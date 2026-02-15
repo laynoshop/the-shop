@@ -14,11 +14,14 @@
 
 * { box-sizing: border-box; }
 
-body {
+html, body {
   margin: 0;
+  padding: 0;
+  height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   background-color: var(--bg);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 /* ---------- BUCKEYE BACKGROUND ---------- */
@@ -43,11 +46,35 @@ body::before {
 }
 /* ---------------------------------------- */
 
-#app {
-  padding-bottom: 80px;
+
+/* ===== LOGIN SCREEN FIX ===== */
+#login {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* vertically center */
+  align-items: center;       /* horizontally center */
+  text-align: center;
+  padding: 20px;
 }
 
-/* HEADER FIX */
+#login input {
+  width: 250px;
+}
+
+#login h1 {
+  margin-bottom: 20px;
+}
+/* ============================= */
+
+
+/* MAIN APP */
+#app {
+  padding-bottom: 110px; /* extra space so tabs don’t overlap content */
+}
+
+
+/* HEADER */
 .header {
   padding: 14px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -57,7 +84,7 @@ body::before {
 .headerTop {
   display: flex;
   align-items: center;
-  justify-content: space-between; /* THIS keeps refresh on the right */
+  justify-content: space-between;
 }
 
 .brand {
@@ -92,6 +119,7 @@ body::before {
   color: var(--muted);
 }
 
+
 /* GRID */
 .grid {
   display: grid;
@@ -103,6 +131,7 @@ body::before {
 @media (min-width: 520px) {
   .grid { grid-template-columns: 1fr 1fr; }
 }
+
 
 /* GAME CARDS */
 .game {
@@ -149,7 +178,8 @@ body::before {
   font-weight:900;
 }
 
-/* TABS */
+
+/* ===== TAB BAR FIX (iPhone safe area) ===== */
 .tabs {
   position: fixed;
   bottom: 0;
@@ -157,12 +187,16 @@ body::before {
   display: flex;
   background: rgba(22,22,22,0.95);
   border-top: 1px solid rgba(255,255,255,0.1);
+
+  padding-bottom: calc(env(safe-area-inset-bottom) + 10px);
+  padding-top: 6px;
 }
 
 .tabs button {
   flex: 1;
-  padding: 14px;
+  padding: 16px;
   background: none;
   color: white;
   font-weight: 800;
 }
+/* ========================================== */
