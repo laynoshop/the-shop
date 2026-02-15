@@ -21,7 +21,7 @@ body {
   color: var(--text);
 }
 
-/* ---------- BUCKEYE BACKGROUND WALLPAPER ---------- */
+/* ---------- BUCKEYE BACKGROUND ---------- */
 body::before {
   content: "";
   position: fixed;
@@ -30,71 +30,73 @@ body::before {
 
   background-image: url("buckeye-O.png");
   background-repeat: repeat;
-
-  /* Controls spacing between each Block O */
-  background-size: 130px 130px;
-
-  /* Small offset so it doesn't look perfectly aligned */
-  background-position: 15px 15px;
-
-  /* Transparency level (lower = more subtle) */
+  background-size: 140px 140px;
+  background-position: 20px 20px;
   opacity: 0.05;
 
   pointer-events: none;
 }
 
-/* Make sure content sits above wallpaper */
 #login, #app, .header, .grid, .tabs, #content {
   position: relative;
   z-index: 1;
 }
-/* --------------------------------------------------- */
-
-h1 {
-  margin: 0 0 14px 0;
-  color: var(--scarlet);
-}
-
-#login {
-  text-align: center;
-  padding: 40px 16px;
-  margin-top: 70px;
-}
-
-input {
-  padding: 12px;
-  margin: 10px 0;
-  font-size: 16px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-}
-
-button {
-  padding: 12px 16px;
-  font-size: 16px;
-  background: var(--scarlet);
-  color: white;
-  border: 0;
-  border-radius: 10px;
-  font-weight: 700;
-}
+/* ---------------------------------------- */
 
 #app {
-  padding-bottom: 76px;
+  padding-bottom: 80px;
 }
 
+/* HEADER FIX */
 .header {
   padding: 14px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
-  background: rgba(18,18,18,0.85);
+  background: rgba(18,18,18,0.90);
 }
 
+.headerTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* THIS keeps refresh on the right */
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(187,0,0,0.15);
+  border: 1px solid rgba(187,0,0,0.35);
+  color: #ffd9d9;
+  font-weight: 700;
+}
+
+.smallBtn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.subline {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* GRID */
 .grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 14px;
   padding: 14px;
 }
 
@@ -102,17 +104,18 @@ button {
   .grid { grid-template-columns: 1fr 1fr; }
 }
 
+/* GAME CARDS */
 .game {
   background: linear-gradient(180deg, rgba(187,0,0,0.12), transparent 55%), var(--card);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 14px;
+  border-radius: 18px;
+  padding: 16px;
 }
 
 .gameHeader {
   display:flex;
   justify-content:space-between;
-  margin-bottom:10px;
+  margin-bottom:12px;
 }
 
 .statusPill {
@@ -130,22 +133,23 @@ button {
 .teamRow {
   display:flex;
   justify-content:space-between;
-  padding:10px;
+  padding:12px;
   border-radius:12px;
   background: rgba(255,255,255,0.04);
-  margin-bottom:10px;
+  margin-bottom:12px;
 }
 
 .teamName {
-  font-size:16px;
+  font-size:17px;
   font-weight:800;
 }
 
 .score {
-  font-size:28px;
+  font-size:30px;
   font-weight:900;
 }
 
+/* TABS */
 .tabs {
   position: fixed;
   bottom: 0;
