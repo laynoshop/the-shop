@@ -252,15 +252,14 @@ function getStartTimeMs(event, competition) {
 /* =========================
    VENUE + ODDS HELPERS
    ========================= */
-function getVenueParts(competition) {
-  const venue = competition?.venue || null;
+function getVenuePartsFromVenueObj(venue) {
   if (!venue) return { venueName: "", location: "" };
 
   const venueName = venue?.fullName || venue?.name || "";
 
-  const city = venue?.address?.city || "";
-  const state = venue?.address?.state || "";
-  const country = venue?.address?.country || "";
+  const city = venue?.address?.city || venue?.city || "";
+  const state = venue?.address?.state || venue?.state || "";
+  const country = venue?.address?.country || venue?.country || "";
 
   let location = "";
   if (city && state) location = `${city}, ${state}`;
@@ -269,6 +268,10 @@ function getVenueParts(competition) {
   else if (country) location = country;
 
   return { venueName, location };
+}
+
+function getVenueParts(competition) {
+  return getVenuePartsFromVenueObj(competition?.venue || null);
 }
 
 function buildVenueLine(competition) {
@@ -309,11 +312,15 @@ function parseOddsFromPickcenter(pc, homeName, awayName) {
 
   const ou = normalizeNumberString(pc.overUnder ?? pc.total ?? pc.overunder ?? "");
 
-  // ESPN often includes a ready-to-display string like "Duke -4.5"
-  const details = cleanFavoredText(pc.details || pc.displayValue || pc.awayTeamOdds?.details || pc.homeTeamOdds?.details || "");
+  const details = cleanFavoredText(
+    pc.details ||
+    pc.displayValue ||
+    pc.awayTeamOdds?.details ||
+    pc.homeTeamOdds?.details ||
+    ""
+  );
   if (details) return { favored: details, ou };
 
-  // Fallback: infer favorite from spread + favorite flags
   const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
   if (!Number.isFinite(spreadNum)) return { favored: "", ou };
 
@@ -332,7 +339,6 @@ function parseOddsFromPickcenter(pc, homeName, awayName) {
 }
 
 function parseOddsFromSummary(summaryData, fallbackComp) {
-  // 1) pickcenter (best)
   const pcArr = summaryData?.pickcenter;
   if (Array.isArray(pcArr) && pcArr.length) {
     const comp = summaryData?.header?.competitions?.[0] || fallbackComp || null;
@@ -346,7 +352,6 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     if (parsed.favored || parsed.ou) return parsed;
   }
 
-  // 1b) sometimes pickcenter exists under competitions[0]
   const sc0 = summaryData?.header?.competitions?.[0] || fallbackComp || null;
   const pcComp = firstPickcenterFromCompetition(sc0);
   if (pcComp) {
@@ -359,7 +364,6 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     if (parsed.favored || parsed.ou) return parsed;
   }
 
-  // 2) summary header competition odds array
   const o2 = firstOddsFromCompetition(sc0);
   if (o2 && (o2.details || o2.overUnder !== undefined || o2.total !== undefined)) {
     return {
@@ -368,7 +372,6 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     };
   }
 
-  // 3) some summaries include top-level odds arrays
   const oTop = Array.isArray(summaryData?.odds) ? summaryData.odds[0] : null;
   if (oTop && (oTop.details || oTop.overUnder !== undefined || oTop.total !== undefined)) {
     return {
@@ -381,7 +384,6 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
 }
 
 function parseOddsFromScoreboardCompetition(competition) {
-  // A) direct odds array
   const o1 = firstOddsFromCompetition(competition);
   if (o1 && (o1.details || o1.overUnder !== undefined || o1.total !== undefined)) {
     return {
@@ -390,7 +392,6 @@ function parseOddsFromScoreboardCompetition(competition) {
     };
   }
 
-  // B) sometimes pickcenter is already present on the scoreboard competition
   const pc = firstPickcenterFromCompetition(competition);
   if (pc) {
     const competitors = competition?.competitors || [];
@@ -412,19 +413,13 @@ function buildOddsLine(favored, ou) {
 
 /* =========================
    ODDS FETCH (RELIABLE)
-   - Prefer scoreboard payload odds
-   - Else fetch /summary with region/lang fallbacks
-   - Caching (per league+date+event) + concurrency limit
-   - Updates each game card odds line in place as data arrives
    ========================= */
 const ODDS_CONCURRENCY_LIMIT = 6;
 const ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const ODDS_STORAGE_PREFIX = "theShopOddsCache_v1"; // sessionStorage key prefix
 
-// cacheKey -> { favored, ou, ts }
-const oddsCache = new Map();
-// cacheKey -> Promise<{favored,ou}>
-const oddsInFlight = new Map();
+const oddsCache = new Map();   // cacheKey -> { favored, ou, ts }
+const oddsInFlight = new Map(); // cacheKey -> Promise<{favored,ou}>
 
 function oddsCacheKey(leagueKey, dateYYYYMMDD, eventId) {
   return `${leagueKey}|${dateYYYYMMDD}|${eventId}`;
@@ -451,9 +446,7 @@ function loadOddsCacheFromSession(leagueKey, dateYYYYMMDD) {
       const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, eventId);
       oddsCache.set(ck, { favored: val.favored || "", ou: val.ou || "", ts });
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 }
 
 let oddsCacheSaveTimer = null;
@@ -470,9 +463,7 @@ function saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD) {
         obj[eventId] = { favored: val.favored || "", ou: val.ou || "", ts: val.ts || Date.now() };
       }
       sessionStorage.setItem(key, JSON.stringify(obj));
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }, 400);
 }
 
@@ -524,7 +515,6 @@ async function fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, eventId, fa
 
   const p = (async () => {
     const base = league.summaryEndpoint(eventId);
-
     const urls = [
       withLangRegion(base),
       withLangRegion(base.replace("?event=", "?eventId=")),
@@ -541,9 +531,7 @@ async function fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, eventId, fa
           saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
           return parsed;
         }
-      } catch (e) {
-        // try next
-      }
+      } catch (e) {}
     }
 
     const empty = { favored: "", ou: "" };
@@ -560,7 +548,6 @@ async function fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, eventId, fa
   }
 }
 
-// Concurrency-limited runner
 async function runWithConcurrency(items, limit, worker) {
   let i = 0;
   const results = [];
@@ -585,7 +572,6 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
     })
     .filter(j => j.eventId);
 
-  // First pass: apply cached + scoreboard odds immediately
   for (const job of jobs) {
     const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
     const cached = oddsCache.get(ck);
@@ -616,8 +602,9 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
 /* ======================= */
 
 /* =========================
-   GOLF (PGA) LEADERBOARD HELPERS
-   Option A: One tournament card with Top 15 rows
+   GOLF (PGA) LEADERBOARD (Option A)
+   - One tournament card with Top 15
+   - Each row: "1. Name" | Score | Thru
    ========================= */
 function parseGolfPosToSortValue(pos) {
   const s = String(pos || "").trim();
@@ -630,14 +617,12 @@ function formatGolfScoreToPar(raw) {
   const s = String(raw ?? "").trim();
   if (!s) return "—";
   if (s === "E" || s === "EVEN" || s === "Even") return "E";
-  // Keep "-" and "+" as-is
   return s;
 }
 
 function getGolfCompetitorsList(competition) {
   const list = competition?.competitors;
-  if (Array.isArray(list)) return list;
-  return [];
+  return Array.isArray(list) ? list : [];
 }
 
 function getGolferName(c) {
@@ -664,27 +649,50 @@ function getGolferPos(c) {
   );
 }
 
+function statValueByName(statsArr, names) {
+  if (!Array.isArray(statsArr)) return "";
+  const target = names.map(norm);
+  const found = statsArr.find(s => target.includes(norm(s?.name)) || target.includes(norm(s?.displayName)));
+  return (found?.displayValue || found?.value || "").toString().trim();
+}
+
 function getGolferScoreToPar(c) {
   const direct =
     c?.score ||
     c?.toPar ||
     c?.scoreToPar ||
-    c?.statistics?.find?.(x => norm(x?.name) === "to par")?.displayValue ||
-    c?.statistics?.find?.(x => norm(x?.name) === "topar")?.displayValue ||
-    c?.statistics?.find?.(x => norm(x?.name) === "score")?.displayValue ||
-    c?.statistics?.find?.(x => norm(x?.name) === "total")?.displayValue ||
+    statValueByName(c?.statistics, ["To Par", "toPar", "Topar"]) ||
+    statValueByName(c?.statistics, ["Score", "Total", "Strokes"]) ||
     "";
   return formatGolfScoreToPar(direct);
 }
 
+function normalizeThruLabel(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  // If ESPN already gives something like "F", "Thru 9", keep it
+  if (/^(f|cut|wd|dq)$/i.test(s)) return s.toUpperCase();
+  if (/thru/i.test(s)) return s;
+  // If it's just a number, make it "Thru X"
+  if (/^\d{1,2}$/.test(s)) return `Thru ${s}`;
+  // If it's like "18" or "17", we handle above; anything else, keep as-is
+  return s;
+}
+
 function getGolferThru(c) {
-  return (
+  // ESPN can provide thru/round detail in a few places
+  const fromStatus =
     c?.status?.type?.shortDetail ||
     c?.status?.type?.detail ||
     c?.status?.displayValue ||
-    c?.status ||
-    ""
-  );
+    "";
+
+  const fromStats =
+    statValueByName(c?.statistics, ["Thru", "THRU", "Hole", "Holes", "Current Hole", "currentHole"]) ||
+    "";
+
+  const pick = fromStatus || fromStats;
+  return normalizeThruLabel(pick);
 }
 
 function getTournamentName(event, competition) {
@@ -699,23 +707,31 @@ function getTournamentName(event, competition) {
   );
 }
 
-function getTournamentLocationLine(competition) {
-  // Use existing venue formatting. If venue name exists, keep it; else just location.
-  return buildVenueLine(competition);
+function getTournamentLocationLine(event, competition) {
+  // PGA scoreboard sometimes has venue at different levels.
+  const v1 = competition?.venue || null;
+  const v2 = event?.venue || null;
+  const v3 = (Array.isArray(event?.venues) && event.venues.length) ? event.venues[0] : null;
+  const v4 = event?.competitions?.[0]?.venue || null;
+
+  const chosen = v1 || v2 || v3 || v4 || null;
+  if (!chosen) return "—";
+
+  const parts = getVenuePartsFromVenueObj(chosen);
+  const line = [parts.venueName, parts.location].filter(Boolean).join(" - ");
+  return line || "—";
 }
 
-function buildGolfHeaderLine(pos, thru) {
-  const parts = [];
-  if (pos) parts.push(`Pos: ${pos}`);
-  if (thru) parts.push(`Thru: ${thru}`);
-  return parts.length ? parts.join(" • ") : "—";
+function formatGolfPosLabel(pos) {
+  const s = String(pos || "").trim();
+  if (!s) return "";
+  return s.endsWith(".") ? s : `${s}.`;
 }
 
 function renderGolfLeaderboards(events, content) {
   const grid = document.createElement("div");
   grid.className = "grid";
 
-  // Each ESPN "event" = a tournament/leaderboard for that date
   events.forEach(event => {
     const competition = event?.competitions?.[0];
     if (!competition) return;
@@ -726,13 +742,12 @@ function renderGolfLeaderboards(events, content) {
     const pillText = statusLabelFromState(state, detail);
 
     const tournamentName = getTournamentName(event, competition);
-    const locationLine = getTournamentLocationLine(competition);
+    const locationLine = getTournamentLocationLine(event, competition);
 
     const golfers = getGolfCompetitorsList(competition)
       .map(c => {
         const pos = getGolferPos(c);
         return {
-          raw: c,
           name: getGolferName(c),
           pos: String(pos || "").trim(),
           sortPos: parseGolfPosToSortValue(pos),
@@ -742,7 +757,6 @@ function renderGolfLeaderboards(events, content) {
       })
       .filter(g => g.name && g.name !== "—");
 
-    // Sort by position where possible
     golfers.sort((a, b) => {
       if (a.sortPos !== b.sortPos) return a.sortPos - b.sortPos;
       return a.name.localeCompare(b.name);
@@ -751,10 +765,9 @@ function renderGolfLeaderboards(events, content) {
     const top15 = golfers.slice(0, 15);
 
     const card = document.createElement("div");
-    card.className = "game";
+    card.className = "game golfCard";
 
-    // Keep the same meta lines for consistent layout.
-    // Venue line becomes: "Tournament Name — Location"
+    // Tournament line: "Tournament — City, State"
     const venueText = `${tournamentName} — ${locationLine}`;
 
     card.innerHTML = `
@@ -771,16 +784,21 @@ function renderGolfLeaderboards(events, content) {
       </div>
     `;
 
-    // Add Top 15 rows using EXISTING styles (teamRow/teamName/teamMeta/score)
     top15.forEach(g => {
       const row = document.createElement("div");
       row.className = "teamRow";
+      const posPrefix = formatGolfPosLabel(g.pos);
+      const thruText = g.thru || "—";
+
       row.innerHTML = `
         <div class="teamLeft">
-          <div class="teamName">${escapeHtml(g.name)}</div>
-          <div class="teamMeta">${escapeHtml(buildGolfHeaderLine(g.pos, g.thru))}</div>
+          <div class="teamName">${escapeHtml(posPrefix)} ${escapeHtml(g.name)}</div>
         </div>
-        <div class="score">${escapeHtml(g.score)}</div>
+
+        <div class="scoreCol">
+          <div class="score">${escapeHtml(g.score)}</div>
+          <div class="scoreMeta">${escapeHtml(thruText)}</div>
+        </div>
       `;
       card.appendChild(row);
     });
@@ -1069,7 +1087,7 @@ async function loadScores(showLoading) {
       return;
     }
 
-    // GOLF (PGA): render leaderboard style (Option A)
+    // GOLF (PGA): leaderboard style (Option A)
     if (league.key === "pga") {
       renderGolfLeaderboards(events, content);
       return;
@@ -1132,7 +1150,6 @@ async function loadScores(showLoading) {
 
       const venueLine = buildVenueLine(competition);
 
-      // Start odds from scoreboard if present; summary hydration will fill missing ones
       const initialOdds = parseOddsFromScoreboardCompetition(competition);
       const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
 
@@ -1195,7 +1212,6 @@ async function loadScores(showLoading) {
 
     content.appendChild(grid);
 
-    // Hydrate odds reliably without spamming (cached + concurrency limited)
     hydrateAllOdds(events, league, selectedKey, selectedDate);
 
   } catch (error) {
