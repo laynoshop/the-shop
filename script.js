@@ -71,7 +71,7 @@ function formatDateYYYYMMDD(d) {
 }
 
 /* =========================
-   LOGO HELPERS (ADDED)
+   LOGO HELPERS
    ========================= */
 function getTeamLogoUrl(team) {
   if (!team) return "";
@@ -90,11 +90,11 @@ function getTeamAbbrev(team) {
 
 function escapeHtml(str) {
   return String(str || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 /* ======================= */
 
@@ -124,7 +124,6 @@ function stopAutoRefresh() {
 
 function startAutoRefresh() {
   stopAutoRefresh();
-  // Refresh current league every 30 seconds while Scores is visible
   refreshIntervalId = setInterval(() => {
     if (currentTab === "scores") loadScores(false);
   }, 30000);
@@ -203,6 +202,67 @@ function buildLeagueSelectHTML(selectedKey) {
   `;
 }
 
+/* =========================
+   ESPN FETCH (ROBUST)
+   ========================= */
+function removeDatesParam(url) {
+  // Removes ?dates=YYYYMMDD or &dates=YYYYMMDD safely
+  return url
+    .replace(/\?dates=\d{8}&/i, "?")
+    .replace(/\?dates=\d{8}$/i, "")
+    .replace(/&dates=\d{8}&/i, "&")
+    .replace(/&dates=\d{8}$/i, "");
+}
+
+function addOrReplaceParam(url, key, value) {
+  const hasQ = url.includes("?");
+  const re = new RegExp(`([?&])${key}=.*?(&|$)`, "i");
+  if (re.test(url)) {
+    return url.replace(re, `$1${key}=${encodeURIComponent(value)}$2`).replace(/&$/, "");
+  }
+  return url + (hasQ ? "&" : "?") + `${key}=${encodeURIComponent(value)}`;
+}
+
+async function fetchScoreboardWithFallbacks(league, date) {
+  const todayUrl = league.endpoint(date);
+
+  const d = new Date();
+  const yesterday = new Date(d.getTime() - 86400000);
+  const tomorrow = new Date(d.getTime() + 86400000);
+  const yDate = formatDateYYYYMMDD(yesterday);
+  const tDate = formatDateYYYYMMDD(tomorrow);
+
+  const attempts = [
+    { label: "today", url: todayUrl },
+    { label: "today+groups", url: addOrReplaceParam(todayUrl, "groups", "200") }, // helps NCAAM a lot
+    { label: "noDate", url: removeDatesParam(todayUrl) }, // ESPN decides "today"
+    { label: "yesterday", url: league.endpoint(yDate) },
+    { label: "tomorrow", url: league.endpoint(tDate) }
+  ];
+
+  let lastError = null;
+
+  for (const a of attempts) {
+    try {
+      const resp = await fetch(a.url, { cache: "no-store" });
+      if (!resp.ok) {
+        lastError = new Error(`HTTP ${resp.status}`);
+        continue;
+      }
+      const data = await resp.json();
+      const events = Array.isArray(data?.events) ? data.events : [];
+      if (events.length > 0) {
+        return { data, events, used: a.label, url: a.url };
+      }
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  return { data: null, events: [], used: "none", url: "", error: lastError };
+}
+/* ======================= */
+
 async function loadScores(showLoading) {
   const content = document.getElementById("content");
 
@@ -233,9 +293,8 @@ async function loadScores(showLoading) {
   }
 
   try {
-    const response = await fetch(league.endpoint(date));
-    const data = await response.json();
-    const events = Array.isArray(data.events) ? data.events : [];
+    const result = await fetchScoreboardWithFallbacks(league, date);
+    const events = result.events;
 
     // Header with dropdown + updated time
     content.innerHTML = `
@@ -264,7 +323,15 @@ async function loadScores(showLoading) {
     }
 
     if (events.length === 0) {
-      content.innerHTML += `<div class="notice">No games found today for this league (likely offseason).</div>`;
+      // Keep your same user-facing message, but add a tiny hint so you know it tried fallbacks
+      content.innerHTML += `
+        <div class="notice">
+          No games found today for this league (likely offseason).
+          <div style="margin-top:8px; opacity:0.6; font-size:12px;">
+            (Tried ESPN fallbacks: ${escapeHtml(result.used)})
+          </div>
+        </div>
+      `;
       return;
     }
 
@@ -290,7 +357,7 @@ async function loadScores(showLoading) {
       const homeName = home?.team?.displayName || "Home";
       const awayName = away?.team?.displayName || "Away";
 
-      // LOGOS (ADDED)
+      // LOGOS
       const homeTeam = home?.team || null;
       const awayTeam = away?.team || null;
       const homeLogo = getTeamLogoUrl(homeTeam);
