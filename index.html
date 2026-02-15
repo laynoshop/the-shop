@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Shop</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#bb0000" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+<div id="login">
+  <h1>The Shop</h1>
+  <input type="password" id="code" placeholder="Enter Invite Code" />
+  <button onclick="checkCode()">Enter</button>
+</div>
+
+<div id="app" style="display:none;">
+  <div id="content"></div>
+
+  <div class="tabs">
+    <button onclick="showTab('scores')">Scores</button>
+    <button onclick="showTab('wagers')">Wagers</button>
+    <button onclick="showTab('shop')">Shop</button>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
