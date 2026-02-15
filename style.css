@@ -222,6 +222,47 @@ button {
   font-size:13px;
 }
 
+/* =========================
+   LOGO LAYER (ADDED)
+   ========================= */
+.teamLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teamText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.teamLogo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 3px;
+}
+
+.teamLogoFallback {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.85);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+}
+/* ======================= */
+
 /* TABS (safe area padding) */
 .tabs {
   position: fixed;
