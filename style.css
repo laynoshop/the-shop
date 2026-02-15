@@ -225,7 +225,7 @@ button {
   word-break: break-word;
 }
 
-/* Odds/meta line under venue */
+/* Odds line under venue */
 .gameMetaOddsLine {
   margin-top: -2px;
   margin-bottom: 12px;
