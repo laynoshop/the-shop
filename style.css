@@ -66,4 +66,99 @@ input {
   margin: 10px 0;
   font-size: 16px;
   border-radius: 10px;
-  border: 1px solid var(-
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+button {
+  padding: 12px 16px;
+  font-size: 16px;
+  background: var(--scarlet);
+  color: white;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+#app {
+  padding-bottom: 76px;
+}
+
+.header {
+  padding: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(18,18,18,0.85);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 14px;
+}
+
+@media (min-width: 520px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+
+.game {
+  background: linear-gradient(180deg, rgba(187,0,0,0.12), transparent 55%), var(--card);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.gameHeader {
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:10px;
+}
+
+.statusPill {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.status-live   { background: rgba(34,197,94,0.2);  color: #bbf7d0; }
+.status-final  { background: rgba(156,163,175,0.2); color: #e5e7eb; }
+.status-up     { background: rgba(245,158,11,0.2); color: #fde68a; }
+.status-other  { background: rgba(255,255,255,0.1); color: #e5e7eb; }
+
+.teamRow {
+  display:flex;
+  justify-content:space-between;
+  padding:10px;
+  border-radius:12px;
+  background: rgba(255,255,255,0.04);
+  margin-bottom:10px;
+}
+
+.teamName {
+  font-size:16px;
+  font-weight:800;
+}
+
+.score {
+  font-size:28px;
+  font-weight:900;
+}
+
+.tabs {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  background: rgba(22,22,22,0.95);
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.tabs button {
+  flex: 1;
+  padding: 14px;
+  background: none;
+  color: white;
+  font-weight: 800;
+}
