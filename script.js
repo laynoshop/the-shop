@@ -245,6 +245,43 @@ function getStartTimeMs(event, competition) {
 }
 /* ======================= */
 
+/* =========================
+   VENUE + ODDS HELPERS
+   ========================= */
+function getVenueText(competition) {
+  const venue = competition?.venue || null;
+  if (!venue) return { venueName: "", location: "" };
+
+  const venueName = venue?.fullName || venue?.name || "";
+
+  const city = venue?.address?.city || "";
+  const state = venue?.address?.state || "";
+  const country = venue?.address?.country || "";
+
+  // Prefer City, ST; fallback to Country if no state/city
+  let location = "";
+  if (city && state) location = `${city}, ${state}`;
+  else if (city) location = city;
+  else if (state) location = state;
+  else if (country) location = country;
+
+  return { venueName, location };
+}
+
+function getOddsText(competition) {
+  // ESPN often provides competition.odds[0] with { details, overUnder, ... }
+  const o = Array.isArray(competition?.odds) && competition.odds.length ? competition.odds[0] : null;
+
+  const spread = (o?.details || "").trim(); // ex: "Duke -8.5"
+  const ouRaw = o?.overUnder;
+  const overUnder = (ouRaw !== null && ouRaw !== undefined && ouRaw !== "")
+    ? `O/U ${ouRaw}`
+    : "";
+
+  return { spread, overUnder };
+}
+/* ======================= */
+
 function checkCode() {
   const code = document.getElementById("code").value;
   if (code === "2026") {
@@ -587,12 +624,41 @@ async function loadScores(showLoading) {
       const homeAbbrev = escapeHtml(getTeamAbbrev(homeTeam)).slice(0, 4);
       const awayAbbrev = escapeHtml(getTeamAbbrev(awayTeam)).slice(0, 4);
 
+      // NEW: Venue + Odds (spread + O/U)
+      const v = getVenueText(competition);
+      const o = getOddsText(competition);
+
+      const venueLine = (() => {
+        const parts = [];
+        if (v.venueName) parts.push(v.venueName);
+        if (v.location) parts.push(v.location);
+        return parts.join(" • ");
+      })();
+
+      const spreadText = o.spread ? o.spread : "—";
+      const ouText = o.overUnder ? o.overUnder : "—";
+
       const card = document.createElement("div");
       card.className = "game";
 
       card.innerHTML = `
         <div class="gameHeader">
           <div class="statusPill ${pillClass}">${pillText}</div>
+        </div>
+
+        <div class="gameMetaTop" aria-label="Venue and odds">
+          <div class="metaRow">
+            <div class="metaKey">Venue</div>
+            <div class="metaVal">${escapeHtml(venueLine || "—")}</div>
+          </div>
+          <div class="metaRow">
+            <div class="metaKey">Line</div>
+            <div class="metaVal">${escapeHtml(spreadText)}</div>
+          </div>
+          <div class="metaRow">
+            <div class="metaKey">Total</div>
+            <div class="metaVal">${escapeHtml(ouText)}</div>
+          </div>
         </div>
 
         <div class="teamRow">
@@ -627,11 +693,6 @@ async function loadScores(showLoading) {
             </div>
           </div>
           <div class="score">${homeScore}</div>
-        </div>
-
-        <div class="footerLine">
-          <div>${competition?.status?.type?.shortDetail || ""}</div>
-          <div style="color: rgba(187,0,0,0.9); font-weight:900;">⬤</div>
         </div>
       `;
 
