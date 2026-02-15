@@ -70,6 +70,34 @@ function formatDateYYYYMMDD(d) {
   return `${yyyy}${mm}${dd}`;
 }
 
+/* =========================
+   LOGO HELPERS (ADDED)
+   ========================= */
+function getTeamLogoUrl(team) {
+  if (!team) return "";
+  if (team.logo) return team.logo;
+
+  const logos = team.logos;
+  if (Array.isArray(logos) && logos.length > 0) {
+    return logos[0].href || "";
+  }
+  return "";
+}
+
+function getTeamAbbrev(team) {
+  return team?.abbreviation || team?.shortDisplayName || team?.displayName || "";
+}
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+/* ======================= */
+
 function checkCode() {
   const code = document.getElementById("code").value;
   if (code === "2026") {
@@ -262,6 +290,14 @@ async function loadScores(showLoading) {
       const homeName = home?.team?.displayName || "Home";
       const awayName = away?.team?.displayName || "Away";
 
+      // LOGOS (ADDED)
+      const homeTeam = home?.team || null;
+      const awayTeam = away?.team || null;
+      const homeLogo = getTeamLogoUrl(homeTeam);
+      const awayLogo = getTeamLogoUrl(awayTeam);
+      const homeAbbrev = escapeHtml(getTeamAbbrev(homeTeam)).slice(0, 4);
+      const awayAbbrev = escapeHtml(getTeamAbbrev(awayTeam)).slice(0, 4);
+
       const card = document.createElement("div");
       card.className = "game";
 
@@ -272,16 +308,34 @@ async function loadScores(showLoading) {
 
         <div class="teamRow">
           <div class="teamLeft">
-            <div class="teamName">${awayName}</div>
-            <div class="teamMeta">Away</div>
+            <div class="teamLine">
+              ${
+                awayLogo
+                  ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
+                  : `<div class="teamLogoFallback">${awayAbbrev || "—"}</div>`
+              }
+              <div class="teamText">
+                <div class="teamName">${escapeHtml(awayName)}</div>
+                <div class="teamMeta">Away</div>
+              </div>
+            </div>
           </div>
           <div class="score">${awayScore}</div>
         </div>
 
         <div class="teamRow">
           <div class="teamLeft">
-            <div class="teamName">${homeName}</div>
-            <div class="teamMeta">Home</div>
+            <div class="teamLine">
+              ${
+                homeLogo
+                  ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
+                  : `<div class="teamLogoFallback">${homeAbbrev || "—"}</div>`
+              }
+              <div class="teamText">
+                <div class="teamName">${escapeHtml(homeName)}</div>
+                <div class="teamMeta">Home</div>
+              </div>
+            </div>
           </div>
           <div class="score">${homeScore}</div>
         </div>
