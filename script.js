@@ -109,7 +109,7 @@ const LEAGUES = [
 function getSavedLeagueKey() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved && LEAGUES.some(l => l.key === saved)) return saved;
-  return "ncaam"; // default
+  return "ncaam";
 }
 
 function saveLeagueKey(key) {
@@ -134,7 +134,6 @@ function parseUserDateToYYYYMMDD(input) {
   const lower = raw.toLowerCase();
   if (lower === "today" || lower === "t") return formatDateYYYYMMDD(new Date());
 
-  // Accept YYYY-MM-DD or YYYY/MM/DD
   let m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
   if (m) {
     const yyyy = Number(m[1]);
@@ -147,7 +146,6 @@ function parseUserDateToYYYYMMDD(input) {
     return null;
   }
 
-  // Accept MM/DD/YYYY
   m = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
   if (m) {
     const mm = Number(m[1]);
@@ -160,7 +158,6 @@ function parseUserDateToYYYYMMDD(input) {
     return null;
   }
 
-  // Accept YYYYMMDD
   m = raw.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (m) {
     const yyyy = Number(m[1]);
@@ -198,16 +195,13 @@ function yyyymmddToPretty(yyyymmdd) {
 }
 
 /* =========================
-   LOGO HELPERS
+   LOGO + HTML
    ========================= */
 function getTeamLogoUrl(team) {
   if (!team) return "";
   if (team.logo) return team.logo;
-
   const logos = team.logos;
-  if (Array.isArray(logos) && logos.length > 0) {
-    return logos[0].href || "";
-  }
+  if (Array.isArray(logos) && logos.length > 0) return logos[0].href || "";
   return "";
 }
 
@@ -223,7 +217,6 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-/* ======================= */
 
 /* =========================
    FAVORITES SORTING
@@ -243,14 +236,11 @@ function getTeamIdentityStrings(team) {
 function favoriteRankForEvent(competition) {
   const competitors = competition?.competitors || [];
   let bestRank = Infinity;
-
   for (const c of competitors) {
     const team = c?.team;
     const ids = getTeamIdentityStrings(team).map(norm);
     for (let i = 0; i < FAVORITES_NORM.length; i++) {
-      if (ids.includes(FAVORITES_NORM[i])) {
-        if (i < bestRank) bestRank = i;
-      }
+      if (ids.includes(FAVORITES_NORM[i])) bestRank = Math.min(bestRank, i);
     }
   }
   return bestRank;
@@ -268,26 +258,21 @@ function getStartTimeMs(event, competition) {
   const t = Date.parse(iso);
   return Number.isFinite(t) ? t : 0;
 }
-/* ======================= */
 
 /* =========================
    VENUE + ODDS HELPERS
    ========================= */
 function getVenuePartsFromVenueObj(venue) {
   if (!venue) return { venueName: "", location: "" };
-
   const venueName = venue?.fullName || venue?.name || "";
-
   const city = venue?.address?.city || venue?.city || "";
   const state = venue?.address?.state || venue?.state || "";
   const country = venue?.address?.country || venue?.country || "";
-
   let location = "";
   if (city && state) location = `${city}, ${state}`;
   else if (city) location = city;
   else if (state) location = state;
   else if (country) location = country;
-
   return { venueName, location };
 }
 
@@ -331,7 +316,6 @@ function parseOddsFromPickcenter(pc, homeName, awayName) {
   if (!pc) return { favored: "", ou: "" };
 
   const ou = normalizeNumberString(pc.overUnder ?? pc.total ?? pc.overunder ?? "");
-
   const details = cleanFavoredText(
     pc.details ||
     pc.displayValue ||
@@ -354,12 +338,10 @@ function parseOddsFromPickcenter(pc, homeName, awayName) {
 
   const abs = Math.abs(spreadNum);
   const spreadVal = abs % 1 === 0 ? String(abs.toFixed(0)) : String(abs);
-
   return { favored: `${favoredTeam} -${spreadVal}`, ou };
 }
 
 function parseOddsFromSummary(summaryData, fallbackComp) {
-  // 1) summary.pickcenter
   const pcArr = summaryData?.pickcenter;
   if (Array.isArray(pcArr) && pcArr.length) {
     const comp = summaryData?.header?.competitions?.[0] || fallbackComp || null;
@@ -368,12 +350,10 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     const away = competitors.find(t => t.homeAway === "away");
     const homeName = home?.team?.displayName || "Home";
     const awayName = away?.team?.displayName || "Away";
-
     const parsed = parseOddsFromPickcenter(pcArr[0], homeName, awayName);
     if (parsed.favored || parsed.ou) return parsed;
   }
 
-  // 2) competition.pickcenter (sometimes nested)
   const sc0 = summaryData?.header?.competitions?.[0] || fallbackComp || null;
   const pcComp = firstPickcenterFromCompetition(sc0);
   if (pcComp) {
@@ -386,7 +366,6 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     if (parsed.favored || parsed.ou) return parsed;
   }
 
-  // 3) competition.odds
   const o2 = firstOddsFromCompetition(sc0);
   if (o2 && (o2.details || o2.overUnder !== undefined || o2.total !== undefined)) {
     return {
@@ -395,7 +374,6 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     };
   }
 
-  // 4) top-level odds
   const oTop = Array.isArray(summaryData?.odds) ? summaryData.odds[0] : null;
   if (oTop && (oTop.details || oTop.overUnder !== undefined || oTop.total !== undefined)) {
     return {
@@ -433,17 +411,17 @@ function parseOddsFromScoreboardCompetition(competition) {
 function buildOddsLine(favored, ou) {
   return `Favored: ${favored || "—"} • O/U: ${ou || "—"}`;
 }
-/* ======================= */
 
 /* =========================
    ODDS FETCH (RELIABLE)
    ========================= */
 const ODDS_CONCURRENCY_LIMIT = 6;
-const ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-const ODDS_STORAGE_PREFIX = "theShopOddsCache_v1"; // sessionStorage key prefix
+const ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const ODDS_STORAGE_PREFIX = "theShopOddsCache_v1";
 
 const oddsCache = new Map();    // cacheKey -> { favored, ou, ts }
 const oddsInFlight = new Map(); // cacheKey -> Promise
+let oddsCacheSaveTimer = null;
 
 function oddsCacheKey(leagueKey, dateYYYYMMDD, eventId) {
   return `${leagueKey}|${dateYYYYMMDD}|${eventId}`;
@@ -463,17 +441,14 @@ function loadOddsCacheFromSession(leagueKey, dateYYYYMMDD) {
 
     const now = Date.now();
     for (const [eventId, val] of Object.entries(parsed)) {
-      if (!val || typeof val !== "object") continue;
-      const ts = Number(val.ts || 0);
+      const ts = Number(val?.ts || 0);
       if (!Number.isFinite(ts) || (now - ts) > ODDS_CACHE_TTL_MS) continue;
-
       const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, eventId);
       oddsCache.set(ck, { favored: val.favored || "", ou: val.ou || "", ts });
     }
   } catch (e) {}
 }
 
-let oddsCacheSaveTimer = null;
 function saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD) {
   if (oddsCacheSaveTimer) return;
   oddsCacheSaveTimer = setTimeout(() => {
@@ -511,11 +486,7 @@ function withLangRegion(url) {
     if (!u.searchParams.has("region")) u.searchParams.set("region", "us");
     return u.toString();
   } catch {
-    const joiner = url.includes("?") ? "&" : "?";
-    let out = url;
-    if (!/([?&])lang=/.test(out)) out += `${joiner}lang=en`;
-    if (!/([?&])region=/.test(out)) out += `${out.includes("?") ? "&" : "?"}region=us`;
-    return out;
+    return url;
   }
 }
 
@@ -574,26 +545,20 @@ async function fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, eventId, fa
 
 async function runWithConcurrency(items, limit, worker) {
   let i = 0;
-  const results = [];
   const runners = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
     while (i < items.length) {
       const idx = i++;
-      results[idx] = await worker(items[idx], idx);
+      await worker(items[idx], idx);
     }
   });
   await Promise.all(runners);
-  return results;
 }
 
 async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
   loadOddsCacheFromSession(leagueKey, dateYYYYMMDD);
 
   const jobs = events
-    .map(e => {
-      const eventId = String(e?.id || "");
-      const competition = e?.competitions?.[0] || null;
-      return { eventId, competition };
-    })
+    .map(e => ({ eventId: String(e?.id || ""), competition: e?.competitions?.[0] || null }))
     .filter(j => j.eventId);
 
   // apply cached + scoreboard first
@@ -604,7 +569,6 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
       applyOddsToDom(job.eventId, cached.favored, cached.ou);
       continue;
     }
-
     const fromScoreboard = parseOddsFromScoreboardCompetition(job.competition);
     if (fromScoreboard.favored || fromScoreboard.ou) {
       oddsCache.set(ck, { favored: fromScoreboard.favored || "", ou: fromScoreboard.ou || "", ts: Date.now() });
@@ -624,10 +588,9 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
     applyOddsToDom(job.eventId, parsed.favored, parsed.ou);
   });
 }
-/* ======================= */
 
 /* =========================
-   PGA Top 15 Leaderboard
+   PGA Top 15
    ========================= */
 function parseGolfPosToSortValue(pos) {
   const s = String(pos || "").trim();
@@ -653,9 +616,6 @@ function getGolferName(c) {
     c?.athlete?.displayName ||
     c?.athlete?.shortName ||
     c?.athlete?.fullName ||
-    c?.player?.displayName ||
-    c?.player?.fullName ||
-    c?.competitor?.displayName ||
     c?.displayName ||
     "—"
   );
@@ -667,7 +627,6 @@ function getGolferPos(c) {
     c?.position?.shortDisplayName ||
     c?.position ||
     c?.rank ||
-    c?.order ||
     ""
   );
 }
@@ -684,8 +643,7 @@ function getGolferScoreToPar(c) {
     c?.score ||
     c?.toPar ||
     c?.scoreToPar ||
-    statValueByName(c?.statistics, ["To Par", "toPar", "Topar"]) ||
-    statValueByName(c?.statistics, ["Score", "Total", "Strokes"]) ||
+    statValueByName(c?.statistics, ["To Par", "toPar"]) ||
     "";
   return formatGolfScoreToPar(direct);
 }
@@ -705,37 +663,19 @@ function getGolferThru(c) {
     c?.status?.type?.detail ||
     c?.status?.displayValue ||
     "";
-
-  const fromStats =
-    statValueByName(c?.statistics, ["Thru", "THRU", "Hole", "Holes", "Current Hole", "currentHole"]) ||
-    "";
-
+  const fromStats = statValueByName(c?.statistics, ["Thru", "Hole", "Holes", "Current Hole"]) || "";
   const pick = fromStatus || fromStats;
   return normalizeThruLabel(pick);
 }
 
 function getTournamentName(event, competition) {
-  return (
-    event?.name ||
-    event?.shortName ||
-    event?.longName ||
-    competition?.tournament?.name ||
-    competition?.tournament?.shortName ||
-    competition?.name ||
-    "Tournament"
-  );
+  return event?.name || event?.shortName || competition?.name || "Tournament";
 }
 
 function getTournamentLocationLine(event, competition) {
-  const v1 = competition?.venue || null;
-  const v2 = event?.venue || null;
-  const v3 = (Array.isArray(event?.venues) && event.venues.length) ? event.venues[0] : null;
-  const v4 = event?.competitions?.[0]?.venue || null;
-
-  const chosen = v1 || v2 || v3 || v4 || null;
-  if (!chosen) return "—";
-
-  const parts = getVenuePartsFromVenueObj(chosen);
+  const v = competition?.venue || event?.venue || (Array.isArray(event?.venues) ? event.venues[0] : null) || null;
+  if (!v) return "—";
+  const parts = getVenuePartsFromVenueObj(v);
   const line = [parts.venueName, parts.location].filter(Boolean).join(" - ");
   return line || "—";
 }
@@ -775,35 +715,26 @@ function renderGolfLeaderboards(events, content) {
       })
       .filter(g => g.name && g.name !== "—");
 
-    golfers.sort((a, b) => {
-      if (a.sortPos !== b.sortPos) return a.sortPos - b.sortPos;
-      return a.name.localeCompare(b.name);
-    });
-
+    golfers.sort((a, b) => (a.sortPos - b.sortPos) || a.name.localeCompare(b.name));
     const top15 = golfers.slice(0, 15);
 
     const card = document.createElement("div");
     card.className = "game golfCard";
 
-    const venueText = `${tournamentName} — ${locationLine}`;
+    const metaText = `${tournamentName} — ${locationLine}`;
 
     card.innerHTML = `
       <div class="gameHeader">
         <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
       </div>
-
-      <div class="gameMetaTopLine" aria-label="Tournament and location">
-        ${escapeHtml(venueText)}
-      </div>
-
-      <div class="gameMetaOddsLine" aria-label="Leaderboard">
-        Top 15 Leaderboard
-      </div>
+      <div class="gameMetaTopLine">${escapeHtml(metaText)}</div>
+      <div class="gameMetaOddsLine">Top 15 Leaderboard</div>
     `;
 
     top15.forEach(g => {
       const row = document.createElement("div");
       row.className = "teamRow";
+
       const posPrefix = formatGolfPosLabel(g.pos);
       const thruText = g.thru || "—";
 
@@ -811,7 +742,6 @@ function renderGolfLeaderboards(events, content) {
         <div class="teamLeft">
           <div class="teamName">${escapeHtml(posPrefix)} ${escapeHtml(g.name)}</div>
         </div>
-
         <div class="scoreCol">
           <div class="score">${escapeHtml(g.score)}</div>
           <div class="scoreMeta">${escapeHtml(thruText)}</div>
@@ -832,7 +762,6 @@ function renderGolfLeaderboards(events, content) {
 
   content.appendChild(grid);
 }
-/* ======================= */
 
 /* =========================
    FIREBASE WAGERS (v0.1)
@@ -855,8 +784,7 @@ async function initFirebaseIfNeeded() {
     const db = fsMod.getFirestore(app);
 
     fb = {
-      auth,
-      db,
+      auth, db,
       signInAnon: () => authMod.signInAnonymously(auth),
       onAuth: (cb) => authMod.onAuthStateChanged(auth, cb),
       doc: fsMod.doc,
@@ -877,15 +805,12 @@ async function initFirebaseIfNeeded() {
 function getWagersUserName() {
   return (localStorage.getItem(WAGERS_USER_KEY) || "").trim();
 }
-
 function setWagersUserName(name) {
   localStorage.setItem(WAGERS_USER_KEY, String(name || "").trim());
 }
-
 function getWagersRoomId() {
   return (localStorage.getItem(WAGERS_ROOM_KEY) || "").trim();
 }
-
 function setWagersRoomId(roomId) {
   localStorage.setItem(WAGERS_ROOM_KEY, String(roomId || "").trim());
 }
@@ -904,14 +829,10 @@ function buildEventKey(leagueKey, dateYYYYMMDD, eventId) {
 async function ensureSignedIn() {
   const f = await initFirebaseIfNeeded();
   if (f.auth.currentUser) return f.auth.currentUser;
-
   await f.signInAnon();
   return new Promise((resolve) => {
     const unsub = f.onAuth((u) => {
-      if (u) {
-        unsub();
-        resolve(u);
-      }
+      if (u) { unsub(); resolve(u); }
     });
   });
 }
@@ -932,10 +853,7 @@ async function createRoomIfMissing(roomId) {
 
   const name = getWagersUserName() || "Guest";
   const memberRef = f.doc(f.db, "rooms", roomId, "members", user.uid);
-  await f.setDoc(memberRef, {
-    name,
-    joinedAt: f.serverTimestamp()
-  }, { merge: true });
+  await f.setDoc(memberRef, { name, joinedAt: f.serverTimestamp() }, { merge: true });
 }
 
 async function joinRoomFlow() {
@@ -959,10 +877,7 @@ async function setNameFlow() {
   const input = prompt("Your display name for wagers:", current || "");
   if (input === null) return;
   const cleaned = String(input || "").trim();
-  if (!cleaned) {
-    alert("Name can’t be blank.");
-    return;
-  }
+  if (!cleaned) { alert("Name can’t be blank."); return; }
   setWagersUserName(cleaned);
 
   const roomId = getWagersRoomId();
@@ -979,9 +894,7 @@ async function setNameFlow() {
 }
 
 function stopWagersListeners() {
-  if (fbUnsubPicks) {
-    try { fbUnsubPicks(); } catch (e) {}
-  }
+  if (fbUnsubPicks) { try { fbUnsubPicks(); } catch (e) {} }
   fbUnsubPicks = null;
 }
 
@@ -1070,19 +983,18 @@ function computeLeaderboard(picks, resultsByEventId) {
     const row = byUser.get(key);
 
     const res = resultsByEventId.get(p.eventId);
-    if (!res || res.state !== "post" || !res.winner) {
-      row.pending++;
-      continue;
-    }
+    if (!res || res.state !== "post" || !res.winner) { row.pending++; continue; }
     if (p.pick === res.winner) row.wins++;
     else row.losses++;
   }
   return Array.from(byUser.values()).sort((a,b) => (b.wins - a.wins) || (a.losses - b.losses) || a.name.localeCompare(b.name));
 }
 
+/* =========================
+   RENDER WAGERS
+   ========================= */
 async function renderWagers(showLoading) {
   const content = document.getElementById("content");
-
   const selectedDate = getSavedDateYYYYMMDD();
   const prettyDate = yyyymmddToPretty(selectedDate);
   const now = new Date();
@@ -1111,24 +1023,7 @@ async function renderWagers(showLoading) {
         <div>${escapeHtml(prettyDate)} • Updated ${updatedTime}</div>
       </div>
     </div>
-  `;
 
-  const sel = document.getElementById("leagueSelect");
-  if (sel) {
-    sel.addEventListener("change", () => {
-      saveLeagueKey(sel.value);
-      renderWagers(true);
-    });
-  }
-
-  const dateBtn = document.getElementById("dateBtn");
-  if (dateBtn) {
-    dateBtn.addEventListener("click", () => {
-      promptForDateAndReloadWagers();
-    });
-  }
-
-  content.innerHTML += `
     <div class="notice">
       <div class="wagersLine">
         <div><strong>Name:</strong> ${escapeHtml(userName || "Not set")}</div>
@@ -1140,19 +1035,6 @@ async function renderWagers(showLoading) {
       </div>
     </div>
   `;
-
-  document.getElementById("setNameBtn")?.addEventListener("click", () => setNameFlow());
-  document.getElementById("joinRoomBtn")?.addEventListener("click", async () => {
-    if (!getWagersUserName()) {
-      alert("Set your Name first so your buddies can see who you are.");
-      return;
-    }
-    try {
-      await joinRoomFlow();
-    } catch (e) {
-      alert("Couldn’t join room yet. Make sure Anonymous Auth + Firestore are enabled and rules are pasted.");
-    }
-  });
 
   if (!userName || !roomId) {
     content.innerHTML += `
@@ -1207,13 +1089,10 @@ async function renderWagers(showLoading) {
   events = [...events].sort((a, b) => {
     const ca = a?.competitions?.[0];
     const cb = b?.competitions?.[0];
-
     const ra = favoriteRankForEvent(ca);
     const rb = favoriteRankForEvent(cb);
-
     const aFav = Number.isFinite(ra) ? ra : Infinity;
     const bFav = Number.isFinite(rb) ? rb : Infinity;
-
     if (aFav !== bFav) return aFav - bFav;
 
     const sa = a?.status?.type?.state || "unknown";
@@ -1275,16 +1154,12 @@ async function renderWagers(showLoading) {
 
     card.innerHTML = `
       <div class="gameHeader">
-        <div class="statusPill ${pillClass}">${pillText}</div>
+        <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
       </div>
 
-      <div class="gameMetaTopLine" aria-label="Venue">
-        ${escapeHtml(venueLine)}
-      </div>
+      <div class="gameMetaTopLine">${escapeHtml(venueLine)}</div>
 
-      <div class="gameMetaOddsLine" aria-label="Betting line">
-        ${escapeHtml(initialOddsText)}
-      </div>
+      <div class="gameMetaOddsLine">${escapeHtml(initialOddsText)}</div>
 
       <div class="teamRow">
         <div class="teamLeft">
@@ -1321,23 +1196,7 @@ async function renderWagers(showLoading) {
     grid.appendChild(card);
   });
 
-  // odds hydration (same engine as Scores)
   hydrateAllOdds(events, league, selectedKey, selectedDate);
-
-  grid.querySelectorAll(".wagerBtn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const eventId = btn.getAttribute("data-eventid") || "";
-      const pick = btn.getAttribute("data-pick") || "";
-      const teamName = btn.getAttribute("data-team") || "";
-      if (!eventId || (pick !== "home" && pick !== "away")) return;
-
-      try {
-        await setPick(roomId, selectedKey, selectedDate, eventId, pick, teamName);
-      } catch (e) {
-        alert("Couldn’t save pick. Check Firebase rules/auth.");
-      }
-    });
-  });
 
   await listenToPicks(roomId, selectedKey, selectedDate, (payload) => {
     if (payload && payload.error) {
@@ -1372,126 +1231,23 @@ async function renderWagers(showLoading) {
       lb.querySelector(".leaderboardBody").textContent = "No picks yet.";
       return;
     }
+
     lb.querySelector(".leaderboardBody").innerHTML = rows.map(r => {
       return `<div class="leaderboardRow">${escapeHtml(r.name)}: ${r.wins}-${r.losses} <span style="opacity:0.7;">(pending ${r.pending})</span></div>`;
     }).join("");
   });
 }
 
-function promptForDateAndReloadWagers() {
-  const current = getSavedDateYYYYMMDD();
-  const pretty = yyyymmddToPretty(current);
-
-  const input = prompt(
-    `Pick a date:\n\n• Enter: YYYY-MM-DD (example: 2026-02-15)\n• Or: MM/DD/YYYY (example: 02/15/2026)\n• Or type: today\n\nCurrent: ${pretty} (${current})`,
-    `${current.slice(0,4)}-${current.slice(4,6)}-${current.slice(6,8)}`
-  );
-
-  if (input === null) return;
-
-  const parsed = parseUserDateToYYYYMMDD(input);
-  if (!parsed) {
-    alert("Date not recognized. Try YYYY-MM-DD or MM/DD/YYYY.");
-    return;
-  }
-
-  saveDateYYYYMMDD(parsed);
-  renderWagers(true);
-}
-/* ======================= */
-
-function checkCode() {
-  const code = document.getElementById("code").value;
-  if (code === "2026") {
-    document.getElementById("login").style.display = "none";
-    document.getElementById("app").style.display = "block";
-    showTab("scores");
-  } else {
-    alert("Wrong code");
-  }
-}
-
-function setActiveTabButton(tab) {
-  document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
-  const map = { scores: 0, wagers: 1, shop: 2 };
-  const idx = map[tab];
-  const btn = document.querySelectorAll(".tabs button")[idx];
-  if (btn) btn.classList.add("active");
-}
-
-function stopAutoRefresh() {
-  if (refreshIntervalId) clearInterval(refreshIntervalId);
-  refreshIntervalId = null;
-}
-
-function startAutoRefresh() {
-  stopAutoRefresh();
-  refreshIntervalId = setInterval(() => {
-    if (currentTab === "scores") loadScores(false);
-    if (currentTab === "wagers") renderWagers(false);
-  }, 30000);
-}
-
-function showTab(tab) {
-  currentTab = tab;
-  setActiveTabButton(tab);
-  stopAutoRefresh();
-
-  stopWagersListeners();
-
-  const content = document.getElementById("content");
-  content.innerHTML = "";
-
-  if (tab === "scores") {
-    loadScores(true);
-    startAutoRefresh();
-  } else if (tab === "wagers") {
-    renderWagers(true);
-    startAutoRefresh();
-  } else if (tab === "shop") {
-    content.innerHTML = `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Shop Updates</h2>
-            <span class="badge">v0.1</span>
-          </div>
-        </div>
-        <div class="subline">
-          <div>Photos + notes</div>
-          <div>Private</div>
-        </div>
-      </div>
-      <div class="notice">Next after wagers: a feed where you post pics/notes.</div>
-    `;
-  }
-}
-
-function statusClassFromState(state) {
-  if (state === "in") return "status-live";
-  if (state === "post") return "status-final";
-  if (state === "pre") return "status-up";
-  return "status-other";
-}
-
-function statusLabelFromState(state, detail) {
-  if (state === "in") return `LIVE • ${detail}`;
-  if (state === "post") return `FINAL`;
-  if (state === "pre") return `${detail}`;
-  return detail || "STATUS";
-}
-
+/* =========================
+   SCORES TAB
+   ========================= */
 function buildLeagueSelectHTML(selectedKey) {
   const options = LEAGUES.map(l => {
     const sel = l.key === selectedKey ? "selected" : "";
     return `<option value="${l.key}" ${sel}>${l.name}</option>`;
   }).join("");
 
-  return `
-    <select id="leagueSelect" class="leagueSelect" aria-label="Select league">
-      ${options}
-    </select>
-  `;
+  return `<select id="leagueSelect" class="leagueSelect" aria-label="Select league">${options}</select>`;
 }
 
 function buildCalendarButtonHTML() {
@@ -1508,15 +1264,26 @@ function promptForDateAndReload() {
   );
 
   if (input === null) return;
-
   const parsed = parseUserDateToYYYYMMDD(input);
-  if (!parsed) {
-    alert("Date not recognized. Try YYYY-MM-DD or MM/DD/YYYY.");
-    return;
-  }
-
+  if (!parsed) { alert("Date not recognized. Try YYYY-MM-DD or MM/DD/YYYY."); return; }
   saveDateYYYYMMDD(parsed);
   loadScores(true);
+}
+
+function promptForDateAndReloadWagers() {
+  const current = getSavedDateYYYYMMDD();
+  const pretty = yyyymmddToPretty(current);
+
+  const input = prompt(
+    `Pick a date:\n\n• Enter: YYYY-MM-DD (example: 2026-02-15)\n• Or: MM/DD/YYYY (example: 02/15/2026)\n• Or type: today\n\nCurrent: ${pretty} (${current})`,
+    `${current.slice(0,4)}-${current.slice(4,6)}-${current.slice(6,8)}`
+  );
+
+  if (input === null) return;
+  const parsed = parseUserDateToYYYYMMDD(input);
+  if (!parsed) { alert("Date not recognized. Try YYYY-MM-DD or MM/DD/YYYY."); return; }
+  saveDateYYYYMMDD(parsed);
+  renderWagers(true);
 }
 
 /* =========================
@@ -1558,27 +1325,21 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
   for (const a of attempts) {
     try {
       const resp = await fetch(a.url, { cache: "no-store" });
-      if (!resp.ok) {
-        lastError = new Error(`HTTP ${resp.status}`);
-        continue;
-      }
+      if (!resp.ok) { lastError = new Error(`HTTP ${resp.status}`); continue; }
       const data = await resp.json();
       const events = Array.isArray(data?.events) ? data.events : [];
-      if (events.length > 0) {
-        return { data, events, used: a.label, url: a.url };
-      }
-    } catch (e) {
-      lastError = e;
-    }
+      if (events.length > 0) return { data, events, used: a.label, url: a.url };
+    } catch (e) { lastError = e; }
   }
 
   return { data: null, events: [], used: "none", url: "", error: lastError };
 }
-/* ======================= */
 
+/* =========================
+   Scores render
+   ========================= */
 async function loadScores(showLoading) {
   const content = document.getElementById("content");
-
   const selectedDate = getSavedDateYYYYMMDD();
   const prettyDate = yyyymmddToPretty(selectedDate);
 
@@ -1633,21 +1394,6 @@ async function loadScores(showLoading) {
       </div>
     `;
 
-    const sel = document.getElementById("leagueSelect");
-    if (sel) {
-      sel.addEventListener("change", () => {
-        saveLeagueKey(sel.value);
-        loadScores(true);
-      });
-    }
-
-    const dateBtn = document.getElementById("dateBtn");
-    if (dateBtn) {
-      dateBtn.addEventListener("click", () => {
-        promptForDateAndReload();
-      });
-    }
-
     if (events.length === 0) {
       content.innerHTML += `
         <div class="notice">
@@ -1660,13 +1406,13 @@ async function loadScores(showLoading) {
       return;
     }
 
-    // PGA: Top 15 leaderboard
+    // PGA special page
     if (league.key === "pga") {
       renderGolfLeaderboards(events, content);
       return;
     }
 
-    // FAVORITES-FIRST SORT (still shows ALL games)
+    // favorites-first sort
     events = [...events].sort((a, b) => {
       const ca = a?.competitions?.[0];
       const cb = b?.competitions?.[0];
@@ -1676,7 +1422,6 @@ async function loadScores(showLoading) {
 
       const aFav = Number.isFinite(ra) ? ra : Infinity;
       const bFav = Number.isFinite(rb) ? rb : Infinity;
-
       if (aFav !== bFav) return aFav - bFav;
 
       const sa = a?.status?.type?.state || "unknown";
@@ -1737,13 +1482,9 @@ async function loadScores(showLoading) {
           <div class="statusPill ${pillClass}">${pillText}</div>
         </div>
 
-        <div class="gameMetaTopLine" aria-label="Venue">
-          ${escapeHtml(venueLine)}
-        </div>
+        <div class="gameMetaTopLine">${escapeHtml(venueLine)}</div>
 
-        <div class="gameMetaOddsLine" aria-label="Betting line">
-          ${escapeHtml(initialOddsText)}
-        </div>
+        <div class="gameMetaOddsLine">${escapeHtml(initialOddsText)}</div>
 
         <div class="teamRow">
           <div class="teamLeft">
@@ -1784,7 +1525,6 @@ async function loadScores(showLoading) {
     });
 
     content.appendChild(grid);
-
     hydrateAllOdds(events, league, selectedKey, selectedDate);
 
   } catch (error) {
@@ -1807,27 +1547,25 @@ async function loadScores(showLoading) {
       </div>
       <div class="notice">Couldn’t load scores right now.</div>
     `;
-
-    const sel = document.getElementById("leagueSelect");
-    if (sel) {
-      sel.addEventListener("change", () => {
-        saveLeagueKey(sel.value);
-        loadScores(true);
-      });
-    }
-
-    const dateBtn = document.getElementById("dateBtn");
-    if (dateBtn) {
-      dateBtn.addEventListener("click", () => {
-        promptForDateAndReload();
-      });
-    }
   }
 }
 
 /* =========================
-   UI / TABS
+   Tabs + Status
    ========================= */
+function statusClassFromState(state) {
+  if (state === "in") return "status-live";
+  if (state === "post") return "status-final";
+  if (state === "pre") return "status-up";
+  return "status-other";
+}
+function statusLabelFromState(state, detail) {
+  if (state === "in") return `LIVE • ${detail}`;
+  if (state === "post") return `FINAL`;
+  if (state === "pre") return `${detail}`;
+  return detail || "STATUS";
+}
+
 function setActiveTabButton(tab) {
   document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
   const map = { scores: 0, wagers: 1, shop: 2 };
@@ -1836,9 +1574,6 @@ function setActiveTabButton(tab) {
   if (btn) btn.classList.add("active");
 }
 
-/* =========================
-   Auto refresh
-   ========================= */
 function stopAutoRefresh() {
   if (refreshIntervalId) clearInterval(refreshIntervalId);
   refreshIntervalId = null;
@@ -1856,7 +1591,6 @@ function showTab(tab) {
   currentTab = tab;
   setActiveTabButton(tab);
   stopAutoRefresh();
-
   stopWagersListeners();
 
   const content = document.getElementById("content");
@@ -1888,18 +1622,90 @@ function showTab(tab) {
 }
 
 /* =========================
-   Status label helpers
+   Login
    ========================= */
-function statusClassFromState(state) {
-  if (state === "in") return "status-live";
-  if (state === "post") return "status-final";
-  if (state === "pre") return "status-up";
-  return "status-other";
+function checkCode() {
+  const code = document.getElementById("code").value;
+  if (code === "2026") {
+    document.getElementById("login").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    showTab("scores");
+  } else {
+    alert("Wrong code");
+  }
 }
 
-function statusLabelFromState(state, detail) {
-  if (state === "in") return `LIVE • ${detail}`;
-  if (state === "post") return `FINAL`;
-  if (state === "pre") return `${detail}`;
-  return detail || "STATUS";
-}
+/* =========================
+   HARDENED EVENTS (FIX)
+   - One global click/change handler
+   ========================= */
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  if (btn.id === "setNameBtn") {
+    setNameFlow();
+    return;
+  }
+
+  if (btn.id === "joinRoomBtn") {
+    if (!getWagersUserName()) {
+      alert("Set your Name first so your buddies can see who you are.");
+      return;
+    }
+    try {
+      await joinRoomFlow();
+    } catch (err) {
+      alert("Couldn’t join room yet. Make sure Anonymous Auth + Firestore are enabled and rules are pasted.");
+    }
+    return;
+  }
+
+  if (btn.id === "dateBtn") {
+    if (currentTab === "wagers") promptForDateAndReloadWagers();
+    else promptForDateAndReload();
+    return;
+  }
+
+  // Wager pick buttons (event delegation)
+  if (btn.classList.contains("wagerBtn")) {
+    const roomId = getWagersRoomId();
+    if (!roomId) { alert("Join a room first."); return; }
+
+    const leagueKey = getSavedLeagueKey();
+    const dateYYYYMMDD = getSavedDateYYYYMMDD();
+
+    const eventId = btn.getAttribute("data-eventid") || "";
+    const pick = btn.getAttribute("data-pick") || "";
+    const teamName = btn.getAttribute("data-team") || "";
+    if (!eventId || (pick !== "home" && pick !== "away")) return;
+
+    try {
+      await setPick(roomId, leagueKey, dateYYYYMMDD, eventId, pick, teamName);
+    } catch (err) {
+      alert("Couldn’t save pick. Check Firebase rules/auth.");
+    }
+    return;
+  }
+});
+
+document.addEventListener("change", (e) => {
+  const sel = e.target;
+  if (!(sel instanceof HTMLSelectElement)) return;
+  if (sel.id !== "leagueSelect") return;
+
+  saveLeagueKey(sel.value);
+  if (currentTab === "wagers") renderWagers(true);
+  else loadScores(true);
+});
+
+/* =========================
+   Window exports (FIX)
+   - ensures inline onclick works everywhere
+   ========================= */
+window.checkCode = checkCode;
+window.showTab = showTab;
+window.loadScores = loadScores;
+window.renderWagers = renderWagers;
+window.promptForDateAndReload = promptForDateAndReload;
+window.promptForDateAndReloadWagers = promptForDateAndReloadWagers;
