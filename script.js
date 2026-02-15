@@ -2,13 +2,34 @@ let refreshIntervalId = null;
 let currentTab = null;
 
 const STORAGE_KEY = "theShopLeague_v1";
+const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
+
+// Favorites (top priority, in this order)
+const FAVORITES = [
+  "Ohio State Buckeyes",
+  "Duke Blue Devils",
+  "West Virginia Mountaineers",
+  "Columbus Blue Jackets",
+  "Carolina Hurricanes",
+  "Carolina Panthers",
+  "Dallas Cowboys",
+  "Boston Red Sox",
+  "Cleveland Guardians"
+];
+
+function norm(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
 
 // Leagues for dropdown
 const LEAGUES = [
   {
     key: "ncaam",
     name: "Men’s College Basketball",
-    // IMPORTANT: groups=50 forces "All Division I" instead of featured/Top-25 subset
+    // groups=50 => All Division I (prevents the “one featured game” issue)
     endpoint: (date) =>
       `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
   },
@@ -71,6 +92,77 @@ function formatDateYYYYMMDD(d) {
   return `${yyyy}${mm}${dd}`;
 }
 
+function parseUserDateToYYYYMMDD(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+
+  const lower = raw.toLowerCase();
+  if (lower === "today" || lower === "t") return formatDateYYYYMMDD(new Date());
+
+  // Accept YYYY-MM-DD or YYYY/MM/DD
+  let m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (m) {
+    const yyyy = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    const dt = new Date(yyyy, mm - 1, dd);
+    if (dt && dt.getFullYear() === yyyy && dt.getMonth() === (mm - 1) && dt.getDate() === dd) {
+      return formatDateYYYYMMDD(dt);
+    }
+    return null;
+  }
+
+  // Accept MM/DD/YYYY or M/D/YYYY
+  m = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (m) {
+    const mm = Number(m[1]);
+    const dd = Number(m[2]);
+    const yyyy = Number(m[3]);
+    const dt = new Date(yyyy, mm - 1, dd);
+    if (dt && dt.getFullYear() === yyyy && dt.getMonth() === (mm - 1) && dt.getDate() === dd) {
+      return formatDateYYYYMMDD(dt);
+    }
+    return null;
+  }
+
+  // Accept YYYYMMDD
+  m = raw.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) {
+    const yyyy = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    const dt = new Date(yyyy, mm - 1, dd);
+    if (dt && dt.getFullYear() === yyyy && dt.getMonth() === (mm - 1) && dt.getDate() === dd) {
+      return formatDateYYYYMMDD(dt);
+    }
+    return null;
+  }
+
+  return null;
+}
+
+function getSavedDateYYYYMMDD() {
+  const saved = localStorage.getItem(DATE_KEY);
+  if (saved && /^\d{8}$/.test(saved)) return saved;
+  // default to today
+  const today = formatDateYYYYMMDD(new Date());
+  localStorage.setItem(DATE_KEY, today);
+  return today;
+}
+
+function saveDateYYYYMMDD(yyyymmdd) {
+  localStorage.setItem(DATE_KEY, yyyymmdd);
+}
+
+function yyyymmddToPretty(yyyymmdd) {
+  if (!yyyymmdd || !/^\d{8}$/.test(yyyymmdd)) return "";
+  const yyyy = Number(yyyymmdd.slice(0, 4));
+  const mm = Number(yyyymmdd.slice(4, 6));
+  const dd = Number(yyyymmdd.slice(6, 8));
+  const dt = new Date(yyyy, mm - 1, dd);
+  return dt.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 /* =========================
    LOGO HELPERS
    ========================= */
@@ -96,6 +188,60 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+/* ======================= */
+
+/* =========================
+   FAVORITES SORTING
+   ========================= */
+const FAVORITES_NORM = FAVORITES.map(norm);
+
+function getTeamIdentityStrings(team) {
+  // We match on displayName primarily (your list), but also include a few safe alternates
+  const displayName = team?.displayName || "";
+  const shortName = team?.shortDisplayName || "";
+  const name = team?.name || "";
+  const location = team?.location || "";
+  const abbrev = team?.abbreviation || "";
+
+  // Build some typical ESPN combos like "Ohio State Buckeyes"
+  const combo1 = location && name ? `${location} ${name}` : "";
+
+  return [displayName, combo1, shortName, name, location, abbrev].filter(Boolean);
+}
+
+function favoriteRankForEvent(competition) {
+  const competitors = competition?.competitors || [];
+  let bestRank = Infinity;
+
+  for (const c of competitors) {
+    const team = c?.team;
+    const ids = getTeamIdentityStrings(team).map(norm);
+
+    // EXACT match to your favorite list entries
+    for (let i = 0; i < FAVORITES_NORM.length; i++) {
+      if (ids.includes(FAVORITES_NORM[i])) {
+        if (i < bestRank) bestRank = i;
+      }
+    }
+  }
+
+  return bestRank; // Infinity means not a favorite game
+}
+
+function stateRank(state) {
+  // We want: LIVE first, then upcoming, then finals, then other
+  if (state === "in") return 0;
+  if (state === "pre") return 1;
+  if (state === "post") return 2;
+  return 3;
+}
+
+function getStartTimeMs(event, competition) {
+  // ESPN usually provides event.date (ISO string), sometimes competition.date
+  const iso = event?.date || competition?.date || "";
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
 }
 /* ======================= */
 
@@ -125,6 +271,7 @@ function stopAutoRefresh() {
 
 function startAutoRefresh() {
   stopAutoRefresh();
+  // Refresh current league every 30 seconds while Scores is visible
   refreshIntervalId = setInterval(() => {
     if (currentTab === "scores") loadScores(false);
   }, 30000);
@@ -203,6 +350,31 @@ function buildLeagueSelectHTML(selectedKey) {
   `;
 }
 
+function buildCalendarButtonHTML() {
+  return `<button id="dateBtn" class="iconBtn" aria-label="Choose date">📅</button>`;
+}
+
+function promptForDateAndReload() {
+  const current = getSavedDateYYYYMMDD();
+  const pretty = yyyymmddToPretty(current);
+
+  const input = prompt(
+    `Pick a date:\n\n• Enter: YYYY-MM-DD (example: 2026-02-15)\n• Or: MM/DD/YYYY (example: 02/15/2026)\n• Or type: today\n\nCurrent: ${pretty} (${current})`,
+    `${current.slice(0,4)}-${current.slice(4,6)}-${current.slice(6,8)}`
+  );
+
+  if (input === null) return; // user canceled
+
+  const parsed = parseUserDateToYYYYMMDD(input);
+  if (!parsed) {
+    alert("Date not recognized. Try YYYY-MM-DD or MM/DD/YYYY.");
+    return;
+  }
+
+  saveDateYYYYMMDD(parsed);
+  loadScores(true);
+}
+
 /* =========================
    ESPN FETCH (ROBUST)
    ========================= */
@@ -214,38 +386,32 @@ function removeDatesParam(url) {
     .replace(/&dates=\d{8}$/i, "");
 }
 
-function addOrReplaceParam(url, key, value) {
-  const hasQ = url.includes("?");
-  const re = new RegExp(`([?&])${key}=.*?(&|$)`, "i");
-  if (re.test(url)) {
-    return url.replace(re, `$1${key}=${encodeURIComponent(value)}$2`).replace(/&$/, "");
-  }
-  return url + (hasQ ? "&" : "?") + `${key}=${encodeURIComponent(value)}`;
-}
+async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
+  const baseUrl = league.endpoint(yyyymmdd);
 
-async function fetchScoreboardWithFallbacks(league, date) {
-  const baseTodayUrl = league.endpoint(date);
+  // Use selected date for yesterday/tomorrow as well
+  const yyyy = Number(yyyymmdd.slice(0, 4));
+  const mm = Number(yyyymmdd.slice(4, 6));
+  const dd = Number(yyyymmdd.slice(6, 8));
+  const baseDate = new Date(yyyy, mm - 1, dd);
 
-  const d = new Date();
-  const yesterday = new Date(d.getTime() - 86400000);
-  const tomorrow = new Date(d.getTime() + 86400000);
+  const yesterday = new Date(baseDate.getTime() - 86400000);
+  const tomorrow = new Date(baseDate.getTime() + 86400000);
   const yDate = formatDateYYYYMMDD(yesterday);
   const tDate = formatDateYYYYMMDD(tomorrow);
 
-  // NCAAM: sometimes the "best" result is groups=50 (already set in endpoint),
-  // but we also try a couple other variants just in case ESPN behavior changes.
   const isNcaam = league.key === "ncaam";
 
   const attempts = [
-    { label: "today", url: baseTodayUrl },
+    { label: "selectedDate", url: baseUrl },
 
-    // NCAAM-only: try without groups (rarely helpful, but safe)
-    ...(isNcaam ? [{ label: "today-noGroups", url: baseTodayUrl.replace(/&groups=50/i, "") }] : []),
+    // NCAAM-only: try removing groups in case ESPN behavior shifts
+    ...(isNcaam ? [{ label: "ncaam-noGroups", url: baseUrl.replace(/&groups=50/i, "") }] : []),
 
-    // General: noDate lets ESPN decide "today"
-    { label: "noDate", url: removeDatesParam(baseTodayUrl) },
+    // General: noDate lets ESPN decide “today” (mostly useful when the selected date is today)
+    { label: "noDate", url: removeDatesParam(baseUrl) },
 
-    // Time edge cases
+    // Edge cases
     { label: "yesterday", url: league.endpoint(yDate) },
     { label: "tomorrow", url: league.endpoint(tDate) }
   ];
@@ -276,8 +442,10 @@ async function fetchScoreboardWithFallbacks(league, date) {
 async function loadScores(showLoading) {
   const content = document.getElementById("content");
 
+  const selectedDate = getSavedDateYYYYMMDD();
+  const prettyDate = yyyymmddToPretty(selectedDate);
+
   const now = new Date();
-  const date = formatDateYYYYMMDD(now);
   const updatedTime = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
   const selectedKey = getSavedLeagueKey();
@@ -294,19 +462,22 @@ async function loadScores(showLoading) {
           <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
         </div>
         <div class="subline">
-          <div>${buildLeagueSelectHTML(selectedKey)}</div>
-          <div>Loading…</div>
+          <div class="sublineLeft">
+            ${buildLeagueSelectHTML(selectedKey)}
+            ${buildCalendarButtonHTML()}
+          </div>
+          <div>${escapeHtml(prettyDate)} • Loading…</div>
         </div>
       </div>
-      <div class="notice">Grabbing today’s games…</div>
+      <div class="notice">Grabbing games…</div>
     `;
   }
 
   try {
-    const result = await fetchScoreboardWithFallbacks(league, date);
-    const events = result.events;
+    const result = await fetchScoreboardWithFallbacks(league, selectedDate);
+    let events = result.events;
 
-    // Header with dropdown + updated time
+    // Header with dropdown + calendar + updated time + selected date
     content.innerHTML = `
       <div class="header">
         <div class="headerTop">
@@ -317,8 +488,11 @@ async function loadScores(showLoading) {
           <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
         </div>
         <div class="subline">
-          <div>${buildLeagueSelectHTML(selectedKey)}</div>
-          <div>Updated ${updatedTime}</div>
+          <div class="sublineLeft">
+            ${buildLeagueSelectHTML(selectedKey)}
+            ${buildCalendarButtonHTML()}
+          </div>
+          <div>${escapeHtml(prettyDate)} • Updated ${updatedTime}</div>
         </div>
       </div>
     `;
@@ -332,10 +506,18 @@ async function loadScores(showLoading) {
       });
     }
 
+    // Wire calendar button
+    const dateBtn = document.getElementById("dateBtn");
+    if (dateBtn) {
+      dateBtn.addEventListener("click", () => {
+        promptForDateAndReload();
+      });
+    }
+
     if (events.length === 0) {
       content.innerHTML += `
         <div class="notice">
-          No games found today for this league (likely offseason).
+          No games found for this league/date (likely offseason).
           <div style="margin-top:8px; opacity:0.6; font-size:12px;">
             (Tried ESPN fallbacks: ${escapeHtml(result.used)})
           </div>
@@ -343,6 +525,37 @@ async function loadScores(showLoading) {
       `;
       return;
     }
+
+    // FAVORITES-FIRST SORT (still shows ALL games)
+    // 1) Favorite games first (by your favorite order)
+    // 2) Within that: LIVE > UPCOMING > FINAL > OTHER
+    // 3) Then by start time
+    // 4) Then stable fallback by event id/name
+    events = [...events].sort((a, b) => {
+      const ca = a?.competitions?.[0];
+      const cb = b?.competitions?.[0];
+
+      const ra = favoriteRankForEvent(ca);
+      const rb = favoriteRankForEvent(cb);
+
+      const aFav = Number.isFinite(ra) ? ra : Infinity;
+      const bFav = Number.isFinite(rb) ? rb : Infinity;
+
+      if (aFav !== bFav) return aFav - bFav;
+
+      const sa = a?.status?.type?.state || "unknown";
+      const sb = b?.status?.type?.state || "unknown";
+      const sr = stateRank(sa) - stateRank(sb);
+      if (sr !== 0) return sr;
+
+      const ta = getStartTimeMs(a, ca);
+      const tb = getStartTimeMs(b, cb);
+      if (ta !== tb) return ta - tb;
+
+      const ida = String(a?.id || a?.uid || a?.name || "");
+      const idb = String(b?.id || b?.uid || b?.name || "");
+      return ida.localeCompare(idb);
+    });
 
     // Show ALL games (scroll)
     const grid = document.createElement("div");
@@ -438,7 +651,10 @@ async function loadScores(showLoading) {
           <button class="smallBtn" onclick="loadScores(true)">Retry</button>
         </div>
         <div class="subline">
-          <div>${buildLeagueSelectHTML(getSavedLeagueKey())}</div>
+          <div class="sublineLeft">
+            ${buildLeagueSelectHTML(getSavedLeagueKey())}
+            ${buildCalendarButtonHTML()}
+          </div>
           <div>Error</div>
         </div>
       </div>
@@ -450,6 +666,13 @@ async function loadScores(showLoading) {
       sel.addEventListener("change", () => {
         saveLeagueKey(sel.value);
         loadScores(true);
+      });
+    }
+
+    const dateBtn = document.getElementById("dateBtn");
+    if (dateBtn) {
+      dateBtn.addEventListener("click", () => {
+        promptForDateAndReload();
       });
     }
   }
