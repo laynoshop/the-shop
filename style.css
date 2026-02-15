@@ -139,6 +139,13 @@ button {
   align-items: center;
 }
 
+/* NEW: keeps dropdown + calendar button together without redesign */
+.sublineLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* League dropdown */
 .leagueSelect {
   font-size: 14px;
@@ -149,6 +156,17 @@ button {
   color: white;
   outline: none;
   max-width: 240px;
+}
+
+/* NEW: calendar emoji button (matches your smallBtn style language) */
+.iconBtn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-weight: 900;
+  color: white;
+  line-height: 1;
 }
 
 /* GRID */
@@ -222,9 +240,7 @@ button {
   font-size:13px;
 }
 
-/* =========================
-   LOGO LAYER (ADDED)
-   ========================= */
+/* LOGO LAYER */
 .teamLine {
   display: flex;
   align-items: center;
@@ -261,7 +277,6 @@ button {
   font-weight: 900;
   letter-spacing: 0.3px;
 }
-/* ======================= */
 
 /* TABS (safe area padding) */
 .tabs {
