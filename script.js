@@ -29,7 +29,6 @@ const LEAGUES = [
   {
     key: "ncaam",
     name: "Men’s College Basketball",
-    // groups=50 => All Division I (prevents the “one featured game” issue)
     endpoint: (date) =>
       `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
   },
@@ -144,7 +143,6 @@ function parseUserDateToYYYYMMDD(input) {
 function getSavedDateYYYYMMDD() {
   const saved = localStorage.getItem(DATE_KEY);
   if (saved && /^\d{8}$/.test(saved)) return saved;
-  // default to today
   const today = formatDateYYYYMMDD(new Date());
   localStorage.setItem(DATE_KEY, today);
   return today;
@@ -197,16 +195,12 @@ function escapeHtml(str) {
 const FAVORITES_NORM = FAVORITES.map(norm);
 
 function getTeamIdentityStrings(team) {
-  // We match on displayName primarily (your list), but also include a few safe alternates
   const displayName = team?.displayName || "";
   const shortName = team?.shortDisplayName || "";
   const name = team?.name || "";
   const location = team?.location || "";
   const abbrev = team?.abbreviation || "";
-
-  // Build some typical ESPN combos like "Ohio State Buckeyes"
   const combo1 = location && name ? `${location} ${name}` : "";
-
   return [displayName, combo1, shortName, name, location, abbrev].filter(Boolean);
 }
 
@@ -217,8 +211,6 @@ function favoriteRankForEvent(competition) {
   for (const c of competitors) {
     const team = c?.team;
     const ids = getTeamIdentityStrings(team).map(norm);
-
-    // EXACT match to your favorite list entries
     for (let i = 0; i < FAVORITES_NORM.length; i++) {
       if (ids.includes(FAVORITES_NORM[i])) {
         if (i < bestRank) bestRank = i;
@@ -226,11 +218,10 @@ function favoriteRankForEvent(competition) {
     }
   }
 
-  return bestRank; // Infinity means not a favorite game
+  return bestRank;
 }
 
 function stateRank(state) {
-  // We want: LIVE first, then upcoming, then finals, then other
   if (state === "in") return 0;
   if (state === "pre") return 1;
   if (state === "post") return 2;
@@ -238,7 +229,6 @@ function stateRank(state) {
 }
 
 function getStartTimeMs(event, competition) {
-  // ESPN usually provides event.date (ISO string), sometimes competition.date
   const iso = event?.date || competition?.date || "";
   const t = Date.parse(iso);
   return Number.isFinite(t) ? t : 0;
@@ -248,7 +238,7 @@ function getStartTimeMs(event, competition) {
 /* =========================
    VENUE + ODDS HELPERS
    ========================= */
-function getVenueText(competition) {
+function getVenueParts(competition) {
   const venue = competition?.venue || null;
   if (!venue) return { venueName: "", location: "" };
 
@@ -258,7 +248,6 @@ function getVenueText(competition) {
   const state = venue?.address?.state || "";
   const country = venue?.address?.country || "";
 
-  // Prefer City, ST; fallback to Country if no state/city
   let location = "";
   if (city && state) location = `${city}, ${state}`;
   else if (city) location = city;
@@ -268,17 +257,30 @@ function getVenueText(competition) {
   return { venueName, location };
 }
 
-function getOddsText(competition) {
-  // ESPN often provides competition.odds[0] with { details, overUnder, ... }
+function getOddsParts(competition) {
   const o = Array.isArray(competition?.odds) && competition.odds.length ? competition.odds[0] : null;
-
   const spread = (o?.details || "").trim(); // ex: "Duke -8.5"
   const ouRaw = o?.overUnder;
-  const overUnder = (ouRaw !== null && ouRaw !== undefined && ouRaw !== "")
-    ? `O/U ${ouRaw}`
-    : "";
-
+  const overUnder =
+    ouRaw !== null && ouRaw !== undefined && ouRaw !== "" ? `O/U ${ouRaw}` : "";
   return { spread, overUnder };
+}
+
+function buildMetaLine(competition) {
+  const v = getVenueParts(competition);
+  const o = getOddsParts(competition);
+
+  // Build: Stadium/Venue - City, State - Favored - O/U
+  const parts = [];
+
+  const venuePart = [v.venueName, v.location].filter(Boolean).join(" - ");
+  if (venuePart) parts.push(venuePart);
+
+  if (o.spread) parts.push(o.spread);
+  if (o.overUnder) parts.push(o.overUnder);
+
+  // If everything missing, show a dash so layout stays consistent
+  return parts.length ? parts.join(" - ") : "—";
 }
 /* ======================= */
 
@@ -308,7 +310,6 @@ function stopAutoRefresh() {
 
 function startAutoRefresh() {
   stopAutoRefresh();
-  // Refresh current league every 30 seconds while Scores is visible
   refreshIntervalId = setInterval(() => {
     if (currentTab === "scores") loadScores(false);
   }, 30000);
@@ -400,7 +401,7 @@ function promptForDateAndReload() {
     `${current.slice(0,4)}-${current.slice(4,6)}-${current.slice(6,8)}`
   );
 
-  if (input === null) return; // user canceled
+  if (input === null) return;
 
   const parsed = parseUserDateToYYYYMMDD(input);
   if (!parsed) {
@@ -426,7 +427,6 @@ function removeDatesParam(url) {
 async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
   const baseUrl = league.endpoint(yyyymmdd);
 
-  // Use selected date for yesterday/tomorrow as well
   const yyyy = Number(yyyymmdd.slice(0, 4));
   const mm = Number(yyyymmdd.slice(4, 6));
   const dd = Number(yyyymmdd.slice(6, 8));
@@ -441,14 +441,8 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
 
   const attempts = [
     { label: "selectedDate", url: baseUrl },
-
-    // NCAAM-only: try removing groups in case ESPN behavior shifts
     ...(isNcaam ? [{ label: "ncaam-noGroups", url: baseUrl.replace(/&groups=50/i, "") }] : []),
-
-    // General: noDate lets ESPN decide “today” (mostly useful when the selected date is today)
     { label: "noDate", url: removeDatesParam(baseUrl) },
-
-    // Edge cases
     { label: "yesterday", url: league.endpoint(yDate) },
     { label: "tomorrow", url: league.endpoint(tDate) }
   ];
@@ -514,7 +508,6 @@ async function loadScores(showLoading) {
     const result = await fetchScoreboardWithFallbacks(league, selectedDate);
     let events = result.events;
 
-    // Header with dropdown + calendar + updated time + selected date
     content.innerHTML = `
       <div class="header">
         <div class="headerTop">
@@ -534,7 +527,6 @@ async function loadScores(showLoading) {
       </div>
     `;
 
-    // Wire dropdown change
     const sel = document.getElementById("leagueSelect");
     if (sel) {
       sel.addEventListener("change", () => {
@@ -543,7 +535,6 @@ async function loadScores(showLoading) {
       });
     }
 
-    // Wire calendar button
     const dateBtn = document.getElementById("dateBtn");
     if (dateBtn) {
       dateBtn.addEventListener("click", () => {
@@ -563,11 +554,6 @@ async function loadScores(showLoading) {
       return;
     }
 
-    // FAVORITES-FIRST SORT (still shows ALL games)
-    // 1) Favorite games first (by your favorite order)
-    // 2) Within that: LIVE > UPCOMING > FINAL > OTHER
-    // 3) Then by start time
-    // 4) Then stable fallback by event id/name
     events = [...events].sort((a, b) => {
       const ca = a?.competitions?.[0];
       const cb = b?.competitions?.[0];
@@ -594,7 +580,6 @@ async function loadScores(showLoading) {
       return ida.localeCompare(idb);
     });
 
-    // Show ALL games (scroll)
     const grid = document.createElement("div");
     grid.className = "grid";
 
@@ -616,7 +601,6 @@ async function loadScores(showLoading) {
       const homeName = home?.team?.displayName || "Home";
       const awayName = away?.team?.displayName || "Away";
 
-      // LOGOS
       const homeTeam = home?.team || null;
       const awayTeam = away?.team || null;
       const homeLogo = getTeamLogoUrl(homeTeam);
@@ -624,19 +608,8 @@ async function loadScores(showLoading) {
       const homeAbbrev = escapeHtml(getTeamAbbrev(homeTeam)).slice(0, 4);
       const awayAbbrev = escapeHtml(getTeamAbbrev(awayTeam)).slice(0, 4);
 
-      // NEW: Venue + Odds (spread + O/U)
-      const v = getVenueText(competition);
-      const o = getOddsText(competition);
-
-      const venueLine = (() => {
-        const parts = [];
-        if (v.venueName) parts.push(v.venueName);
-        if (v.location) parts.push(v.location);
-        return parts.join(" • ");
-      })();
-
-      const spreadText = o.spread ? o.spread : "—";
-      const ouText = o.overUnder ? o.overUnder : "—";
+      // NEW: single meta line (wraps, no labels)
+      const metaLine = buildMetaLine(competition);
 
       const card = document.createElement("div");
       card.className = "game";
@@ -646,19 +619,8 @@ async function loadScores(showLoading) {
           <div class="statusPill ${pillClass}">${pillText}</div>
         </div>
 
-        <div class="gameMetaTop" aria-label="Venue and odds">
-          <div class="metaRow">
-            <div class="metaKey">Venue</div>
-            <div class="metaVal">${escapeHtml(venueLine || "—")}</div>
-          </div>
-          <div class="metaRow">
-            <div class="metaKey">Line</div>
-            <div class="metaVal">${escapeHtml(spreadText)}</div>
-          </div>
-          <div class="metaRow">
-            <div class="metaKey">Total</div>
-            <div class="metaVal">${escapeHtml(ouText)}</div>
-          </div>
+        <div class="gameMetaTopLine" aria-label="Venue and odds">
+          ${escapeHtml(metaLine)}
         </div>
 
         <div class="teamRow">
@@ -700,7 +662,6 @@ async function loadScores(showLoading) {
     });
 
     content.appendChild(grid);
-
   } catch (error) {
     content.innerHTML = `
       <div class="header">
