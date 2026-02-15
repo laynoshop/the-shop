@@ -205,10 +205,10 @@ button {
 .status-up     { background: rgba(245,158,11,0.2); color: #fde68a; }
 .status-other  { background: rgba(255,255,255,0.1); color: #e5e7eb; }
 
-/* NEW: single line (wraps), no labels, no cutoff */
+/* Venue line (wraps, no cutoff) */
 .gameMetaTopLine {
   margin-top: -4px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(255,255,255,0.04);
@@ -219,7 +219,26 @@ button {
   font-weight: 800;
   color: rgba(255,255,255,0.72);
 
-  /* THIS is the fix: allow wrapping, no ellipsis cutoff */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+}
+
+/* NEW: odds line under venue (same look, slightly tighter) */
+.gameMetaOddsLine {
+  margin-top: -2px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: rgba(255,255,255,0.68);
+
   white-space: normal;
   overflow: visible;
   text-overflow: unset;
