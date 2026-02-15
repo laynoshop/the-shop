@@ -225,7 +225,7 @@ button {
   word-break: break-word;
 }
 
-/* odds line under venue */
+/* Odds/meta line under venue */
 .gameMetaOddsLine {
   margin-top: -2px;
   margin-bottom: 12px;
@@ -310,10 +310,8 @@ button {
   letter-spacing: 0.3px;
 }
 
-/* ===== PGA tweaks (minimal, Gold Standard compliant) ===== */
-.golfCard .teamName {
-  font-size: 16px; /* slight reduction so rows fit better on phones */
-}
+/* ===== PGA tweaks (small font help on phones) ===== */
+.golfCard .teamName { font-size: 16px; }
 
 .scoreCol {
   display: flex;
@@ -330,7 +328,42 @@ button {
   color: rgba(255,255,255,0.65);
   line-height: 1;
 }
-/* ========================================= */
+
+/* ===== Wagers ===== */
+.wagersLine{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.wagerActions{
+  display:flex;
+  gap:10px;
+  margin-top:6px;
+  margin-bottom:10px;
+}
+
+.wagerBtn{ flex:1; }
+
+.wagerPicksLine{
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: rgba(255,255,255,0.68);
+
+  white-space: normal;
+  word-break: break-word;
+}
+
+.leaderboardTitle{ margin-bottom: 8px; }
+.leaderboardRow{ margin-top: 6px; }
 
 /* TABS (safe area padding) */
 .tabs {
