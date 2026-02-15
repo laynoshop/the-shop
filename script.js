@@ -486,19 +486,16 @@ function applyOddsToDom(eventId, favored, ou) {
   const el = getOddsLineElByEventId(eventId);
   if (!el) return;
   const text = buildOddsLine(favored, ou);
-  // update only if changed (reduces layout churn)
   if (el.textContent !== text) el.textContent = text;
 }
 
 function withLangRegion(url) {
-  // Preserve existing query params; add lang/region if missing
   try {
     const u = new URL(url);
     if (!u.searchParams.has("lang")) u.searchParams.set("lang", "en");
     if (!u.searchParams.has("region")) u.searchParams.set("region", "us");
     return u.toString();
   } catch {
-    // if URL() fails, best-effort append
     const joiner = url.includes("?") ? "&" : "?";
     let out = url;
     if (!/([?&])lang=/.test(out)) out += `${joiner}lang=en`;
@@ -528,13 +525,10 @@ async function fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, eventId, fa
   const p = (async () => {
     const base = league.summaryEndpoint(eventId);
 
-    // Try standard summary endpoint with region/lang first
     const urls = [
       withLangRegion(base),
-      // fallback variants (ESPN sometimes accepts eventId key)
       withLangRegion(base.replace("?event=", "?eventId=")),
       withLangRegion(base.replace("summary?event=", "summary?eventId=")),
-      // last resort: raw base (in case ESPN rejects extra params for some league)
       base
     ];
 
@@ -581,7 +575,6 @@ async function runWithConcurrency(items, limit, worker) {
 }
 
 async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
-  // Load persistent cache for this league/date once per load
   loadOddsCacheFromSession(leagueKey, dateYYYYMMDD);
 
   const jobs = events
@@ -609,7 +602,6 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
     }
   }
 
-  // Second pass: only fetch summary for those still missing
   const needsFetch = jobs.filter(job => {
     const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
     const val = oddsCache.get(ck);
@@ -620,6 +612,190 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
     const parsed = await fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, job.eventId, job.competition);
     applyOddsToDom(job.eventId, parsed.favored, parsed.ou);
   });
+}
+/* ======================= */
+
+/* =========================
+   GOLF (PGA) LEADERBOARD HELPERS
+   Option A: One tournament card with Top 15 rows
+   ========================= */
+function parseGolfPosToSortValue(pos) {
+  const s = String(pos || "").trim();
+  if (!s) return Infinity;
+  const n = Number(s.replace(/^T/i, ""));
+  return Number.isFinite(n) ? n : Infinity;
+}
+
+function formatGolfScoreToPar(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "—";
+  if (s === "E" || s === "EVEN" || s === "Even") return "E";
+  // Keep "-" and "+" as-is
+  return s;
+}
+
+function getGolfCompetitorsList(competition) {
+  const list = competition?.competitors;
+  if (Array.isArray(list)) return list;
+  return [];
+}
+
+function getGolferName(c) {
+  return (
+    c?.athlete?.displayName ||
+    c?.athlete?.shortName ||
+    c?.athlete?.fullName ||
+    c?.player?.displayName ||
+    c?.player?.fullName ||
+    c?.competitor?.displayName ||
+    c?.displayName ||
+    "—"
+  );
+}
+
+function getGolferPos(c) {
+  return (
+    c?.position?.displayName ||
+    c?.position?.shortDisplayName ||
+    c?.position ||
+    c?.rank ||
+    c?.order ||
+    ""
+  );
+}
+
+function getGolferScoreToPar(c) {
+  const direct =
+    c?.score ||
+    c?.toPar ||
+    c?.scoreToPar ||
+    c?.statistics?.find?.(x => norm(x?.name) === "to par")?.displayValue ||
+    c?.statistics?.find?.(x => norm(x?.name) === "topar")?.displayValue ||
+    c?.statistics?.find?.(x => norm(x?.name) === "score")?.displayValue ||
+    c?.statistics?.find?.(x => norm(x?.name) === "total")?.displayValue ||
+    "";
+  return formatGolfScoreToPar(direct);
+}
+
+function getGolferThru(c) {
+  return (
+    c?.status?.type?.shortDetail ||
+    c?.status?.type?.detail ||
+    c?.status?.displayValue ||
+    c?.status ||
+    ""
+  );
+}
+
+function getTournamentName(event, competition) {
+  return (
+    event?.name ||
+    event?.shortName ||
+    event?.longName ||
+    competition?.tournament?.name ||
+    competition?.tournament?.shortName ||
+    competition?.name ||
+    "Tournament"
+  );
+}
+
+function getTournamentLocationLine(competition) {
+  // Use existing venue formatting. If venue name exists, keep it; else just location.
+  return buildVenueLine(competition);
+}
+
+function buildGolfHeaderLine(pos, thru) {
+  const parts = [];
+  if (pos) parts.push(`Pos: ${pos}`);
+  if (thru) parts.push(`Thru: ${thru}`);
+  return parts.length ? parts.join(" • ") : "—";
+}
+
+function renderGolfLeaderboards(events, content) {
+  const grid = document.createElement("div");
+  grid.className = "grid";
+
+  // Each ESPN "event" = a tournament/leaderboard for that date
+  events.forEach(event => {
+    const competition = event?.competitions?.[0];
+    if (!competition) return;
+
+    const state = event?.status?.type?.state || "unknown";
+    const detail = event?.status?.type?.detail || "Status unavailable";
+    const pillClass = statusClassFromState(state);
+    const pillText = statusLabelFromState(state, detail);
+
+    const tournamentName = getTournamentName(event, competition);
+    const locationLine = getTournamentLocationLine(competition);
+
+    const golfers = getGolfCompetitorsList(competition)
+      .map(c => {
+        const pos = getGolferPos(c);
+        return {
+          raw: c,
+          name: getGolferName(c),
+          pos: String(pos || "").trim(),
+          sortPos: parseGolfPosToSortValue(pos),
+          score: getGolferScoreToPar(c),
+          thru: getGolferThru(c)
+        };
+      })
+      .filter(g => g.name && g.name !== "—");
+
+    // Sort by position where possible
+    golfers.sort((a, b) => {
+      if (a.sortPos !== b.sortPos) return a.sortPos - b.sortPos;
+      return a.name.localeCompare(b.name);
+    });
+
+    const top15 = golfers.slice(0, 15);
+
+    const card = document.createElement("div");
+    card.className = "game";
+
+    // Keep the same meta lines for consistent layout.
+    // Venue line becomes: "Tournament Name — Location"
+    const venueText = `${tournamentName} — ${locationLine}`;
+
+    card.innerHTML = `
+      <div class="gameHeader">
+        <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
+      </div>
+
+      <div class="gameMetaTopLine" aria-label="Tournament and location">
+        ${escapeHtml(venueText)}
+      </div>
+
+      <div class="gameMetaOddsLine" aria-label="Leaderboard">
+        Top 15 Leaderboard
+      </div>
+    `;
+
+    // Add Top 15 rows using EXISTING styles (teamRow/teamName/teamMeta/score)
+    top15.forEach(g => {
+      const row = document.createElement("div");
+      row.className = "teamRow";
+      row.innerHTML = `
+        <div class="teamLeft">
+          <div class="teamName">${escapeHtml(g.name)}</div>
+          <div class="teamMeta">${escapeHtml(buildGolfHeaderLine(g.pos, g.thru))}</div>
+        </div>
+        <div class="score">${escapeHtml(g.score)}</div>
+      `;
+      card.appendChild(row);
+    });
+
+    if (top15.length === 0) {
+      const notice = document.createElement("div");
+      notice.className = "notice";
+      notice.textContent = "No leaderboard data available yet.";
+      card.appendChild(notice);
+    }
+
+    grid.appendChild(card);
+  });
+
+  content.appendChild(grid);
 }
 /* ======================= */
 
@@ -890,6 +1066,12 @@ async function loadScores(showLoading) {
           </div>
         </div>
       `;
+      return;
+    }
+
+    // GOLF (PGA): render leaderboard style (Option A)
+    if (league.key === "pga") {
+      renderGolfLeaderboards(events, content);
       return;
     }
 
