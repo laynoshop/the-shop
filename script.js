@@ -257,30 +257,71 @@ function getVenueParts(competition) {
   return { venueName, location };
 }
 
-function getOddsParts(competition) {
-  const o = Array.isArray(competition?.odds) && competition.odds.length ? competition.odds[0] : null;
-  const spread = (o?.details || "").trim(); // ex: "Duke -8.5"
-  const ouRaw = o?.overUnder;
-  const overUnder =
-    ouRaw !== null && ouRaw !== undefined && ouRaw !== "" ? `O/U ${ouRaw}` : "";
-  return { spread, overUnder };
+function getOddsObj(competition) {
+  // ESPN has varied formats over time; try a few safe patterns.
+  const oddsArr = competition?.odds;
+  if (Array.isArray(oddsArr) && oddsArr.length) return oddsArr[0];
+
+  // Sometimes odds can show up nested differently; keep safe checks.
+  // (No brittle assumptions here; we just fall back cleanly.)
+  return null;
 }
 
-function buildMetaLine(competition) {
+function formatOverUnderValue(v) {
+  if (v === null || v === undefined || v === "") return "";
+  // If it's a number, keep as-is; if it's a string, trim.
+  const s = String(v).trim();
+  return s;
+}
+
+function cleanFavoredText(details) {
+  const s = String(details || "").trim();
+  if (!s) return "";
+  // Strip common prefixes ESPN sometimes includes.
+  return s
+    .replace(/^Line:\s*/i, "")
+    .replace(/^Spread:\s*/i, "")
+    .replace(/^Odds:\s*/i, "")
+    .trim();
+}
+
+function getFavoredAndOU(competition) {
+  const o = getOddsObj(competition);
+
+  // Favored/spread line: ESPN often uses o.details (e.g., "Duke -4.5")
+  // Other fields can exist; we attempt them in safe priority order.
+  let favored = "";
+
+  if (o) {
+    favored =
+      cleanFavoredText(o.details) ||
+      cleanFavoredText(o.displayValue) ||
+      cleanFavoredText(o.spread) ||
+      "";
+  }
+
+  // Over/Under: typically o.overUnder
+  let ou = "";
+  if (o) {
+    ou = formatOverUnderValue(o.overUnder);
+  }
+
+  return { favored, ou };
+}
+
+function buildVenueLine(competition) {
   const v = getVenueParts(competition);
-  const o = getOddsParts(competition);
-
-  // Build: Stadium/Venue - City, State - Favored - O/U
-  const parts = [];
-
   const venuePart = [v.venueName, v.location].filter(Boolean).join(" - ");
-  if (venuePart) parts.push(venuePart);
+  return venuePart ? venuePart : "—";
+}
 
-  if (o.spread) parts.push(o.spread);
-  if (o.overUnder) parts.push(o.overUnder);
+function buildOddsLine(competition) {
+  const { favored, ou } = getFavoredAndOU(competition);
 
-  // If everything missing, show a dash so layout stays consistent
-  return parts.length ? parts.join(" - ") : "—";
+  const favoredText = favored ? favored : "—";
+  const ouText = ou ? ou : "—";
+
+  return `Favored: ${favoredText} • O/U: ${ouText}`;
 }
 /* ======================= */
 
@@ -608,8 +649,11 @@ async function loadScores(showLoading) {
       const homeAbbrev = escapeHtml(getTeamAbbrev(homeTeam)).slice(0, 4);
       const awayAbbrev = escapeHtml(getTeamAbbrev(awayTeam)).slice(0, 4);
 
-      // NEW: single meta line (wraps, no labels)
-      const metaLine = buildMetaLine(competition);
+      // Venue line (already working)
+      const venueLine = buildVenueLine(competition);
+
+      // NEW: odds line (Favored + O/U)
+      const oddsLine = buildOddsLine(competition);
 
       const card = document.createElement("div");
       card.className = "game";
@@ -619,8 +663,12 @@ async function loadScores(showLoading) {
           <div class="statusPill ${pillClass}">${pillText}</div>
         </div>
 
-        <div class="gameMetaTopLine" aria-label="Venue and odds">
-          ${escapeHtml(metaLine)}
+        <div class="gameMetaTopLine" aria-label="Venue">
+          ${escapeHtml(venueLine)}
+        </div>
+
+        <div class="gameMetaOddsLine" aria-label="Betting line">
+          ${escapeHtml(oddsLine)}
         </div>
 
         <div class="teamRow">
