@@ -1,8 +1,30 @@
+/* =========================
+   The Shop — Gold Standard v1
+   - Scores (ESPN) + robust odds
+   - PGA Top 15 leaderboard view
+   - Wagers (Firebase v0.1): rooms + picks + leaderboard
+   ========================= */
+
 let refreshIntervalId = null;
 let currentTab = null;
 
 const STORAGE_KEY = "theShopLeague_v1";
 const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
+
+// Wagers (Firebase)
+const WAGERS_USER_KEY = "theShopWagersUser_v1";   // display name
+const WAGERS_ROOM_KEY = "theShopWagersRoom_v1";   // room id/code
+
+// Firebase Web config (public)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBvcZ2EFiicabZWpXG1bBnKA-cLsWVDY4c",
+  authDomain: "shop-app-a2fe1.firebaseapp.com",
+  projectId: "shop-app-a2fe1",
+  storageBucket: "shop-app-a2fe1.firebasestorage.app",
+  messagingSenderId: "909459942749",
+  appId: "1:909459942749:web:c28c897bead11be9658cb4",
+  measurementId: "G-7H6CK42QM1"
+};
 
 // Favorites (top priority, in this order)
 const FAVORITES = [
@@ -125,7 +147,7 @@ function parseUserDateToYYYYMMDD(input) {
     return null;
   }
 
-  // Accept MM/DD/YYYY or M/D/YYYY
+  // Accept MM/DD/YYYY
   m = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
   if (m) {
     const mm = Number(m[1]);
@@ -231,7 +253,6 @@ function favoriteRankForEvent(competition) {
       }
     }
   }
-
   return bestRank;
 }
 
@@ -306,7 +327,6 @@ function firstPickcenterFromCompetition(comp) {
   return null;
 }
 
-// Primary: parse from ESPN Summary "pickcenter" (most reliable when ESPN UI shows lines)
 function parseOddsFromPickcenter(pc, homeName, awayName) {
   if (!pc) return { favored: "", ou: "" };
 
@@ -339,6 +359,7 @@ function parseOddsFromPickcenter(pc, homeName, awayName) {
 }
 
 function parseOddsFromSummary(summaryData, fallbackComp) {
+  // 1) summary.pickcenter
   const pcArr = summaryData?.pickcenter;
   if (Array.isArray(pcArr) && pcArr.length) {
     const comp = summaryData?.header?.competitions?.[0] || fallbackComp || null;
@@ -352,6 +373,7 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     if (parsed.favored || parsed.ou) return parsed;
   }
 
+  // 2) competition.pickcenter (sometimes nested)
   const sc0 = summaryData?.header?.competitions?.[0] || fallbackComp || null;
   const pcComp = firstPickcenterFromCompetition(sc0);
   if (pcComp) {
@@ -364,6 +386,7 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     if (parsed.favored || parsed.ou) return parsed;
   }
 
+  // 3) competition.odds
   const o2 = firstOddsFromCompetition(sc0);
   if (o2 && (o2.details || o2.overUnder !== undefined || o2.total !== undefined)) {
     return {
@@ -372,6 +395,7 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     };
   }
 
+  // 4) top-level odds
   const oTop = Array.isArray(summaryData?.odds) ? summaryData.odds[0] : null;
   if (oTop && (oTop.details || oTop.overUnder !== undefined || oTop.total !== undefined)) {
     return {
@@ -418,8 +442,8 @@ const ODDS_CONCURRENCY_LIMIT = 6;
 const ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const ODDS_STORAGE_PREFIX = "theShopOddsCache_v1"; // sessionStorage key prefix
 
-const oddsCache = new Map();   // cacheKey -> { favored, ou, ts }
-const oddsInFlight = new Map(); // cacheKey -> Promise<{favored,ou}>
+const oddsCache = new Map();    // cacheKey -> { favored, ou, ts }
+const oddsInFlight = new Map(); // cacheKey -> Promise
 
 function oddsCacheKey(leagueKey, dateYYYYMMDD, eventId) {
   return `${leagueKey}|${dateYYYYMMDD}|${eventId}`;
@@ -572,6 +596,7 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
     })
     .filter(j => j.eventId);
 
+  // apply cached + scoreboard first
   for (const job of jobs) {
     const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
     const cached = oddsCache.get(ck);
@@ -602,9 +627,7 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
 /* ======================= */
 
 /* =========================
-   GOLF (PGA) LEADERBOARD (Option A)
-   - One tournament card with Top 15
-   - Each row: "1. Name" | Score | Thru
+   PGA Top 15 Leaderboard
    ========================= */
 function parseGolfPosToSortValue(pos) {
   const s = String(pos || "").trim();
@@ -670,17 +693,13 @@ function getGolferScoreToPar(c) {
 function normalizeThruLabel(raw) {
   const s = String(raw || "").trim();
   if (!s) return "";
-  // If ESPN already gives something like "F", "Thru 9", keep it
   if (/^(f|cut|wd|dq)$/i.test(s)) return s.toUpperCase();
   if (/thru/i.test(s)) return s;
-  // If it's just a number, make it "Thru X"
   if (/^\d{1,2}$/.test(s)) return `Thru ${s}`;
-  // If it's like "18" or "17", we handle above; anything else, keep as-is
   return s;
 }
 
 function getGolferThru(c) {
-  // ESPN can provide thru/round detail in a few places
   const fromStatus =
     c?.status?.type?.shortDetail ||
     c?.status?.type?.detail ||
@@ -708,7 +727,6 @@ function getTournamentName(event, competition) {
 }
 
 function getTournamentLocationLine(event, competition) {
-  // PGA scoreboard sometimes has venue at different levels.
   const v1 = competition?.venue || null;
   const v2 = event?.venue || null;
   const v3 = (Array.isArray(event?.venues) && event.venues.length) ? event.venues[0] : null;
@@ -767,7 +785,6 @@ function renderGolfLeaderboards(events, content) {
     const card = document.createElement("div");
     card.className = "game golfCard";
 
-    // Tournament line: "Tournament — City, State"
     const venueText = `${tournamentName} — ${locationLine}`;
 
     card.innerHTML = `
@@ -817,6 +834,572 @@ function renderGolfLeaderboards(events, content) {
 }
 /* ======================= */
 
+/* =========================
+   FIREBASE WAGERS (v0.1)
+   ========================= */
+let fb = null;
+let fbInitPromise = null;
+let fbUnsubPicks = null;
+
+async function initFirebaseIfNeeded() {
+  if (fb) return fb;
+  if (fbInitPromise) return fbInitPromise;
+
+  fbInitPromise = (async () => {
+    const appMod = await import("https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js");
+    const authMod = await import("https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js");
+    const fsMod = await import("https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js");
+
+    const app = appMod.initializeApp(FIREBASE_CONFIG);
+    const auth = authMod.getAuth(app);
+    const db = fsMod.getFirestore(app);
+
+    fb = {
+      auth,
+      db,
+      signInAnon: () => authMod.signInAnonymously(auth),
+      onAuth: (cb) => authMod.onAuthStateChanged(auth, cb),
+      doc: fsMod.doc,
+      setDoc: fsMod.setDoc,
+      getDoc: fsMod.getDoc,
+      serverTimestamp: fsMod.serverTimestamp,
+      collection: fsMod.collection,
+      query: fsMod.query,
+      where: fsMod.where,
+      onSnapshot: fsMod.onSnapshot
+    };
+    return fb;
+  })();
+
+  return fbInitPromise;
+}
+
+function getWagersUserName() {
+  return (localStorage.getItem(WAGERS_USER_KEY) || "").trim();
+}
+
+function setWagersUserName(name) {
+  localStorage.setItem(WAGERS_USER_KEY, String(name || "").trim());
+}
+
+function getWagersRoomId() {
+  return (localStorage.getItem(WAGERS_ROOM_KEY) || "").trim();
+}
+
+function setWagersRoomId(roomId) {
+  localStorage.setItem(WAGERS_ROOM_KEY, String(roomId || "").trim());
+}
+
+function randomRoomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 8; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+function buildEventKey(leagueKey, dateYYYYMMDD, eventId) {
+  return `${leagueKey}|${dateYYYYMMDD}|${eventId}`;
+}
+
+async function ensureSignedIn() {
+  const f = await initFirebaseIfNeeded();
+  if (f.auth.currentUser) return f.auth.currentUser;
+
+  await f.signInAnon();
+  return new Promise((resolve) => {
+    const unsub = f.onAuth((u) => {
+      if (u) {
+        unsub();
+        resolve(u);
+      }
+    });
+  });
+}
+
+async function createRoomIfMissing(roomId) {
+  const f = await initFirebaseIfNeeded();
+  const user = await ensureSignedIn();
+
+  const roomRef = f.doc(f.db, "rooms", roomId);
+  const snap = await f.getDoc(roomRef);
+  if (!snap.exists()) {
+    await f.setDoc(roomRef, {
+      createdAt: f.serverTimestamp(),
+      createdBy: user.uid,
+      v: 1
+    }, { merge: true });
+  }
+
+  const name = getWagersUserName() || "Guest";
+  const memberRef = f.doc(f.db, "rooms", roomId, "members", user.uid);
+  await f.setDoc(memberRef, {
+    name,
+    joinedAt: f.serverTimestamp()
+  }, { merge: true });
+}
+
+async function joinRoomFlow() {
+  const current = getWagersRoomId();
+  const input = prompt(
+    `Enter a Room Code to join (or leave blank to create a new one).\n\nCurrent: ${current || "None"}`,
+    current || ""
+  );
+  if (input === null) return;
+
+  const cleaned = String(input || "").trim().toUpperCase().replace(/\s+/g, "");
+  const roomId = cleaned || randomRoomCode();
+
+  setWagersRoomId(roomId);
+  await createRoomIfMissing(roomId);
+  renderWagers(true);
+}
+
+async function setNameFlow() {
+  const current = getWagersUserName();
+  const input = prompt("Your display name for wagers:", current || "");
+  if (input === null) return;
+  const cleaned = String(input || "").trim();
+  if (!cleaned) {
+    alert("Name can’t be blank.");
+    return;
+  }
+  setWagersUserName(cleaned);
+
+  const roomId = getWagersRoomId();
+  if (roomId) {
+    try {
+      const f = await initFirebaseIfNeeded();
+      const user = await ensureSignedIn();
+      const memberRef = f.doc(f.db, "rooms", roomId, "members", user.uid);
+      await f.setDoc(memberRef, { name: cleaned }, { merge: true });
+    } catch (e) {}
+  }
+
+  renderWagers(false);
+}
+
+function stopWagersListeners() {
+  if (fbUnsubPicks) {
+    try { fbUnsubPicks(); } catch (e) {}
+  }
+  fbUnsubPicks = null;
+}
+
+async function setPick(roomId, leagueKey, dateYYYYMMDD, eventId, pick, teamName) {
+  const f = await initFirebaseIfNeeded();
+  const user = await ensureSignedIn();
+  const name = getWagersUserName() || "Guest";
+
+  const eventKey = buildEventKey(leagueKey, dateYYYYMMDD, eventId);
+  const docId = `${eventKey}|${user.uid}`;
+
+  const pickRef = f.doc(f.db, "rooms", roomId, "picks", docId);
+  await f.setDoc(pickRef, {
+    uid: user.uid,
+    name,
+    leagueKey,
+    date: dateYYYYMMDD,
+    eventId,
+    pick,
+    teamName: teamName || "",
+    updatedAt: f.serverTimestamp()
+  }, { merge: true });
+}
+
+function getWinnerFromCompetition(competition) {
+  const competitors = competition?.competitors || [];
+  const home = competitors.find(c => c.homeAway === "home");
+  const away = competitors.find(c => c.homeAway === "away");
+  const homeScore = Number(home?.score ?? "");
+  const awayScore = Number(away?.score ?? "");
+  if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return "";
+  if (homeScore === awayScore) return "";
+  return homeScore > awayScore ? "home" : "away";
+}
+
+function buildPickLine(picksForEvent, homeName, awayName) {
+  if (!picksForEvent.length) return "Picks: —";
+  const maxShow = 3;
+  const shown = picksForEvent.slice(0, maxShow);
+  const more = picksForEvent.length - shown.length;
+  const parts = shown.map(p => {
+    const who = p.name || "Someone";
+    const team = p.pick === "home" ? homeName : awayName;
+    return `${who} → ${team}`;
+  });
+  if (more > 0) parts.push(`+${more} more`);
+  return `Picks: ${parts.join(" • ")}`;
+}
+
+async function listenToPicks(roomId, leagueKey, dateYYYYMMDD, onUpdate) {
+  stopWagersListeners();
+  const f = await initFirebaseIfNeeded();
+  await ensureSignedIn();
+
+  const picksCol = f.collection(f.db, "rooms", roomId, "picks");
+  const q = f.query(
+    picksCol,
+    f.where("leagueKey", "==", leagueKey),
+    f.where("date", "==", dateYYYYMMDD)
+  );
+
+  fbUnsubPicks = f.onSnapshot(q, (snap) => {
+    const picks = [];
+    snap.forEach(docSnap => {
+      const d = docSnap.data() || {};
+      picks.push({
+        uid: d.uid || "",
+        name: d.name || "",
+        leagueKey: d.leagueKey || "",
+        date: d.date || "",
+        eventId: d.eventId || "",
+        pick: d.pick || ""
+      });
+    });
+    onUpdate(picks);
+  }, (err) => {
+    onUpdate({ error: String(err?.message || err) });
+  });
+}
+
+function computeLeaderboard(picks, resultsByEventId) {
+  const byUser = new Map();
+  for (const p of picks) {
+    const key = p.uid || p.name || "unknown";
+    if (!byUser.has(key)) byUser.set(key, { name: p.name || "Unknown", wins: 0, losses: 0, pending: 0 });
+    const row = byUser.get(key);
+
+    const res = resultsByEventId.get(p.eventId);
+    if (!res || res.state !== "post" || !res.winner) {
+      row.pending++;
+      continue;
+    }
+    if (p.pick === res.winner) row.wins++;
+    else row.losses++;
+  }
+  return Array.from(byUser.values()).sort((a,b) => (b.wins - a.wins) || (a.losses - b.losses) || a.name.localeCompare(b.name));
+}
+
+async function renderWagers(showLoading) {
+  const content = document.getElementById("content");
+
+  const selectedDate = getSavedDateYYYYMMDD();
+  const prettyDate = yyyymmddToPretty(selectedDate);
+  const now = new Date();
+  const updatedTime = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  const selectedKey = getSavedLeagueKey();
+  const league = getLeagueByKey(selectedKey);
+
+  const userName = getWagersUserName();
+  const roomId = getWagersRoomId();
+
+  content.innerHTML = `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Wagers</h2>
+          <span class="badge">v0.1</span>
+        </div>
+        <button class="smallBtn" onclick="renderWagers(true)">Refresh</button>
+      </div>
+      <div class="subline">
+        <div class="sublineLeft">
+          ${buildLeagueSelectHTML(selectedKey)}
+          ${buildCalendarButtonHTML()}
+        </div>
+        <div>${escapeHtml(prettyDate)} • Updated ${updatedTime}</div>
+      </div>
+    </div>
+  `;
+
+  const sel = document.getElementById("leagueSelect");
+  if (sel) {
+    sel.addEventListener("change", () => {
+      saveLeagueKey(sel.value);
+      renderWagers(true);
+    });
+  }
+
+  const dateBtn = document.getElementById("dateBtn");
+  if (dateBtn) {
+    dateBtn.addEventListener("click", () => {
+      promptForDateAndReloadWagers();
+    });
+  }
+
+  content.innerHTML += `
+    <div class="notice">
+      <div class="wagersLine">
+        <div><strong>Name:</strong> ${escapeHtml(userName || "Not set")}</div>
+        <button class="smallBtn" id="setNameBtn">Set Name</button>
+      </div>
+      <div class="wagersLine" style="margin-top:10px;">
+        <div><strong>Room:</strong> ${escapeHtml(roomId || "Not joined")}</div>
+        <button class="smallBtn" id="joinRoomBtn">${roomId ? "Change Room" : "Join / Create"}</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("setNameBtn")?.addEventListener("click", () => setNameFlow());
+  document.getElementById("joinRoomBtn")?.addEventListener("click", async () => {
+    if (!getWagersUserName()) {
+      alert("Set your Name first so your buddies can see who you are.");
+      return;
+    }
+    try {
+      await joinRoomFlow();
+    } catch (e) {
+      alert("Couldn’t join room yet. Make sure Anonymous Auth + Firestore are enabled and rules are pasted.");
+    }
+  });
+
+  if (!userName || !roomId) {
+    content.innerHTML += `
+      <div class="notice">
+        Next steps:
+        <div style="margin-top:8px; opacity:0.8; font-size:12px;">
+          1) Tap <strong>Set Name</strong><br/>
+          2) Tap <strong>Join / Create</strong> and text the Room Code to your buddies
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  try {
+    await createRoomIfMissing(roomId);
+  } catch (e) {
+    content.innerHTML += `
+      <div class="notice">
+        Firebase isn’t ready yet. Double-check:
+        <div style="margin-top:8px; opacity:0.8; font-size:12px;">
+          • Anonymous Auth enabled<br/>
+          • Firestore created<br/>
+          • Rules pasted
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const result = await fetchScoreboardWithFallbacks(league, selectedDate);
+  let events = result.events;
+
+  if (events.length === 0) {
+    content.innerHTML += `
+      <div class="notice">
+        No games found for this league/date (likely offseason).
+        <div style="margin-top:8px; opacity:0.6; font-size:12px;">
+          (Tried ESPN fallbacks: ${escapeHtml(result.used)})
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (league.key === "pga") {
+    content.innerHTML += `<div class="notice">Wagers are for team sports right now. Switch leagues above.</div>`;
+    return;
+  }
+
+  // favorites-first sort
+  events = [...events].sort((a, b) => {
+    const ca = a?.competitions?.[0];
+    const cb = b?.competitions?.[0];
+
+    const ra = favoriteRankForEvent(ca);
+    const rb = favoriteRankForEvent(cb);
+
+    const aFav = Number.isFinite(ra) ? ra : Infinity;
+    const bFav = Number.isFinite(rb) ? rb : Infinity;
+
+    if (aFav !== bFav) return aFav - bFav;
+
+    const sa = a?.status?.type?.state || "unknown";
+    const sb = b?.status?.type?.state || "unknown";
+    const sr = stateRank(sa) - stateRank(sb);
+    if (sr !== 0) return sr;
+
+    const ta = getStartTimeMs(a, ca);
+    const tb = getStartTimeMs(b, cb);
+    if (ta !== tb) return ta - tb;
+
+    const ida = String(a?.id || a?.uid || a?.name || "");
+    const idb = String(b?.id || b?.uid || b?.name || "");
+    return ida.localeCompare(idb);
+  });
+
+  const lb = document.createElement("div");
+  lb.className = "notice";
+  lb.innerHTML = `<div class="leaderboardTitle"><strong>Leaderboard</strong></div><div class="leaderboardBody">Loading…</div>`;
+  content.appendChild(lb);
+
+  const grid = document.createElement("div");
+  grid.className = "grid";
+  content.appendChild(grid);
+
+  const resultsByEventId = new Map();
+
+  events.forEach(event => {
+    const competition = event?.competitions?.[0];
+    if (!competition) return;
+
+    const home = competition.competitors.find(t => t.homeAway === "home");
+    const away = competition.competitors.find(t => t.homeAway === "away");
+
+    const state = event?.status?.type?.state || "unknown";
+    const detail = event?.status?.type?.detail || "Status unavailable";
+    const pillClass = statusClassFromState(state);
+    const pillText = statusLabelFromState(state, detail);
+
+    const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
+    const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
+
+    const homeName = home?.team?.displayName || "Home";
+    const awayName = away?.team?.displayName || "Away";
+
+    const venueLine = buildVenueLine(competition);
+    const initialOdds = parseOddsFromScoreboardCompetition(competition);
+    const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
+
+    const eventId = String(event?.id || "");
+    const eventKey = buildEventKey(selectedKey, selectedDate, eventId);
+
+    const winner = state === "post" ? getWinnerFromCompetition(competition) : "";
+    resultsByEventId.set(eventId, { winner, state });
+
+    const card = document.createElement("div");
+    card.className = "game wagersGame";
+    if (eventId) card.setAttribute("data-eventid", eventId);
+
+    card.innerHTML = `
+      <div class="gameHeader">
+        <div class="statusPill ${pillClass}">${pillText}</div>
+      </div>
+
+      <div class="gameMetaTopLine" aria-label="Venue">
+        ${escapeHtml(venueLine)}
+      </div>
+
+      <div class="gameMetaOddsLine" aria-label="Betting line">
+        ${escapeHtml(initialOddsText)}
+      </div>
+
+      <div class="teamRow">
+        <div class="teamLeft">
+          <div class="teamLine">
+            <div class="teamText">
+              <div class="teamName">${escapeHtml(awayName)}</div>
+              <div class="teamMeta">Away</div>
+            </div>
+          </div>
+        </div>
+        <div class="score">${awayScore}</div>
+      </div>
+
+      <div class="teamRow">
+        <div class="teamLeft">
+          <div class="teamLine">
+            <div class="teamText">
+              <div class="teamName">${escapeHtml(homeName)}</div>
+              <div class="teamMeta">Home</div>
+            </div>
+          </div>
+        </div>
+        <div class="score">${homeScore}</div>
+      </div>
+
+      <div class="wagerActions">
+        <button class="smallBtn wagerBtn" data-pick="away" data-eventid="${escapeHtml(eventId)}" data-team="${escapeHtml(awayName)}">Pick Away</button>
+        <button class="smallBtn wagerBtn" data-pick="home" data-eventid="${escapeHtml(eventId)}" data-team="${escapeHtml(homeName)}">Pick Home</button>
+      </div>
+
+      <div class="wagerPicksLine" data-eventkey="${escapeHtml(eventKey)}">Picks: —</div>
+    `;
+
+    grid.appendChild(card);
+  });
+
+  // odds hydration (same engine as Scores)
+  hydrateAllOdds(events, league, selectedKey, selectedDate);
+
+  grid.querySelectorAll(".wagerBtn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const eventId = btn.getAttribute("data-eventid") || "";
+      const pick = btn.getAttribute("data-pick") || "";
+      const teamName = btn.getAttribute("data-team") || "";
+      if (!eventId || (pick !== "home" && pick !== "away")) return;
+
+      try {
+        await setPick(roomId, selectedKey, selectedDate, eventId, pick, teamName);
+      } catch (e) {
+        alert("Couldn’t save pick. Check Firebase rules/auth.");
+      }
+    });
+  });
+
+  await listenToPicks(roomId, selectedKey, selectedDate, (payload) => {
+    if (payload && payload.error) {
+      lb.querySelector(".leaderboardBody").textContent = "Firebase rules/auth not ready.";
+      return;
+    }
+
+    const picks = Array.isArray(payload) ? payload : [];
+    const byEventKey = new Map();
+    for (const p of picks) {
+      const ek = buildEventKey(p.leagueKey, p.date, p.eventId);
+      if (!byEventKey.has(ek)) byEventKey.set(ek, []);
+      byEventKey.get(ek).push(p);
+    }
+
+    grid.querySelectorAll(".wagerPicksLine").forEach(el => {
+      const ek = el.getAttribute("data-eventkey") || "";
+      const parts = ek.split("|");
+      const eventId = parts[2] || "";
+      const card = grid.querySelector(`.game[data-eventid="${CSS.escape(eventId)}"]`);
+      if (!card) return;
+      const teamNames = card.querySelectorAll(".teamName");
+      const awayName = teamNames?.[0]?.textContent || "Away";
+      const homeName = teamNames?.[1]?.textContent || "Home";
+
+      const arr = byEventKey.get(ek) || [];
+      el.textContent = buildPickLine(arr, homeName, awayName);
+    });
+
+    const rows = computeLeaderboard(picks, resultsByEventId);
+    if (!rows.length) {
+      lb.querySelector(".leaderboardBody").textContent = "No picks yet.";
+      return;
+    }
+    lb.querySelector(".leaderboardBody").innerHTML = rows.map(r => {
+      return `<div class="leaderboardRow">${escapeHtml(r.name)}: ${r.wins}-${r.losses} <span style="opacity:0.7;">(pending ${r.pending})</span></div>`;
+    }).join("");
+  });
+}
+
+function promptForDateAndReloadWagers() {
+  const current = getSavedDateYYYYMMDD();
+  const pretty = yyyymmddToPretty(current);
+
+  const input = prompt(
+    `Pick a date:\n\n• Enter: YYYY-MM-DD (example: 2026-02-15)\n• Or: MM/DD/YYYY (example: 02/15/2026)\n• Or type: today\n\nCurrent: ${pretty} (${current})`,
+    `${current.slice(0,4)}-${current.slice(4,6)}-${current.slice(6,8)}`
+  );
+
+  if (input === null) return;
+
+  const parsed = parseUserDateToYYYYMMDD(input);
+  if (!parsed) {
+    alert("Date not recognized. Try YYYY-MM-DD or MM/DD/YYYY.");
+    return;
+  }
+
+  saveDateYYYYMMDD(parsed);
+  renderWagers(true);
+}
+/* ======================= */
+
 function checkCode() {
   const code = document.getElementById("code").value;
   if (code === "2026") {
@@ -845,6 +1428,7 @@ function startAutoRefresh() {
   stopAutoRefresh();
   refreshIntervalId = setInterval(() => {
     if (currentTab === "scores") loadScores(false);
+    if (currentTab === "wagers") renderWagers(false);
   }, 30000);
 }
 
@@ -853,6 +1437,8 @@ function showTab(tab) {
   setActiveTabButton(tab);
   stopAutoRefresh();
 
+  stopWagersListeners();
+
   const content = document.getElementById("content");
   content.innerHTML = "";
 
@@ -860,21 +1446,8 @@ function showTab(tab) {
     loadScores(true);
     startAutoRefresh();
   } else if (tab === "wagers") {
-    content.innerHTML = `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Friendly Wagers</h2>
-            <span class="badge">v0.1</span>
-          </div>
-        </div>
-        <div class="subline">
-          <div>Coming next</div>
-          <div>Invite-only</div>
-        </div>
-      </div>
-      <div class="notice">Next: tap a game → pick a winner → simple leaderboard.</div>
-    `;
+    renderWagers(true);
+    startAutoRefresh();
   } else if (tab === "shop") {
     content.innerHTML = `
       <div class="header">
@@ -1087,7 +1660,7 @@ async function loadScores(showLoading) {
       return;
     }
 
-    // GOLF (PGA): leaderboard style (Option A)
+    // PGA: Top 15 leaderboard
     if (league.key === "pga") {
       renderGolfLeaderboards(events, content);
       return;
@@ -1250,4 +1823,83 @@ async function loadScores(showLoading) {
       });
     }
   }
+}
+
+/* =========================
+   UI / TABS
+   ========================= */
+function setActiveTabButton(tab) {
+  document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
+  const map = { scores: 0, wagers: 1, shop: 2 };
+  const idx = map[tab];
+  const btn = document.querySelectorAll(".tabs button")[idx];
+  if (btn) btn.classList.add("active");
+}
+
+/* =========================
+   Auto refresh
+   ========================= */
+function stopAutoRefresh() {
+  if (refreshIntervalId) clearInterval(refreshIntervalId);
+  refreshIntervalId = null;
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  refreshIntervalId = setInterval(() => {
+    if (currentTab === "scores") loadScores(false);
+    if (currentTab === "wagers") renderWagers(false);
+  }, 30000);
+}
+
+function showTab(tab) {
+  currentTab = tab;
+  setActiveTabButton(tab);
+  stopAutoRefresh();
+
+  stopWagersListeners();
+
+  const content = document.getElementById("content");
+  content.innerHTML = "";
+
+  if (tab === "scores") {
+    loadScores(true);
+    startAutoRefresh();
+  } else if (tab === "wagers") {
+    renderWagers(true);
+    startAutoRefresh();
+  } else if (tab === "shop") {
+    content.innerHTML = `
+      <div class="header">
+        <div class="headerTop">
+          <div class="brand">
+            <h2 style="margin:0;">Shop Updates</h2>
+            <span class="badge">v0.1</span>
+          </div>
+        </div>
+        <div class="subline">
+          <div>Photos + notes</div>
+          <div>Private</div>
+        </div>
+      </div>
+      <div class="notice">Next after wagers: a feed where you post pics/notes.</div>
+    `;
+  }
+}
+
+/* =========================
+   Status label helpers
+   ========================= */
+function statusClassFromState(state) {
+  if (state === "in") return "status-live";
+  if (state === "post") return "status-final";
+  if (state === "pre") return "status-up";
+  return "status-other";
+}
+
+function statusLabelFromState(state, detail) {
+  if (state === "in") return `LIVE • ${detail}`;
+  if (state === "post") return `FINAL`;
+  if (state === "pre") return `${detail}`;
+  return detail || "STATUS";
 }
