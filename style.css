@@ -1,0 +1,52 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #1c1c1c;
+  color: white;
+}
+
+h1 {
+  color: #bb0000;
+}
+
+#login {
+  text-align: center;
+  margin-top: 100px;
+}
+
+input {
+  padding: 10px;
+  margin: 10px;
+  font-size: 16px;
+}
+
+button {
+  padding: 10px 15px;
+  font-size: 16px;
+  background-color: #bb0000;
+  color: white;
+  border: none;
+  border-radius: 5px;
+}
+
+.tabs {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  display: flex;
+  background-color: #333;
+}
+
+.tabs button {
+  flex: 1;
+  padding: 15px;
+  background: none;
+  color: white;
+}
+
+.game {
+  background-color: #2a2a2a;
+  padding: 10px;
+  margin: 10px;
+  border-radius: 10px;
+}
