@@ -207,6 +207,43 @@ button {
 .status-up     { background: rgba(245,158,11,0.2); color: #fde68a; }
 .status-other  { background: rgba(255,255,255,0.1); color: #e5e7eb; }
 
+/* NEW: venue + odds block under the status pill (no layout redesign, just added info) */
+.gameMetaTop {
+  margin-top: -4px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.25;
+  color: rgba(255,255,255,0.75);
+  padding: 3px 0;
+}
+
+.metaKey {
+  color: rgba(255,255,255,0.55);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  flex: 0 0 auto;
+}
+
+.metaVal {
+  text-align: right;
+  font-weight: 800;
+  color: rgba(255,255,255,0.78);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* GAME ROWS */
 .teamRow {
   display:flex;
   justify-content:space-between;
@@ -231,13 +268,6 @@ button {
 .score {
   font-size:30px;
   font-weight:900;
-}
-
-.footerLine {
-  display:flex;
-  justify-content:space-between;
-  color: rgba(255,255,255,0.65);
-  font-size:13px;
 }
 
 /* LOGO LAYER */
