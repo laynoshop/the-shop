@@ -8,8 +8,9 @@ const LEAGUES = [
   {
     key: "ncaam",
     name: "Men’s College Basketball",
+    // IMPORTANT: groups=50 forces "All Division I" instead of featured/Top-25 subset
     endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}`
+      `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
   },
   {
     key: "cfb",
@@ -206,7 +207,6 @@ function buildLeagueSelectHTML(selectedKey) {
    ESPN FETCH (ROBUST)
    ========================= */
 function removeDatesParam(url) {
-  // Removes ?dates=YYYYMMDD or &dates=YYYYMMDD safely
   return url
     .replace(/\?dates=\d{8}&/i, "?")
     .replace(/\?dates=\d{8}$/i, "")
@@ -224,7 +224,7 @@ function addOrReplaceParam(url, key, value) {
 }
 
 async function fetchScoreboardWithFallbacks(league, date) {
-  const todayUrl = league.endpoint(date);
+  const baseTodayUrl = league.endpoint(date);
 
   const d = new Date();
   const yesterday = new Date(d.getTime() - 86400000);
@@ -232,10 +232,20 @@ async function fetchScoreboardWithFallbacks(league, date) {
   const yDate = formatDateYYYYMMDD(yesterday);
   const tDate = formatDateYYYYMMDD(tomorrow);
 
+  // NCAAM: sometimes the "best" result is groups=50 (already set in endpoint),
+  // but we also try a couple other variants just in case ESPN behavior changes.
+  const isNcaam = league.key === "ncaam";
+
   const attempts = [
-    { label: "today", url: todayUrl },
-    { label: "today+groups", url: addOrReplaceParam(todayUrl, "groups", "200") }, // helps NCAAM a lot
-    { label: "noDate", url: removeDatesParam(todayUrl) }, // ESPN decides "today"
+    { label: "today", url: baseTodayUrl },
+
+    // NCAAM-only: try without groups (rarely helpful, but safe)
+    ...(isNcaam ? [{ label: "today-noGroups", url: baseTodayUrl.replace(/&groups=50/i, "") }] : []),
+
+    // General: noDate lets ESPN decide "today"
+    { label: "noDate", url: removeDatesParam(baseTodayUrl) },
+
+    // Time edge cases
     { label: "yesterday", url: league.endpoint(yDate) },
     { label: "tomorrow", url: league.endpoint(tDate) }
   ];
@@ -323,7 +333,6 @@ async function loadScores(showLoading) {
     }
 
     if (events.length === 0) {
-      // Keep your same user-facing message, but add a tiny hint so you know it tried fallbacks
       content.innerHTML += `
         <div class="notice">
           No games found today for this league (likely offseason).
