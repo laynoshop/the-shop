@@ -1,3 +1,5 @@
+FULL REPLACEMENT: script.js (Gold Standard v1 + Odds Fix)
+
 let refreshIntervalId = null;
 let currentTab = null;
 
@@ -297,18 +299,24 @@ function firstOddsFromCompetition(comp) {
   return null;
 }
 
-// Primary: parse from ESPN Summary "pickcenter" (most reliable when the TV/ESPN UI shows lines)
+function firstPickcenterFromCompetition(comp) {
+  const pc = comp?.pickcenter;
+  if (Array.isArray(pc) && pc.length) return pc[0];
+  return null;
+}
+
+// Primary: parse from ESPN Summary "pickcenter" (most reliable when ESPN UI shows lines)
 function parseOddsFromPickcenter(pc, homeName, awayName) {
   if (!pc) return { favored: "", ou: "" };
 
-  const ou = normalizeNumberString(pc.overUnder || pc.total || "");
+  const ou = normalizeNumberString(pc.overUnder ?? pc.total ?? pc.overunder ?? "");
 
   // ESPN often includes a ready-to-display string like "Duke -4.5"
-  const details = cleanFavoredText(pc.details || pc.displayValue || "");
+  const details = cleanFavoredText(pc.details || pc.displayValue || pc.awayTeamOdds?.details || pc.homeTeamOdds?.details || "");
   if (details) return { favored: details, ou };
 
   // Fallback: infer favorite from spread + favorite flags
-  const spreadNum = Number(pc.spread);
+  const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
   if (!Number.isFinite(spreadNum)) return { favored: "", ou };
 
   const homeFav = !!pc.homeTeamOdds?.favorite;
@@ -340,13 +348,34 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     if (parsed.favored || parsed.ou) return parsed;
   }
 
-  // 2) summary header competition odds array (sometimes exists)
-  const sc = summaryData?.header?.competitions?.[0];
-  const o2 = firstOddsFromCompetition(sc);
-  if (o2 && (o2.details || o2.overUnder !== undefined)) {
+  // 1b) sometimes pickcenter exists under competitions[0]
+  const sc0 = summaryData?.header?.competitions?.[0] || fallbackComp || null;
+  const pcComp = firstPickcenterFromCompetition(sc0);
+  if (pcComp) {
+    const competitors = sc0?.competitors || [];
+    const home = competitors.find(t => t.homeAway === "home");
+    const away = competitors.find(t => t.homeAway === "away");
+    const homeName = home?.team?.displayName || "Home";
+    const awayName = away?.team?.displayName || "Away";
+    const parsed = parseOddsFromPickcenter(pcComp, homeName, awayName);
+    if (parsed.favored || parsed.ou) return parsed;
+  }
+
+  // 2) summary header competition odds array
+  const o2 = firstOddsFromCompetition(sc0);
+  if (o2 && (o2.details || o2.overUnder !== undefined || o2.total !== undefined)) {
     return {
       favored: cleanFavoredText(o2.details || o2.displayValue || ""),
-      ou: normalizeNumberString(o2.overUnder)
+      ou: normalizeNumberString(o2.overUnder ?? o2.total ?? "")
+    };
+  }
+
+  // 3) some summaries include top-level odds arrays
+  const oTop = Array.isArray(summaryData?.odds) ? summaryData.odds[0] : null;
+  if (oTop && (oTop.details || oTop.overUnder !== undefined || oTop.total !== undefined)) {
+    return {
+      favored: cleanFavoredText(oTop.details || oTop.displayValue || ""),
+      ou: normalizeNumberString(oTop.overUnder ?? oTop.total ?? "")
     };
   }
 
@@ -354,13 +383,27 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
 }
 
 function parseOddsFromScoreboardCompetition(competition) {
+  // A) direct odds array
   const o1 = firstOddsFromCompetition(competition);
-  if (o1 && (o1.details || o1.overUnder !== undefined)) {
+  if (o1 && (o1.details || o1.overUnder !== undefined || o1.total !== undefined)) {
     return {
       favored: cleanFavoredText(o1.details || o1.displayValue || ""),
-      ou: normalizeNumberString(o1.overUnder)
+      ou: normalizeNumberString(o1.overUnder ?? o1.total ?? "")
     };
   }
+
+  // B) sometimes pickcenter is already present on the scoreboard competition
+  const pc = firstPickcenterFromCompetition(competition);
+  if (pc) {
+    const competitors = competition?.competitors || [];
+    const home = competitors.find(t => t.homeAway === "home");
+    const away = competitors.find(t => t.homeAway === "away");
+    const homeName = home?.team?.displayName || "Home";
+    const awayName = away?.team?.displayName || "Away";
+    const parsed = parseOddsFromPickcenter(pc, homeName, awayName);
+    if (parsed.favored || parsed.ou) return parsed;
+  }
+
   return { favored: "", ou: "" };
 }
 
@@ -371,10 +414,69 @@ function buildOddsLine(favored, ou) {
 
 /* =========================
    ODDS FETCH (RELIABLE)
-   - Fetch /summary for ALL events (with concurrency limit)
-   - Updates each card as it returns
+   - Prefer scoreboard payload odds
+   - Else fetch /summary with region/lang fallbacks
+   - Caching (per league+date+event) + concurrency limit
+   - Updates each game card odds line in place as data arrives
    ========================= */
-const oddsCache = new Map(); // eventId -> { favored, ou }
+const ODDS_CONCURRENCY_LIMIT = 6;
+const ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const ODDS_STORAGE_PREFIX = "theShopOddsCache_v1"; // sessionStorage key prefix
+
+// cacheKey -> { favored, ou, ts }
+const oddsCache = new Map();
+// cacheKey -> Promise<{favored,ou}>
+const oddsInFlight = new Map();
+
+function oddsCacheKey(leagueKey, dateYYYYMMDD, eventId) {
+  return `${leagueKey}|${dateYYYYMMDD}|${eventId}`;
+}
+
+function storageKeyForOdds(leagueKey, dateYYYYMMDD) {
+  return `${ODDS_STORAGE_PREFIX}_${leagueKey}_${dateYYYYMMDD}`;
+}
+
+function loadOddsCacheFromSession(leagueKey, dateYYYYMMDD) {
+  try {
+    const key = storageKeyForOdds(leagueKey, dateYYYYMMDD);
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return;
+
+    const now = Date.now();
+    for (const [eventId, val] of Object.entries(parsed)) {
+      if (!val || typeof val !== "object") continue;
+      const ts = Number(val.ts || 0);
+      if (!Number.isFinite(ts) || (now - ts) > ODDS_CACHE_TTL_MS) continue;
+
+      const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, eventId);
+      oddsCache.set(ck, { favored: val.favored || "", ou: val.ou || "", ts });
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+let oddsCacheSaveTimer = null;
+function saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD) {
+  if (oddsCacheSaveTimer) return;
+  oddsCacheSaveTimer = setTimeout(() => {
+    oddsCacheSaveTimer = null;
+    try {
+      const key = storageKeyForOdds(leagueKey, dateYYYYMMDD);
+      const obj = {};
+      for (const [ck, val] of oddsCache.entries()) {
+        const [lk, dk, eventId] = String(ck).split("|");
+        if (lk !== leagueKey || dk !== dateYYYYMMDD) continue;
+        obj[eventId] = { favored: val.favored || "", ou: val.ou || "", ts: val.ts || Date.now() };
+      }
+      sessionStorage.setItem(key, JSON.stringify(obj));
+    } catch (e) {
+      // ignore
+    }
+  }, 400);
+}
 
 function getOddsLineElByEventId(eventId) {
   const card = document.querySelector(`.game[data-eventid="${CSS.escape(String(eventId))}"]`);
@@ -382,35 +484,88 @@ function getOddsLineElByEventId(eventId) {
   return card.querySelector(".gameMetaOddsLine");
 }
 
-async function fetchOddsFromSummary(league, eventId, fallbackCompetition) {
+function applyOddsToDom(eventId, favored, ou) {
+  const el = getOddsLineElByEventId(eventId);
+  if (!el) return;
+  const text = buildOddsLine(favored, ou);
+  // update only if changed (reduces layout churn)
+  if (el.textContent !== text) el.textContent = text;
+}
+
+function withLangRegion(url) {
+  // Preserve existing query params; add lang/region if missing
+  try {
+    const u = new URL(url);
+    if (!u.searchParams.has("lang")) u.searchParams.set("lang", "en");
+    if (!u.searchParams.has("region")) u.searchParams.set("region", "us");
+    return u.toString();
+  } catch {
+    // if URL() fails, best-effort append
+    const joiner = url.includes("?") ? "&" : "?";
+    let out = url;
+    if (!/([?&])lang=/.test(out)) out += `${joiner}lang=en`;
+    if (!/([?&])region=/.test(out)) out += `${out.includes("?") ? "&" : "?"}region=us`;
+    return out;
+  }
+}
+
+async function fetchJsonNoStore(url) {
+  const resp = await fetch(url, { cache: "no-store" });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+async function fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, eventId, fallbackCompetition) {
   if (!league?.summaryEndpoint || !eventId) return { favored: "", ou: "" };
 
-  if (oddsCache.has(eventId)) return oddsCache.get(eventId);
-
-  // Try standard summary endpoint
-  const urls = [
-    league.summaryEndpoint(eventId),
-    // extra fallback variants (ESPN has shifted query keys in some cases)
-    league.summaryEndpoint(eventId).replace("?event=", "?eventId="),
-    league.summaryEndpoint(eventId).replace("summary?event=", "summary?eventId=")
-  ];
-
-  for (const url of urls) {
-    try {
-      const resp = await fetch(url, { cache: "no-store" });
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      const parsed = parseOddsFromSummary(data, fallbackCompetition);
-      oddsCache.set(eventId, parsed);
-      return parsed;
-    } catch (e) {
-      // try next
-    }
+  const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, eventId);
+  const cached = oddsCache.get(ck);
+  const now = Date.now();
+  if (cached && (now - (cached.ts || 0)) <= ODDS_CACHE_TTL_MS) {
+    return { favored: cached.favored || "", ou: cached.ou || "" };
   }
 
-  const empty = { favored: "", ou: "" };
-  oddsCache.set(eventId, empty);
-  return empty;
+  if (oddsInFlight.has(ck)) return oddsInFlight.get(ck);
+
+  const p = (async () => {
+    const base = league.summaryEndpoint(eventId);
+
+    // Try standard summary endpoint with region/lang first
+    const urls = [
+      withLangRegion(base),
+      // fallback variants (ESPN sometimes accepts eventId key)
+      withLangRegion(base.replace("?event=", "?eventId=")),
+      withLangRegion(base.replace("summary?event=", "summary?eventId=")),
+      // last resort: raw base (in case ESPN rejects extra params for some league)
+      base
+    ];
+
+    for (const url of urls) {
+      try {
+        const data = await fetchJsonNoStore(url);
+        const parsed = parseOddsFromSummary(data, fallbackCompetition);
+        if (parsed.favored || parsed.ou) {
+          oddsCache.set(ck, { favored: parsed.favored || "", ou: parsed.ou || "", ts: Date.now() });
+          saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
+          return parsed;
+        }
+      } catch (e) {
+        // try next
+      }
+    }
+
+    const empty = { favored: "", ou: "" };
+    oddsCache.set(ck, { favored: "", ou: "", ts: Date.now() });
+    saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
+    return empty;
+  })();
+
+  oddsInFlight.set(ck, p);
+  try {
+    return await p;
+  } finally {
+    oddsInFlight.delete(ck);
+  }
 }
 
 // Concurrency-limited runner
@@ -427,8 +582,10 @@ async function runWithConcurrency(items, limit, worker) {
   return results;
 }
 
-async function hydrateAllOdds(events, league) {
-  // Only games that are visible in the DOM and have ids
+async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
+  // Load persistent cache for this league/date once per load
+  loadOddsCacheFromSession(leagueKey, dateYYYYMMDD);
+
   const jobs = events
     .map(e => {
       const eventId = String(e?.id || "");
@@ -437,20 +594,33 @@ async function hydrateAllOdds(events, league) {
     })
     .filter(j => j.eventId);
 
-  // Don’t hammer ESPN. 6 concurrent summary calls is fast + safe.
-  await runWithConcurrency(jobs, 6, async (job) => {
-    // If scoreboard already had odds, skip summary
-    const fromScoreboard = parseOddsFromScoreboardCompetition(job.competition);
-    if (fromScoreboard.favored || fromScoreboard.ou) {
-      oddsCache.set(job.eventId, fromScoreboard);
-      const el = getOddsLineElByEventId(job.eventId);
-      if (el) el.textContent = buildOddsLine(fromScoreboard.favored, fromScoreboard.ou);
-      return;
+  // First pass: apply cached + scoreboard odds immediately
+  for (const job of jobs) {
+    const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
+    const cached = oddsCache.get(ck);
+    if (cached && (Date.now() - (cached.ts || 0)) <= ODDS_CACHE_TTL_MS) {
+      applyOddsToDom(job.eventId, cached.favored, cached.ou);
+      continue;
     }
 
-    const parsed = await fetchOddsFromSummary(league, job.eventId, job.competition);
-    const el = getOddsLineElByEventId(job.eventId);
-    if (el) el.textContent = buildOddsLine(parsed.favored, parsed.ou);
+    const fromScoreboard = parseOddsFromScoreboardCompetition(job.competition);
+    if (fromScoreboard.favored || fromScoreboard.ou) {
+      oddsCache.set(ck, { favored: fromScoreboard.favored || "", ou: fromScoreboard.ou || "", ts: Date.now() });
+      saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
+      applyOddsToDom(job.eventId, fromScoreboard.favored, fromScoreboard.ou);
+    }
+  }
+
+  // Second pass: only fetch summary for those still missing
+  const needsFetch = jobs.filter(job => {
+    const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
+    const val = oddsCache.get(ck);
+    return !(val && (val.favored || val.ou));
+  });
+
+  await runWithConcurrency(needsFetch, ODDS_CONCURRENCY_LIMIT, async (job) => {
+    const parsed = await fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, job.eventId, job.competition);
+    applyOddsToDom(job.eventId, parsed.favored, parsed.ou);
   });
 }
 /* ======================= */
@@ -782,7 +952,7 @@ async function loadScores(showLoading) {
 
       const venueLine = buildVenueLine(competition);
 
-      // Start odds as placeholder; we’ll fill via /summary right after render
+      // Start odds from scoreboard if present; summary hydration will fill missing ones
       const initialOdds = parseOddsFromScoreboardCompetition(competition);
       const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
 
@@ -845,9 +1015,8 @@ async function loadScores(showLoading) {
 
     content.appendChild(grid);
 
-    // NEW: hydrate odds for ALL games reliably (safe concurrency)
-    // (This is what fixes “I know lines exist but I’m not seeing them.”)
-    hydrateAllOdds(events, league);
+    // Hydrate odds reliably without spamming (cached + concurrency limited)
+    hydrateAllOdds(events, league, selectedKey, selectedDate);
 
   } catch (error) {
     content.innerHTML = `
