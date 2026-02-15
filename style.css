@@ -22,6 +22,9 @@ html, body {
   background-color: var(--bg);
   color: var(--text);
   overflow-x: hidden;
+
+  /* iOS Safari helpers */
+  -webkit-text-size-adjust: 100%;
 }
 
 /* ---------- BUCKEYE BACKGROUND ---------- */
@@ -52,25 +55,34 @@ body::before {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;   /* vertically center */
-  align-items: center;       /* horizontally center */
+  justify-content: center;
+  align-items: center;
   text-align: center;
   padding: 20px;
 }
 
-#login input {
-  width: 250px;
-}
-
 #login h1 {
   margin-bottom: 20px;
+}
+
+/* IMPORTANT: iPhone will auto-zoom inputs if font-size < 16px */
+#login input {
+  width: 250px;
+  font-size: 16px;              /* <-- prevents iOS zoom */
+  line-height: 1.2;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  outline: none;
 }
 /* ============================= */
 
 
 /* MAIN APP */
 #app {
-  padding-bottom: 110px; /* extra space so tabs don’t overlap content */
+  padding-bottom: 110px;
 }
 
 
@@ -178,6 +190,17 @@ body::before {
   font-weight:900;
 }
 
+
+/* BUTTONS (kept same) */
+button {
+  padding: 12px 16px;
+  font-size: 16px;
+  background: var(--scarlet);
+  color: white;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 700;
+}
 
 /* ===== TAB BAR FIX (iPhone safe area) ===== */
 .tabs {
