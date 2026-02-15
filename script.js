@@ -1,5 +1,3 @@
-FULL REPLACEMENT: script.js (Gold Standard v1 + Odds Fix)
-
 let refreshIntervalId = null;
 let currentTab = null;
 
