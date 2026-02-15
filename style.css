@@ -139,7 +139,6 @@ button {
   align-items: center;
 }
 
-/* NEW: keeps dropdown + calendar button together without redesign */
 .sublineLeft {
   display: flex;
   align-items: center;
@@ -158,7 +157,6 @@ button {
   max-width: 240px;
 }
 
-/* NEW: calendar emoji button (matches your smallBtn style language) */
 .iconBtn {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.15);
@@ -207,40 +205,25 @@ button {
 .status-up     { background: rgba(245,158,11,0.2); color: #fde68a; }
 .status-other  { background: rgba(255,255,255,0.1); color: #e5e7eb; }
 
-/* NEW: venue + odds block under the status pill (no layout redesign, just added info) */
-.gameMetaTop {
+/* NEW: single line (wraps), no labels, no cutoff */
+.gameMetaTopLine {
   margin-top: -4px;
   margin-bottom: 12px;
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.06);
-}
 
-.metaRow {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
   font-size: 12px;
   line-height: 1.25;
-  color: rgba(255,255,255,0.75);
-  padding: 3px 0;
-}
-
-.metaKey {
-  color: rgba(255,255,255,0.55);
   font-weight: 800;
-  letter-spacing: 0.2px;
-  flex: 0 0 auto;
-}
+  color: rgba(255,255,255,0.72);
 
-.metaVal {
-  text-align: right;
-  font-weight: 800;
-  color: rgba(255,255,255,0.78);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* THIS is the fix: allow wrapping, no ellipsis cutoff */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
 }
 
 /* GAME ROWS */
