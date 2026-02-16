@@ -457,3 +457,104 @@ button {
   font-size: 12px;
   opacity: 0.7;
 }
+
+/* ===== Beat TTUN extras (surgical) ===== */
+.beatBubble{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 16px;
+  padding: 14px 14px;
+  margin: 12px 14px;
+}
+
+.beatBubbleTop{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:10px;
+  opacity:0.95;
+}
+
+.beatBubbleTitle{
+  font-weight:800;
+  letter-spacing:0.4px;
+}
+
+.beatBubbleDate{
+  font-size:12px;
+  opacity:0.75;
+  white-space:nowrap;
+}
+
+.beatCountdown{
+  margin-top:10px;
+  font-size:22px;
+  font-weight:900;
+  letter-spacing:0.6px;
+}
+
+.rivalRecordRow{
+  margin-top:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+}
+
+.rivalTeam{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background: rgba(0,0,0,0.15);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.rivalLogo{
+  width:22px;
+  height:22px;
+  object-fit:contain;
+}
+
+.rivalTie{
+  opacity:0.9;
+  background: rgba(0,0,0,0.15);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.last10List{
+  margin-top:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.last10Row{
+  display:flex;
+  gap:10px;
+  align-items:baseline;
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.15);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.last10Year{
+  width:56px;
+  font-weight:800;
+  opacity:0.9;
+}
+
+.last10Winner{
+  flex:1;
+  font-weight:700;
+}
+
+.last10Score{
+  font-weight:900;
+  opacity:0.95;
+  white-space:nowrap;
+}
