@@ -605,8 +605,10 @@ async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
 }
 
 /* =========================
-   PGA Top 15
+   PGA Top 15 (FIXED SORT)
+   - Correctly sorts by leaderboard position (not alphabetical)
    ========================= */
+
 function parseGolfPosToSortValue(pos) {
   const s = String(pos || "").trim();
   if (!s) return Infinity;
@@ -637,13 +639,48 @@ function getGolferName(c) {
 }
 
 function getGolferPos(c) {
-  return (
+  // Try the most common “position” shapes first
+  const p =
     c?.position?.displayName ||
     c?.position?.shortDisplayName ||
-    c?.position ||
-    c?.rank ||
-    ""
-  );
+    c?.position?.displayValue ||
+    c?.position?.name ||
+    "";
+
+  if (String(p || "").trim()) return String(p).trim();
+
+  // Many ESPN golf payloads store position/rank in statistics
+  const fromStats =
+    statValueByName(c?.statistics, ["Pos", "POS", "Position", "Rank", "RANK"]) ||
+    "";
+
+  if (String(fromStats || "").trim()) return String(fromStats).trim();
+
+  // Fallbacks
+  if (c?.rank !== undefined && c?.rank !== null && String(c.rank).trim()) return String(c.rank).trim();
+  if (c?.order !== undefined && c?.order !== null && String(c.order).trim()) return String(c.order).trim();
+
+  return "";
+}
+
+function getGolferSortPos(c) {
+  // Prefer an explicit numeric sort value if ESPN provides one
+  const candidates = [
+    c?.position?.sortValue,
+    c?.position?.rank,
+    c?.rank,
+    c?.order
+  ];
+
+  for (const v of candidates) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+
+  // Otherwise parse the display position (e.g., "T1", "1", "T15")
+  const posStr = getGolferPos(c);
+  const parsed = parseGolfPosToSortValue(posStr);
+  return Number.isFinite(parsed) ? parsed : Infinity;
 }
 
 function statValueByName(statsArr, names) {
@@ -687,7 +724,12 @@ function getTournamentName(event, competition) {
 }
 
 function getTournamentLocationLine(event, competition) {
-  const v = competition?.venue || event?.venue || (Array.isArray(event?.venues) ? event.venues[0] : null) || null;
+  const v =
+    competition?.venue ||
+    event?.venue ||
+    (Array.isArray(event?.venues) ? event.venues[0] : null) ||
+    null;
+
   const parts = getVenuePartsFromVenueObj(v);
   const line = [parts.venueName, parts.location].filter(Boolean).join(" - ");
   return line || "—";
@@ -721,13 +763,14 @@ function renderGolfLeaderboards(events, content) {
         return {
           name: getGolferName(c),
           pos: String(pos || "").trim(),
-          sortPos: parseGolfPosToSortValue(pos),
+          sortPos: getGolferSortPos(c),          // ✅ FIXED
           score: getGolferScoreToPar(c),
           thru: getGolferThru(c)
         };
       })
       .filter(g => g.name && g.name !== "—");
 
+    // ✅ FIXED: sort by real leaderboard position first, then name
     golfers.sort((a, b) => (a.sortPos - b.sortPos) || a.name.localeCompare(b.name));
     const top15 = golfers.slice(0, 15);
 
