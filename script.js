@@ -1571,10 +1571,38 @@ document.addEventListener("change", (e) => {
 });
 
 /* =========================
+   GLOBAL TTUN REPLACER
+   ========================= */
+
+function replaceMichiganText(root = document.body) {
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
+    null,
+    false
+  );
+
+  let node;
+  while ((node = walker.nextNode())) {
+    if (!node.nodeValue) continue;
+
+    node.nodeValue = node.nodeValue
+      .replace(/Michigan/gi, "TTUN")
+      .replace(/Wolverines/gi, "TTUN");
+  }
+}
+
+/* =========================
    Window exports (keeps inline onclick working)
    ========================= */
 window.checkCode = checkCode;
 window.showTab = showTab;
+// Run TTUN replacer after every render
+const originalShowTab = showTab;
+showTab = function(tab) {
+  originalShowTab(tab);
+  setTimeout(() => replaceMichiganText(), 0);
+};
 window.loadScores = loadScores;
 window.renderBeatTTUN = renderBeatTTUN;
 window.renderTopNews = renderTopNews;
