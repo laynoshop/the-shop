@@ -15,9 +15,14 @@
   <div id="login">
     <h1>The Shop</h1>
 
-    <input type="password" id="code" placeholder="Enter Invite Code" inputmode="numeric" />
+    <input 
+      type="password" 
+      id="code" 
+      placeholder="Enter Invite Code" 
+      inputmode="numeric" 
+    />
 
-    <!-- ADDED SPACING CLASS -->
+    <!-- spacing handled by .login-btn class in CSS -->
     <button class="login-btn" onclick="checkCode()">Enter</button>
   </div>
 
@@ -28,7 +33,8 @@
     <div class="tabs">
       <button onclick="showTab('scores')">Scores</button>
       <button onclick="showTab('beat')">Beat TTUN</button>
-      <button onclick="showTab('headlines')">Headlines</button>
+      <button onclick="showTab('news')">Top News</button>
+      <button onclick="showTab('shop')">Shop</button>
     </div>
   </div>
 
