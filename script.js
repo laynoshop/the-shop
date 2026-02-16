@@ -1175,43 +1175,71 @@ async function loadScores(showLoading) {
 /* =========================
    BEAT TTUN (HYPE MODE)
    ========================= */
+
+// ESPN CDN logos (fast + reliable)
+const OSU_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png";
+const MICH_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png";
+
+// All-time series (per common published series totals; update anytime you want)
+const THE_GAME_ALL_TIME = {
+  michWins: 62,
+  osuWins: 52,
+  ties: 6
+};
+
+// Last 10 *played* matchups (excludes 2020 canceled)
+// Source: Ohio State opponent history table (dates/scores)
+const THE_GAME_LAST_10 = [
+  { year: 2025, winner: "Ohio State", score: "27–9" },
+  { year: 2024, winner: "Michigan",   score: "13–10" },
+  { year: 2023, winner: "Michigan",   score: "30–24" },
+  { year: 2022, winner: "Michigan",   score: "45–23" },
+  { year: 2021, winner: "Michigan",   score: "42–27" },
+  { year: 2019, winner: "Ohio State", score: "56–27" },
+  { year: 2018, winner: "Ohio State", score: "62–39" },
+  { year: 2017, winner: "Ohio State", score: "31–20" },
+  { year: 2016, winner: "Ohio State", score: "30–27 (2OT)" },
+  { year: 2015, winner: "Ohio State", score: "42–13" }
+];
+
 let beatCountdownTimer = null;
 
-function getNextTheGameDateLocalNoon() {
-  // "The Game" is usually the last Saturday in November.
-  // We compute last Saturday of November for current year; if already passed, use next year.
-  function lastSaturdayOfNovember(year) {
-    // Start at Nov 30
-    const d = new Date(year, 10, 30, 12, 0, 0); // month=10 => November
-    while (d.getDay() !== 6) d.setDate(d.getDate() - 1); // 6 = Saturday
-    return d;
-  }
-
-  const now = new Date();
-  let candidate = lastSaturdayOfNovember(now.getFullYear());
-  if (candidate.getTime() < now.getTime()) {
-    candidate = lastSaturdayOfNovember(now.getFullYear() + 1);
-  }
-  return candidate;
-}
-
-function fmtCountdown(ms) {
-  if (ms <= 0) return "0d 0h 0m";
-  const totalMin = Math.floor(ms / 60000);
-  const days = Math.floor(totalMin / (60 * 24));
-  const hours = Math.floor((totalMin % (60 * 24)) / 60);
-  const mins = totalMin % 60;
-  return `${days}d ${hours}h ${mins}m`;
-}
-
-function clearBeatTimer() {
+function stopBeatCountdown() {
   if (beatCountdownTimer) clearInterval(beatCountdownTimer);
   beatCountdownTimer = null;
 }
 
+// “The Game” is typically the last Saturday of November.
+// We count down to **noon local** on that day to keep it stable.
+function getNextTheGameDateLocalNoon() {
+  const now = new Date();
+  const year = now.getFullYear();
+
+  const candidate = lastSaturdayOfNovemberAtNoon(year);
+  if (candidate.getTime() > now.getTime()) return candidate;
+
+  return lastSaturdayOfNovemberAtNoon(year + 1);
+}
+
+function lastSaturdayOfNovemberAtNoon(year) {
+  // Start at Nov 30, walk backward to Saturday
+  const d = new Date(year, 10, 30, 12, 0, 0, 0); // month 10 = November
+  while (d.getDay() !== 6) d.setDate(d.getDate() - 1); // 6 = Saturday
+  return d;
+}
+
+function fmtCountdown(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(total / 86400);
+  const hrs  = Math.floor((total % 86400) / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return `${days}d ${String(hrs).padStart(2,"0")}h ${String(mins).padStart(2,"0")}m ${String(secs).padStart(2,"0")}s`;
+}
+
 function renderBeatTTUN() {
-  clearBeatTimer();
   const content = document.getElementById("content");
+  stopBeatCountdown();
 
   const target = getNextTheGameDateLocalNoon();
   const targetLabel = target.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
@@ -1221,84 +1249,72 @@ function renderBeatTTUN() {
       <div class="headerTop">
         <div class="brand">
           <h2 style="margin:0;">Beat TTUN</h2>
-          <span class="badge">Hype Mode</span>
+          <span class="badge">Hype</span>
         </div>
-        <button class="smallBtn" onclick="renderBeatTTUN()">Refresh</button>
       </div>
       <div class="subline">
-        <div>Countdown to The Game • ${escapeHtml(targetLabel)}</div>
-        <div></div>
+        <div>Scarlet Mode</div>
+        <div>❌ichigan Week Energy</div>
       </div>
     </div>
 
-    <div class="notice" style="text-align:center;">
-      <div id="ttunCountdown" style="font-size:26px;font-weight:800;color:#bb0000;margin-bottom:8px;">—</div>
-      <div style="opacity:0.85;">BEAT TTUN.</div>
+    <!-- NEW: Countdown as its own bubble -->
+    <div class="beatBubble">
+      <div class="beatBubbleTop">
+        <div class="beatBubbleTitle">Countdown to The Game</div>
+        <div class="beatBubbleDate">${escapeHtml(targetLabel)}</div>
+      </div>
+      <div id="beatCountdown" class="beatCountdown">—</div>
     </div>
 
-    <div class="grid">
-      <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill status-up">Rivalry Vault</div>
-        </div>
-        <div class="gameMetaTopLine">All-Time Record (static)</div>
-        <div class="gameMetaOddsLine">Because this app has standards.</div>
+    <div class="notice">
+      <div style="font-weight:800; letter-spacing:0.5px;">ALL-TIME RECORD</div>
 
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">Ohio State</div><div class="teamMeta">Wins</div></div>
-          <div class="score">51</div>
+      <!-- NEW: Blurb change -->
+      <div style="margin-top:6px; opacity:0.9;">TTUN are cheating bastards</div>
+
+      <!-- NEW: Logos next to win totals -->
+      <div class="rivalRecordRow">
+        <div class="rivalTeam">
+          <img class="rivalLogo" src="${OSU_LOGO}" alt="Ohio State logo" loading="lazy" decoding="async" />
+          <div class="rivalText"><strong>Ohio State:</strong> ${THE_GAME_ALL_TIME.osuWins}</div>
         </div>
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">TTUN</div><div class="teamMeta">Wins</div></div>
-          <div class="score">60</div>
+        <div class="rivalTeam">
+          <img class="rivalLogo" src="${MICH_LOGO}" alt="Michigan logo" loading="lazy" decoding="async" />
+          <div class="rivalText"><strong>Michigan:</strong> ${THE_GAME_ALL_TIME.michWins}</div>
         </div>
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">Ties</div><div class="teamMeta">Historical</div></div>
-          <div class="score">6</div>
-        </div>
+        <div class="rivalTie"><strong>Ties:</strong> ${THE_GAME_ALL_TIME.ties}</div>
       </div>
+    </div>
 
-      <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill status-other">Last Matchups (static)</div>
-        </div>
-        <div class="gameMetaTopLine">Recent results</div>
-        <div class="gameMetaOddsLine">Scarlet remembers.</div>
-
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">2024</div><div class="teamMeta">Final</div></div>
-          <div class="score">30-24</div>
-        </div>
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">2023</div><div class="teamMeta">Final</div></div>
-          <div class="score">45-23</div>
-        </div>
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">2022</div><div class="teamMeta">Final</div></div>
-          <div class="score">45-23</div>
-        </div>
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">2021</div><div class="teamMeta">Final</div></div>
-          <div class="score">42-27</div>
-        </div>
-        <div class="teamRow">
-          <div class="teamLeft"><div class="teamName">2019</div><div class="teamMeta">Final</div></div>
-          <div class="score">56-27</div>
-        </div>
+    <div class="notice">
+      <div style="font-weight:800; letter-spacing:0.5px;">LAST 10 MATCHUPS</div>
+      <div class="last10List">
+        ${THE_GAME_LAST_10.map(g => {
+          const winner = escapeHtml(g.winner);
+          const score  = escapeHtml(g.score);
+          return `
+            <div class="last10Row">
+              <div class="last10Year">${g.year}</div>
+              <div class="last10Winner">${winner}</div>
+              <div class="last10Score">${score}</div>
+            </div>
+          `;
+        }).join("")}
       </div>
     </div>
   `;
 
-  function tick() {
-    const now = Date.now();
-    const ms = target.getTime() - now;
-    const el = document.getElementById("ttunCountdown");
+  // Countdown tick
+  const el = document.getElementById("beatCountdown");
+  const tick = () => {
+    const ms = target.getTime() - Date.now();
     if (!el) return;
-    el.textContent = `${fmtCountdown(ms)} until kickoff`;
-  }
+    el.textContent = fmtCountdown(ms);
+  };
 
   tick();
-  beatCountdownTimer = setInterval(tick, 60000);
+  beatCountdownTimer = setInterval(tick, 1000);
 }
 
 /* =========================
