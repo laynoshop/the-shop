@@ -928,20 +928,24 @@ function positionRivalryBanner() {
   const content = document.getElementById("content");
   if (!banner || !tabs || !content) return;
 
-  const tabsH = tabs.offsetHeight || 0;
-
-  // ✅ Make banner feel like part of the bottom bar (no gap, no side inset)
+  // Make banner feel like a real bottom bar (full width)
   banner.style.left = "0";
   banner.style.right = "0";
   banner.style.margin = "0";
   banner.style.borderRadius = "0";
 
-  // ✅ Sit FLUSH on top of the tabs
-  banner.style.bottom = `${tabsH}px`;
+  // Put banner at the very bottom
+  banner.style.bottom = "0px";
 
-  // ✅ Keep content from hiding behind banner + tabs
+  // Measure banner after it’s visible
   const bannerH = banner.offsetHeight || 0;
-  content.style.paddingBottom = `${tabsH + bannerH}px`;
+
+  // Push the tabs UP so they sit above the banner
+  tabs.style.bottom = `${bannerH}px`;
+
+  // Keep content from hiding behind tabs + banner
+  const tabsH = tabs.offsetHeight || 0;
+  content.style.paddingBottom = `${bannerH + tabsH}px`;
 }
 
 function setActiveTabButton(tab) {
