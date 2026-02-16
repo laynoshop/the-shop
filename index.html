@@ -10,19 +10,25 @@
 </head>
 
 <body>
+
+  <!-- LOGIN SCREEN -->
   <div id="login">
     <h1>The Shop</h1>
+
     <input type="password" id="code" placeholder="Enter Invite Code" inputmode="numeric" />
-    <button onclick="checkCode()">Enter</button>
+
+    <!-- ADDED SPACING CLASS -->
+    <button class="login-btn" onclick="checkCode()">Enter</button>
   </div>
 
+  <!-- MAIN APP -->
   <div id="app" style="display:none;">
     <div id="content"></div>
 
     <div class="tabs">
       <button onclick="showTab('scores')">Scores</button>
-      <button onclick="showTab('wagers')">Wagers</button>
-      <button onclick="showTab('shop')">Shop</button>
+      <button onclick="showTab('beat')">Beat TTUN</button>
+      <button onclick="showTab('headlines')">Headlines</button>
     </div>
   </div>
 
