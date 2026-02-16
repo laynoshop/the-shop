@@ -885,6 +885,8 @@ function checkCode() {
     document.getElementById("login").style.display = "none";
     document.getElementById("app").style.display = "block";
     showTab("scores");
+    updateRivalryBanner();
+window.addEventListener("resize", positionRivalryBanner);
   } else {
     alert("Wrong code");
   }
@@ -893,6 +895,49 @@ function checkCode() {
 /* =========================
    Tabs
    ========================= */
+
+/* =========================
+   BUCKEYE BANNER (above tabs)
+   ========================= */
+
+// Set this to the most recent TTUN win date (local time). Update if/when it changes.
+const LAST_TTUN_WIN_DATE = new Date(2024, 10, 30, 12, 0, 0); // Nov 30, 2024 @ noon local
+
+function daysSince(d) {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = today.getTime() - start.getTime();
+  return Math.max(0, Math.floor(diff / 86400000));
+}
+
+function updateRivalryBanner() {
+  const banner = document.getElementById("rivalryBanner");
+  if (!banner) return;
+
+  const days = daysSince(LAST_TTUN_WIN_DATE);
+  banner.textContent = `${days} days since TTUN has won in The Game`;
+  banner.style.display = "block";
+
+  positionRivalryBanner();
+}
+
+function positionRivalryBanner() {
+  const banner = document.getElementById("rivalryBanner");
+  const tabs = document.querySelector(".tabs");
+  const content = document.getElementById("content");
+  if (!banner || !tabs || !content) return;
+
+  // Place banner directly above tabs
+  const tabsH = tabs.offsetHeight || 0;
+  banner.style.bottom = `${tabsH + 10}px`;
+
+  // Prevent content from sliding behind banner/tabs
+  const bannerH = banner.offsetHeight || 0;
+  const pad = tabsH + bannerH + 26;
+  content.style.paddingBottom = `${pad}px`;
+}
+
 function setActiveTabButton(tab) {
   document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
   // Tabs order: Scores, Beat TTUN, Top News, Shop
@@ -915,25 +960,7 @@ function startAutoRefresh() {
   }, 30000);
 }
 
-function showTab(tab) {
-  currentTab = tab;
-  setActiveTabButton(tab);
-  stopAutoRefresh();
 
-  const content = document.getElementById("content");
-  content.innerHTML = "";
-
-  if (tab === "scores") {
-    loadScores(true);
-    startAutoRefresh();
-  } else if (tab === "beat") {
-    renderBeatTTUN();
-  } else if (tab === "news") {
-    renderTopNews(true);
-  } else if (tab === "shop") {
-    renderShop();
-  }
-}
 
 function statusClassFromState(state) {
   if (state === "in") return "status-live";
@@ -947,6 +974,32 @@ function statusLabelFromState(state, detail) {
   if (state === "post") return `FINAL`;
   if (state === "pre") return `${detail}`;
   return detail || "STATUS";
+}
+
+function showTab(tab) {
+  currentTab = tab;
+  setActiveTabButton(tab);
+  stopAutoRefresh();
+
+  const content = document.getElementById("content");
+  content.innerHTML = "";
+
+  if (tab === "scores") {
+    loadScores(true);
+    startAutoRefresh();
+  } 
+  else if (tab === "beat") {
+    renderBeatTTUN();
+  } 
+  else if (tab === "news") {
+    renderTopNews(true);
+  } 
+  else if (tab === "shop") {
+    renderShop();
+  }
+
+  // 🔴 Always refresh Buckeye banner after tab change
+  updateRivalryBanner();
 }
 
 /* =========================
