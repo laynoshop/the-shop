@@ -1469,7 +1469,10 @@ async function renderTopNews(showLoading) {
           <div>Error</div>
         </div>
       </div>
-      <div class="notice">Couldn’t load headlines right now.</div>
+<div class="notice" style="text-align:center;">
+  Jim Harbaugh stole the headlines.<br/>
+  Once the NCAA finishes the investigation, they’ll finally return.
+</div>
     `;
   }
 
