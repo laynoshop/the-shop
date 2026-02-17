@@ -2073,6 +2073,7 @@ async function sendShopChatMessage() {
    ========================= */
 function renderShop() {
   const content = document.getElementById("content");
+
   content.innerHTML = `
     <div class="header">
       <div class="headerTop">
@@ -2088,15 +2089,31 @@ function renderShop() {
     </div>
 
     <div class="notice">
-      Coming soon ideas:
-      <div style="margin-top:8px; opacity:0.85; font-size:12px; line-height:1.35;">
-        • Daily poll (everyone votes)<br/>
-        • Power rankings (weekly shop vote)<br/>
-        • Buckeye “Game Day” banner mode<br/>
-        • Quick notes feed (pics + wins of the day)
+      <div style="font-weight:800; letter-spacing:0.5px;">GROUP CHAT</div>
+      <div id="chatStatusLine" style="margin-top:6px; opacity:0.85;">Loading chat…</div>
+
+      <div style="margin-top:12px;">
+        <div id="chatList" style="max-height:52vh; overflow:auto;"></div>
+      </div>
+
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <input id="chatInput" type="text" placeholder="Type a message…" style="flex:1;" />
+        <button class="smallBtn" id="chatSendBtn">Send</button>
+      </div>
+
+      <div style="margin-top:10px; opacity:0.7; font-size:12px;">
+        One room • Real-time • Buckeye energy
       </div>
     </div>
   `;
+
+  startShopChatRealtime()
+    .catch(() => {
+      const status = document.getElementById("chatStatusLine");
+      if (status) status.textContent = "Chat unavailable — check Firebase config/rules.";
+    });
+
+  setTimeout(() => replaceMichiganText(), 0);
 }
 
 /* =========================
