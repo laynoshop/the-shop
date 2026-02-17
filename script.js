@@ -925,11 +925,16 @@ function promptForDateAndReload() {
 function checkCode() {
   const code = document.getElementById("code").value;
   if (code === "2026") {
+    // Always default to TODAY on fresh login
+    const today = formatDateYYYYMMDD(new Date());
+    saveDateYYYYMMDD(today);
+
     document.getElementById("login").style.display = "none";
     document.getElementById("app").style.display = "block";
+
     showTab("scores");
     updateRivalryBanner();
-window.addEventListener("resize", positionRivalryBanner);
+    window.addEventListener("resize", positionRivalryBanner);
   } else {
     alert("Wrong code");
   }
