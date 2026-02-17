@@ -2023,14 +2023,12 @@ function renderShopChatMessages(items) {
     const time = t ? t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
 
     return `
-      <div class="game" style="margin-bottom:10px;">
-        <div class="gameHeader">
-          <div class="statusPill status-other">${name}</div>
-        </div>
-        <div class="gameMetaTopLine">${text}</div>
-        <div class="gameMetaOddsLine">${escapeHtml(time)}</div>
-      </div>
-    `;
+  <div class="chatMsgBubble">
+    <div class="chatMsgHeader">${name}</div>
+    <div class="chatMsgText">${text}</div>
+    ${time ? `<div class="chatMsgTime">${escapeHtml(time)}</div>` : ``}
+  </div>
+`;
   }).join("");
 
   list.innerHTML = html || `<div class="notice">No messages yet. Start it up.</div>`;
