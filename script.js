@@ -2016,6 +2016,8 @@ function renderShopChatMessages(items) {
   const list = document.getElementById("chatList");
   if (!list) return;
 
+  const myName = getChatDisplayName();
+
   const html = (items || []).map(m => {
     const text = escapeHtml(sanitizeTTUNText(m?.text || ""));
     const t = m?.ts?.toDate ? m.ts.toDate() : null;
@@ -2023,8 +2025,10 @@ function renderShopChatMessages(items) {
       ? t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
       : "";
 
+    const isMine = m?.name === myName;
+
     return `
-      <div class="chatMsgBubble">
+      <div class="chatMsgBubble ${isMine ? "mine" : ""}">
         <div class="chatMsgText">${text}</div>
         ${time ? `<div class="chatMsgTime">${escapeHtml(time)}</div>` : ``}
       </div>
@@ -2033,10 +2037,8 @@ function renderShopChatMessages(items) {
 
   list.innerHTML = html || `<div class="notice">No messages yet. Start it up.</div>`;
 
-  // Keep newest visible
   list.scrollTop = list.scrollHeight;
 
-  // TTUN enforcement
   setTimeout(() => replaceMichiganText(), 0);
 }
 
