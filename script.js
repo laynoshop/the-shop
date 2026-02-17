@@ -1595,24 +1595,8 @@ function buildNewsFiltersRowHTML(activeKey) {
 }
 
 async function fetchTopNewsItemsFromESPN() {
-  // Multiple endpoints because ESPN will intermittently fail one while another works
-  const baseUrls = [
-    "https://site.api.espn.com/apis/v2/sports/news",
-    "https://site.api.espn.com/apis/site/v2/sports/news"
-  ];
-
-  // Add lang/region variants for reliability
-  const urls = [];
-  for (const u of baseUrls) {
-    urls.push(u);
-    urls.push(withLangRegion(u));
-  }
-
-  let lastErr = null;
-  let data = null;
-
-  // Small timeout so iOS PWA doesn’t “hang” in fetch limbo
-  async function fetchWithTimeout(url, ms = 8000) {
+  // --- helpers (local to this function) ---
+  async function fetchJsonWithTimeout(url, ms = 9000) {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), ms);
     try {
@@ -1624,29 +1608,30 @@ async function fetchTopNewsItemsFromESPN() {
     }
   }
 
-  for (const url of urls) {
+  async function fetchTextWithTimeout(url, ms = 9000) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
     try {
-      const attempt = await fetchWithTimeout(url, 8000);
-      const articles = Array.isArray(attempt?.articles) ? attempt.articles : [];
-      if (articles.length) {
-        data = attempt;
-        break;
-      }
-    } catch (e) {
-      lastErr = e;
+      const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.text();
+    } finally {
+      clearTimeout(t);
     }
   }
 
-  if (!data) throw (lastErr || new Error("News fetch failed"));
+  function ensureLinkOrSearch(it) {
+    if (it.link) return it.link;
+    // Failsafe: ESPN search URL so headline is always clickable
+    const q = encodeURIComponent(it.headline || "");
+    return q ? `https://www.espn.com/search/results?q=${q}` : "https://www.espn.com/";
+  }
 
-  const articles = Array.isArray(data?.articles) ? data.articles : [];
-  const sliced = articles.slice(0, 30);
-
-  const items = sliced.map(a => {
+  function normalizeItem(a) {
     const publishedIso = a?.published || "";
     const publishedTs = Date.parse(publishedIso);
 
-    return {
+    const item = {
       headline: sanitizeTTUNText(a?.headline || ""),
       description: sanitizeTTUNText(a?.description || ""),
       source: sanitizeTTUNText(a?.source || "ESPN"),
@@ -1654,14 +1639,102 @@ async function fetchTopNewsItemsFromESPN() {
       publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
       link: a?.links?.web?.href || a?.links?.[0]?.href || ""
     };
-  }).filter(x => x.headline);
 
-  const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
-  const deduped = dedupeNewsItems(tagged);
+    item.link = ensureLinkOrSearch(item);
+    return item;
+  }
 
-  deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
+  function parseRssItems(xmlText) {
+    const doc = new DOMParser().parseFromString(xmlText, "text/xml");
+    const items = Array.from(doc.querySelectorAll("item")).slice(0, 30);
 
-  return deduped.slice(0, 12);
+    return items.map((node) => {
+      const title = node.querySelector("title")?.textContent || "";
+      const link = node.querySelector("link")?.textContent || "";
+      const desc = node.querySelector("description")?.textContent || "";
+      const pub = node.querySelector("pubDate")?.textContent || "";
+
+      const publishedTs = Date.parse(pub);
+
+      const it = {
+        headline: sanitizeTTUNText(title),
+        description: sanitizeTTUNText(desc.replace(/<[^>]*>/g, "").trim()),
+        source: "ESPN",
+        publishedIso: pub,
+        publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
+        link: link || ""
+      };
+
+      it.link = ensureLinkOrSearch(it);
+      return it;
+    }).filter(x => x.headline);
+  }
+
+  // --- 1) Try ESPN JSON (multiple endpoints + lang/region) ---
+  const jsonBases = [
+    "https://site.api.espn.com/apis/v2/sports/news",
+    "https://site.api.espn.com/apis/site/v2/sports/news",
+    "https://site.api.espn.com/apis/v2/sports/news?limit=50",
+    "https://site.api.espn.com/apis/site/v2/sports/news?limit=50"
+  ];
+
+  const jsonUrls = [];
+  for (const u of jsonBases) {
+    jsonUrls.push(u);
+    jsonUrls.push(withLangRegion(u));
+  }
+
+  let lastErr = null;
+  for (const url of jsonUrls) {
+    try {
+      const data = await fetchJsonWithTimeout(url, 9000);
+      const articles = Array.isArray(data?.articles) ? data.articles : [];
+      if (articles.length) {
+        const items = articles.slice(0, 30).map(normalizeItem).filter(x => x.headline);
+
+        const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
+        const deduped = dedupeNewsItems(tagged);
+
+        deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
+        return deduped.slice(0, 12);
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  // --- 2) Try ESPN RSS directly ---
+  const rssUrl = "https://www.espn.com/espn/rss/news";
+  try {
+    const xml = await fetchTextWithTimeout(rssUrl, 9000);
+    const items = parseRssItems(xml);
+
+    const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
+    const deduped = dedupeNewsItems(tagged);
+
+    deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
+    return deduped.slice(0, 12);
+  } catch (e) {
+    lastErr = e;
+  }
+
+  // --- 3) Try RSS via AllOrigins (CORS escape hatch) ---
+  // This is a fallback only (used when ESPN blocks CORS)
+  try {
+    const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
+    const xml = await fetchTextWithTimeout(proxied, 9000);
+    const items = parseRssItems(xml);
+
+    const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
+    const deduped = dedupeNewsItems(tagged);
+
+    deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
+    return deduped.slice(0, 12);
+  } catch (e) {
+    lastErr = e;
+  }
+
+  throw (lastErr || new Error("News fetch failed"));
 }
 
 function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
@@ -1670,7 +1743,9 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
   const filtered = (items || []).filter(it => passesNewsFilter(it, currentNewsFilter));
 
   const cards = filtered.map((it) => {
-    const title = escapeHtml(sanitizeTTUNText(it.headline));
+    const safeTitle = sanitizeTTUNText(it.headline);
+    const title = escapeHtml(safeTitle);
+
     const descText = sanitizeTTUNText(it.description || "");
     const desc = descText
       ? `<div style="margin-top:8px;opacity:0.85;font-size:13px;line-height:1.25;">${escapeHtml(descText)}</div>`
@@ -1683,21 +1758,27 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
     ].filter(Boolean);
 
     const meta = metaParts.join(" • ");
+    const href = it.link ? it.link : `https://www.espn.com/search/results?q=${encodeURIComponent(safeTitle || "")}`;
 
-    const link = it.link
-      ? `<a class="smallBtn" style="display:inline-block;margin-top:10px;text-decoration:none;" href="${it.link}" target="_blank" rel="noopener noreferrer">Open</a>`
-      : "";
+    // Headline is now the link (opens Safari)
+    const headlineLink = `
+      <a href="${href}"
+         target="_blank"
+         rel="noopener noreferrer"
+         style="display:block;color:inherit;text-decoration:none;">
+        ${title}
+      </a>
+    `;
 
     return `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">TOP</div>
         </div>
-        <div class="gameMetaTopLine">${title}</div>
+        <div class="gameMetaTopLine">${headlineLink}</div>
         <div class="gameMetaOddsLine">${meta || "—"}</div>
         <div style="padding:0 2px 2px 2px;">
           ${desc}
-          ${link}
         </div>
       </div>
     `;
@@ -1731,7 +1812,6 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
     </div>
   `;
 
-  // Safety pass after DOM insert
   setTimeout(() => replaceMichiganText(), 0);
 }
 
