@@ -2000,14 +2000,17 @@ async function startShopChatRealtime() {
       const items = [];
       snap.forEach((doc) => items.push({ id: doc.id, ...doc.data() }));
       items.reverse(); // oldest -> newest
+
       renderShopChatMessages(items);
 
-      const status = document.getElementById("chatStatusLine");
-      if (status) status.textContent = "Connected.";
+      // 🔵 Set connection status to online
+      setChatConnectionStatus(true);
     },
-    () => {
-      const status = document.getElementById("chatStatusLine");
-      if (status) status.textContent = "Chat connection issue — try again.";
+    (error) => {
+      console.error("Chat listener error:", error);
+
+      // 🔴 Set connection status to offline
+      setChatConnectionStatus(false);
     }
   );
 }
