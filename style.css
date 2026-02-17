@@ -607,3 +607,30 @@ button {
   opacity: 0.6;
   text-align: right;
 }
+
+.chatMsgBubble{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  max-width: 75%;
+}
+
+.chatMsgBubble.mine{
+  margin-left: auto;
+  background: rgba(187,0,0,0.18);
+  border-color: rgba(187,0,0,0.45);
+}
+
+.chatMsgText{
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.chatMsgTime{
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.6;
+  text-align: right;
+}
