@@ -2017,18 +2017,18 @@ function renderShopChatMessages(items) {
   if (!list) return;
 
   const html = (items || []).map(m => {
-    const name = escapeHtml(sanitizeTTUNText(m?.name || "Anon"));
     const text = escapeHtml(sanitizeTTUNText(m?.text || ""));
     const t = m?.ts?.toDate ? m.ts.toDate() : null;
-    const time = t ? t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    const time = t
+      ? t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "";
 
     return `
-  <div class="chatMsgBubble">
-    <div class="chatMsgHeader">${name}</div>
-    <div class="chatMsgText">${text}</div>
-    ${time ? `<div class="chatMsgTime">${escapeHtml(time)}</div>` : ``}
-  </div>
-`;
+      <div class="chatMsgBubble">
+        <div class="chatMsgText">${text}</div>
+        ${time ? `<div class="chatMsgTime">${escapeHtml(time)}</div>` : ``}
+      </div>
+    `;
   }).join("");
 
   list.innerHTML = html || `<div class="notice">No messages yet. Start it up.</div>`;
@@ -2089,6 +2089,8 @@ function renderShop() {
     <div class="notice">
       <div style="font-weight:800; letter-spacing:0.5px;">GROUP CHAT</div>
       <div id="chatStatusLine" style="margin-top:6px; opacity:0.85;">Loading chat…</div>
+
+<div id="chatRoomTitle" class="chatRoomTitle">THE Chat</div>
 
       <div style="margin-top:12px;">
         <div id="chatList" style="max-height:52vh; overflow:auto;"></div>
