@@ -8,6 +8,19 @@
    - HARDENED for iOS/PWA (CSS.escape polyfill + event delegation)
    ========================= */
 
+/* =========================
+   FIREBASE CONFIG (Shop Chat)
+   ========================= */
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBK09tMYLKcDLTMLVn2gYpsezCJAax0Y9Y",
+  authDomain: "the-shop-chat.firebaseapp.com",
+  projectId: "the-shop-chat",
+  storageBucket: "the-shop-chat.firebasestorage.app",
+  messagingSenderId: "98648984848",
+  appId: "1:98648984848:web:c4e876c8acdb00d8ba2995"
+};
+
 /* ====== SAFETY: CSS.escape polyfill (fixes iOS/PWA crashes) ====== */
 (function ensureCssEscape(){
   if (!window.CSS) window.CSS = {};
