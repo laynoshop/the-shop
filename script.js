@@ -2124,8 +2124,35 @@ document.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
+  // 📅 Date picker (Scores tab)
   if (btn.id === "dateBtn") {
     promptForDateAndReload();
+    return;
+  }
+
+  // 💬 Shop Chat Send button
+  if (btn.id === "chatSendBtn") {
+    sendShopChatMessage();
+    return;
+  }
+
+  // 📰 News filters (existing logic)
+  const filter = btn.getAttribute("data-newsfilter");
+  if (filter) {
+    currentNewsFilter = filter;
+    sessionStorage.setItem(NEWS_FILTER_KEY, filter);
+
+    const cached = loadNewsCache();
+    const headerUpdated = new Date().toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit"
+    });
+
+    if (cached && cached.items && cached.items.length) {
+      renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
+    } else {
+      renderTopNews(true);
+    }
     return;
   }
 });
