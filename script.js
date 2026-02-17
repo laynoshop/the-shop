@@ -1986,6 +1986,10 @@ async function startShopChatRealtime() {
   await ensureFirebaseChatReady();
   stopShopChatRealtime();
 
+  // show loading immediately
+  const status = document.getElementById("chatStatusLine");
+  if (status) status.textContent = "Loading chat…";
+
   const db = firebase.firestore();
 
   const q = db
@@ -1995,6 +1999,8 @@ async function startShopChatRealtime() {
     .orderBy("ts", "desc")
     .limit(50);
 
+  let firstLoadDone = false;
+
   chatUnsub = q.onSnapshot(
     (snap) => {
       const items = [];
@@ -2003,14 +2009,26 @@ async function startShopChatRealtime() {
 
       renderShopChatMessages(items);
 
-      // 🔵 Set connection status to online
+      // ✅ Connected UI
       setChatConnectionStatus(true);
+
+      // ✅ Stop saying "Loading…" after the first good snapshot
+      if (!firstLoadDone) {
+        firstLoadDone = true;
+        if (status) status.textContent = ""; // or "Ready."
+      } else {
+        // keep it blank after initial load
+        if (status) status.textContent = "";
+      }
     },
     (error) => {
       console.error("Chat listener error:", error);
 
-      // 🔴 Set connection status to offline
+      // 🔴 Disconnected UI
       setChatConnectionStatus(false);
+
+      // show error state
+      if (status) status.textContent = "Chat unavailable — try again.";
     }
   );
 }
