@@ -2012,6 +2012,23 @@ async function startShopChatRealtime() {
   );
 }
 
+function setChatConnectionStatus(isConnected) {
+  const dot = document.getElementById("chatStatusDot");
+  const text = document.getElementById("chatStatusText");
+
+  if (!dot || !text) return;
+
+  if (isConnected) {
+    dot.classList.remove("offline");
+    dot.classList.add("online");
+    text.textContent = "Connected";
+  } else {
+    dot.classList.remove("online");
+    dot.classList.add("offline");
+    text.textContent = "Disconnected";
+  }
+}
+
 function renderShopChatMessages(items) {
   const list = document.getElementById("chatList");
   if (!list) return;
@@ -2092,7 +2109,13 @@ function renderShop() {
       <div style="font-weight:800; letter-spacing:0.5px;">GROUP CHAT</div>
       <div id="chatStatusLine" style="margin-top:6px; opacity:0.85;">Loading chat…</div>
 
-<div id="chatRoomTitle" class="chatRoomTitle">THE Chat</div>
+<div id="chatRoomTitle" class="chatRoomTitle">
+  <span id="chatRoomName">THE Chat</span>
+  <span class="chatStatusWrap">
+    • <span id="chatStatusDot" class="chatStatusDot"></span>
+    <span id="chatStatusText">Connecting...</span>
+  </span>
+</div>
 
       <div style="margin-top:12px;">
         <div id="chatList" style="max-height:52vh; overflow:auto;"></div>
