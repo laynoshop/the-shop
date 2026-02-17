@@ -1818,24 +1818,6 @@ async function renderTopNews(showLoading) {
   }
 }
 
-  async function refreshTopNewsInBackground() {
-    try {
-      const fresh = await fetchTopNewsItemsFromESPN();
-      const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-      saveNewsCache(fresh, cacheLabel);
-
-      // Only re-render if user is still on the News tab
-      if (currentTab === "news") {
-        const headerUpdated2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        renderNewsList(fresh, headerUpdated2, cacheLabel);
-      }
-    } catch {
-      // Silent fail in background — cache keeps page alive
-    }
-  }
-}
-
 /* ===== News filter clicks (delegated) ===== */
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
