@@ -668,3 +668,7 @@ button {
 .chatStatusDot.offline{
   background: #e74c3c;
 }
+
+#chatInput{
+  font-size: 16px;
+}
