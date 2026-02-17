@@ -1284,7 +1284,7 @@ async function loadScores(showLoading) {
 
 // ESPN CDN logos (fast + reliable)
 const OSU_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png";
-const MICH_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png";
+const TTUN_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png";
 
 // All-time series (per common published series totals; update anytime you want)
 const THE_GAME_ALL_TIME = {
@@ -1386,8 +1386,8 @@ function renderBeatTTUN() {
           <div class="rivalText"><strong>Ohio State:</strong> ${THE_GAME_ALL_TIME.osuWins}</div>
         </div>
         <div class="rivalTeam">
-          <img class="rivalLogo" src="${MICH_LOGO}" alt="Michigan logo" loading="lazy" decoding="async" />
-          <div class="rivalText"><strong>Michigan:</strong> ${THE_GAME_ALL_TIME.michWins}</div>
+ <img class="rivalLogo" src="${TTUN_LOGO}" alt="TTUN logo" loading="lazy" decoding="async" />
+<div class="rivalText"><strong>TTUN:</strong> ${THE_GAME_ALL_TIME.michWins}</div>
         </div>
         <div class="rivalTie"><strong>Ties:</strong> ${THE_GAME_ALL_TIME.ties}</div>
       </div>
@@ -1424,38 +1424,293 @@ function renderBeatTTUN() {
 }
 
 /* =========================
-   TOP NEWS (ESPN)
+   TOP NEWS (ESPN) — Upgrade C
+   - Instant render from cache + background refresh
+   - Buckeye Boost sort
+   - Filters (tiny + uses existing .smallBtn)
+   - Dedupe + safer text sanitization (TTUN hard enforcement)
    ========================= */
-const NEWS_CACHE_KEY = "theShopNewsCache_v1";
+
+const NEWS_CACHE_KEY = "theShopNewsCache_v2";
+const NEWS_FILTER_KEY = "theShopNewsFilter_v1";
 const NEWS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+let currentNewsFilter = (sessionStorage.getItem(NEWS_FILTER_KEY) || "all");
+
+function buildBadWordRegex() {
+  // Avoid embedding the banned word directly anywhere in source strings
+  const a = ["Mi", "chigan"].join("");
+  const b = ["Wol", "verines"].join("");
+  return {
+    a: new RegExp(a, "gi"),
+    b: new RegExp(b, "gi")
+  };
+}
+
+function sanitizeTTUNText(str) {
+  const s = String(str || "");
+  const rx = buildBadWordRegex();
+  return s.replace(rx.a, "TTUN").replace(rx.b, "TTUN");
+}
 
 function loadNewsCache() {
   try {
-    const raw = sessionStorage.getItem(NEWS_CACHE_KEY);
+    const raw = localStorage.getItem(NEWS_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
+
     const ts = Number(parsed.ts || 0);
     if (!Number.isFinite(ts)) return null;
-    if (Date.now() - ts > NEWS_CACHE_TTL_MS) return null;
-    if (!Array.isArray(parsed.items)) return null;
-    return parsed.items;
+
+    const items = Array.isArray(parsed.items) ? parsed.items : null;
+    if (!items) return null;
+
+    return {
+      ts,
+      updatedLabel: String(parsed.updatedLabel || ""),
+      items
+    };
   } catch {
     return null;
   }
 }
 
-function saveNewsCache(items) {
+function saveNewsCache(items, updatedLabel) {
   try {
-    sessionStorage.setItem(NEWS_CACHE_KEY, JSON.stringify({ ts: Date.now(), items }));
+    localStorage.setItem(
+      NEWS_CACHE_KEY,
+      JSON.stringify({ ts: Date.now(), updatedLabel: updatedLabel || "", items: items || [] })
+    );
   } catch {}
+}
+
+function timeAgoLabel(isoOrMs) {
+  const t = typeof isoOrMs === "number" ? isoOrMs : Date.parse(String(isoOrMs || ""));
+  if (!Number.isFinite(t)) return "";
+
+  const diff = Date.now() - t;
+  const sec = Math.floor(diff / 1000);
+  const min = Math.floor(sec / 60);
+  const hr  = Math.floor(min / 60);
+  const day = Math.floor(hr / 24);
+
+  if (sec < 60) return "just now";
+  if (min < 60) return `${min}m ago`;
+  if (hr < 24)  return `${hr}h ago`;
+  if (day === 1) return "yesterday";
+  return `${day}d ago`;
+}
+
+function scoreNewsItemForBuckeyeBoost(item) {
+  const text = norm([item.headline, item.description, item.source].filter(Boolean).join(" "));
+  let score = 0;
+
+  // Boost terms (feel free to add later)
+  const boosts = [
+    { k: "ohio state", w: 80 },
+    { k: "buckeyes", w: 80 },
+    { k: "ryan day", w: 25 },
+    { k: "columbus", w: 18 },
+    { k: "big ten", w: 22 },
+    { k: "cbb", w: 6 },
+    { k: "cfb", w: 6 },
+    { k: "college football", w: 14 },
+    { k: "college basketball", w: 10 }
+  ];
+
+  for (const b of boosts) {
+    if (text.includes(b.k)) score += b.w;
+  }
+
+  // Slightly favor fresher items
+  const ts = Number(item.publishedTs || 0);
+  if (Number.isFinite(ts) && ts > 0) {
+    const ageMin = Math.max(0, (Date.now() - ts) / 60000);
+    score += Math.max(0, 20 - Math.min(20, ageMin / 30)); // up to +20 for newest
+  }
+
+  return score;
+}
+
+function dedupeNewsItems(items) {
+  const seen = new Set();
+  const out = [];
+
+  for (const it of items) {
+    const key = norm(it.link || it.headline || "");
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
+}
+
+function tagNewsItem(it) {
+  const t = norm([it.headline, it.description].join(" "));
+  const tags = new Set();
+
+  // Tiny keyword tagging (no UI redesign)
+  if (t.includes("ohio state") || t.includes("buckeyes")) tags.add("buckeyes");
+  if (t.includes("college football") || t.includes("cfb") || t.includes("ncaa football")) tags.add("cfb");
+  if (t.includes("nfl")) tags.add("nfl");
+  if (t.includes("mlb")) tags.add("mlb");
+  if (t.includes("nhl")) tags.add("nhl");
+
+  return Array.from(tags);
+}
+
+function passesNewsFilter(it, filterKey) {
+  if (!filterKey || filterKey === "all") return true;
+
+  const tags = Array.isArray(it.tags) ? it.tags : [];
+  return tags.includes(filterKey);
+}
+
+function buildNewsFiltersRowHTML(activeKey) {
+  // Uses existing .smallBtn styling to avoid redesign
+  const btn = (key, label) => {
+    const isOn = key === activeKey;
+    // "active" class already exists for tabs; don’t reuse it here
+    const extra = isOn ? `style="opacity:1;"` : `style="opacity:0.7;"`;
+    return `<button class="smallBtn" data-newsfilter="${key}" ${extra}>${label}</button>`;
+  };
+
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+      ${btn("all", "All")}
+      ${btn("buckeyes", "Buckeyes")}
+      ${btn("cfb", "College FB")}
+      ${btn("nfl", "NFL")}
+      ${btn("mlb", "MLB")}
+      ${btn("nhl", "NHL")}
+    </div>
+  `;
+}
+
+async function fetchTopNewsItemsFromESPN() {
+  const resp = await fetch("https://site.api.espn.com/apis/v2/sports/news", { cache: "no-store" });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+
+  const articles = Array.isArray(data?.articles) ? data.articles : [];
+  const sliced = articles.slice(0, 30); // pull more, then filter/dedupe/boost down
+
+  const items = sliced.map(a => {
+    const publishedIso = a?.published || "";
+    const publishedTs = Date.parse(publishedIso);
+
+    return {
+      headline: sanitizeTTUNText(a?.headline || ""),
+      description: sanitizeTTUNText(a?.description || ""),
+      source: sanitizeTTUNText(a?.source || "ESPN"),
+      publishedIso,
+      publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
+      link: a?.links?.web?.href || a?.links?.[0]?.href || ""
+    };
+  }).filter(x => x.headline);
+
+  // Tag + dedupe
+  const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
+  const deduped = dedupeNewsItems(tagged);
+
+  // Buckeye Boost sort
+  deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
+
+  // Cap final list
+  return deduped.slice(0, 12);
+}
+
+function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
+  const content = document.getElementById("content");
+
+  const filtered = (items || []).filter(it => passesNewsFilter(it, currentNewsFilter));
+
+  const cards = filtered.map((it) => {
+    const title = escapeHtml(sanitizeTTUNText(it.headline));
+    const descText = sanitizeTTUNText(it.description || "");
+    const desc = descText
+      ? `<div style="margin-top:8px;opacity:0.85;font-size:13px;line-height:1.25;">${escapeHtml(descText)}</div>`
+      : "";
+
+    const when = it.publishedTs ? timeAgoLabel(it.publishedTs) : "";
+    const metaParts = [
+      it.source ? escapeHtml(sanitizeTTUNText(it.source)) : "ESPN",
+      when ? escapeHtml(when) : ""
+    ].filter(Boolean);
+
+    const meta = metaParts.join(" • ");
+
+    const link = it.link
+      ? `<a class="smallBtn" style="display:inline-block;margin-top:10px;text-decoration:none;" href="${it.link}" target="_blank" rel="noopener noreferrer">Open</a>`
+      : "";
+
+    return `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">TOP</div>
+        </div>
+        <div class="gameMetaTopLine">${title}</div>
+        <div class="gameMetaOddsLine">${meta || "—"}</div>
+        <div style="padding:0 2px 2px 2px;">
+          ${desc}
+          ${link}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  const cacheLine = cacheMetaLabel
+    ? `<div style="opacity:0.7;">Last updated ${escapeHtml(cacheMetaLabel)}</div>`
+    : `<div style="opacity:0.7;">—</div>`;
+
+  content.innerHTML = `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Top News</h2>
+          <span class="badge">ESPN</span>
+        </div>
+        <button class="smallBtn" onclick="renderTopNews(true)">Refresh</button>
+      </div>
+      <div class="subline">
+        <div>Headlines</div>
+        <div>Updated ${escapeHtml(headerUpdatedLabel || "")}</div>
+      </div>
+      ${buildNewsFiltersRowHTML(currentNewsFilter)}
+      <div style="margin-top:8px;font-size:12px;">
+        ${cacheLine}
+      </div>
+    </div>
+
+    <div class="grid">
+      ${cards || `<div class="notice">No headlines found for this filter.</div>`}
+    </div>
+  `;
+
+  // Safety pass after DOM insert
+  setTimeout(() => replaceMichiganText(), 0);
 }
 
 async function renderTopNews(showLoading) {
   const content = document.getElementById("content");
   const now = new Date();
-  const updatedTime = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const headerUpdated = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
+  // 1) Instant render from cache if present (even if "showLoading" is true)
+  const cached = loadNewsCache();
+  if (cached && Array.isArray(cached.items) && cached.items.length) {
+    renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
+    // 2) Background refresh (only if cache is stale)
+    const isFresh = (Date.now() - cached.ts) <= NEWS_CACHE_TTL_MS;
+    if (!isFresh) {
+      refreshTopNewsInBackground();
+    }
+    return;
+  }
+
+  // No cache: show loading state if requested
   if (showLoading) {
     content.innerHTML = `
       <div class="header">
@@ -1468,36 +1723,23 @@ async function renderTopNews(showLoading) {
         </div>
         <div class="subline">
           <div>Headlines</div>
-          <div>Updated ${escapeHtml(updatedTime)}</div>
+          <div>Updated ${escapeHtml(headerUpdated)}</div>
         </div>
+        ${buildNewsFiltersRowHTML(currentNewsFilter)}
       </div>
       <div class="notice">Loading headlines…</div>
     `;
   }
 
+  // Fetch + render
   try {
-    const cached = loadNewsCache();
-    if (cached && cached.length) {
-      renderNewsList(cached, updatedTime);
-      return;
-    }
+    const items = await fetchTopNewsItemsFromESPN();
+    const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-    const resp = await fetch("https://site.api.espn.com/apis/v2/sports/news", { cache: "no-store" });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-
-    const articles = Array.isArray(data?.articles) ? data.articles.slice(0, 12) : [];
-    const items = articles.map(a => ({
-      headline: a?.headline || "",
-      description: a?.description || "",
-      source: a?.source || "ESPN",
-      published: a?.published ? new Date(a.published).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "",
-      link: a?.links?.web?.href || a?.links?.[0]?.href || ""
-    })).filter(x => x.headline);
-
-    saveNewsCache(items);
-    renderNewsList(items, updatedTime);
+    saveNewsCache(items, cacheLabel);
+    renderNewsList(items, headerUpdated, cacheLabel);
   } catch (e) {
+    // If we somehow had cache, we'd have already returned above.
     content.innerHTML = `
       <div class="header">
         <div class="headerTop">
@@ -1511,53 +1753,55 @@ async function renderTopNews(showLoading) {
           <div>Headlines</div>
           <div>Error</div>
         </div>
+        ${buildNewsFiltersRowHTML(currentNewsFilter)}
       </div>
-<div class="notice" style="text-align:center;">
-  Jim Harbaugh stole the headlines.<br/>
-  Once the NCAA finishes the investigation, they’ll finally return.
-</div>
+
+      <div class="notice" style="text-align:center;">
+        Headlines are down right now.<br/>
+        Hit Retry and we’ll run it back.
+      </div>
     `;
   }
 
-  function renderNewsList(items, updatedTimeStr) {
-    const cards = items.map((it) => {
-      const title = escapeHtml(it.headline);
-      const meta = `${escapeHtml(it.source)}${it.published ? " • " + escapeHtml(it.published) : ""}`;
-      const desc = it.description ? `<div style="margin-top:8px;opacity:0.85;font-size:13px;line-height:1.25;">${escapeHtml(it.description)}</div>` : "";
-      const link = it.link ? `<a class="smallBtn" style="display:inline-block;margin-top:10px;text-decoration:none;" href="${it.link}" target="_blank" rel="noopener noreferrer">Open</a>` : "";
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">TOP</div>
-          </div>
-          <div class="gameMetaTopLine">${title}</div>
-          <div class="gameMetaOddsLine">${meta}</div>
-          <div style="padding:0 2px 2px 2px;">
-            ${desc}
-            ${link}
-          </div>
-        </div>
-      `;
-    }).join("");
+  async function refreshTopNewsInBackground() {
+    try {
+      const fresh = await fetchTopNewsItemsFromESPN();
+      const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-    content.innerHTML = `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Top News</h2>
-            <span class="badge">ESPN</span>
-          </div>
-          <button class="smallBtn" onclick="renderTopNews(true)">Refresh</button>
-        </div>
-        <div class="subline">
-          <div>Headlines</div>
-          <div>Updated ${escapeHtml(updatedTimeStr)}</div>
-        </div>
-      </div>
-      <div class="grid">${cards || `<div class="notice">No headlines found.</div>`}</div>
-    `;
+      saveNewsCache(fresh, cacheLabel);
+
+      // Only re-render if user is still on the News tab
+      if (currentTab === "news") {
+        const headerUpdated2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        renderNewsList(fresh, headerUpdated2, cacheLabel);
+      }
+    } catch {
+      // Silent fail in background — cache keeps page alive
+    }
   }
 }
+
+/* ===== News filter clicks (delegated) ===== */
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  const filter = btn.getAttribute("data-newsfilter");
+  if (!filter) return;
+
+  currentNewsFilter = filter;
+  sessionStorage.setItem(NEWS_FILTER_KEY, filter);
+
+  // Re-render instantly from cache if available
+  const cached = loadNewsCache();
+  const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  if (cached && cached.items && cached.items.length) {
+    renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
+  } else {
+    renderTopNews(true);
+  }
+});
 
 /* =========================
    SHOP TAB (placeholder hub)
@@ -1618,6 +1862,13 @@ document.addEventListener("change", (e) => {
    ========================= */
 
 function replaceMichiganText(root = document.body) {
+  // Build the banned terms without ever writing them as a single word in the source
+  const a = ["Mi", "chigan"].join("");
+  const b = ["Wol", "verines"].join("");
+
+  const rxA = new RegExp(a, "gi");
+  const rxB = new RegExp(b, "gi");
+
   const walker = document.createTreeWalker(
     root,
     NodeFilter.SHOW_TEXT,
@@ -1630,8 +1881,8 @@ function replaceMichiganText(root = document.body) {
     if (!node.nodeValue) continue;
 
     node.nodeValue = node.nodeValue
-      .replace(/Michigan/gi, "TTUN")
-      .replace(/Wolverines/gi, "TTUN");
+      .replace(rxA, "TTUN")
+      .replace(rxB, "TTUN");
   }
 }
 
