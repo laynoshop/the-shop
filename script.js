@@ -1939,6 +1939,136 @@ document.addEventListener("click", (e) => {
 });
 
 /* =========================
+   SHOP CHAT (Firebase / Firestore)
+   - One shared room: rooms/main/messages
+   ========================= */
+
+const CHAT_ROOM_ID = "main";
+let chatUnsub = null;
+let chatReady = false;
+
+function getChatDisplayName() {
+  const key = "theShopChatName_v1";
+  let name = (localStorage.getItem(key) || "").trim();
+  if (!name) {
+    name = prompt("Chat name (shown to the group):", "") || "";
+    name = name.trim().slice(0, 30);
+    if (name) localStorage.setItem(key, name);
+  }
+  return name || "Anon";
+}
+
+async function ensureFirebaseChatReady() {
+  if (chatReady) return;
+
+  if (!window.firebase || !firebase.initializeApp) {
+    throw new Error("Firebase SDK not loaded. Check index.html script tags.");
+  }
+
+  if (!firebase.apps || !firebase.apps.length) {
+    firebase.initializeApp(FIREBASE_CONFIG);
+  }
+
+  const auth = firebase.auth();
+  if (!auth.currentUser) {
+    await auth.signInAnonymously();
+  }
+
+  chatReady = true;
+}
+
+function stopShopChatRealtime() {
+  if (typeof chatUnsub === "function") chatUnsub();
+  chatUnsub = null;
+}
+
+async function startShopChatRealtime() {
+  await ensureFirebaseChatReady();
+  stopShopChatRealtime();
+
+  const db = firebase.firestore();
+
+  const q = db
+    .collection("rooms")
+    .doc(CHAT_ROOM_ID)
+    .collection("messages")
+    .orderBy("ts", "desc")
+    .limit(50);
+
+  chatUnsub = q.onSnapshot(
+    (snap) => {
+      const items = [];
+      snap.forEach((doc) => items.push({ id: doc.id, ...doc.data() }));
+      items.reverse(); // oldest -> newest
+      renderShopChatMessages(items);
+
+      const status = document.getElementById("chatStatusLine");
+      if (status) status.textContent = "Connected.";
+    },
+    () => {
+      const status = document.getElementById("chatStatusLine");
+      if (status) status.textContent = "Chat connection issue — try again.";
+    }
+  );
+}
+
+function renderShopChatMessages(items) {
+  const list = document.getElementById("chatList");
+  if (!list) return;
+
+  const html = (items || []).map(m => {
+    const name = escapeHtml(sanitizeTTUNText(m?.name || "Anon"));
+    const text = escapeHtml(sanitizeTTUNText(m?.text || ""));
+    const t = m?.ts?.toDate ? m.ts.toDate() : null;
+    const time = t ? t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+
+    return `
+      <div class="game" style="margin-bottom:10px;">
+        <div class="gameHeader">
+          <div class="statusPill status-other">${name}</div>
+        </div>
+        <div class="gameMetaTopLine">${text}</div>
+        <div class="gameMetaOddsLine">${escapeHtml(time)}</div>
+      </div>
+    `;
+  }).join("");
+
+  list.innerHTML = html || `<div class="notice">No messages yet. Start it up.</div>`;
+
+  // Keep newest visible
+  list.scrollTop = list.scrollHeight;
+
+  // TTUN enforcement
+  setTimeout(() => replaceMichiganText(), 0);
+}
+
+async function sendShopChatMessage() {
+  const input = document.getElementById("chatInput");
+  if (!input) return;
+
+  const raw = String(input.value || "").trim();
+  if (!raw) return;
+
+  const text = sanitizeTTUNText(raw).slice(0, 500);
+  input.value = "";
+
+  await ensureFirebaseChatReady();
+
+  const db = firebase.firestore();
+  const name = getChatDisplayName();
+
+  await db
+    .collection("rooms")
+    .doc(CHAT_ROOM_ID)
+    .collection("messages")
+    .add({
+      name: sanitizeTTUNText(name).slice(0, 30),
+      text,
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+}
+
+/* =========================
    SHOP TAB (placeholder hub)
    ========================= */
 function renderShop() {
