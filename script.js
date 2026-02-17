@@ -1590,12 +1590,52 @@ function buildNewsFiltersRowHTML(activeKey) {
 }
 
 async function fetchTopNewsItemsFromESPN() {
-  const resp = await fetch("https://site.api.espn.com/apis/v2/sports/news", { cache: "no-store" });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const data = await resp.json();
+  // Multiple endpoints because ESPN will intermittently fail one while another works
+  const baseUrls = [
+    "https://site.api.espn.com/apis/v2/sports/news",
+    "https://site.api.espn.com/apis/site/v2/sports/news"
+  ];
+
+  // Add lang/region variants for reliability
+  const urls = [];
+  for (const u of baseUrls) {
+    urls.push(u);
+    urls.push(withLangRegion(u));
+  }
+
+  let lastErr = null;
+  let data = null;
+
+  // Small timeout so iOS PWA doesn’t “hang” in fetch limbo
+  async function fetchWithTimeout(url, ms = 8000) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
+    try {
+      const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  for (const url of urls) {
+    try {
+      const attempt = await fetchWithTimeout(url, 8000);
+      const articles = Array.isArray(attempt?.articles) ? attempt.articles : [];
+      if (articles.length) {
+        data = attempt;
+        break;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  if (!data) throw (lastErr || new Error("News fetch failed"));
 
   const articles = Array.isArray(data?.articles) ? data.articles : [];
-  const sliced = articles.slice(0, 30); // pull more, then filter/dedupe/boost down
+  const sliced = articles.slice(0, 30);
 
   const items = sliced.map(a => {
     const publishedIso = a?.published || "";
@@ -1611,14 +1651,11 @@ async function fetchTopNewsItemsFromESPN() {
     };
   }).filter(x => x.headline);
 
-  // Tag + dedupe
   const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
   const deduped = dedupeNewsItems(tagged);
 
-  // Buckeye Boost sort
   deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
 
-  // Cap final list
   return deduped.slice(0, 12);
 }
 
@@ -1695,22 +1732,18 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
 
 async function renderTopNews(showLoading) {
   const content = document.getElementById("content");
-  const now = new Date();
-  const headerUpdated = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-  // 1) Instant render from cache if present (even if "showLoading" is true)
+  // 1) Instant render from cache if present
   const cached = loadNewsCache();
   if (cached && Array.isArray(cached.items) && cached.items.length) {
     renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
-    // 2) Background refresh (only if cache is stale)
     const isFresh = (Date.now() - cached.ts) <= NEWS_CACHE_TTL_MS;
-    if (!isFresh) {
-      refreshTopNewsInBackground();
-    }
+    if (!isFresh) refreshTopNewsInBackground();
     return;
   }
 
-  // No cache: show loading state if requested
+  // 2) No cache: show loading
   if (showLoading) {
     content.innerHTML = `
       <div class="header">
@@ -1731,7 +1764,6 @@ async function renderTopNews(showLoading) {
     `;
   }
 
-  // Fetch + render
   try {
     const items = await fetchTopNewsItemsFromESPN();
     const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -1739,7 +1771,13 @@ async function renderTopNews(showLoading) {
     saveNewsCache(items, cacheLabel);
     renderNewsList(items, headerUpdated, cacheLabel);
   } catch (e) {
-    // If we somehow had cache, we'd have already returned above.
+    // 3) If fetch fails, try showing ANY cached data if it exists (even if old)
+    const fallback = loadNewsCache();
+    if (fallback && Array.isArray(fallback.items) && fallback.items.length) {
+      renderNewsList(fallback.items, headerUpdated, fallback.updatedLabel || "");
+      return;
+    }
+
     content.innerHTML = `
       <div class="header">
         <div class="headerTop">
@@ -1762,6 +1800,23 @@ async function renderTopNews(showLoading) {
       </div>
     `;
   }
+
+  async function refreshTopNewsInBackground() {
+    try {
+      const fresh = await fetchTopNewsItemsFromESPN();
+      const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+      saveNewsCache(fresh, cacheLabel);
+
+      if (currentTab === "news") {
+        const headerUpdated2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        renderNewsList(fresh, headerUpdated2, cacheLabel);
+      }
+    } catch {
+      // silent
+    }
+  }
+}
 
   async function refreshTopNewsInBackground() {
     try {
