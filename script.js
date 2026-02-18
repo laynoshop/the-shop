@@ -924,8 +924,9 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
 }
 
 /* =========================
-   UI: League + Calendar
+   UI: League + Native Calendar Picker
    ========================= */
+
 function buildLeagueSelectHTML(selectedKey) {
   const options = LEAGUES.map(l => {
     const sel = l.key === selectedKey ? "selected" : "";
@@ -939,32 +940,71 @@ function buildLeagueSelectHTML(selectedKey) {
   `;
 }
 
-function buildCalendarButtonHTML() {
-  return `<button id="dateBtn" class="iconBtn" aria-label="Choose date">📅</button>`;
-}
+/* ===== Date Picker Helpers ===== */
 
-function promptForDateAndReload() {
-  const current = getSavedDateYYYYMMDD();
-  const pretty = yyyymmddToPretty(current);
-
-  const input = prompt(
-    `Pick a date:\n\n• Enter: YYYY-MM-DD (example: 2026-02-15)\n• Or: MM/DD/YYYY (example: 02/15/2026)\n• Or type: today\n\nCurrent: ${pretty} (${current})`,
-    `${current.slice(0,4)}-${current.slice(4,6)}-${current.slice(6,8)}`
-  );
-
-  if (input === null) return;
-
-  const parsed = parseUserDateToYYYYMMDD(input);
-  if (!parsed) {
-    alert("Date not recognized. Try YYYY-MM-DD or MM/DD/YYYY.");
-    return;
+function yyyymmddToInputValue(yyyymmdd) {
+  const s = String(yyyymmdd || "").trim();
+  if (/^\d{8}$/.test(s)) {
+    return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
   }
 
-  saveDateYYYYMMDD(parsed);
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 
-  // Date picker is for Scores (and any future date-aware tabs). For now: Scores only.
-  if (currentTab === "scores") loadScores(true);
-  else loadScores(true);
+function inputValueToYYYYMMDD(value) {
+  const m = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  return `${m[1]}${m[2]}${m[3]}`;
+}
+
+function openNativeDatePicker() {
+  const input = document.getElementById("nativeDateInput");
+  if (!input) return;
+
+  input.value = yyyymmddToInputValue(getSavedDateYYYYMMDD());
+
+  if (typeof input.showPicker === "function") {
+    input.showPicker();
+  } else {
+    input.focus();
+    input.click();
+  }
+}
+
+function handleNativeDateChange(e) {
+  const yyyymmdd = inputValueToYYYYMMDD(e?.target?.value);
+  if (!yyyymmdd) return;
+
+  saveDateYYYYMMDD(yyyymmdd);
+  loadScores(true);
+}
+
+/* ===== Calendar Button HTML ===== */
+
+function buildCalendarButtonHTML() {
+  const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
+
+  return `
+    <button 
+      id="dateBtn" 
+      class="iconBtn" 
+      aria-label="Choose date"
+      onclick="openNativeDatePicker()"
+    >📅</button>
+
+    <input
+      id="nativeDateInput"
+      class="nativeDateInput"
+      type="date"
+      value="${escapeHtml(current)}"
+      onchange="handleNativeDateChange(event)"
+      aria-hidden="true"
+      tabindex="-1"
+    />
+  `;
 }
 
 /* =========================
