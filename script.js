@@ -240,6 +240,10 @@ function yyyymmddToPretty(yyyymmdd) {
   return dt.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+const AI_ENDPOINT = ""; 
+// If you later deploy a real endpoint, set it like:
+// const AI_ENDPOINT = "https://your-vercel-app.vercel.app/api/ai-insight";
+
 /* =========================
    LOGO + HTML HELPERS
    ========================= */
@@ -1817,14 +1821,50 @@ async function fetchAIInsight(payload) {
   const cached = aiInsightCache[key];
   if (isAiCacheFresh(cached)) return cached;
 
+  // ---- LOCAL FALLBACK (always available) ----
+  function localCompute() {
+    // Use your existing helper (already in your script)
+    const g = generateAIInsight({
+      homeName: payload.home,
+      awayName: payload.away,
+      homeScore: "",   // pregame
+      awayScore: "",
+      favoredText: payload.spread || "",
+      ouText: payload.total || "",
+      state: "pre"
+    });
+
+    return {
+      edge: g.edge || "Stay Away",
+      lean: g.lean || "",
+      confidence: g.confidence ?? "5.0",
+      ts: Date.now()
+    };
+  }
+
+  // If no endpoint configured, just use local
+  if (!AI_ENDPOINT) {
+    const stored = localCompute();
+    aiInsightCache[key] = stored;
+    saveAiCacheToSessionThrottled();
+    return stored;
+  }
+
+  // ---- REMOTE (optional if you deploy later) ----
   try {
-    const resp = await fetch("/api/ai-insight", {
+    const resp = await fetch(AI_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
-    if (!resp.ok) return (cached && cached.edge) ? cached : null;
+    // If remote fails, fallback local
+    if (!resp.ok) {
+      const stored = localCompute();
+      aiInsightCache[key] = stored;
+      saveAiCacheToSessionThrottled();
+      return stored;
+    }
 
     const data = await resp.json();
 
@@ -1840,7 +1880,10 @@ async function fetchAIInsight(payload) {
     return stored;
 
   } catch {
-    return (cached && cached.edge) ? cached : null;
+    const stored = localCompute();
+    aiInsightCache[key] = stored;
+    saveAiCacheToSessionThrottled();
+    return stored;
   }
 }
 
