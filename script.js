@@ -924,7 +924,7 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
 }
 
 /* =========================
-   UI: League + Calendar
+   UI: League + Calendar (Native picker)
    ========================= */
 
 // Convert YYYYMMDD -> YYYY-MM-DD (for <input type="date">)
@@ -938,7 +938,7 @@ function yyyymmddToInputValue(yyyymmdd) {
 function inputValueToYYYYMMDD(v) {
   const s = String(v || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
-  return s.replaceAll("-", "");
+  return s.replace(/-/g, "");
 }
 
 function buildLeagueSelectHTML(selectedKey) {
@@ -955,26 +955,18 @@ function buildLeagueSelectHTML(selectedKey) {
 }
 
 /**
- * We render ONLY the 📅 button visually.
- * The native date input is present but hidden off-screen.
+ * Show ONLY the 📅 button.
+ * Keep a hidden native <input type="date"> in the DOM so iOS can render its picker.
  */
 function buildCalendarButtonHTML() {
   const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
 
   return `
-    <button
-      id="dateBtn"
-      class="iconBtn"
-      aria-label="Choose date"
-      type="button"
-      onclick="openNativeDatePicker()"
-    >📅</button>
-
+    <button id="dateBtn" class="iconBtn" aria-label="Choose date" type="button">📅</button>
     <input
       id="nativeDateInput"
       type="date"
       value="${escapeHtml(current)}"
-      onchange="handleNativeDateChange(event)"
       aria-hidden="true"
       tabindex="-1"
       style="position:fixed; left:-9999px; top:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;"
@@ -982,31 +974,33 @@ function buildCalendarButtonHTML() {
   `;
 }
 
-// Called when user taps the 📅 button
+// Open native picker (called from delegated click so it counts as a user gesture)
 function openNativeDatePicker() {
   const el = document.getElementById("nativeDateInput");
   if (!el) return;
 
-  // iOS/Safari: showPicker exists on some browsers; fallback to focus+click
+  // Keep the hidden input synced to current saved date every time we open
+  const saved = getSavedDateYYYYMMDD();
+  const inputVal = yyyymmddToInputValue(saved);
+  if (inputVal) el.value = inputVal;
+
   if (typeof el.showPicker === "function") {
     el.showPicker();
   } else {
     el.focus({ preventScroll: true });
-    el.click(); // must be inside a real user gesture (this is, via onclick)
+    el.click();
   }
 }
 
-// Called when the user selects a date in the native picker
-function handleNativeDateChange(e) {
-  const v = e?.target?.value || "";
+function handleNativeDateChangeFromInput(inputEl) {
+  const v = inputEl?.value || "";
   const yyyymmdd = inputValueToYYYYMMDD(v);
   if (!yyyymmdd) return;
 
   saveDateYYYYMMDD(yyyymmdd);
 
-  // Reload scores (date affects scores)
-  if (currentTab === "scores") loadScores(true);
-  else loadScores(true);
+  // Reload Scores (date affects scoreboard)
+  loadScores(true);
 }
 
 /* =========================
@@ -2668,9 +2662,9 @@ document.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
-  // 📅 Date picker (Scores tab)
+  // 📅 Date picker (Scores tab) — open native iOS picker
   if (btn.id === "dateBtn") {
-    promptForDateAndReload();
+    openNativeDatePicker();
     return;
   }
 
@@ -2701,13 +2695,22 @@ document.addEventListener("click", (e) => {
   }
 });
 
+// League dropdown
 document.addEventListener("change", (e) => {
-  const sel = e.target;
-  if (!(sel instanceof HTMLSelectElement)) return;
-  if (sel.id !== "leagueSelect") return;
+  const t = e.target;
 
-  saveLeagueKey(sel.value);
-  loadScores(true);
+  // League select
+  if (t instanceof HTMLSelectElement && t.id === "leagueSelect") {
+    saveLeagueKey(t.value);
+    loadScores(true);
+    return;
+  }
+
+  // Native date input
+  if (t instanceof HTMLInputElement && t.id === "nativeDateInput") {
+    handleNativeDateChangeFromInput(t);
+    return;
+  }
 });
 
 /* =========================
@@ -2778,3 +2781,5 @@ window.renderBeatTTUN = renderBeatTTUN;
 window.renderTopNews = renderTopNews;
 window.renderShop = renderShop;
 window.logout = logout;
+window.openNativeDatePicker = openNativeDatePicker;
+window.handleNativeDateChangeFromInput = handleNativeDateChangeFromInput;
