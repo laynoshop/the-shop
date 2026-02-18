@@ -803,28 +803,3 @@ button {
   font-weight: 600;
   opacity: 0.85;
 }
-
-.aiInsight{
-  margin-top:10px;
-  padding:10px 12px;
-  border-radius:12px;
-  background: rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.08);
-  font-size:13px;
-}
-
-.aiEdge{
-  font-weight:800;
-  letter-spacing:0.3px;
-}
-
-.aiLean{
-  margin-top:4px;
-  opacity:0.85;
-}
-
-.aiConfidence{
-  margin-top:4px;
-  font-size:12px;
-  opacity:0.7;
-}
