@@ -1062,10 +1062,7 @@ function positionRivalryBanner() {
 
 function setActiveTabButton(tab) {
   document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
-  // Tabs order: Scores, Beat TTUN, Top News, Shop
-  const map = { scores: 0, beat: 1, news: 2, shop: 3 };
-  const idx = map[tab];
-  const btn = document.querySelectorAll(".tabs button")[idx];
+  const btn = document.querySelector(`.tabs button[data-tab="${CSS.escape(String(tab))}"]`);
   if (btn) btn.classList.add("active");
 }
 
