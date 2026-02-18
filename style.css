@@ -585,7 +585,7 @@ button {
 .chatMsgName{
   font-size: 12px;
   opacity: 0.7;
-  margin: 0 0 4px 0;  /* tight above bubble */
+  margin: 0 0 2px 0;  /* tight above bubble */
   padding: 0 8px;     /* slight inset like iMessage */
 }
 
