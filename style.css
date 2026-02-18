@@ -436,6 +436,65 @@ button {
   background: var(--scarlet);
 }
 
+/* =========================
+   BEAT TTUN – Countdown V2
+   ========================= */
+
+.ttunCountdownWrap{
+  margin: 14px 14px 10px 14px;
+  padding: 16px 14px;
+  border-radius: 18px;
+  background: rgba(0,0,0,0.40);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ttunMatchupLine{
+  text-align: center;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  opacity: 0.95;
+  margin-bottom: 12px;
+}
+
+.ttunCountdownGrid{
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.ttunTimeBox{
+  text-align: center;
+  padding: 12px 10px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.ttunTimeNum{
+  font-size: 34px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.ttunTimeLabel{
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+/* Looks good on smaller phones too */
+@media (max-width: 380px){
+  .ttunTimeNum{ font-size: 30px; }
+  .ttunCountdownGrid{ gap: 8px; }
+}
+
 /* ===== Beat TTUN extras (surgical) ===== */
 .beatBubble{
   background: rgba(255,255,255,0.06);
