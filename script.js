@@ -1601,14 +1601,23 @@ async function loadScores(showLoading) {
       const venueLine = buildVenueLine(competition);
 
       // Start odds as placeholder; we’ll fill via summary hydration after render
-      const initialOdds = parseOddsFromScoreboardCompetition(competition);
-      const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
+const initialOdds = parseOddsFromScoreboardCompetition(competition);
+const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
 
-      const eventId = String(event?.id || "");
+const eventId = String(event?.id || "");
 
-      const card = document.createElement("div");
-      card.className = "game";
-      if (eventId) card.setAttribute("data-eventid", eventId);
+const card = document.createElement("div");
+card.className = "game";
+
+// ✅ Add status-based class so the left accent edge matches the pill
+if (state === "in") card.classList.add("statusLive");
+else if (state === "pre") card.classList.add("statusPre");
+else if (state === "post") card.classList.add("statusFinal");
+
+// ✅ Optional: if there’s no betting line, make it neutral
+if (!initialOdds?.favored && !initialOdds?.ou) card.classList.add("edgeNone");
+
+if (eventId) card.setAttribute("data-eventid", eventId);
 
       // --- AI placeholders (only show for PRE games with odds) ---
       const shouldShowAI = (state === "pre") && !!initialOddsText && !!eventId;
