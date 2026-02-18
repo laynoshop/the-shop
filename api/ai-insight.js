@@ -45,8 +45,13 @@ Rules:
       })
     });
 
-    const data = await openaiRes.json();
+    if (!openaiRes.ok) {
+      const errText = await openaiRes.text();
+      console.error("OpenAI error:", errText);
+      return res.status(500).json({ error: "OpenAI request failed" });
+    }
 
+    const data = await openaiRes.json();
     const text = data.choices?.[0]?.message?.content || "{}";
 
     let parsed;
@@ -63,6 +68,7 @@ Rules:
     return res.status(200).json(parsed);
 
   } catch (err) {
+    console.error("Server error:", err);
     return res.status(500).json({ error: "Server error" });
   }
 }
