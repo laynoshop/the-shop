@@ -714,3 +714,27 @@ button {
   opacity: 0.6;
   text-align: right;
 }
+
+/* ===== Chat name positioning (iMessage-like) ===== */
+.chatName {
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.1;
+  margin: 0 14px 4px 14px; /* <-- keeps it just above bubble */
+}
+
+/* If you have left/right rows, this locks alignment */
+.chatRow.mine .chatName {
+  text-align: right;
+  margin: 0 14px 4px 14px;
+}
+
+.chatRow.other .chatName {
+  text-align: left;
+  margin: 0 14px 4px 14px;
+}
+
+/* Optional: tighten the space between message blocks a touch */
+.chatRow {
+  margin-bottom: 10px;
+}
