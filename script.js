@@ -1109,12 +1109,17 @@ function checkCode() {
     return;
   }
 
-  // Save role (optional but useful)
+  // Save role
   localStorage.setItem(ROLE_KEY, role);
 
+  // Clear input for cleanliness
+  if (codeEl) codeEl.value = "";
+
   // Show app
-  document.getElementById("login").style.display = "none";
-  document.getElementById("app").style.display = "block";
+  const loginEl = document.getElementById("login");
+  const appEl = document.getElementById("app");
+  if (loginEl) loginEl.style.display = "none";
+  if (appEl) appEl.style.display = "block";
 
   // Build correct tab bar for this role
   buildTabsForRole(role);
@@ -1122,8 +1127,11 @@ function checkCode() {
   // Always start on Scores
   showTab("scores");
 
-  // Banner stuff you already had
+  // Banner
   updateRivalryBanner();
+
+  // Prevent stacking resize handlers
+  window.removeEventListener("resize", positionRivalryBanner);
   window.addEventListener("resize", positionRivalryBanner);
 }
 
