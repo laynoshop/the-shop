@@ -542,7 +542,7 @@ button {
   color: rgba(255,255,255,0.75);
 }
 
-/* ✅ TABS (tightened — NO extra vertical bloat) */
+/* ✅ TABS (fully tightened — no extra bottom gap) */
 .tabs {
   position: fixed;
   bottom: 0;
@@ -552,25 +552,28 @@ button {
   width: 100%;
   display: flex;
 
-  background: rgba(22,22,22,0.95);
-  border-top: 1px solid rgba(255,255,255,0.1);
+  background: rgba(22,22,22,0.96);
+  border-top: 1px solid rgba(255,255,255,0.08);
 
-  padding-top: 4px; /* was 6px */
-  padding-bottom: calc(env(safe-area-inset-bottom) + 4px); /* was +10px */
+  /* ONLY safe area, no bonus padding */
+  padding-bottom: env(safe-area-inset-bottom);
 
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* Make buttons control the height — not the container */
 .tabs button {
   flex: 1;
-  padding: 16px;
+  padding: 12px 6px 14px; /* tighter vertical space */
   background: none;
   color: white;
   font-weight: 900;
   letter-spacing: 0.2px;
+  line-height: 1.05;
 }
 
+/* Active indicator stays snug */
 .tabs button.active {
   position: relative;
 }
@@ -578,9 +581,9 @@ button {
 .tabs button.active::after {
   content: "";
   position: absolute;
-  left: 20%;
-  right: 20%;
-  bottom: 6px;
+  left: 25%;
+  right: 25%;
+  bottom: 4px; /* slightly tighter */
   height: 3px;
   border-radius: 999px;
   background: var(--scarlet);
