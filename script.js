@@ -1706,57 +1706,39 @@ if (eventId) card.setAttribute("data-eventid", eventId);
     let idx = 0;
 
     async function runNext() {
-      while (idx < aiJobs.length) {
-        const job = aiJobs[idx++];
-        const data = await fetchAIInsight({
-          eventId: job.eventId,
-          league: job.leagueKey,
-          date: job.dateYYYYMMDD,
-          home: job.home,
-          away: job.away,
-          favored: job.favored,
-          total: job.total
-        });
+  while (idx < aiJobs.length) {
+    const job = aiJobs[idx++];
 
-        if (!data) continue;
+    // IMPORTANT: match the API field names (spread/total)
+    const data = await fetchAIInsight({
+      eventId: job.eventId,
+      league: job.leagueKey,
+      date: job.dateYYYYMMDD,
 
-        const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(job.eventId)}"]`);
-        const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(job.eventId)}"]`);
+      home: job.home,
+      away: job.away,
 
-        const edge = (data.edge || "—");
-        const lean = (data.lean || "—");
-        const conf = (data.confidence ?? "—");
+      spread: job.favored || "",   // ✅ was "favored" before
+      total: job.total || ""       // ✅ keep as "total"
+    });
 
-        if (line1) line1.textContent = `AI EDGE: ${edge} • Lean: ${lean}`;
-        if (line2) line2.textContent = `Confidence: ${conf}/10`;
-      }
-    }
+    if (!data) continue;
 
-    await Promise.all(new Array(Math.min(limit, aiJobs.length)).fill(0).map(runNext));
+    const line1 = document.querySelector(
+      `[data-ai-line1="${CSS.escape(String(job.eventId))}"]`
+    );
+    const line2 = document.querySelector(
+      `[data-ai-line2="${CSS.escape(String(job.eventId))}"]`
+    );
 
-  } catch (error) {
-    content.innerHTML = `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Scores</h2>
-            <span class="badge">The Shop</span>
-          </div>
-          <div class="headerActions">
-            <button class="smallBtn" onclick="loadScores(true)">Retry</button>
-            <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
-          </div>
-        </div>
-        <div class="subline">
-          <div class="sublineLeft">
-            ${buildLeagueSelectHTML(getSavedLeagueKey())}
-            ${buildCalendarButtonHTML()}
-          </div>
-          <div>Error</div>
-        </div>
-      </div>
-      <div class="notice">Couldn’t load scores right now.</div>
-    `;
+    const edge = (data.edge || "—");
+    const lean = (data.lean || "");
+    const conf = (data.confidence ?? "—");
+
+    // Build the exact line format you wanted
+    const leanPart = lean ? ` • Lean: ${lean}` : "";
+    if (line1) line1.textContent = `AI EDGE: ${edge}${leanPart}`;
+    if (line2) line2.textContent = `Confidence: ${conf}/10`;
   }
 }
 
