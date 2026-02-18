@@ -238,24 +238,6 @@ body::before {
   z-index: 1;
 }
 
-/* O-H / I-O bar */
-.chantBar{
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 18px; /* above iOS home bar */
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap: 10px;
-  font-weight: 1000;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  z-index: 5;
-  pointer-events:none;
-  opacity: 0.92;
-}
-
 /* ===== O-H • I-O Top Chant Bar ===== */
 
 .chantBar{
