@@ -1153,8 +1153,10 @@ async function loadScores(showLoading) {
           <div class="brand">
             <h2 style="margin:0;">Scores</h2>
             <span class="badge">The Shop</span>
-          </div>
-          <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
+          <div class="headerActions">
+  <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
+  <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
+</div>
         </div>
         <div class="subline">
           <div class="sublineLeft">
@@ -1178,8 +1180,10 @@ async function loadScores(showLoading) {
           <div class="brand">
             <h2 style="margin:0;">Scores</h2>
             <span class="badge">The Shop</span>
-          </div>
-          <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
+          <div class="headerActions">
+  <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
+  <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
+</div>
         </div>
         <div class="subline">
           <div class="sublineLeft">
@@ -2365,6 +2369,29 @@ function replaceMichiganText(root = document.body) {
 }
 
 /* =========================
+   LOGOUT
+   ========================= */
+function logout() {
+  // Clear role
+  localStorage.removeItem("theShopRole_v1");
+
+  // Stop refresh timers
+  stopAutoRefresh();
+
+  // Hide app, show login
+  document.getElementById("app").style.display = "none";
+  document.getElementById("login").style.display = "flex";
+
+  // Clear content
+  const content = document.getElementById("content");
+  if (content) content.innerHTML = "";
+
+  // Optional: clear code field
+  const codeEl = document.getElementById("code");
+  if (codeEl) codeEl.value = "";
+}
+
+/* =========================
    Window exports (keeps inline onclick working)
    ========================= */
 window.checkCode = checkCode;
@@ -2379,3 +2406,4 @@ window.loadScores = loadScores;
 window.renderBeatTTUN = renderBeatTTUN;
 window.renderTopNews = renderTopNews;
 window.renderShop = renderShop;
+window.logout = logout;
