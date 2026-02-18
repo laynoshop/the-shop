@@ -1323,13 +1323,13 @@ const awayName = teamDisplayNameWithRank(awayNameRaw, away, selectedKey);
           <div class="statusPill ${pillClass}">${pillText}</div>
         </div>
 
-        <div class="gameMetaTopLine" aria-label="Venue">
-          ${escapeHtml(venueLine)}
-        </div>
+        <div class="gameMetaTopPlain" aria-label="Venue">
+  ${escapeHtml(venueLine)}
+</div>
 
-        <div class="gameMetaOddsLine" aria-label="Betting line">
-          ${escapeHtml(initialOddsText)}
-        </div>
+<div class="gameMetaOddsPlain" aria-label="Betting line">
+  ${escapeHtml(initialOddsText)}
+</div>
 
         <div class="teamRow">
           <div class="teamLeft">
