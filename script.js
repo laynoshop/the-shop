@@ -1146,17 +1146,23 @@ function checkCode() {
   const input = document.getElementById("code");
   const entered = (input.value || "").trim();
 
-  // ✅ Determine role FIRST (admin key)
-  const role = (entered === "1024") ? "admin" : "member";
+  // Use ROLE_KEY if you have it, otherwise default safely
+  const roleKey = (typeof ROLE_KEY !== "undefined" && ROLE_KEY) ? ROLE_KEY : "role";
 
-  // ✅ Validate access:
-  // - 1024 ALWAYS valid (admin)
-  // - otherwise use INVITE_CODE if defined
-  const isValid = (role === "admin") || (
-    (typeof INVITE_CODE !== "undefined")
-      ? (entered === String(INVITE_CODE))
-      : (entered.length > 0) // fallback so it doesn't hard-break if INVITE_CODE isn't defined
-  );
+  // ✅ Define your codes here
+  const ADMIN_CODE = "1024";
+
+  // ✅ Validate (keep your INVITE_CODE logic if you want, but we need ADMIN support)
+  let isValid = false;
+
+  if (entered === ADMIN_CODE) {
+    isValid = true;
+  } else if (typeof INVITE_CODE !== "undefined") {
+    isValid = (entered === String(INVITE_CODE));
+  } else {
+    // fallback so app doesn't hard-break if INVITE_CODE isn't defined
+    isValid = (entered.length > 0);
+  }
 
   if (!isValid) {
     input.focus();
@@ -1165,6 +1171,10 @@ function checkCode() {
     return;
   }
 
+  // ✅ Set role (this is the missing piece)
+  const role = (entered === ADMIN_CODE) ? "admin" : "guest";
+  localStorage.setItem(roleKey, role);
+
   const login = document.getElementById("login");
   const app = document.getElementById("app");
 
@@ -1172,7 +1182,6 @@ function checkCode() {
   login.classList.add("loginUnlocking");
   login.classList.add("chantFlashIO");
 
-  // smooth exit + enter
   setTimeout(() => {
     login.classList.add("loginFadeOut");
   }, 160);
@@ -1181,20 +1190,15 @@ function checkCode() {
     login.style.display = "none";
     app.style.display = "block";
 
-    // remove login-only classes for cleanliness
+    // cleanup
     login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
 
-    // ✅ Reveal/hide tabs based on role (shows Shop for admin)
+    // ✅ Rebuild tabs based on role so Shop exists for admin
     if (typeof buildTabsForRole === "function") {
       buildTabsForRole(role);
-    } else {
-      // fallback (in case buildTabsForRole isn't in your script yet)
-      document.querySelectorAll(".tabs .adminOnly").forEach(btn => {
-        btn.style.display = (role === "admin") ? "flex" : "none";
-      });
     }
 
-    // ✅ if you have any "on login" initialization, keep it here
+    // ✅ land on Scores (or change to "shop" if you want admin to land there)
     if (typeof showTab === "function") showTab("scores");
   }, 520);
 }
