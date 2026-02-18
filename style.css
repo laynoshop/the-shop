@@ -856,7 +856,7 @@ button {
 
 /* ✅ CONTENT SAFE SPACE so nothing gets covered */
 #content{
-  padding-bottom: calc(64px + 48px + env(safe-area-inset-bottom) + 12px) !important;
+  padding-bottom: calc(var(--tabsH) + var(--bannerH) + env(safe-area-inset-bottom) + 12px) !important;
 }
 
 /* =========================
