@@ -542,17 +542,19 @@ button {
   color: rgba(255,255,255,0.75);
 }
 
-/* ✅ TABS — FORCE directly above banner (wins vs JS inline) */
 .tabs{
   position: fixed;
   left: 0;
   right: 0;
 
+  /* ✅ Kill any JS/inlines that set top */
+  top: auto !important;
+
+  /* ✅ Tabs sit directly above the banner (banner height = 48px) */
   bottom: calc(48px + env(safe-area-inset-bottom)) !important;
 
   display: flex;
   width: 100%;
-
   height: 64px;
 
   background: rgba(22,22,22,0.96);
@@ -820,7 +822,11 @@ button {
   left: 0;
   right: 0;
 
-  bottom: 0 !important;
+  /* ✅ Kill any JS/inlines that set top */
+  top: auto !important;
+
+  /* ✅ True bottom, respecting iPhone safe area */
+  bottom: env(safe-area-inset-bottom) !important;
 
   height: 48px;
 
