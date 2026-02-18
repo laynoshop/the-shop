@@ -1088,7 +1088,6 @@ function buildTabsForRole(role) {
 }
 
 function checkCode() {
-  alert("checkCode() fired");
   const codeEl = document.getElementById("code");
   const code = String(codeEl?.value || "").trim();
 
