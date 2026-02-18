@@ -1419,39 +1419,7 @@ function getTeamAbbrevUI(team) {
   return team.abbreviation || "";
 }
 
-/* =========================
-   TTUN Display Override (Michigan Wolverines only)
-   ========================= */
 
-// ESPN team id for Michigan Wolverines is 130
-function isWolverinesTeam(team) {
-  if (!team) return false;
-
-  const id = String(team.id || "");
-  if (id === "130") return true;
-
-  const displayName = String(team.displayName || "");
-  const location = String(team.location || "");
-  const name = String(team.name || "");
-
-  // Fallback detection (only Wolverines)
-  if (location === "Michigan" && name === "Wolverines") return true;
-  if (/Michigan\s+Wolverines/i.test(displayName)) return true;
-
-  return false;
-}
-
-function getTeamDisplayNameUI(team) {
-  if (isWolverinesTeam(team)) return "The Team Up North";
-  return team?.displayName || team?.shortDisplayName || team?.name || "Team";
-}
-
-function getTeamAbbrevUI(team) {
-  if (isWolverinesTeam(team)) return "TTUN";
-  // fall back to your existing abbrev helper if you have it
-  if (typeof getTeamAbbrev === "function") return getTeamAbbrev(team);
-  return team?.abbreviation || "";
-}
 
 function generateAIInsight({ homeName, awayName, homeScore, awayScore, favoredText, ouText, state }) {
   let confidence = 5;
@@ -1495,8 +1463,6 @@ function generateAIInsight({ homeName, awayName, homeScore, awayScore, favoredTe
 /* =========================
    SCORES TAB (Updated header layout) — AI via /api/ai-insight
    ========================= */
-
-const aiInsightCache = {};
 async function loadScores(showLoading) {
   const content = document.getElementById("content");
 
@@ -1593,7 +1559,6 @@ async function loadScores(showLoading) {
     const grid = document.createElement("div");
     grid.className = "grid";
 
-    // We’ll queue AI jobs as we render cards
     const aiJobs = [];
 
     events.forEach(event => {
@@ -1614,43 +1579,36 @@ async function loadScores(showLoading) {
       const homeTeam = home?.team || null;
       const awayTeam = away?.team || null;
 
-      // ---- TTUN Wolverines override happens HERE (before rank is added) ----
       const homeBaseName = getTeamDisplayNameUI(homeTeam);
       const awayBaseName = getTeamDisplayNameUI(awayTeam);
 
-      // Add AP rank (CBB/CFB) AFTER the TTUN name swap
       const homeName = teamDisplayNameWithRank(homeBaseName, home, selectedKey);
       const awayName = teamDisplayNameWithRank(awayBaseName, away, selectedKey);
 
       const homeLogo = getTeamLogoUrl(homeTeam);
       const awayLogo = getTeamLogoUrl(awayTeam);
 
-      // Abbrev fallback also respects TTUN
       const homeAbbrev = escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
       const awayAbbrev = escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
 
       const venueLine = buildVenueLine(competition);
 
-      // Start odds as placeholder; we’ll fill via summary hydration after render
-const initialOdds = parseOddsFromScoreboardCompetition(competition);
-const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
+      const initialOdds = parseOddsFromScoreboardCompetition(competition);
+      const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
 
-const eventId = String(event?.id || "");
+      const eventId = String(event?.id || "");
 
-const card = document.createElement("div");
-card.className = "game";
+      const card = document.createElement("div");
+      card.className = "game";
 
-// ✅ Add status-based class so the left accent edge matches the pill
-if (state === "in") card.classList.add("statusLive");
-else if (state === "pre") card.classList.add("statusPre");
-else if (state === "post") card.classList.add("statusFinal");
+      // status accent classes (your “sexy up” styles)
+      if (state === "in") card.classList.add("statusLive");
+      else if (state === "pre") card.classList.add("statusPre");
+      else if (state === "post") card.classList.add("statusFinal");
+      if (!initialOdds?.favored && !initialOdds?.ou) card.classList.add("edgeNone");
 
-// ✅ Optional: if there’s no betting line, make it neutral
-if (!initialOdds?.favored && !initialOdds?.ou) card.classList.add("edgeNone");
+      if (eventId) card.setAttribute("data-eventid", eventId);
 
-if (eventId) card.setAttribute("data-eventid", eventId);
-
-      // --- AI placeholders (only show for PRE games with odds) ---
       const shouldShowAI = (state === "pre") && !!initialOddsText && !!eventId;
 
       card.innerHTML = `
@@ -1712,7 +1670,6 @@ if (eventId) card.setAttribute("data-eventid", eventId);
 
       grid.appendChild(card);
 
-      // Queue AI call (do NOT run for live/final)
       if (shouldShowAI) {
         aiJobs.push({
           eventId,
@@ -1720,7 +1677,7 @@ if (eventId) card.setAttribute("data-eventid", eventId);
           dateYYYYMMDD: selectedDate,
           home: homeBaseName,
           away: awayBaseName,
-          favored: initialOdds.favored || "",
+          spread: initialOdds.favored || "",
           total: initialOdds.ou || ""
         });
       }
@@ -1728,79 +1685,82 @@ if (eventId) card.setAttribute("data-eventid", eventId);
 
     content.appendChild(grid);
 
-    // Hydrate odds for all games (safe concurrency + caching)
+    // Odds hydration
     hydrateAllOdds(events, league, selectedKey, selectedDate);
 
-    // AFTER render: call your Vercel endpoint for AI insights and inject into placeholders
-    // (small concurrency so iOS doesn’t get slammed)
+    // AI hydration (small concurrency)
     const limit = 4;
     let idx = 0;
 
     async function runNext() {
-  while (idx < aiJobs.length) {
-    const job = aiJobs[idx++];
+      while (idx < aiJobs.length) {
+        const job = aiJobs[idx++];
 
-    const line1 = document.querySelector(
-      `[data-ai-line1="${CSS.escape(String(job.eventId))}"]`
-    );
-    const line2 = document.querySelector(
-      `[data-ai-line2="${CSS.escape(String(job.eventId))}"]`
-    );
+        const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(String(job.eventId))}"]`);
+        const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(String(job.eventId))}"]`);
 
-    // ✅ If already filled, don't overwrite with placeholders
-    // (prevents the "goes blank then reloads" effect)
-    const alreadyHasText =
-      (line1 && line1.textContent && line1.textContent.trim().length > 0) ||
-      (line2 && line2.textContent && line2.textContent.trim().length > 0);
+        const alreadyHasText =
+          (line1 && line1.textContent && line1.textContent.trim().length > 0) ||
+          (line2 && line2.textContent && line2.textContent.trim().length > 0);
 
-    // Only show placeholder if it's truly empty
-    if (!alreadyHasText) {
-      if (line1) line1.textContent = job.spread ? "AI EDGE: Analyzing…" : "AI EDGE: Waiting for line…";
-      if (line2) line2.textContent = "Confidence: —/10";
+        if (!alreadyHasText) {
+          if (line1) line1.textContent = job.spread ? "AI EDGE: Analyzing…" : "AI EDGE: Waiting for line…";
+          if (line2) line2.textContent = "Confidence: —/10";
+        }
+
+        const data = await fetchAIInsight({
+          eventId: job.eventId,
+          league: job.leagueKey,
+          date: job.dateYYYYMMDD,
+          home: job.home,
+          away: job.away,
+          spread: job.spread || "",
+          total: job.total || ""
+        });
+
+        if (!data) continue;
+
+        const edge = (data.edge || "—");
+        const lean = (data.lean || "");
+        const conf = (data.confidence ?? "—");
+
+        const leanPart = lean ? ` • Lean: ${lean}` : "";
+        if (line1) line1.textContent = `AI EDGE: ${edge}${leanPart}`;
+        if (line2) line2.textContent = `Confidence: ${conf}/10`;
+      }
     }
 
-    const data = await fetchAIInsight({
-      eventId: job.eventId,
-      league: job.leagueKey,
-      date: job.dateYYYYMMDD,
-      home: job.home,
-      away: job.away,
-      spread: job.favored || "",
-      total: job.total || ""
-    });
+    await Promise.all(new Array(Math.min(limit, aiJobs.length)).fill(0).map(runNext));
 
-    if (!data) continue;
-
-    const edge = (data.edge || "—");
-    const lean = (data.lean || "");
-    const conf = (data.confidence ?? "—");
-
-    const leanPart = lean ? ` • Lean: ${lean}` : "";
-    if (line1) line1.textContent = `AI EDGE: ${edge}${leanPart}`;
-    if (line2) line2.textContent = `Confidence: ${conf}/10`;
+  } catch (error) {
+    content.innerHTML = `
+      <div class="header">
+        <div class="headerTop">
+          <div class="brand">
+            <h2 style="margin:0;">Scores</h2>
+            <span class="badge">The Shop</span>
+          </div>
+          <div class="headerActions">
+            <button class="smallBtn" onclick="loadScores(true)">Retry</button>
+            <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
+          </div>
+        </div>
+        <div class="subline">
+          <div class="sublineLeft">
+            ${buildLeagueSelectHTML(getSavedLeagueKey())}
+            ${buildCalendarButtonHTML()}
+          </div>
+          <div>Error</div>
+        </div>
+      </div>
+      <div class="notice">Couldn’t load scores right now.</div>
+    `;
   }
 }
 
-async function updateAIForEvent({ eventId, leagueKey, dateYYYYMMDD, home, away, favored, total }) {
-  const data = await fetchAIInsight({
-    eventId,
-    league: leagueKey,
-    date: dateYYYYMMDD,
-    home,
-    away,
-    favored,
-    total
-  });
-
-  if (!data) return;
-
-  const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(eventId)}"]`);
-  const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(eventId)}"]`);
-
-  if (line1) line1.textContent = `AI EDGE: ${data.edge || "—"} • Lean: ${data.lean || "—"}`;
-  if (line2) line2.textContent = `Confidence: ${(data.confidence ?? "—")}/10`;
-}
-
+/* =========================
+   AI fetch (cached + no flicker)
+   ========================= */
 async function fetchAIInsight(payload) {
   const key = [
     payload.league || "",
@@ -1813,9 +1773,7 @@ async function fetchAIInsight(payload) {
   ].join("|");
 
   const cached = aiInsightCache[key];
-  if (isAiCacheFresh(cached)) {
-    return cached; // ✅ instant, prevents blank/flicker
-  }
+  if (isAiCacheFresh(cached)) return cached;
 
   try {
     const resp = await fetch("/api/ai-insight", {
@@ -1824,11 +1782,10 @@ async function fetchAIInsight(payload) {
       body: JSON.stringify(payload)
     });
 
-    if (!resp.ok) return cached && cached.edge ? cached : null;
+    if (!resp.ok) return (cached && cached.edge) ? cached : null;
 
     const data = await resp.json();
 
-    // Store with timestamp
     const stored = {
       edge: data.edge || "—",
       lean: data.lean || "",
@@ -1838,12 +1795,10 @@ async function fetchAIInsight(payload) {
 
     aiInsightCache[key] = stored;
     saveAiCacheToSessionThrottled();
-
     return stored;
-  } catch (e) {
-    // If network fails, return stale cache instead of blanking
-    if (cached && cached.edge) return cached;
-    return null;
+
+  } catch {
+    return (cached && cached.edge) ? cached : null;
   }
 }
 
