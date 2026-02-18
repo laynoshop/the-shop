@@ -1978,11 +1978,11 @@ function renderBeatTTUN() {
   const targetLabel = target.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 
   const hypeLines = [
-    "SILENCE THEIR STADIUM.",
-    "FINISH THE FIGHT.",
-    "LEAVE NO DOUBT.",
-    "NO MERCY.",
-    "DOMINATE."
+    "SILENCE THEIR STADIUM",
+    "FINISH THE FIGHT",
+    "LEAVE NO DOUBT",
+    "NO MERCY",
+    "DOMINATE"
   ];
 
   const streak = computeCurrentStreak();
