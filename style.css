@@ -61,9 +61,14 @@ body::before {
 .loginScreen{
   min-height: 100vh;
   display:flex;
-  align-items:center;
-  justify-content:center;
-  padding: 22px 18px 70px; /* leaves room for O-H / I-O */
+
+  /* 👇 Push card toward the top instead of center */
+  align-items: flex-start;
+  justify-content: center;
+
+  /* 👇 Controlled top spacing */
+  padding: 110px 18px 70px;
+
   text-align:center;
   position: relative;
 }
