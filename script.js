@@ -1749,6 +1749,26 @@ async function loadScores(showLoading) {
   }
 }
 
+async function updateAIForEvent({ eventId, leagueKey, dateYYYYMMDD, home, away, favored, total }) {
+  const data = await fetchAIInsight({
+    eventId,
+    league: leagueKey,
+    date: dateYYYYMMDD,
+    home,
+    away,
+    favored,
+    total
+  });
+
+  if (!data) return;
+
+  const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(eventId)}"]`);
+  const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(eventId)}"]`);
+
+  if (line1) line1.textContent = `AI EDGE: ${data.edge || "—"} • Lean: ${data.lean || "—"}`;
+  if (line2) line2.textContent = `Confidence: ${(data.confidence ?? "—")}/10`;
+}
+
 async function fetchAIInsight(payload) {
   try {
     const resp = await fetch("/api/ai-insight", {
