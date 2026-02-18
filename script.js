@@ -988,21 +988,22 @@ function buildCalendarButtonHTML() {
   const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
 
   return `
-    <button 
-      id="dateBtn" 
-      class="iconBtn" 
+    <button
+      id="dateBtn"
+      class="iconBtn"
       aria-label="Choose date"
       onclick="openNativeDatePicker()"
+      type="button"
     >📅</button>
 
     <input
       id="nativeDateInput"
-      class="nativeDateInput"
       type="date"
       value="${escapeHtml(current)}"
       onchange="handleNativeDateChange(event)"
       aria-hidden="true"
       tabindex="-1"
+      style="position:fixed; left:-9999px; top:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;"
     />
   `;
 }
