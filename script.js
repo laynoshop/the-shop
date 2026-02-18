@@ -1394,18 +1394,23 @@ async function loadScores(showLoading) {
       const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
       const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
 
-      const homeNameRaw = home?.team?.displayName || "Home";
-const awayNameRaw = away?.team?.displayName || "Away";
-
-const homeName = teamDisplayNameWithRank(homeNameRaw, home, selectedKey);
-const awayName = teamDisplayNameWithRank(awayNameRaw, away, selectedKey);
-
       const homeTeam = home?.team || null;
       const awayTeam = away?.team || null;
+
+      // ---- TTUN Wolverines override happens HERE (before rank is added) ----
+      const homeBaseName = getTeamDisplayNameUI(homeTeam);
+      const awayBaseName = getTeamDisplayNameUI(awayTeam);
+
+      // Add AP rank (CBB/CFB) AFTER the TTUN name swap
+      const homeName = teamDisplayNameWithRank(homeBaseName, home, selectedKey);
+      const awayName = teamDisplayNameWithRank(awayBaseName, away, selectedKey);
+
       const homeLogo = getTeamLogoUrl(homeTeam);
       const awayLogo = getTeamLogoUrl(awayTeam);
-      const homeAbbrev = escapeHtml(getTeamAbbrev(homeTeam)).slice(0, 4);
-      const awayAbbrev = escapeHtml(getTeamAbbrev(awayTeam)).slice(0, 4);
+
+      // Abbrev fallback also respects TTUN
+      const homeAbbrev = escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
+      const awayAbbrev = escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
 
       const venueLine = buildVenueLine(competition);
 
@@ -1425,14 +1430,14 @@ const awayName = teamDisplayNameWithRank(awayNameRaw, away, selectedKey);
         </div>
 
         <div class="gameMetaTopPlain" aria-label="Venue">
-  ${escapeHtml(venueLine)}
-</div>
+          ${escapeHtml(venueLine)}
+        </div>
 
-${initialOddsText ? `
-  <div class="gameMetaOddsPlain" aria-label="Betting line">
-    ${escapeHtml(initialOddsText)}
-  </div>
-` : ""}
+        ${initialOddsText ? `
+          <div class="gameMetaOddsPlain" aria-label="Betting line">
+            ${escapeHtml(initialOddsText)}
+          </div>
+        ` : ""}
 
         <div class="teamRow">
           <div class="teamLeft">
@@ -1444,7 +1449,7 @@ ${initialOddsText ? `
               }
               <div class="teamText">
                 <div class="teamName">${escapeHtml(awayName)}</div>
-<div class="teamMeta">${escapeHtml(homeAwayWithRecord("Away", away, selectedKey))}</div>
+                <div class="teamMeta">${escapeHtml(homeAwayWithRecord("Away", away, selectedKey))}</div>
               </div>
             </div>
           </div>
