@@ -1,3 +1,16 @@
+(function bootBanner(){
+  document.addEventListener("DOMContentLoaded", () => {
+    try {
+      const b = document.createElement("div");
+      b.id = "bootBanner";
+      b.textContent = "SCRIPT.JS LOADED ✅";
+      b.style.cssText = "position:fixed;left:10px;right:10px;bottom:10px;z-index:999998;background:#0b3;color:#fff;padding:10px;border-radius:12px;font:12px/1.2 -apple-system;opacity:.95";
+      document.body.appendChild(b);
+      setTimeout(()=>{ b.style.opacity = ".25"; }, 2500);
+    } catch {}
+  });
+})();
+
 // =========================
 // DEBUG: On-screen error overlay (shows the exact crash in-app)
 // =========================
