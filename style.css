@@ -97,7 +97,7 @@ button {
 }
 
 #app {
-  padding-bottom: 110px; /* room for tabs */
+  padding-bottom: calc(70px + env(safe-area-inset-bottom));
 }
 
 /* HEADER */
