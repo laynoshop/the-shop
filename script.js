@@ -1110,7 +1110,6 @@ function buildTabsForRole(role) {
   const tabs = document.querySelector(".tabs");
   if (!tabs) return;
 
-  // Build tabs (Shop only for admin)
   const baseTabs = [
     { key: "scores", label: "Scores" },
     { key: "picks",  label: "Picks" },
@@ -1122,18 +1121,11 @@ function buildTabsForRole(role) {
     baseTabs.push({ key: "shop", label: "Shop" });
   }
 
-  tabs.innerHTML = baseTabs.map(t =>
-    `<button type="button" data-tab="${t.key}">${t.label}</button>`
-  ).join("");
+  tabs.innerHTML = baseTabs
+    .map(t => `<button type="button" data-tab="${t.key}">${t.label}</button>`)
+    .join("");
 
-  // Re-bind clicks
-function wireTabClicks() {
-  document.querySelectorAll(".tabs button").forEach(btn => {
-    btn.onclick = () => {
-      const tab = btn.getAttribute("data-tab");
-      if (tab) showTab(tab);
-    };
-  });
+  // DO NOT call showTab() here. Caller controls navigation.
 }
 
   // Keep the current tab if possible; otherwise go to scores
@@ -1144,62 +1136,49 @@ function wireTabClicks() {
 
 function checkCode() {
   const input = document.getElementById("code");
-  const entered = (input.value || "").trim();
+  const entered = (input?.value || "").trim();
 
-  // Use ROLE_KEY if you have it, otherwise default safely
-  const roleKey = (typeof ROLE_KEY !== "undefined" && ROLE_KEY) ? ROLE_KEY : "role";
+  let role = "";
 
-  // ✅ Define your codes here
-  const ADMIN_CODE = "1024";
+  // ✅ Admin / Guest codes
+  if (entered === ADMIN_CODE) role = "admin";
+  else if (entered === GUEST_CODE) role = "guest";
+  else if (typeof INVITE_CODE !== "undefined" && entered === String(INVITE_CODE)) role = "guest";
 
-  // ✅ Validate (keep your INVITE_CODE logic if you want, but we need ADMIN support)
-  let isValid = false;
-
-  if (entered === ADMIN_CODE) {
-    isValid = true;
-  } else if (typeof INVITE_CODE !== "undefined") {
-    isValid = (entered === String(INVITE_CODE));
-  } else {
-    // fallback so app doesn't hard-break if INVITE_CODE isn't defined
-    isValid = (entered.length > 0);
-  }
-
-  if (!isValid) {
-    input.focus();
-    input.style.borderColor = "rgba(187,0,0,0.60)";
-    setTimeout(() => (input.style.borderColor = ""), 450);
+  if (!role) {
+    if (input) {
+      input.focus();
+      input.style.borderColor = "rgba(187,0,0,0.60)";
+      setTimeout(() => (input.style.borderColor = ""), 450);
+    }
     return;
   }
 
-  // ✅ Set role (this is the missing piece)
-  const role = (entered === ADMIN_CODE) ? "admin" : "guest";
-  localStorage.setItem(roleKey, role);
+  // ✅ Save role under the one true key
+  localStorage.setItem(ROLE_KEY, role);
 
   const login = document.getElementById("login");
   const app = document.getElementById("app");
 
   // premium unlock feel
-  login.classList.add("loginUnlocking");
-  login.classList.add("chantFlashIO");
+  if (login) {
+    login.classList.add("loginUnlocking");
+    login.classList.add("chantFlashIO");
+    setTimeout(() => login.classList.add("loginFadeOut"), 160);
+  }
 
   setTimeout(() => {
-    login.classList.add("loginFadeOut");
-  }, 160);
-
-  setTimeout(() => {
-    login.style.display = "none";
-    app.style.display = "block";
-
-    // cleanup
-    login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
-
-    // ✅ Rebuild tabs based on role so Shop exists for admin
-    if (typeof buildTabsForRole === "function") {
-      buildTabsForRole(role);
+    if (login) {
+      login.style.display = "none";
+      login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
     }
+    if (app) app.style.display = "block";
 
-    // ✅ land on Scores (or change to "shop" if you want admin to land there)
-    if (typeof showTab === "function") showTab("scores");
+    // ✅ Build tabs AFTER role is set
+    buildTabsForRole(role);
+
+    // ✅ Navigate ONCE (don’t let tab-building override clicks)
+    showTab("scores");
   }, 520);
 }
 
@@ -3576,14 +3555,16 @@ document.addEventListener("click", (e) => {
 /* =========================
    Window exports (keeps inline onclick working)
    ========================= */
-window.checkCode = checkCode;
-window.showTab = showTab;
 
-const originalShowTab = showTab;
+const __originalShowTab = showTab;
 showTab = function(tab) {
-  originalShowTab(tab);
+  __originalShowTab(tab);
   setTimeout(() => replaceMichiganText(), 0);
 };
+
+// exports (AFTER wrapping)
+window.checkCode = checkCode;
+window.showTab = showTab;
 
 window.loadScores = loadScores;
 window.renderBeatTTUN = renderBeatTTUN;
