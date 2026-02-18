@@ -1422,14 +1422,14 @@ ${initialOddsText ? `
 }
 
 /* =========================
-   BEAT TTUN (HYPE MODE)
+   BEAT TTUN (HYPE MODE) – Countdown V2
    ========================= */
 
 // ESPN CDN logos (fast + reliable)
 const OSU_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png";
 const TTUN_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png";
 
-// All-time series (per common published series totals; update anytime you want)
+// All-time series (update anytime you want)
 const THE_GAME_ALL_TIME = {
   michWins: 62,
   osuWins: 52,
@@ -1437,7 +1437,6 @@ const THE_GAME_ALL_TIME = {
 };
 
 // Last 10 *played* matchups (excludes 2020 canceled)
-// Source: Ohio State opponent history table (dates/scores)
 const THE_GAME_LAST_10 = [
   { year: 2025, winner: "Ohio State", score: "27–9" },
   { year: 2024, winner: "Michigan",   score: "13–10" },
@@ -1477,13 +1476,17 @@ function lastSaturdayOfNovemberAtNoon(year) {
   return d;
 }
 
-function fmtCountdown(ms) {
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function calcCountdownParts(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const days = Math.floor(total / 86400);
   const hrs  = Math.floor((total % 86400) / 3600);
   const mins = Math.floor((total % 3600) / 60);
   const secs = total % 60;
-  return `${days}d ${String(hrs).padStart(2,"0")}h ${String(mins).padStart(2,"0")}m ${String(secs).padStart(2,"0")}s`;
+  return { days, hrs, mins, secs };
 }
 
 function renderBeatTTUN() {
@@ -1507,31 +1510,54 @@ function renderBeatTTUN() {
       </div>
     </div>
 
-    <!-- NEW: Countdown as its own bubble -->
-    <div class="beatBubble">
-      <div class="beatBubbleTop">
+    <!-- Countdown V2 -->
+    <div class="ttunCountdownWrap">
+      <div class="beatBubbleTop" style="margin-bottom:10px;">
         <div class="beatBubbleTitle">Countdown to The Game</div>
         <div class="beatBubbleDate">${escapeHtml(targetLabel)}</div>
       </div>
-      <div id="beatCountdown" class="beatCountdown">—</div>
+
+      <div class="ttunMatchupLine">Ohio State vs TTUN</div>
+
+      <div class="ttunCountdownGrid">
+        <div class="ttunTimeBox">
+          <div id="ttunDays" class="ttunTimeNum">--</div>
+          <div class="ttunTimeLabel">Days</div>
+        </div>
+
+        <div class="ttunTimeBox">
+          <div id="ttunHours" class="ttunTimeNum">--</div>
+          <div class="ttunTimeLabel">Hours</div>
+        </div>
+
+        <div class="ttunTimeBox">
+          <div id="ttunMins" class="ttunTimeNum">--</div>
+          <div class="ttunTimeLabel">Minutes</div>
+        </div>
+
+        <div class="ttunTimeBox">
+          <div id="ttunSecs" class="ttunTimeNum">--</div>
+          <div class="ttunTimeLabel">Seconds</div>
+        </div>
+      </div>
     </div>
 
     <div class="notice">
       <div style="font-weight:800; letter-spacing:0.5px;">ALL-TIME RECORD</div>
 
-      <!-- NEW: Blurb change -->
       <div style="margin-top:6px; opacity:0.9;">TTUN are cheating bastards</div>
 
-      <!-- NEW: Logos next to win totals -->
       <div class="rivalRecordRow">
         <div class="rivalTeam">
           <img class="rivalLogo" src="${OSU_LOGO}" alt="Ohio State logo" loading="lazy" decoding="async" />
           <div class="rivalText"><strong>Ohio State:</strong> ${THE_GAME_ALL_TIME.osuWins}</div>
         </div>
+
         <div class="rivalTeam">
- <img class="rivalLogo" src="${TTUN_LOGO}" alt="TTUN logo" loading="lazy" decoding="async" />
-<div class="rivalText"><strong>TTUN:</strong> ${THE_GAME_ALL_TIME.michWins}</div>
+          <img class="rivalLogo" src="${TTUN_LOGO}" alt="TTUN logo" loading="lazy" decoding="async" />
+          <div class="rivalText"><strong>TTUN:</strong> ${THE_GAME_ALL_TIME.michWins}</div>
         </div>
+
         <div class="rivalTie"><strong>Ties:</strong> ${THE_GAME_ALL_TIME.ties}</div>
       </div>
     </div>
@@ -1554,16 +1580,29 @@ function renderBeatTTUN() {
     </div>
   `;
 
-  // Countdown tick
-  const el = document.getElementById("beatCountdown");
+  // Countdown tick (updates the 4 boxes)
+  const dEl = document.getElementById("ttunDays");
+  const hEl = document.getElementById("ttunHours");
+  const mEl = document.getElementById("ttunMins");
+  const sEl = document.getElementById("ttunSecs");
+
   const tick = () => {
     const ms = target.getTime() - Date.now();
-    if (!el) return;
-    el.textContent = fmtCountdown(ms);
+    const { days, hrs, mins, secs } = calcCountdownParts(ms);
+
+    if (dEl) dEl.textContent = String(days);
+    if (hEl) hEl.textContent = pad2(hrs);
+    if (mEl) mEl.textContent = pad2(mins);
+    if (sEl) sEl.textContent = pad2(secs);
   };
 
   tick();
   beatCountdownTimer = setInterval(tick, 1000);
+
+  // TTUN enforcement (in case last-10 data includes that word)
+  setTimeout(() => {
+    if (typeof replaceMichiganText === "function") replaceMichiganText();
+  }, 0);
 }
 
 /* =========================
