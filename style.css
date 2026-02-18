@@ -183,13 +183,14 @@ button {
   .grid { grid-template-columns: 1fr 1fr; }
 }
 
-.nativeDateInput{
-  position: absolute;
-  left: -9999px;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
+#nativeDateInput{
+  position: fixed !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* GAME CARDS */
