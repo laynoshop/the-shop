@@ -1422,6 +1422,45 @@ function getTeamAbbrevUI(team) {
   return team?.abbreviation || "";
 }
 
+function generateAIInsight({ homeName, awayName, homeScore, awayScore, favoredText, ouText, state }) {
+  let confidence = 5;
+  let edge = "Stay Away";
+  let lean = "";
+
+  // If live game, increase volatility
+  if (state === "in") confidence += 0.5;
+
+  // Spread logic
+  if (favoredText && favoredText.includes("-")) {
+    const parts = favoredText.split("-");
+    const team = parts[0].trim();
+    const spread = parseFloat(parts[1]);
+
+    if (!isNaN(spread)) {
+      confidence += spread < 4 ? 1.2 : 0.4;
+      edge = `${team} -${spread}`;
+    }
+  }
+
+  // O/U logic
+  if (ouText) {
+    const total = parseFloat(ouText);
+    if (!isNaN(total)) {
+      confidence += total > 145 ? 0.5 : 0.2;
+      lean = total > 145 ? `Over ${total}` : `Under ${total}`;
+    }
+  }
+
+  // Clamp confidence
+  confidence = Math.max(1, Math.min(10, confidence));
+
+  return {
+    edge,
+    lean,
+    confidence: confidence.toFixed(1)
+  };
+}
+
 /* =========================
    SCORES TAB (Updated header layout)
    ========================= */
@@ -1559,6 +1598,15 @@ async function loadScores(showLoading) {
       // Start odds as placeholder; we’ll fill via summary hydration after render
       const initialOdds = parseOddsFromScoreboardCompetition(competition);
       const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
+      const ai = generateAIInsight({
+  homeName,
+  awayName,
+  homeScore,
+  awayScore,
+  favoredText: initialOdds.favored,
+  ouText: initialOdds.ou,
+  state
+});
 
       const eventId = String(event?.id || "");
 
@@ -1579,6 +1627,11 @@ async function loadScores(showLoading) {
           <div class="gameMetaOddsPlain" aria-label="Betting line">
             ${escapeHtml(initialOddsText)}
           </div>
+          <div class="aiInsight">
+  <div class="aiEdge">AI EDGE: ${escapeHtml(ai.edge)}</div>
+  ${ai.lean ? `<div class="aiLean">Lean: ${escapeHtml(ai.lean)}</div>` : ""}
+  <div class="aiConfidence">Confidence: ${ai.confidence} / 10</div>
+</div>
         ` : ""}
 
         <div class="teamRow">
