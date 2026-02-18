@@ -1462,7 +1462,7 @@ function generateAIInsight({ homeName, awayName, homeScore, awayScore, favoredTe
 }
 
 /* =========================
-   SCORES TAB (Updated header layout)
+   SCORES TAB (Updated header layout) — AI via /api/ai-insight
    ========================= */
 async function loadScores(showLoading) {
   const content = document.getElementById("content");
@@ -1560,6 +1560,9 @@ async function loadScores(showLoading) {
     const grid = document.createElement("div");
     grid.className = "grid";
 
+    // We’ll queue AI jobs as we render cards
+    const aiJobs = [];
+
     events.forEach(event => {
       const competition = event?.competitions?.[0];
       if (!competition) return;
@@ -1599,21 +1602,14 @@ async function loadScores(showLoading) {
       const initialOdds = parseOddsFromScoreboardCompetition(competition);
       const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
 
-      const ai = generateAIInsight({
-        homeName,
-        awayName,
-        homeScore,
-        awayScore,
-        favoredText: initialOdds.favored,
-        ouText: initialOdds.ou,
-        state
-      });
-
       const eventId = String(event?.id || "");
 
       const card = document.createElement("div");
       card.className = "game";
       if (eventId) card.setAttribute("data-eventid", eventId);
+
+      // --- AI placeholders (only show for PRE games with odds) ---
+      const shouldShowAI = (state === "pre") && !!initialOddsText && !!eventId;
 
       card.innerHTML = `
         <div class="gameHeader">
@@ -1628,15 +1624,12 @@ async function loadScores(showLoading) {
           <div class="gameMetaOddsPlain" aria-label="Betting line">
             ${escapeHtml(initialOddsText)}
           </div>
+        ` : ""}
 
+        ${shouldShowAI ? `
           <div class="gameMetaAIPlain" aria-label="AI insight">
-            <div class="aiRow">
-              AI EDGE: ${escapeHtml(ai.edge)}
-              ${ai.lean ? ` • Lean: ${escapeHtml(ai.lean)}` : ``}
-            </div>
-            <div class="aiConfidenceRow">
-              Confidence: ${escapeHtml(ai.confidence)} / 10
-            </div>
+            <div class="aiRow" data-ai-line1="${escapeHtml(eventId)}">AI EDGE: — • Lean: —</div>
+            <div class="aiConfidenceRow" data-ai-line2="${escapeHtml(eventId)}">Confidence: —/10</div>
           </div>
         ` : ""}
 
@@ -1676,12 +1669,59 @@ async function loadScores(showLoading) {
       `;
 
       grid.appendChild(card);
+
+      // Queue AI call (do NOT run for live/final)
+      if (shouldShowAI) {
+        aiJobs.push({
+          eventId,
+          leagueKey: selectedKey,
+          dateYYYYMMDD: selectedDate,
+          home: homeBaseName,
+          away: awayBaseName,
+          favored: initialOdds.favored || "",
+          total: initialOdds.ou || ""
+        });
+      }
     });
 
     content.appendChild(grid);
 
     // Hydrate odds for all games (safe concurrency + caching)
     hydrateAllOdds(events, league, selectedKey, selectedDate);
+
+    // AFTER render: call your Vercel endpoint for AI insights and inject into placeholders
+    // (small concurrency so iOS doesn’t get slammed)
+    const limit = 4;
+    let idx = 0;
+
+    async function runNext() {
+      while (idx < aiJobs.length) {
+        const job = aiJobs[idx++];
+        const data = await fetchAIInsight({
+          eventId: job.eventId,
+          league: job.leagueKey,
+          date: job.dateYYYYMMDD,
+          home: job.home,
+          away: job.away,
+          favored: job.favored,
+          total: job.total
+        });
+
+        if (!data) continue;
+
+        const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(job.eventId)}"]`);
+        const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(job.eventId)}"]`);
+
+        const edge = (data.edge || "—");
+        const lean = (data.lean || "—");
+        const conf = (data.confidence ?? "—");
+
+        if (line1) line1.textContent = `AI EDGE: ${edge} • Lean: ${lean}`;
+        if (line2) line2.textContent = `Confidence: ${conf}/10`;
+      }
+    }
+
+    await Promise.all(new Array(Math.min(limit, aiJobs.length)).fill(0).map(runNext));
 
   } catch (error) {
     content.innerHTML = `
@@ -1706,6 +1746,21 @@ async function loadScores(showLoading) {
       </div>
       <div class="notice">Couldn’t load scores right now.</div>
     `;
+  }
+}
+
+async function fetchAIInsight(payload) {
+  try {
+    const resp = await fetch("/api/ai-insight", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (e) {
+    return null;
   }
 }
 
