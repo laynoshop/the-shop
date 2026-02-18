@@ -183,17 +183,26 @@ button {
   .grid { grid-template-columns: 1fr 1fr; }
 }
 
-/* Native iOS date input: keep it off-screen but still "interactive" */
-#nativeDateInput{
-  position: fixed !important;
-  left: -9999px !important;
-  top: -9999px !important;
-  width: 1px !important;
-  height: 1px !important;
-  opacity: 0.01 !important;
+/* ===== Native date picker (iOS-safe) ===== */
+.datePickerWrap{
+  position: relative;
+  display: inline-block;
+}
 
-  /* IMPORTANT: iOS needs this to NOT be none */
-  pointer-events: auto !important;
+/* Invisible input sits ON TOP of the 📅 button so iOS opens picker reliably */
+.datePickerWrap .nativeDateInput{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* GAME CARDS */
