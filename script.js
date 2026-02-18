@@ -1983,6 +1983,7 @@ function stopShopChatRealtime() {
 }
 
 async function startShopChatRealtime() {
+  ensureChatDisplayName();
   await ensureFirebaseChatReady();
   stopShopChatRealtime();
 
@@ -2144,6 +2145,10 @@ function renderShop() {
 </div>
 
       <div style="margin-top:12px;">
+      <div class="chatNameRow">
+  <span id="chatUserNameLabel"></span>
+  <button onclick="changeChatDisplayName()" class="chatNameBtn">Change</button>
+</div>
         <div id="chatList" style="max-height:52vh; overflow:auto;"></div>
       </div>
 
@@ -2165,6 +2170,61 @@ function renderShop() {
     });
 
   setTimeout(() => replaceMichiganText(), 0);
+}
+
+function getChatDisplayName() {
+  let name = "";
+
+  try {
+    name = String(localStorage.getItem("shopChatName") || "").trim();
+  } catch {
+    name = "";
+  }
+
+  // If missing OR mistakenly set to the room name, re-prompt once
+  if (!name || norm(name) === norm("THE Chat")) {
+    const picked = prompt("Enter your name for group chat (example: Victor):", "");
+    name = String(picked || "").trim();
+    if (!name) name = "Anon";
+
+    try {
+      localStorage.setItem("shopChatName", name.slice(0, 20));
+    } catch {}
+  }
+
+  // Update the small label if it exists
+  const label = document.getElementById("chatUserNameLabel");
+  if (label) label.textContent = `You: ${name}`;
+
+  return name;
+}
+
+function ensureChatDisplayName() {
+  let name = getChatDisplayName();
+
+  if (!name) {
+    name = prompt("Enter your display name:");
+    if (!name) name = "Anon";
+    localStorage.setItem("shopChatName", name.trim().slice(0, 20));
+  }
+
+  updateChatNameUI();
+  return name;
+}
+
+function changeChatDisplayName() {
+  const name = prompt("Enter new display name:");
+  if (!name) return;
+
+  localStorage.setItem("shopChatName", name.trim().slice(0, 20));
+  updateChatNameUI();
+}
+
+function updateChatNameUI() {
+  const label = document.getElementById("chatUserNameLabel");
+  if (label) {
+    label.textContent = `You: ${getChatDisplayName()}`;
+  }
 }
 
 /* =========================
