@@ -933,29 +933,80 @@ function promptForDateAndReload() {
 }
 
 /* =========================
-   Login
+   Login (ROLE-BASED)
+   - 1024 = Admin (shows Shop)
+   - 2026 = Guest (no Shop tab)
    ========================= */
-function checkCode() {
-  const code = document.getElementById("code").value;
-  if (code === "2026") {
-    // Always default to TODAY on fresh login
-    const today = formatDateYYYYMMDD(new Date());
-    saveDateYYYYMMDD(today);
+const ADMIN_CODE = "1024";
+const GUEST_CODE = "2026";
+const ROLE_KEY = "theShopRole_v1"; // "admin" | "guest"
 
-    document.getElementById("login").style.display = "none";
-    document.getElementById("app").style.display = "block";
+function buildTabsForRole(role) {
+  const tabsEl = document.querySelector(".tabs");
+  if (!tabsEl) return;
 
-    showTab("scores");
-    updateRivalryBanner();
-    window.addEventListener("resize", positionRivalryBanner);
-  } else {
-    alert("Wrong code");
+  const baseTabs = [
+    { key: "scores", label: "Scores" },
+    { key: "beat",   label: "Beat\nTTUN" },
+    { key: "news",   label: "Top\nNews" }
+  ];
+
+  if (role === "admin") {
+    baseTabs.push({ key: "shop", label: "Shop" });
   }
+
+  tabsEl.innerHTML = baseTabs.map(t => {
+    // keep your two-line labels working
+    const labelHtml = String(t.label).replace(/\n/g, "<br/>");
+    return `<button type="button" data-tab="${t.key}">${labelHtml}</button>`;
+  }).join("");
+}
+
+function checkCode() {
+  const codeEl = document.getElementById("code");
+  const code = String(codeEl?.value || "").trim();
+
+  let role = null;
+  if (code === ADMIN_CODE) role = "admin";
+  else if (code === GUEST_CODE) role = "guest";
+
+  if (!role) {
+    alert("Wrong code");
+    return;
+  }
+
+  // Save role (optional but useful)
+  localStorage.setItem(ROLE_KEY, role);
+
+  // Show app
+  document.getElementById("login").style.display = "none";
+  document.getElementById("app").style.display = "block";
+
+  // Build correct tab bar for this role
+  buildTabsForRole(role);
+
+  // Always start on Scores
+  showTab("scores");
+
+  // Banner stuff you already had
+  updateRivalryBanner();
+  window.addEventListener("resize", positionRivalryBanner);
 }
 
 /* =========================
    Tabs
    ========================= */
+
+/* ===== Tabs click (delegated) ===== */
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".tabs button");
+  if (!btn) return;
+
+  const tab = btn.getAttribute("data-tab");
+  if (!tab) return;
+
+  showTab(tab);
+});
 
 /* =========================
    BUCKEYE BANNER (above tabs)
@@ -1048,6 +1099,12 @@ function statusLabelFromState(state, detail) {
 }
 
 function showTab(tab) {
+  // Block Shop for guests (even if someone somehow tries to open it)
+  const role = localStorage.getItem(ROLE_KEY) || "guest";
+  if (tab === "shop" && role !== "admin") {
+    tab = "scores";
+  }
+
   currentTab = tab;
   setActiveTabButton(tab);
   stopAutoRefresh();
@@ -1067,9 +1124,13 @@ function showTab(tab) {
   } 
   else if (tab === "shop") {
     renderShop();
+  } 
+  else {
+    // fallback safety
+    loadScores(true);
+    startAutoRefresh();
   }
 
-  // 🔴 Always refresh Buckeye banner after tab change
   updateRivalryBanner();
 }
 
