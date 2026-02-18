@@ -738,3 +738,7 @@ button {
 .chatRow {
   margin-bottom: 10px;
 }
+
+.chatBubble {
+  margin-top: 0;
+}
