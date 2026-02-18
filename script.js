@@ -2662,9 +2662,12 @@ document.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
-  // 📅 Date picker (Scores tab) — open native iOS picker
+  // 📅 Date picker (Scores tab)
   if (btn.id === "dateBtn") {
-    openNativeDatePicker();
+    // Use the native picker (hidden input[type=date])
+    if (typeof openNativeDatePicker === "function") {
+      openNativeDatePicker();
+    }
     return;
   }
 
@@ -2691,24 +2694,6 @@ document.addEventListener("click", (e) => {
     } else {
       renderTopNews(true);
     }
-    return;
-  }
-});
-
-// League dropdown
-document.addEventListener("change", (e) => {
-  const t = e.target;
-
-  // League select
-  if (t instanceof HTMLSelectElement && t.id === "leagueSelect") {
-    saveLeagueKey(t.value);
-    loadScores(true);
-    return;
-  }
-
-  // Native date input
-  if (t instanceof HTMLInputElement && t.id === "nativeDateInput") {
-    handleNativeDateChangeFromInput(t);
     return;
   }
 });
