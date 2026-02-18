@@ -209,6 +209,33 @@ button {
 .status-up     { background: rgba(245,158,11,0.2); color: #fde68a; }
 .status-other  { background: rgba(255,255,255,0.1); color: #e5e7eb; }
 
+/* ===== Scores: plain (non-bubble) venue + odds lines ===== */
+.gameMetaTopPlain,
+.gameMetaOddsPlain{
+  margin-top: 2px;
+  margin-bottom: 8px;
+
+  /* same typography feel as before */
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: rgba(255,255,255,0.72);
+
+  /* remove “bubble” look */
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+
+  white-space: normal;
+  word-break: break-word;
+}
+
+.gameMetaOddsPlain{
+  color: rgba(255,255,255,0.68);
+  margin-bottom: 12px;
+}
+
 /* Venue line (wraps, no cutoff) */
 .gameMetaTopLine {
   margin-top: -4px;
