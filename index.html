@@ -19,22 +19,37 @@
   </noscript>
 
   <!-- LOGIN -->
-  <div id="login" class="loginWrap">
-    <div class="loginCard">
-      <h1 style="margin:0 0 12px 0;">The Shop</h1>
-      <p style="margin:0 0 14px 0; opacity:.8;">Enter Invite Code</p>
+<div id="login" class="loginScreen">
+  <div class="loginCard">
+    <div class="loginBadgeRow">
+      <div class="eliteChip">ELITE MEMBERS CLUB</div>
+      <div class="secureChip">SECURE ACCESS</div>
+    </div>
 
+    <h1 class="loginTitle">The Shop</h1>
+    <div class="loginSubtitle">Enter the Scarlet Key</div>
+
+    <div class="loginForm">
       <input
         type="password"
         id="code"
-        placeholder="Invite Code"
+        class="loginInput"
+        placeholder="Scarlet Key"
         inputmode="numeric"
         autocomplete="one-time-code"
       />
-      <button type="button" id="enterBtn">Enter</button>
-
+      <button class="loginBtn" onclick="checkCode()">Unlock</button>
     </div>
+
+    <div class="loginHint">Authorized members only.</div>
   </div>
+
+  <div class="chantBar" aria-hidden="true">
+    <span class="chantOH">O-H</span>
+    <span class="chantDot">•</span>
+    <span class="chantIO">I-O</span>
+  </div>
+</div>
 
   <!-- APP -->
   <div id="app" style="display:none;">
