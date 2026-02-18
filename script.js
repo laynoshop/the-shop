@@ -78,15 +78,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-document.addEventListener("DOMContentLoaded", () => {
-  const input = document.getElementById("code");
-  if (input) {
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") checkCode();
-    });
-  }
-});
-
 // Favorites (top priority, in this order)
 const FAVORITES = [
   "Ohio State Buckeyes",
@@ -1117,18 +1108,13 @@ function buildTabsForRole(role) {
     { key: "news",   label: "Top<br/>News" }
   ];
 
-  if (role === "admin") {
-    baseTabs.push({ key: "shop", label: "Shop" });
-  }
+  if (role === "admin") baseTabs.push({ key: "shop", label: "Shop" });
 
   tabs.innerHTML = baseTabs
     .map(t => `<button type="button" data-tab="${t.key}">${t.label}</button>`)
     .join("");
 
-  // DO NOT call showTab() here. Caller controls navigation.
-}
-
-  // Keep the current tab if possible; otherwise go to scores
+  // Keep current tab if possible, else default to scores
   const current = window.__activeTab || "scores";
   const exists = baseTabs.some(t => t.key === current);
   showTab(exists ? current : "scores");
@@ -1136,48 +1122,41 @@ function buildTabsForRole(role) {
 
 function checkCode() {
   const input = document.getElementById("code");
-  const entered = (input?.value || "").trim();
+  if (!input) return;
 
+  const entered = String(input.value || "").trim();
+
+  // Validate
   let role = "";
-
-  // ✅ Admin / Guest codes
   if (entered === ADMIN_CODE) role = "admin";
   else if (entered === GUEST_CODE) role = "guest";
-  else if (typeof INVITE_CODE !== "undefined" && entered === String(INVITE_CODE)) role = "guest";
 
   if (!role) {
-    if (input) {
-      input.focus();
-      input.style.borderColor = "rgba(187,0,0,0.60)";
-      setTimeout(() => (input.style.borderColor = ""), 450);
-    }
+    input.focus();
+    input.style.borderColor = "rgba(187,0,0,0.60)";
+    setTimeout(() => (input.style.borderColor = ""), 450);
     return;
   }
 
-  // ✅ Save role under the one true key
+  // Persist role
   localStorage.setItem(ROLE_KEY, role);
 
+  // Transition UI
   const login = document.getElementById("login");
   const app = document.getElementById("app");
 
-  // premium unlock feel
   if (login) {
-    login.classList.add("loginUnlocking");
-    login.classList.add("chantFlashIO");
+    login.classList.add("loginUnlocking", "chantFlashIO");
     setTimeout(() => login.classList.add("loginFadeOut"), 160);
   }
 
   setTimeout(() => {
-    if (login) {
-      login.style.display = "none";
-      login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
-    }
+    if (login) login.style.display = "none";
     if (app) app.style.display = "block";
 
-    // ✅ Build tabs AFTER role is set
-    buildTabsForRole(role);
+    if (login) login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
 
-    // ✅ Navigate ONCE (don’t let tab-building override clicks)
+    buildTabsForRole(role);
     showTab("scores");
   }, 520);
 }
