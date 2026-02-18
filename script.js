@@ -1074,6 +1074,28 @@ function handleNativeDateChangeFromEl(el) {
 const ADMIN_CODE = "1024";
 const GUEST_CODE = "2026";
 const ROLE_KEY = "theShopRole_v1"; // "admin" | "guest"
+let isLoggedIn = false;
+
+function showLoginScreen() {
+  isLoggedIn = false;
+  const login = document.getElementById("login");
+  const app = document.getElementById("app");
+  if (app) app.style.display = "none";
+  if (login) login.style.display = "flex";
+}
+
+function showAppScreen() {
+  isLoggedIn = true;
+  const login = document.getElementById("login");
+  const app = document.getElementById("app");
+  if (login) login.style.display = "none";
+  if (app) app.style.display = "block";
+}
+
+function getSavedRole() {
+  const r = (localStorage.getItem(ROLE_KEY) || "").trim();
+  return (r === "admin" || r === "guest") ? r : "";
+}
 
 function buildTabsForRole(role) {
   const tabsEl = document.querySelector(".tabs");
@@ -1100,38 +1122,25 @@ function checkCode() {
   const codeEl = document.getElementById("code");
   const code = String(codeEl?.value || "").trim();
 
-  let role = null;
+  let role = "";
   if (code === ADMIN_CODE) role = "admin";
   else if (code === GUEST_CODE) role = "guest";
 
   if (!role) {
+    // IMPORTANT: prevent any “saved role” from auto-opening after a bad attempt
+    localStorage.removeItem(ROLE_KEY);
+    showLoginScreen();
     alert("Wrong code");
     return;
   }
 
-  // Save role
   localStorage.setItem(ROLE_KEY, role);
 
-  // Clear input for cleanliness
-  if (codeEl) codeEl.value = "";
-
-  // Show app
-  const loginEl = document.getElementById("login");
-  const appEl = document.getElementById("app");
-  if (loginEl) loginEl.style.display = "none";
-  if (appEl) appEl.style.display = "block";
-
-  // Build correct tab bar for this role
+  showAppScreen();
   buildTabsForRole(role);
-
-  // Always start on Scores
   showTab("scores");
 
-  // Banner
   updateRivalryBanner();
-
-  // Prevent stacking resize handlers
-  window.removeEventListener("resize", positionRivalryBanner);
   window.addEventListener("resize", positionRivalryBanner);
 }
 
