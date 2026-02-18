@@ -1,3 +1,36 @@
+// =========================
+// DEBUG: On-screen error overlay (shows the exact crash in-app)
+// =========================
+(function attachFatalErrorOverlay(){
+  function show(msg) {
+    try {
+      let box = document.getElementById("fatalErrorOverlay");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "fatalErrorOverlay";
+        box.style.cssText = [
+          "position:fixed","left:10px","right:10px","top:10px","z-index:999999",
+          "background:#1b1b1b","color:#fff","padding:12px","border-radius:12px",
+          "font:12px/1.35 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial",
+          "white-space:pre-wrap","box-shadow:0 10px 30px rgba(0,0,0,.35)"
+        ].join(";");
+        document.body && document.body.appendChild(box);
+      }
+      box.textContent = msg;
+    } catch {}
+  }
+
+  window.addEventListener("error", (e) => {
+    const msg = `JS ERROR:\n${e.message}\n\n${e.filename || ""}:${e.lineno || ""}:${e.colno || ""}`;
+    show(msg);
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    const msg = `PROMISE ERROR:\n${(e.reason && (e.reason.stack || e.reason.message)) || String(e.reason)}`;
+    show(msg);
+  });
+})();
+
 /* =========================
    The Shop — Gold Standard v1 (Updated)
    - Scores (ESPN) + robust odds hydration
