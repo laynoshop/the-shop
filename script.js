@@ -1215,6 +1215,38 @@ function homeAwayWithRecord(homeAwayLabel, competitor, leagueKey) {
 }
 
 /* =========================
+   TTUN TEAM NAME OVERRIDE (Wolverines only)
+   ========================= */
+const TTUN_TEAM_ID = "130"; // ESPN team id for Michigan Wolverines
+
+function isTTUNTeam(team) {
+  if (!team) return false;
+  const id = String(team.id || "");
+  const slug = String(team.slug || "");
+  const abbr = String(team.abbreviation || "");
+  const name = String(team.displayName || team.shortDisplayName || "");
+
+  // Primary = ID match (best)
+  if (id === TTUN_TEAM_ID) return true;
+
+  // Backstops (in case ESPN shifts fields)
+  if (slug === "michigan-wolverines") return true;
+  if (abbr === "MICH" && /wolverines/i.test(name)) return true;
+
+  return false;
+}
+
+function getTeamDisplayNameUI(team) {
+  if (isTTUNTeam(team)) return "The Team Up North";
+  return team?.displayName || team?.shortDisplayName || "Team";
+}
+
+function getTeamAbbrevUI(team) {
+  if (isTTUNTeam(team)) return "TTUN";
+  return getTeamAbbrev(team); // uses your existing abbrev helper
+}
+
+/* =========================
    TTUN Display Override (Michigan Wolverines only)
    ========================= */
 
