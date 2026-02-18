@@ -96,8 +96,12 @@ button {
   margin-top: 30px;
 }
 
+/* ✅ IMPORTANT FIX:
+   Remove static bottom padding here.
+   The JS (positionRivalryBanner) already pads #content based on banner+tabs height.
+*/
 #app {
-  padding-bottom: calc(70px + env(safe-area-inset-bottom));
+  padding-bottom: 0;
 }
 
 /* HEADER */
@@ -374,7 +378,6 @@ button {
   opacity: 0.72;
 }
 
-/* Optional: if you wrap “AI EDGE” or “Lean” later with spans, these are ready */
 .aiTag{
   display:inline-flex;
   align-items:center;
@@ -464,10 +467,6 @@ button {
   box-shadow: 0 10px 22px rgba(0,0,0,0.22);
 }
 
-/* ===== Favorite indicator (CSS-ready) =====
-   If later you add: <span class="favChip">Fav</span> near teamName,
-   this makes it look 🔥 instantly.
-*/
 .favChip{
   display:inline-flex;
   align-items:center;
@@ -543,16 +542,22 @@ button {
   color: rgba(255,255,255,0.75);
 }
 
-/* TABS (safe area padding) */
+/* ✅ TABS (tightened — NO extra vertical bloat) */
 .tabs {
   position: fixed;
   bottom: 0;
+  left: 0;
+  right: 0;
+
   width: 100%;
   display: flex;
+
   background: rgba(22,22,22,0.95);
   border-top: 1px solid rgba(255,255,255,0.1);
-  padding-bottom: calc(env(safe-area-inset-bottom) + 10px);
-  padding-top: 6px;
+
+  padding-top: 4px; /* was 6px */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 4px); /* was +10px */
+
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -613,7 +618,6 @@ button {
     0 0 0 1px rgba(187,0,0,0.30) inset;
 }
 
-/* ===== Top Section ===== */
 .beatHeroTop{
   display:flex;
   flex-direction:column;
@@ -634,7 +638,6 @@ button {
   line-height: 1.3;
 }
 
-/* ===== Massive Days Display ===== */
 .beatBig{
   display:flex;
   align-items:baseline;
@@ -659,7 +662,6 @@ button {
   opacity: 0.8;
 }
 
-/* ===== Hours / Minutes / Seconds ===== */
 .beatHmsRow{
   display:flex;
   gap:12px;
@@ -692,7 +694,6 @@ button {
   opacity: 0.75;
 }
 
-/* ===== Divider ===== */
 .beatDivider{
   height: 1px;
   margin: 16px 0 14px 0;
@@ -704,7 +705,6 @@ button {
   );
 }
 
-/* ===== Rotating Hype Line ===== */
 .beatHypeLine{
   font-size: 15px;
   font-weight: 1000;
@@ -719,7 +719,6 @@ button {
   box-shadow: 0 0 20px rgba(187,0,0,0.25);
 }
 
-/* ===== Streak Line ===== */
 .beatStreak{
   margin-top: 12px;
   font-size: 12px;
@@ -739,7 +738,6 @@ button {
   text-shadow: 0 0 12px rgba(187,0,0,0.35);
 }
 
-/* ===== All-Time / Last 10 (unchanged layout, slightly refined) ===== */
 .rivalRecordRow{
   margin-top:12px;
   display:flex;
@@ -806,19 +804,19 @@ button {
   white-space:nowrap;
 }
 
-/* ===== Buckeye banner above bottom tabs ===== */
+/* ✅ Banner: make it truly “hug” the bottom; JS still controls exact bottom */
 .rivalryBanner{
   position: fixed;
   left: 0;
   right: 0;
   z-index: 999;
 
-  margin: 0 12px;
+  margin: 0;              /* was 0 12px */
+  border-radius: 0;       /* was 14px */
   padding: 10px 12px;
-  border-radius: 14px;
 
   background: rgba(0,0,0,0.55);
-  border: 1px solid rgba(255,255,255,0.14);
+  border-top: 1px solid rgba(255,255,255,0.14);
 
   font-weight: 900;
   letter-spacing: 0.4px;
