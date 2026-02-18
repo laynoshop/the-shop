@@ -1004,6 +1004,7 @@ function buildTabsForRole(role) {
 
   const baseTabs = [
     { key: "scores", label: "Scores" },
+    { key: "picks",  label: "Picks" },     // ✅ NEW
     { key: "beat",   label: "Beat\nTTUN" },
     { key: "news",   label: "Top\nNews" }
   ];
@@ -1013,7 +1014,6 @@ function buildTabsForRole(role) {
   }
 
   tabsEl.innerHTML = baseTabs.map(t => {
-    // keep your two-line labels working
     const labelHtml = String(t.label).replace(/\n/g, "<br/>");
     return `<button type="button" data-tab="${t.key}">${labelHtml}</button>`;
   }).join("");
@@ -1177,6 +1177,9 @@ function showTab(tab) {
     loadScores(true);
     startAutoRefresh();
   } 
+    else if (tab === "picks") {
+    renderPicks(true);
+  }
   else if (tab === "beat") {
     renderBeatTTUN();
   } 
@@ -2739,6 +2742,553 @@ function logout() {
 }
 
 /* =========================
+   PICKS (Firebase / Firestore)
+   - Locked once submitted
+   - Units-only scoring
+   - Auto-grade when games go FINAL
+   ========================= */
+
+const PICKS_ROOM_ID = "main";
+const PICKS_COLLECTION = "picks";
+const PICKS_NAME_KEY = "theShopPicksName_v1";
+
+function getPicksDisplayName() {
+  // Prefer existing chat name if it exists
+  const existingChat = (localStorage.getItem("shopChatName") || "").trim();
+  if (existingChat) return existingChat.slice(0, 20);
+
+  let name = (localStorage.getItem(PICKS_NAME_KEY) || "").trim();
+  if (!name) {
+    name = (prompt("Name for Picks leaderboard (example: Victor):", "") || "").trim();
+    if (!name) name = "Anon";
+    localStorage.setItem(PICKS_NAME_KEY, name.slice(0, 20));
+  }
+  return name.slice(0, 20);
+}
+
+function picksDocRef(db, id) {
+  return db.collection("rooms").doc(PICKS_ROOM_ID).collection(PICKS_COLLECTION).doc(id);
+}
+
+function picksCollectionRef(db) {
+  return db.collection("rooms").doc(PICKS_ROOM_ID).collection(PICKS_COLLECTION);
+}
+
+function safeNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clampUnits(u) {
+  // Allowed: 0.5 to 5 (and common increments)
+  const n = safeNum(u, 0);
+  if (n <= 0) return 0;
+  const clamped = Math.max(0.5, Math.min(5, n));
+  // round to nearest 0.5
+  return Math.round(clamped * 2) / 2;
+}
+
+function pickKey(leagueKey, dateYYYYMMDD, eventId) {
+  return `${leagueKey}|${dateYYYYMMDD}|${eventId}`;
+}
+
+function parsePickSelection(raw) {
+  return String(raw || "").trim().slice(0, 60);
+}
+
+function normalizePickType(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (s === "ml" || s === "moneyline") return "ml";
+  if (s === "ou" || s === "o/u" || s === "total" || s === "totals") return "ou";
+  return "spread";
+}
+
+// Compute win/loss/push based on final score + pick data
+function gradePickAgainstFinal(pick, finalHome, finalAway) {
+  // pick.side: "home" | "away" | "over" | "under"
+  // pick.type: "spread" | "ml" | "ou"
+  const type = pick?.type;
+  const side = pick?.side;
+  const line = safeNum(pick?.line, 0);
+
+  const home = safeNum(finalHome, 0);
+  const away = safeNum(finalAway, 0);
+
+  if (type === "ml") {
+    // winner only
+    const diff = home - away;
+    if (diff === 0) return "push";
+    const winner = diff > 0 ? "home" : "away";
+    return winner === side ? "win" : "loss";
+  }
+
+  if (type === "spread") {
+    // line applies to chosen side
+    // If side=home: homeScore + line vs awayScore
+    // If side=away: awayScore + line vs homeScore
+    let a, b;
+    if (side === "home") {
+      a = home + line;
+      b = away;
+    } else {
+      a = away + line;
+      b = home;
+    }
+    if (a === b) return "push";
+    return a > b ? "win" : "loss";
+  }
+
+  // OU
+  if (type === "ou") {
+    const total = home + away;
+    if (total === line) return "push";
+    if (side === "over") return total > line ? "win" : "loss";
+    return total < line ? "win" : "loss";
+  }
+}
+
+function outcomeToNetUnits(outcome, units) {
+  if (outcome === "win") return units;
+  if (outcome === "loss") return -units;
+  return 0;
+}
+
+function renderPicksHeaderHTML(rightLabel) {
+  const selectedDate = getSavedDateYYYYMMDD();
+  const prettyDate = yyyymmddToPretty(selectedDate);
+  const selectedKey = getSavedLeagueKey();
+
+  return `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Picks</h2>
+          <span class="badge">Units</span>
+        </div>
+
+        <div class="headerActions">
+          <button class="smallBtn" data-picksaction="refresh">Refresh</button>
+        </div>
+      </div>
+
+      <div class="subline">
+        <div class="sublineLeft">
+          ${buildLeagueSelectHTML(selectedKey)}
+          ${buildCalendarButtonHTML()}
+          <button class="iconBtn" data-picksaction="addQuick" title="Add pick">＋</button>
+        </div>
+        <div>${escapeHtml(prettyDate)} • ${escapeHtml(rightLabel || "")}</div>
+      </div>
+    </div>
+  `;
+}
+
+async function renderPicks(showLoading) {
+  const content = document.getElementById("content");
+  const selectedDate = getSavedDateYYYYMMDD();
+  const selectedKey = getSavedLeagueKey();
+  const league = getLeagueByKey(selectedKey);
+
+  if (showLoading) {
+    content.innerHTML = `
+      ${renderPicksHeaderHTML("Loading…")}
+      <div class="notice">Loading picks + games…</div>
+    `;
+  }
+
+  try {
+    await ensureFirebaseChatReady(); // re-uses your firebase init/auth
+    const db = firebase.firestore();
+
+    // 1) Load scoreboard for current league/date (we’ll use it to show games + grade finals)
+    const sb = await fetchScoreboardWithFallbacks(league, selectedDate);
+    const events = sb.events || [];
+
+    // 2) Load recent picks for THIS league/date (shared competition)
+    const picksSnap = await picksCollectionRef(db)
+      .where("leagueKey", "==", selectedKey)
+      .where("dateYYYYMMDD", "==", selectedDate)
+      .orderBy("createdAt", "desc")
+      .limit(250)
+      .get();
+
+    const picks = [];
+    picksSnap.forEach(doc => picks.push({ id: doc.id, ...doc.data() }));
+
+    // 3) Auto-grade any pending picks where the game is FINAL
+    await autoGradePicksForEvents(db, picks, events);
+
+    // Re-read (so UI reflects grading)
+    const picksSnap2 = await picksCollectionRef(db)
+      .where("leagueKey", "==", selectedKey)
+      .where("dateYYYYMMDD", "==", selectedDate)
+      .orderBy("createdAt", "desc")
+      .limit(250)
+      .get();
+
+    const picks2 = [];
+    picksSnap2.forEach(doc => picks2.push({ id: doc.id, ...doc.data() }));
+
+    // 4) Build leaderboard + lists
+    const leaderboard = computeLeaderboard(picks2);
+    const leaderboardHTML = renderLeaderboardHTML(leaderboard);
+
+    const myName = getPicksDisplayName();
+    const myPicks = picks2.filter(p => String(p.name || "") === myName);
+
+    const myPicksHTML = renderPicksListHTML(myPicks, "My Picks");
+    const allPicksHTML = renderPicksListHTML(picks2, "All Picks");
+
+    // 5) Render games list (Add Pick buttons)
+    const gamesHTML = renderGamesForPickEntryHTML(events, selectedKey, selectedDate);
+
+    const nowLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+    content.innerHTML = `
+      ${renderPicksHeaderHTML(`Updated ${nowLabel}`)}
+
+      <div class="grid">
+        ${leaderboardHTML}
+        ${myPicksHTML}
+        ${allPicksHTML}
+        ${gamesHTML}
+      </div>
+    `;
+
+    setTimeout(() => replaceMichiganText(), 0);
+  } catch (e) {
+    content.innerHTML = `
+      ${renderPicksHeaderHTML("Error")}
+      <div class="notice">Picks are down right now. Hit Refresh.</div>
+    `;
+  }
+}
+
+function computeLeaderboard(picks) {
+  // Per-user: units net, W/L/P counts, streak (simple)
+  const byUser = new Map();
+
+  const sortedOldToNew = [...(picks || [])].sort((a, b) => {
+    const ta = a?.createdAt?.toMillis ? a.createdAt.toMillis() : safeNum(a?.createdAtMs, 0);
+    const tb = b?.createdAt?.toMillis ? b.createdAt.toMillis() : safeNum(b?.createdAtMs, 0);
+    return ta - tb;
+  });
+
+  for (const p of sortedOldToNew) {
+    const name = String(p?.name || "Anon");
+    if (!byUser.has(name)) {
+      byUser.set(name, { name, net: 0, w: 0, l: 0, push: 0, streak: "" , _streakCount: 0, _streakType: ""});
+    }
+    const u = byUser.get(name);
+
+    const outcome = String(p?.outcome || "").toLowerCase(); // win/loss/push/pending
+    const units = safeNum(p?.units, 0);
+
+    if (outcome === "win") { u.w++; u.net += units; updateStreak(u, "W"); }
+    else if (outcome === "loss") { u.l++; u.net -= units; updateStreak(u, "L"); }
+    else if (outcome === "push") { u.push++; updateStreak(u, "P"); }
+    else { /* pending: no impact */ }
+  }
+
+  const rows = Array.from(byUser.values()).map(u => {
+    const total = u.w + u.l;
+    const wp = total ? Math.round((u.w / total) * 100) : 0;
+    const streak = u._streakType ? `${u._streakType}${u._streakCount}` : "—";
+    return { ...u, wp, streak };
+  });
+
+  rows.sort((a, b) => (b.net - a.net) || (b.wp - a.wp) || (b.w - a.w) || a.name.localeCompare(b.name));
+  return rows;
+}
+
+function updateStreak(u, type) {
+  // ignore pushes for streak type (optional). I’ll keep them as neutral.
+  if (type === "P") return;
+
+  if (u._streakType === type) u._streakCount += 1;
+  else { u._streakType = type; u._streakCount = 1; }
+}
+
+function renderLeaderboardHTML(rows) {
+  const lines = (rows || []).slice(0, 10).map((r, idx) => {
+    const net = (r.net >= 0 ? `+${r.net.toFixed(1)}` : r.net.toFixed(1));
+    return `
+      <div class="teamRow leaderboardRow">
+        <div class="teamLeft">
+          <div class="teamName">${escapeHtml(String(idx + 1))}. ${escapeHtml(r.name)}</div>
+          <div class="teamMeta">W-L: ${r.w}-${r.l} • Push: ${r.push} • Win%: ${r.wp}% • Streak: ${escapeHtml(r.streak)}</div>
+        </div>
+        <div class="score">${escapeHtml(net)}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">LEADERBOARD</div>
+      </div>
+      <div class="gameMetaTopLine">Units (Today)</div>
+      <div class="gameMetaOddsLine">Win = +Units • Loss = -Units • Push = 0</div>
+      ${lines || `<div class="notice">No picks yet. Be first.</div>`}
+    </div>
+  `;
+}
+
+function renderPicksListHTML(picks, title) {
+  const items = (picks || []).slice(0, 25).map(p => {
+    const name = escapeHtml(String(p?.name || "Anon"));
+    const type = escapeHtml(String(p?.type || "spread").toUpperCase());
+    const selection = escapeHtml(String(p?.selection || "—"));
+    const units = safeNum(p?.units, 0);
+    const outcome = String(p?.outcome || "pending").toLowerCase();
+
+    const pillClass =
+      outcome === "win" ? "status-live" :
+      outcome === "loss" ? "status-up" :
+      outcome === "push" ? "status-final" : "status-other";
+
+    const pillText =
+      outcome === "win" ? "WIN" :
+      outcome === "loss" ? "LOSS" :
+      outcome === "push" ? "PUSH" : "PENDING";
+
+    return `
+      <div class="teamRow">
+        <div class="teamLeft">
+          <div class="teamName">${name} • ${type}</div>
+          <div class="teamMeta">${selection} • ${units}u</div>
+        </div>
+        <div class="statusPill ${pillClass}">${pillText}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">${escapeHtml(title.toUpperCase())}</div>
+      </div>
+      <div class="gameMetaTopLine">${escapeHtml(title)}</div>
+      <div class="gameMetaOddsLine">${(picks || []).length ? `${(picks || []).length} pick(s)` : "—"}</div>
+      ${items || `<div class="notice">None yet.</div>`}
+    </div>
+  `;
+}
+
+function renderGamesForPickEntryHTML(events, leagueKey, dateYYYYMMDD) {
+  const list = (events || []).slice(0, 30).map(ev => {
+    const comp = ev?.competitions?.[0];
+    if (!comp) return "";
+
+    const home = comp.competitors.find(t => t.homeAway === "home");
+    const away = comp.competitors.find(t => t.homeAway === "away");
+
+    const homeName = escapeHtml(getTeamDisplayNameUI(home?.team));
+    const awayName = escapeHtml(getTeamDisplayNameUI(away?.team));
+
+    const state = ev?.status?.type?.state || "unknown";
+    const detail = ev?.status?.type?.detail || "—";
+    const pillClass = statusClassFromState(state);
+    const pillText = statusLabelFromState(state, detail);
+
+    const eventId = String(ev?.id || "");
+    const kickoff = String(ev?.date || comp?.date || "");
+    const timeLabel = kickoff ? new Date(kickoff).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—";
+
+    return `
+      <div class="teamRow">
+        <div class="teamLeft">
+          <div class="teamName">${awayName} @ ${homeName}</div>
+          <div class="teamMeta">${escapeHtml(timeLabel)} • ${escapeHtml(leagueKey.toUpperCase())}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
+          <button class="smallBtn"
+            data-picksaction="add"
+            data-eventid="${escapeHtml(eventId)}"
+            data-league="${escapeHtml(leagueKey)}"
+            data-date="${escapeHtml(dateYYYYMMDD)}"
+            style="padding:8px 10px;border-radius:12px;">
+            Add
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">ADD PICKS</div>
+      </div>
+      <div class="gameMetaTopLine">Tap “Add” on a game</div>
+      <div class="gameMetaOddsLine">Locked after submit</div>
+      ${list || `<div class="notice">No games on this slate.</div>`}
+    </div>
+  `;
+}
+
+async function autoGradePicksForEvents(db, picks, events) {
+  if (!picks || !picks.length) return;
+  if (!events || !events.length) return;
+
+  // Build event final score lookup
+  const finals = new Map(); // eventId -> { state, home, away }
+  for (const ev of events) {
+    const comp = ev?.competitions?.[0];
+    if (!comp) continue;
+    const eventId = String(ev?.id || "");
+    if (!eventId) continue;
+
+    const state = ev?.status?.type?.state || "unknown";
+    const home = comp?.competitors?.find(t => t.homeAway === "home");
+    const away = comp?.competitors?.find(t => t.homeAway === "away");
+
+    const homeScore = safeNum(home?.score, 0);
+    const awayScore = safeNum(away?.score, 0);
+
+    finals.set(eventId, { state, homeScore, awayScore });
+  }
+
+  // Only grade pending picks for events that are FINAL
+  const toUpdate = [];
+  for (const p of picks) {
+    const outcome = String(p?.outcome || "pending").toLowerCase();
+    if (outcome !== "pending" && outcome !== "") continue;
+
+    const eventId = String(p?.eventId || "");
+    const fin = finals.get(eventId);
+    if (!fin) continue;
+    if (fin.state !== "post") continue;
+
+    const result = gradePickAgainstFinal(p, fin.homeScore, fin.awayScore);
+    const units = safeNum(p?.units, 0);
+    const netUnits = outcomeToNetUnits(result, units);
+
+    toUpdate.push({ id: p.id, outcome: result, netUnits });
+  }
+
+  if (!toUpdate.length) return;
+
+  const batch = db.batch();
+  for (const u of toUpdate.slice(0, 250)) {
+    batch.update(picksDocRef(db, u.id), {
+      outcome: u.outcome,
+      netUnits: u.netUnits,
+      gradedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+  await batch.commit();
+}
+
+async function addPickFlowFromEvent(eventId, leagueKey, dateYYYYMMDD) {
+  await ensureFirebaseChatReady();
+  const db = firebase.firestore();
+
+  const name = getPicksDisplayName();
+
+  // Choose type
+  const typeRaw = prompt("Pick type: spread / ml / ou", "spread");
+  if (typeRaw === null) return;
+  const type = normalizePickType(typeRaw);
+
+  let side = "";
+  let selection = "";
+  let line = 0;
+
+  if (type === "ou") {
+    const overUnder = prompt("Over or Under? (type: over / under)", "over");
+    if (overUnder === null) return;
+    side = String(overUnder || "").trim().toLowerCase().startsWith("u") ? "under" : "over";
+
+    const lineRaw = prompt("Total number (example: 47.5)", "");
+    if (lineRaw === null) return;
+    line = safeNum(lineRaw, 0);
+
+    selection = `${side.toUpperCase()} ${line}`;
+  } else {
+    const sideRaw = prompt("Home or Away? (type: home / away)", "home");
+    if (sideRaw === null) return;
+    side = String(sideRaw || "").trim().toLowerCase().startsWith("a") ? "away" : "home";
+
+    if (type === "spread") {
+      const lineRaw = prompt("Spread line (example: -6.5). Use + for underdog.", "");
+      if (lineRaw === null) return;
+      line = safeNum(lineRaw, 0);
+      selection = `${side.toUpperCase()} ${line}`;
+    } else {
+      // ML
+      selection = `${side.toUpperCase()} ML`;
+      line = 0;
+    }
+  }
+
+  // Units
+  const unitsRaw = prompt("Units (0.5 to 5). Win=+u, Loss=-u", "1");
+  if (unitsRaw === null) return;
+  const units = clampUnits(unitsRaw);
+  if (!units) {
+    alert("Units must be between 0.5 and 5.");
+    return;
+  }
+
+  // Confirm (locked)
+  const ok = confirm(`Submit this pick (LOCKED)?\n\n${name}\n${selection}\n${units}u`);
+  if (!ok) return;
+
+  // Save
+  await picksCollectionRef(db).add({
+    name: sanitizeTTUNText(name).slice(0, 20),
+    eventId: String(eventId || ""),
+    leagueKey: String(leagueKey || ""),
+    dateYYYYMMDD: String(dateYYYYMMDD || ""),
+
+    type,
+    side,
+    line,
+    selection: sanitizeTTUNText(selection),
+
+    units,
+    outcome: "pending",
+    netUnits: 0,
+
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    createdAtMs: Date.now()
+  });
+}
+
+/* ===== Picks click handling (delegated) ===== */
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  const act = btn.getAttribute("data-picksaction");
+  if (!act) return;
+
+  if (act === "refresh") {
+    renderPicks(true);
+    return;
+  }
+
+  if (act === "addQuick") {
+    alert("Tap Add on a game card below to attach it to a real matchup.");
+    return;
+  }
+
+  if (act === "add") {
+    const eventId = btn.getAttribute("data-eventid");
+    const leagueKey = btn.getAttribute("data-league");
+    const dateYYYYMMDD = btn.getAttribute("data-date");
+
+    addPickFlowFromEvent(eventId, leagueKey, dateYYYYMMDD)
+      .then(() => renderPicks(true))
+      .catch(() => alert("Couldn’t submit pick. Check Firebase rules/connection."));
+    return;
+  }
+});
+
+/* =========================
    Window exports (keeps inline onclick working)
    ========================= */
 window.checkCode = checkCode;
@@ -2755,3 +3305,4 @@ window.renderBeatTTUN = renderBeatTTUN;
 window.renderTopNews = renderTopNews;
 window.renderShop = renderShop;
 window.logout = logout;
+window.renderPicks = renderPicks;
