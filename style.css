@@ -183,14 +183,17 @@ button {
   .grid { grid-template-columns: 1fr 1fr; }
 }
 
+/* Native iOS date input: keep it off-screen but still "interactive" */
 #nativeDateInput{
   position: fixed !important;
   left: -9999px !important;
   top: -9999px !important;
   width: 1px !important;
   height: 1px !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
+  opacity: 0.01 !important;
+
+  /* IMPORTANT: iOS needs this to NOT be none */
+  pointer-events: auto !important;
 }
 
 /* GAME CARDS */
