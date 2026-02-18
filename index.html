@@ -62,12 +62,14 @@
 
     <!-- Bottom tabs (JS will replace buttons based on role) -->
     <div class="tabs">
-      <button type="button" data-tab="scores">Scores</button>
-      <button type="button" data-tab="picks">Picks</button>
-      <button type="button" data-tab="beat">Beat<br/>TTUN</button>
-      <button type="button" data-tab="news">Top<br/>News</button>
-      <!-- Shop button is injected by buildTabsForRole("admin") -->
-    </div>
+  <button type="button" data-tab="scores">Scores</button>
+  <button type="button" data-tab="picks">Picks</button>
+  <button type="button" data-tab="beat">Beat<br/>TTUN</button>
+  <button type="button" data-tab="news">Top<br/>News</button>
+
+  <!-- ✅ Present always, only shown for admin -->
+  <button type="button" data-tab="shop" class="adminOnly" style="display:none;">Shop</button>
+</div>
 
     <!-- Rivalry banner sits below tabs; JS positions it -->
     <div id="rivalryBanner" class="rivalryBanner" style="display:none;"></div>
