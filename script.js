@@ -1598,15 +1598,16 @@ async function loadScores(showLoading) {
       // Start odds as placeholder; we’ll fill via summary hydration after render
       const initialOdds = parseOddsFromScoreboardCompetition(competition);
       const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
+
       const ai = generateAIInsight({
-  homeName,
-  awayName,
-  homeScore,
-  awayScore,
-  favoredText: initialOdds.favored,
-  ouText: initialOdds.ou,
-  state
-});
+        homeName,
+        awayName,
+        homeScore,
+        awayScore,
+        favoredText: initialOdds.favored,
+        ouText: initialOdds.ou,
+        state
+      });
 
       const eventId = String(event?.id || "");
 
@@ -1627,11 +1628,16 @@ async function loadScores(showLoading) {
           <div class="gameMetaOddsPlain" aria-label="Betting line">
             ${escapeHtml(initialOddsText)}
           </div>
-          <div class="aiInsight">
-  <div class="aiEdge">AI EDGE: ${escapeHtml(ai.edge)}</div>
-  ${ai.lean ? `<div class="aiLean">Lean: ${escapeHtml(ai.lean)}</div>` : ""}
-  <div class="aiConfidence">Confidence: ${ai.confidence} / 10</div>
-</div>
+
+          <div class="gameMetaAIPlain" aria-label="AI insight">
+            <div class="aiRow">
+              AI EDGE: ${escapeHtml(ai.edge)}
+              ${ai.lean ? ` • Lean: ${escapeHtml(ai.lean)}` : ``}
+            </div>
+            <div class="aiConfidenceRow">
+              Confidence: ${escapeHtml(ai.confidence)} / 10
+            </div>
+          </div>
         ` : ""}
 
         <div class="teamRow">
