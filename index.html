@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>The Shop</title>
+
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#bb0000" />
   <link rel="stylesheet" href="style.css" />
@@ -11,41 +12,50 @@
 
 <body>
 
-  <!-- LOGIN SCREEN -->
-  <div id="login">
-    <h1>The Shop</h1>
+  <!-- LOGIN -->
+  <div id="login" class="loginWrap">
+    <div class="loginCard">
+      <h1 style="margin:0 0 12px 0;">The Shop</h1>
+      <p style="margin:0 0 14px 0; opacity:.8;">Enter Invite Code</p>
 
-    <input 
-      type="password" 
-      id="code" 
-      placeholder="Enter Invite Code" 
-      inputmode="numeric" 
-    />
+      <input
+        type="password"
+        id="code"
+        placeholder="Invite Code"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+      />
+      <button type="button" onclick="checkCode()">Enter</button>
 
-    <!-- spacing handled by .login-btn class in CSS -->
-    <button class="login-btn" onclick="checkCode()">Enter</button>
-  </div>
-
-  <!-- MAIN APP -->
-  <div id="app" style="display:none;">
-<div id="content"></div>
-
-<!-- Buckeye Banner (fixed above tabs) -->
-<div id="rivalryBanner" class="rivalryBanner" style="display:none;"></div>
-
-<div class="tabs">
-      <button onclick="showTab('scores')">Scores</button>
-      <button onclick="showTab('beat')">Beat TTUN</button>
-      <button onclick="showTab('news')">Top News</button>
-      <button onclick="showTab('shop')">Shop</button>
+      <div style="margin-top:12px; opacity:.65; font-size:12px;">
+        Admin: 1024 • Guest: 2026
+      </div>
     </div>
   </div>
 
-<!-- Firebase (compat) for non-module apps like The Shop -->
-<script src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore-compat.js"></script>
+  <!-- APP -->
+  <div id="app" style="display:none;">
+    <div id="content"></div>
 
-  <script src="script.js"></script>
+    <!-- Bottom tabs (JS will replace buttons based on role) -->
+    <div class="tabs">
+      <button type="button" data-tab="scores">Scores</button>
+      <button type="button" data-tab="picks">Picks</button>
+      <button type="button" data-tab="beat">Beat<br/>TTUN</button>
+      <button type="button" data-tab="news">Top<br/>News</button>
+      <!-- Shop button is injected by buildTabsForRole("admin") -->
+    </div>
+
+    <!-- Rivalry banner sits below tabs; JS positions it -->
+    <div id="rivalryBanner" class="rivalryBanner" style="display:none;"></div>
+  </div>
+
+  <!-- Firebase (Compat build for your firebase.* usage) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- Your app code -->
+  <script src="scripts.js"></script>
 </body>
 </html>
