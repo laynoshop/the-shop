@@ -559,18 +559,17 @@ button {
   right: 0;
   top: auto !important;
 
-  /* tabs sit directly above banner */
+  /* sit above banner + safe-area */
   bottom: calc(var(--bannerH) + env(safe-area-inset-bottom)) !important;
 
   display: flex;
   width: 100%;
 
-  /* total footprint includes safe area */
-  height: calc(var(--tabsH) + env(safe-area-inset-bottom));
-  box-sizing: border-box;
+  /* ✅ visible bar height ONLY */
+  height: var(--tabsH);
 
-  /* BUT keep the *visible* bar compact */
-  padding-bottom: env(safe-area-inset-bottom);
+  padding: 0;
+  margin: 0;
 
   background: rgba(22,22,22,0.96);
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -581,6 +580,18 @@ button {
   z-index: 1000;
 }
 
+/* ✅ separate safe-area “spacer” below the tabs (so it doesn't inflate the bar) */
+.tabs::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:100%;
+  height: env(safe-area-inset-bottom);
+  background: rgba(22,22,22,0.96);
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
 .tabs button{
   flex: 1;
   background: none;
@@ -588,29 +599,28 @@ button {
   font-weight: 900;
   letter-spacing: 0.2px;
 
-  /* lock the button area to the compact height */
-  height: var(--tabsH);
+  height: 100%;
+  padding: 6px 0 0 0;
   margin: 0;
-  padding: 8px 0 0 0;
 
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 4px;
 
-  line-height: 1.05;
-  font-size: 14px;           /* ✅ this is a big part of the “huge” feel */
+  gap: 2px;
+  line-height: 1.0;
+
+  font-size: 13px; /* ✅ smaller label */
 }
 
-.tabs button.active{ position: relative; }
-
+/* Active underline stays tight */
 .tabs button.active::after{
   content:"";
   position:absolute;
   left: 25%;
   right: 25%;
-  bottom: 6px;
+  bottom: 4px;
   height: 3px;
   border-radius: 999px;
   background: var(--scarlet);
@@ -834,7 +844,7 @@ button {
   white-space:nowrap;
 }
 
-/* ✅ RIVALRY BANNER — FORCE bottom of screen (wins vs JS inline) */
+/* ✅ banner also: visible height only */
 .rivalryBanner{
   position: fixed;
   left: 0;
@@ -842,9 +852,8 @@ button {
   top: auto !important;
   bottom: 0 !important;
 
-  height: calc(var(--bannerH) + env(safe-area-inset-bottom));
-  box-sizing: border-box;
-  padding: 0 12px env(safe-area-inset-bottom);
+  height: var(--bannerH);
+  padding: 0 12px;
 
   display: flex !important;
   align-items: center;
@@ -861,8 +870,19 @@ button {
   -webkit-backdrop-filter: blur(10px);
 
   z-index: 1100;
+  font-size: 15px;
+}
 
-  font-size: 16px;           /* ✅ keeps banner text from blowing up */
+/* ✅ separate safe-area “spacer” below the banner too */
+.rivalryBanner::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:100%;
+  height: env(safe-area-inset-bottom);
+  background: rgba(0,0,0,0.75);
+  border-top: 1px solid rgba(255,255,255,0.14);
 }
 
 /* ✅ CONTENT SAFE SPACE so nothing gets covered */
