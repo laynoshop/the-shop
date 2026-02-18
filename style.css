@@ -11,9 +11,15 @@
   --final:#9ca3af;
   --upcoming:#f59e0b;
 
-:root{
+  /* Heights for bottom UI */
   --tabsH: 64px;
   --bannerH: 48px;
+
+  /* New “premium” accents */
+  --glowScarlet: rgba(187,0,0,0.28);
+  --glowLive: rgba(34,197,94,0.24);
+  --glowGold: rgba(245,158,11,0.22);
+  --glowGray: rgba(156,163,175,0.18);
 }
 
   /* New “premium” accents */
