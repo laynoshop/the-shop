@@ -1464,6 +1464,8 @@ function generateAIInsight({ homeName, awayName, homeScore, awayScore, favoredTe
 /* =========================
    SCORES TAB (Updated header layout) — AI via /api/ai-insight
    ========================= */
+
+const aiInsightCache = {};
 async function loadScores(showLoading) {
   const content = document.getElementById("content");
 
@@ -1770,6 +1772,13 @@ async function updateAIForEvent({ eventId, leagueKey, dateYYYYMMDD, home, away, 
 }
 
 async function fetchAIInsight(payload) {
+  const key = `${payload.eventId}-${payload.home}-${payload.away}-${payload.favored}-${payload.total}`;
+
+  // If we already fetched this exact combo, reuse it
+  if (aiInsightCache[key]) {
+    return aiInsightCache[key];
+  }
+
   try {
     const resp = await fetch("/api/ai-insight", {
       method: "POST",
@@ -1778,7 +1787,14 @@ async function fetchAIInsight(payload) {
     });
 
     if (!resp.ok) return null;
-    return await resp.json();
+
+    const data = await resp.json();
+
+    // Store in cache
+    aiInsightCache[key] = data;
+
+    return data;
+
   } catch (e) {
     return null;
   }
