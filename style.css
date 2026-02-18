@@ -552,14 +552,17 @@ button {
   right: 0;
   top: auto !important;
 
-  /* Tabs sit above banner (safe-area handled by padding, NOT extra row) */
+  /* tabs sit above banner */
   bottom: var(--bannerH) !important;
 
   display: flex;
   width: 100%;
 
-  height: calc(var(--tabsH) + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
+  /* ✅ visible bar stays tight */
+  height: var(--tabsH);
+
+  padding: 0;
+  margin: 0;
 
   background: rgba(22,22,22,0.96);
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -570,6 +573,17 @@ button {
   z-index: 1000;
 }
 
+/* ✅ safe-area “behind” tabs so it doesn’t inflate the bar */
+.tabs::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:100%;
+  height: env(safe-area-inset-bottom);
+  background: rgba(22,22,22,0.96);
+}
+
 .tabs button{
   flex: 1;
   background: none;
@@ -577,13 +591,14 @@ button {
   font-weight: 900;
   letter-spacing: 0.2px;
 
-  /* ✅ make underline anchor correctly */
+  /* underline anchor */
   position: relative;
 
-  /* ✅ keep visible button area tight */
-  height: var(--tabsH);
+  /* ✅ fill the tabs bar (don’t re-define height here) */
+  height: 100%;
 
-  padding: 6px 0 0 0;
+  /* ✅ tighter */
+  padding: 3px 0 0 0;
   margin: 0;
 
   display: flex;
@@ -591,21 +606,21 @@ button {
   justify-content: center;
   flex-direction: column;
 
-  gap: 2px;
+  gap: 1px;
   line-height: 1.0;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .tabs button.active::after{
   content:"";
   position:absolute;
 
-  /* ✅ center underline under the label */
-  left: 22%;
-  right: 22%;
+  /* ✅ nicer width */
+  left: 24%;
+  right: 24%;
 
-  /* ✅ underline sits inside the visible bar */
-  bottom: 4px;
+  /* ✅ keep it tight to the bottom */
+  bottom: 3px;
 
   height: 3px;
   border-radius: 999px;
