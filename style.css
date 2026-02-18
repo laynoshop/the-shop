@@ -65,7 +65,7 @@ body::before {
 
 #login input {
   width: 250px;
-  font-size: 16px;  /* prevents iOS zoom */
+  font-size: 16px; /* prevents iOS zoom */
   line-height: 1.2;
   padding: 12px;
   border-radius: 10px;
@@ -74,7 +74,6 @@ body::before {
   color: var(--text);
   outline: none;
 }
-/* ======================= */
 
 button {
   padding: 12px 16px;
@@ -84,6 +83,11 @@ button {
   border: 0;
   border-radius: 10px;
   font-weight: 700;
+}
+
+/* LOGIN BUTTON SPACING FIX */
+.login-btn {
+  margin-top: 30px;
 }
 
 #app {
@@ -365,6 +369,11 @@ button {
 .leaderboardTitle{ margin-bottom: 8px; }
 .leaderboardRow{ margin-top: 6px; }
 
+.notice {
+  padding: 14px;
+  color: rgba(255,255,255,0.75);
+}
+
 /* TABS (safe area padding) */
 .tabs {
   position: fixed;
@@ -398,64 +407,6 @@ button {
   height: 3px;
   border-radius: 999px;
   background: var(--scarlet);
-}
-
-.notice {
-  padding: 14px;
-  color: rgba(255,255,255,0.75);
-}
-
-/* LOGIN BUTTON SPACING FIX */
-.login-btn {
-  margin-top: 30px;
-}
-
-/* BEAT TTUN PAGE */
-.beat-container {
-  padding: 20px;
-  text-align: center;
-}
-
-.countdown {
-  font-size: 26px;
-  font-weight: bold;
-  color: #bb0000;
-  margin-bottom: 20px;
-}
-
-.rivalry-card {
-  background: rgba(255,255,255,0.05);
-  border-radius: 12px;
-  padding: 15px;
-  margin-bottom: 15px;
-}
-
-.rivalry-title {
-  font-size: 18px;
-  margin-bottom: 10px;
-  color: #bb0000;
-}
-
-.last-games div {
-  margin-bottom: 6px;
-}
-
-/* HEADLINES */
-.headline-card {
-  background: rgba(255,255,255,0.05);
-  padding: 15px;
-  border-radius: 12px;
-  margin-bottom: 15px;
-}
-
-.headline-title {
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-
-.headline-source {
-  font-size: 12px;
-  opacity: 0.7;
 }
 
 /* ===== Beat TTUN extras (surgical) ===== */
@@ -581,60 +532,16 @@ button {
   -webkit-backdrop-filter: blur(10px);
 }
 
-.chatMsgBubble{
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
-  padding: 12px 14px;
-  margin: 10px 0;
+/* =========================
+   SHOP CHAT (CLEAN + iMessage-like)
+   ========================= */
+
+/* Prevent iOS zoom on focus */
+#chatInput{
+  font-size: 16px;
 }
 
-.chatMsgHeader{
-  font-weight: 700;
-  font-size: 13px;
-  opacity: 0.8;
-  margin-bottom: 6px;
-}
-
-.chatMsgText{
-  font-size: 15px;
-  line-height: 1.3;
-}
-
-.chatMsgTime{
-  margin-top: 8px;
-  font-size: 12px;
-  opacity: 0.6;
-  text-align: right;
-}
-
-.chatMsgBubble{
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
-  padding: 12px 14px;
-  margin: 10px 0;
-  max-width: 75%;
-}
-
-.chatMsgBubble.mine{
-  margin-left: auto;
-  background: rgba(187,0,0,0.18);
-  border-color: rgba(187,0,0,0.45);
-}
-
-.chatMsgText{
-  font-size: 15px;
-  line-height: 1.3;
-}
-
-.chatMsgTime{
-  margin-top: 8px;
-  font-size: 12px;
-  opacity: 0.6;
-  text-align: right;
-}
-
+/* Title row: "THE Chat • (dot) Connected" */
 .chatRoomTitle{
   font-weight: 800;
   letter-spacing: 0.5px;
@@ -647,9 +554,9 @@ button {
 }
 
 .chatStatusWrap{
-  font-weight: 500;
-  opacity: 0.8;
-  display: flex;
+  font-weight: 600;
+  opacity: 0.85;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
@@ -661,41 +568,35 @@ button {
   display: inline-block;
 }
 
-.chatStatusDot.online{
-  background: #2ecc71;
-}
+.chatStatusDot.online{ background: #2ecc71; }
+.chatStatusDot.offline{ background: #e74c3c; }
 
-.chatStatusDot.offline{
-  background: #e74c3c;
-}
-
-#chatInput{
-  font-size: 16px;
-}
-
+/* Each message group (name + bubble) */
 .chatMsgWrap{
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  margin: 10px 0;
+  margin: 8px 0; /* space between message groups */
 }
 
-.chatMsgWrap.mine{
-  align-items: flex-end;
-}
+.chatMsgWrap.mine{ align-items: flex-end; }
+.chatMsgWrap:not(.mine){ align-items: flex-start; }
 
+/* Name sits just above bubble */
 .chatMsgName{
   font-size: 12px;
   opacity: 0.7;
-  margin: 0 6px 4px 6px;
+  margin: 0 0 4px 0;  /* tight above bubble */
+  padding: 0 8px;     /* slight inset like iMessage */
 }
 
+/* Bubble itself */
 .chatMsgBubble{
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 18px;
   padding: 12px 14px;
   max-width: 75%;
+  margin: 0; /* prevent extra vertical gaps */
 }
 
 .chatMsgBubble.mine{
@@ -703,42 +604,16 @@ button {
   border-color: rgba(187,0,0,0.45);
 }
 
+/* Message text */
 .chatMsgText{
   font-size: 15px;
   line-height: 1.3;
 }
 
+/* Time inside the bubble, aligned right */
 .chatMsgTime{
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 12px;
   opacity: 0.6;
   text-align: right;
-}
-
-/* ===== Chat name positioning (iMessage-like) ===== */
-.chatName {
-  font-size: 12px;
-  opacity: 0.75;
-  line-height: 1.1;
-  margin: 0 14px 4px 14px; /* <-- keeps it just above bubble */
-}
-
-/* If you have left/right rows, this locks alignment */
-.chatRow.mine .chatName {
-  text-align: right;
-  margin: 0 14px 4px 14px;
-}
-
-.chatRow.other .chatName {
-  text-align: left;
-  margin: 0 14px 4px 14px;
-}
-
-/* Optional: tighten the space between message blocks a touch */
-.chatRow {
-  margin-bottom: 10px;
-}
-
-.chatBubble {
-  margin-top: 0;
 }
