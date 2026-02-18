@@ -1106,37 +1106,27 @@ function getSavedRole() {
   return (r === "admin" || r === "guest") ? r : "";
 }
 
-function buildTabsForRole(role) {
-  const tabsEl = document.querySelector(".tabs");
-  if (!tabsEl) return;
-
-  const baseTabs = [
-    { key: "scores", label: "Scores" },
-    { key: "picks",  label: "Picks" },     // ✅ NEW
-    { key: "beat",   label: "Beat\nTTUN" },
-    { key: "news",   label: "Top\nNews" }
-  ];
-
-  if (role === "admin") {
-    baseTabs.push({ key: "shop", label: "Shop" });
-  }
-
-  tabsEl.innerHTML = baseTabs.map(t => {
-    const labelHtml = String(t.label).replace(/\n/g, "<br/>");
-    return `<button type="button" data-tab="${t.key}">${labelHtml}</button>`;
-  }).join("");
+function buildTabsForRole(role){
+  document.querySelectorAll(".tabs .adminOnly").forEach(btn => {
+    btn.style.display = (role === "admin") ? "flex" : "none";
+  });
 }
 
 function checkCode() {
   const input = document.getElementById("code");
   const entered = (input.value || "").trim();
 
-  // ✅ keep using YOUR existing invite code variable/logic if you already have one:
-  // If your app uses something like: const INVITE_CODE = "1234";
-  // then replace the next line with your existing check.
-  const isValid = (typeof INVITE_CODE !== "undefined")
-    ? (entered === String(INVITE_CODE))
-    : (entered.length > 0); // fallback so it doesn't hard-break if INVITE_CODE isn't defined
+  // ✅ Determine role FIRST (admin key)
+  const role = (entered === "1024") ? "admin" : "member";
+
+  // ✅ Validate access:
+  // - 1024 ALWAYS valid (admin)
+  // - otherwise use INVITE_CODE if defined
+  const isValid = (role === "admin") || (
+    (typeof INVITE_CODE !== "undefined")
+      ? (entered === String(INVITE_CODE))
+      : (entered.length > 0) // fallback so it doesn't hard-break if INVITE_CODE isn't defined
+  );
 
   if (!isValid) {
     input.focus();
@@ -1164,8 +1154,17 @@ function checkCode() {
     // remove login-only classes for cleanliness
     login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
 
+    // ✅ Reveal/hide tabs based on role (shows Shop for admin)
+    if (typeof buildTabsForRole === "function") {
+      buildTabsForRole(role);
+    } else {
+      // fallback (in case buildTabsForRole isn't in your script yet)
+      document.querySelectorAll(".tabs .adminOnly").forEach(btn => {
+        btn.style.display = (role === "admin") ? "flex" : "none";
+      });
+    }
+
     // ✅ if you have any "on login" initialization, keep it here
-    // e.g. showTab('scores'); loadData(); etc.
     if (typeof showTab === "function") showTab("scores");
   }, 520);
 }
