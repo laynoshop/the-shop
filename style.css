@@ -11,6 +11,11 @@
   --final:#9ca3af;
   --upcoming:#f59e0b;
 
+:root{
+  --tabsH: 64px;
+  --bannerH: 48px;
+}
+
   /* New “premium” accents */
   --glowScarlet: rgba(187,0,0,0.28);
   --glowLive: rgba(34,197,94,0.24);
@@ -550,12 +555,15 @@ button {
   /* ✅ Kill any JS/inlines that set top */
   top: auto !important;
 
-  /* ✅ Tabs sit directly above the banner (banner height = 48px) */
-  bottom: calc(48px + env(safe-area-inset-bottom)) !important;
+  /* ✅ Tabs sit directly on top of the banner (including safe-area) */
+  bottom: calc(var(--bannerH) + env(safe-area-inset-bottom)) !important;
 
   display: flex;
   width: 100%;
-  height: 64px;
+
+  /* ✅ Tabs background also fills to safe-area so no “gap” feeling */
+  height: calc(var(--tabsH) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
 
   background: rgba(22,22,22,0.96);
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -822,19 +830,16 @@ button {
   left: 0;
   right: 0;
 
-  /* ✅ Kill any JS/inlines that set top */
   top: auto !important;
+  bottom: 0 !important;
 
-  /* ✅ True bottom, respecting iPhone safe area */
-  bottom: env(safe-area-inset-bottom) !important;
-
-  height: 48px;
+  /* ✅ Banner background reaches the very bottom */
+  height: calc(var(--bannerH) + env(safe-area-inset-bottom));
+  padding: 0 12px env(safe-area-inset-bottom);
 
   display: flex !important;
   align-items: center;
   justify-content: center;
-
-  padding: 0 12px;
 
   background: rgba(0,0,0,0.75);
   border-top: 1px solid rgba(255,255,255,0.14);
