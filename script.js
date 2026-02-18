@@ -41,6 +41,43 @@ let currentTab = null;
 const STORAGE_KEY = "theShopLeague_v1";
 const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
 
+// =========================
+// LOGIN HARDENING (prevents iOS "submit/reload" issue)
+// =========================
+document.addEventListener("DOMContentLoaded", () => {
+  const codeEl = document.getElementById("code");
+  const loginWrap = document.getElementById("login");
+
+  // If there is a form wrapper anywhere, prevent submit from reloading the page
+  const form = loginWrap ? loginWrap.closest("form") : null;
+  if (form) {
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      checkCode();
+    });
+  }
+
+  // Make sure the Enter button is not treated as submit
+  const btn = loginWrap ? loginWrap.querySelector("button") : null;
+  if (btn) {
+    btn.type = "button";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      checkCode();
+    });
+  }
+
+  // Hitting Enter in the input should log in (without submitting/reloading)
+  if (codeEl) {
+    codeEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        checkCode();
+      }
+    });
+  }
+});
+
 // Favorites (top priority, in this order)
 const FAVORITES = [
   "Ohio State Buckeyes",
