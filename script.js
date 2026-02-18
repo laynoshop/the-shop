@@ -924,8 +924,22 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
 }
 
 /* =========================
-   UI: League + Native Calendar Picker
+   UI: League + Calendar
    ========================= */
+
+// Convert YYYYMMDD -> YYYY-MM-DD (for <input type="date">)
+function yyyymmddToInputValue(yyyymmdd) {
+  const s = String(yyyymmdd || "").trim();
+  if (!/^\d{8}$/.test(s)) return "";
+  return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+}
+
+// Convert YYYY-MM-DD -> YYYYMMDD (for your saved format)
+function inputValueToYYYYMMDD(v) {
+  const s = String(v || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
+  return s.replaceAll("-", "");
+}
 
 function buildLeagueSelectHTML(selectedKey) {
   const options = LEAGUES.map(l => {
@@ -940,50 +954,10 @@ function buildLeagueSelectHTML(selectedKey) {
   `;
 }
 
-/* ===== Date Picker Helpers ===== */
-
-function yyyymmddToInputValue(yyyymmdd) {
-  const s = String(yyyymmdd || "").trim();
-  if (/^\d{8}$/.test(s)) {
-    return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
-  }
-
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
-function inputValueToYYYYMMDD(value) {
-  const m = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return "";
-  return `${m[1]}${m[2]}${m[3]}`;
-}
-
-function openNativeDatePicker() {
-  const input = document.getElementById("nativeDateInput");
-  if (!input) return;
-
-  input.value = yyyymmddToInputValue(getSavedDateYYYYMMDD());
-
-  if (typeof input.showPicker === "function") {
-    input.showPicker();
-  } else {
-    input.focus();
-    input.click();
-  }
-}
-
-function handleNativeDateChange(e) {
-  const yyyymmdd = inputValueToYYYYMMDD(e?.target?.value);
-  if (!yyyymmdd) return;
-
-  saveDateYYYYMMDD(yyyymmdd);
-  loadScores(true);
-}
-
-/* ===== Calendar Button HTML ===== */
-
+/**
+ * We render ONLY the 📅 button visually.
+ * The native date input is present but hidden off-screen.
+ */
 function buildCalendarButtonHTML() {
   const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
 
@@ -992,8 +966,8 @@ function buildCalendarButtonHTML() {
       id="dateBtn"
       class="iconBtn"
       aria-label="Choose date"
-      onclick="openNativeDatePicker()"
       type="button"
+      onclick="openNativeDatePicker()"
     >📅</button>
 
     <input
@@ -1006,6 +980,33 @@ function buildCalendarButtonHTML() {
       style="position:fixed; left:-9999px; top:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;"
     />
   `;
+}
+
+// Called when user taps the 📅 button
+function openNativeDatePicker() {
+  const el = document.getElementById("nativeDateInput");
+  if (!el) return;
+
+  // iOS/Safari: showPicker exists on some browsers; fallback to focus+click
+  if (typeof el.showPicker === "function") {
+    el.showPicker();
+  } else {
+    el.focus({ preventScroll: true });
+    el.click(); // must be inside a real user gesture (this is, via onclick)
+  }
+}
+
+// Called when the user selects a date in the native picker
+function handleNativeDateChange(e) {
+  const v = e?.target?.value || "";
+  const yyyymmdd = inputValueToYYYYMMDD(v);
+  if (!yyyymmdd) return;
+
+  saveDateYYYYMMDD(yyyymmdd);
+
+  // Reload scores (date affects scores)
+  if (currentTab === "scores") loadScores(true);
+  else loadScores(true);
 }
 
 /* =========================
