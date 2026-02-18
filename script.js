@@ -2655,11 +2655,10 @@ document.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
-  // 📅 Date picker (Scores tab)
-    // Use the native picker (hidden input[type=date])
-    if (typeof openNativeDatePicker === "function") {
-      openNativeDatePicker();
-    }
+  // Tabs (bottom bar)
+  const tab = btn.getAttribute("data-tab");
+  if (tab) {
+    showTab(tab);
     return;
   }
 
@@ -2669,17 +2668,14 @@ document.addEventListener("click", (e) => {
     return;
   }
 
-  // 📰 News filters (existing logic)
+  // 📰 News filters (kept for safety if they are buttons)
   const filter = btn.getAttribute("data-newsfilter");
   if (filter) {
     currentNewsFilter = filter;
     sessionStorage.setItem(NEWS_FILTER_KEY, filter);
 
     const cached = loadNewsCache();
-    const headerUpdated = new Date().toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit"
-    });
+    const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
     if (cached && cached.items && cached.items.length) {
       renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
@@ -2747,16 +2743,15 @@ function logout() {
    ========================= */
 window.checkCode = checkCode;
 window.showTab = showTab;
-// Run TTUN replacer after every render
+
 const originalShowTab = showTab;
 showTab = function(tab) {
   originalShowTab(tab);
   setTimeout(() => replaceMichiganText(), 0);
 };
+
 window.loadScores = loadScores;
 window.renderBeatTTUN = renderBeatTTUN;
 window.renderTopNews = renderTopNews;
 window.renderShop = renderShop;
 window.logout = logout;
-window.openNativeDatePicker = openNativeDatePicker;
-window.handleNativeDateChangeFromInput = handleNativeDateChangeFromInput;
