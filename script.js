@@ -1781,26 +1781,63 @@ async function updateAIForEvent({ eventId, leagueKey, dateYYYYMMDD, home, away, 
 }
 
 async function fetchAIInsight(payload) {
-  const key = `${payload.eventId}-${payload.home}-${payload.away}-${payload.favored}-${payload.total}`;
+  // --- Normalize inputs so we always send the same field names ---
+  const p = {
+    eventId: String(payload.eventId || ""),
+    dateKey: String(payload.dateKey || payload.selectedDate || payload.date || ""),
+    league: String(payload.league || ""),
+    home: String(payload.home || payload.homeName || ""),
+    away: String(payload.away || payload.awayName || ""),
+    homeRecord: String(payload.homeRecord || ""),
+    awayRecord: String(payload.awayRecord || ""),
+    venue: String(payload.venue || ""),
+    status: String(payload.status || ""),
+    state: String(payload.state || ""),
+    homeScore: payload.homeScore ?? "",
+    awayScore: payload.awayScore ?? "",
+    // IMPORTANT: use spread/total names your API expects
+    spread: String(payload.spread || payload.favored || ""),
+    total: String(payload.total || payload.ou || "")
+  };
 
-  // If we already fetched this exact combo, reuse it
-  if (aiInsightCache[key]) {
-    return aiInsightCache[key];
+  // --- Build a stable cache key (event + date + market lines) ---
+  const baseId = p.eventId || `${p.league}:${p.home}:${p.away}`;
+  const cacheKey = `ai:${p.dateKey || "nodate"}:${baseId}:${p.spread || "nospread"}:${p.total || "nototal"}`;
+
+  // 1) in-memory cache first
+  if (typeof aiInsightCache !== "undefined" && aiInsightCache[cacheKey]) {
+    return aiInsightCache[cacheKey];
   }
 
+  // 2) localStorage cache next (prevents refetch on refresh)
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (typeof aiInsightCache !== "undefined") aiInsightCache[cacheKey] = cached;
+      return cached;
+    }
+  } catch (e) {
+    // ignore storage errors
+  }
+
+  // --- Call your Vercel API route ---
   try {
     const resp = await fetch("/api/ai-insight", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(p)
     });
 
     if (!resp.ok) return null;
 
     const data = await resp.json();
 
-    // Store in cache
-    aiInsightCache[key] = data;
+    // Store in both caches
+    if (typeof aiInsightCache !== "undefined") aiInsightCache[cacheKey] = data;
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(data));
+    } catch (e) {}
 
     return data;
 
