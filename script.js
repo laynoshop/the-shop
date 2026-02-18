@@ -1132,7 +1132,7 @@ function showTab(tab) {
 }
 
 /* =========================
-   SCORES TAB (UNCHANGED)
+   SCORES TAB (Updated header layout)
    ========================= */
 async function loadScores(showLoading) {
   const content = document.getElementById("content");
@@ -1146,26 +1146,33 @@ async function loadScores(showLoading) {
   const selectedKey = getSavedLeagueKey();
   const league = getLeagueByKey(selectedKey);
 
-  if (showLoading) {
-    content.innerHTML = `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Scores</h2>
-            <span class="badge">The Shop</span>
-          <div class="headerActions">
-  <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
-  <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
-</div>
+  const headerHTML = (rightLabel) => `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Scores</h2>
+          <span class="badge">The Shop</span>
         </div>
-        <div class="subline">
-          <div class="sublineLeft">
-            ${buildLeagueSelectHTML(selectedKey)}
-            ${buildCalendarButtonHTML()}
-          </div>
-          <div>${escapeHtml(prettyDate)} • Loading…</div>
+
+        <div class="headerActions">
+          <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
+          <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
         </div>
       </div>
+
+      <div class="subline">
+        <div class="sublineLeft">
+          ${buildLeagueSelectHTML(selectedKey)}
+          ${buildCalendarButtonHTML()}
+        </div>
+        <div>${rightLabel}</div>
+      </div>
+    </div>
+  `;
+
+  if (showLoading) {
+    content.innerHTML = `
+      ${headerHTML(`${escapeHtml(prettyDate)} • Loading…`)}
       <div class="notice">Grabbing games…</div>
     `;
   }
@@ -1174,26 +1181,7 @@ async function loadScores(showLoading) {
     const result = await fetchScoreboardWithFallbacks(league, selectedDate);
     let events = result.events;
 
-    content.innerHTML = `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Scores</h2>
-            <span class="badge">The Shop</span>
-          <div class="headerActions">
-  <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
-  <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
-</div>
-        </div>
-        <div class="subline">
-          <div class="sublineLeft">
-            ${buildLeagueSelectHTML(selectedKey)}
-            ${buildCalendarButtonHTML()}
-          </div>
-          <div>${escapeHtml(prettyDate)} • Updated ${updatedTime}</div>
-        </div>
-      </div>
-    `;
+    content.innerHTML = headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`);
 
     if (events.length === 0) {
       content.innerHTML += `
@@ -1343,7 +1331,10 @@ async function loadScores(showLoading) {
             <h2 style="margin:0;">Scores</h2>
             <span class="badge">The Shop</span>
           </div>
-          <button class="smallBtn" onclick="loadScores(true)">Retry</button>
+          <div class="headerActions">
+            <button class="smallBtn" onclick="loadScores(true)">Retry</button>
+            <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
+          </div>
         </div>
         <div class="subline">
           <div class="sublineLeft">
