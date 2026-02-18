@@ -1198,14 +1198,73 @@ function getOverallRecordFromCompetitor(competitor) {
   return String(overall?.summary || "").trim();
 }
 
-function teamDisplayNameWithRank(teamName, competitor, leagueKey) {
-  // Only apply to college sports per your request
-  if (leagueKey !== "ncaam" && leagueKey !== "cfb") return teamName;
+// =========================
+// RIVALRY NAME OVERRIDES
+// =========================
+function applyRivalryNameOverrides(rawName, teamObj) {
+  const name = String(rawName || "").trim();
+  const lower = name.toLowerCase();
 
-  const rank = getTop25RankFromCompetitor(competitor);
-  return rank ? `#${rank} ${teamName}` : teamName;
+  const id = String(teamObj?.id || "");
+  const abbrev = String(teamObj?.abbreviation || "").toLowerCase();
+  const displayLower = String(teamObj?.displayName || "").toLowerCase();
+
+  // TTUN (Michigan Wolverines ONLY)
+  if (
+    id === "130" ||
+    lower.includes("michigan wolverines") ||
+    displayLower.includes("michigan wolverines")
+  ) {
+    return "The Team Up North";
+  }
+
+  // UNC (North Carolina Tar Heels ONLY)
+  if (
+    id === "153" ||
+    abbrev === "unc" ||
+    lower.includes("north carolina tar heels") ||
+    displayLower.includes("north carolina tar heels")
+  ) {
+    return "Paper Classes U";
+  }
+
+  return name;
 }
 
+// =========================
+// TEAM NAME WITH RANK (AP Top 25)
+// =========================
+function teamDisplayNameWithRank(rawName, competitor, selectedKey) {
+  const teamObj = competitor?.team || null;
+
+  // First: apply rivalry rename (THIS is what fixes your screenshot)
+  const baseName = applyRivalryNameOverrides(rawName, teamObj);
+
+  // Only add ranking for college hoops + college football
+  const isCollege =
+    selectedKey === "ncaam" ||
+    selectedKey === "ncaaf" ||
+    selectedKey === "collegefb" ||
+    selectedKey === "collegebb";
+
+  if (!isCollege) return baseName;
+
+  // Pull rank from ESPN competitor/team fields (handles common formats)
+  const rank =
+    competitor?.curatedRank?.current ||
+    competitor?.rank?.current ||
+    competitor?.rank ||
+    teamObj?.rank?.current ||
+    teamObj?.rank ||
+    "";
+
+  const r = parseInt(rank, 10);
+  if (Number.isFinite(r) && r > 0 && r <= 25) {
+    return `#${r} ${baseName}`;
+  }
+
+  return baseName;
+}
 function homeAwayWithRecord(homeAwayLabel, competitor, leagueKey) {
   // Only apply to college sports per your request
   if (leagueKey !== "ncaam" && leagueKey !== "cfb") return homeAwayLabel;
