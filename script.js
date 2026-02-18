@@ -1106,10 +1106,40 @@ function getSavedRole() {
   return (r === "admin" || r === "guest") ? r : "";
 }
 
-function buildTabsForRole(role){
-  document.querySelectorAll(".tabs .adminOnly").forEach(btn => {
-    btn.style.display = (role === "admin") ? "flex" : "none";
+function buildTabsForRole(role) {
+  const tabs = document.querySelector(".tabs");
+  if (!tabs) return;
+
+  // Build tabs (Shop only for admin)
+  const baseTabs = [
+    { key: "scores", label: "Scores" },
+    { key: "picks",  label: "Picks" },
+    { key: "beat",   label: "Beat<br/>TTUN" },
+    { key: "news",   label: "Top<br/>News" }
+  ];
+
+  if (role === "admin") {
+    baseTabs.push({ key: "shop", label: "Shop" });
+  }
+
+  tabs.innerHTML = baseTabs.map(t =>
+    `<button type="button" data-tab="${t.key}">${t.label}</button>`
+  ).join("");
+
+  // Re-bind clicks
+function wireTabClicks() {
+  document.querySelectorAll(".tabs button").forEach(btn => {
+    btn.onclick = () => {
+      const tab = btn.getAttribute("data-tab");
+      if (tab) showTab(tab);
+    };
   });
+}
+
+  // Keep the current tab if possible; otherwise go to scores
+  const current = window.__activeTab || "scores";
+  const exists = baseTabs.some(t => t.key === current);
+  showTab(exists ? current : "scores");
 }
 
 function checkCode() {
@@ -1253,42 +1283,69 @@ function statusLabelFromState(state, detail) {
 }
 
 function showTab(tab) {
-  // Block Shop for guests (even if someone somehow tries to open it)
   const role = localStorage.getItem(ROLE_KEY) || "guest";
-  if (tab === "shop" && role !== "admin") {
-    tab = "scores";
-  }
 
+  // Block Shop for guests
+  if (tab === "shop" && role !== "admin") tab = "scores";
+
+  // Track active tab globally (prevents refresh logic from overriding)
   currentTab = tab;
-  setActiveTabButton(tab);
-  stopAutoRefresh();
+  window.__activeTab = tab;
 
+  // Stop any running refresh/timers BEFORE rendering anything
+  try { stopAutoRefresh(); } catch (e) {}
+
+  // Clear content
   const content = document.getElementById("content");
-  content.innerHTML = "";
+  if (content) content.innerHTML = "";
 
+  // Highlight active tab
+  try { setActiveTabButton(tab); } catch (e) {
+    // fallback: set active class via data-tab
+    document.querySelectorAll(".tabs button").forEach(b => {
+      b.classList.toggle("active", b.getAttribute("data-tab") === tab);
+    });
+  }
+
+  // Helper: safe call so one tab can't crash the whole app
+  const safe = (fn, ...args) => {
+    try {
+      if (typeof fn === "function") return fn(...args);
+      console.warn("Missing function:", fn);
+    } catch (err) {
+      console.error("Tab render error:", tab, err);
+      if (content) {
+        content.innerHTML =
+          `<div class="notice">Something went wrong loading <b>${tab}</b>. Check console.</div>`;
+      }
+    }
+  };
+
+  // Render tab
   if (tab === "scores") {
-    loadScores(true);
-    startAutoRefresh();
-  } 
-    else if (tab === "picks") {
-    renderPicks(true);
-  }
-  else if (tab === "beat") {
-    renderBeatTTUN();
-  } 
-  else if (tab === "news") {
-    renderTopNews(true);
-  } 
-  else if (tab === "shop") {
-    renderShop();
-  } 
-  else {
+    safe(loadScores, true);
+    // Only start auto-refresh on Scores
+    safe(startAutoRefresh);
+  } else if (tab === "picks") {
+    safe(renderPicks, true);
+  } else if (tab === "beat") {
+    safe(renderBeatTTUN);
+  } else if (tab === "news") {
+    safe(renderTopNews, true);
+  } else if (tab === "shop") {
+    // Guard: do NOT allow scores refresh to repaint over Shop
+    safe(renderShop);
+  } else {
     // fallback safety
-    loadScores(true);
-    startAutoRefresh();
+    currentTab = "scores";
+    window.__activeTab = "scores";
+    try { setActiveTabButton("scores"); } catch (e) {}
+    safe(loadScores, true);
+    safe(startAutoRefresh);
   }
 
-  updateRivalryBanner();
+  // Banner update (safe)
+  try { updateRivalryBanner(); } catch (e) {}
 }
 
 /* =========================
