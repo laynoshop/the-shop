@@ -837,6 +837,9 @@ button {
   letter-spacing: 0.4px;
   text-align: center;
 
+bottom: calc(env(safe-area-inset-bottom) + 64px) !important;
+z-index: 1000;
+
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
