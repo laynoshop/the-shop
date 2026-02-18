@@ -472,6 +472,37 @@ function buildOddsLine(favored, ou) {
   return "";
 }
 
+// =========================
+// AI INSIGHT CACHE (NO-FLICKER)
+// =========================
+const AI_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const AI_SESSION_KEY = "theShopAiInsightCache_v1";
+
+let aiInsightCache = {}; // key -> { edge, lean, confidence, ts }
+
+(function loadAiCacheFromSession(){
+  try {
+    const raw = sessionStorage.getItem(AI_SESSION_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") aiInsightCache = parsed;
+  } catch {}
+})();
+
+function saveAiCacheToSessionThrottled(){
+  // keep it tiny + fast
+  try {
+    sessionStorage.setItem(AI_SESSION_KEY, JSON.stringify(aiInsightCache));
+  } catch {}
+}
+
+function isAiCacheFresh(entry){
+  if (!entry) return false;
+  const ts = Number(entry.ts || 0);
+  if (!Number.isFinite(ts)) return false;
+  return (Date.now() - ts) <= AI_CACHE_TTL_MS;
+}
+
 /* =========================
    ODDS FETCH (RELIABLE)
    - Cache + concurrency + update cards in place
@@ -1709,21 +1740,6 @@ if (eventId) card.setAttribute("data-eventid", eventId);
   while (idx < aiJobs.length) {
     const job = aiJobs[idx++];
 
-    // IMPORTANT: match the API field names (spread/total)
-    const data = await fetchAIInsight({
-      eventId: job.eventId,
-      league: job.leagueKey,
-      date: job.dateYYYYMMDD,
-
-      home: job.home,
-      away: job.away,
-
-      spread: job.favored || "",   // ✅ was "favored" before
-      total: job.total || ""       // ✅ keep as "total"
-    });
-
-    if (!data) continue;
-
     const line1 = document.querySelector(
       `[data-ai-line1="${CSS.escape(String(job.eventId))}"]`
     );
@@ -1731,11 +1747,34 @@ if (eventId) card.setAttribute("data-eventid", eventId);
       `[data-ai-line2="${CSS.escape(String(job.eventId))}"]`
     );
 
+    // ✅ If already filled, don't overwrite with placeholders
+    // (prevents the "goes blank then reloads" effect)
+    const alreadyHasText =
+      (line1 && line1.textContent && line1.textContent.trim().length > 0) ||
+      (line2 && line2.textContent && line2.textContent.trim().length > 0);
+
+    // Only show placeholder if it's truly empty
+    if (!alreadyHasText) {
+      if (line1) line1.textContent = job.spread ? "AI EDGE: Analyzing…" : "AI EDGE: Waiting for line…";
+      if (line2) line2.textContent = "Confidence: —/10";
+    }
+
+    const data = await fetchAIInsight({
+      eventId: job.eventId,
+      league: job.leagueKey,
+      date: job.dateYYYYMMDD,
+      home: job.home,
+      away: job.away,
+      spread: job.favored || "",
+      total: job.total || ""
+    });
+
+    if (!data) continue;
+
     const edge = (data.edge || "—");
     const lean = (data.lean || "");
     const conf = (data.confidence ?? "—");
 
-    // Build the exact line format you wanted
     const leanPart = lean ? ` • Lean: ${lean}` : "";
     if (line1) line1.textContent = `AI EDGE: ${edge}${leanPart}`;
     if (line2) line2.textContent = `Confidence: ${conf}/10`;
@@ -1763,67 +1802,47 @@ async function updateAIForEvent({ eventId, leagueKey, dateYYYYMMDD, home, away, 
 }
 
 async function fetchAIInsight(payload) {
-  // --- Normalize inputs so we always send the same field names ---
-  const p = {
-    eventId: String(payload.eventId || ""),
-    dateKey: String(payload.dateKey || payload.selectedDate || payload.date || ""),
-    league: String(payload.league || ""),
-    home: String(payload.home || payload.homeName || ""),
-    away: String(payload.away || payload.awayName || ""),
-    homeRecord: String(payload.homeRecord || ""),
-    awayRecord: String(payload.awayRecord || ""),
-    venue: String(payload.venue || ""),
-    status: String(payload.status || ""),
-    state: String(payload.state || ""),
-    homeScore: payload.homeScore ?? "",
-    awayScore: payload.awayScore ?? "",
-    // IMPORTANT: use spread/total names your API expects
-    spread: String(payload.spread || payload.favored || ""),
-    total: String(payload.total || payload.ou || "")
-  };
+  const key = [
+    payload.league || "",
+    payload.date || "",
+    payload.eventId || "",
+    payload.home || "",
+    payload.away || "",
+    payload.spread || "",
+    payload.total || ""
+  ].join("|");
 
-  // --- Build a stable cache key (event + date + market lines) ---
-  const baseId = p.eventId || `${p.league}:${p.home}:${p.away}`;
-  const cacheKey = `ai:${p.dateKey || "nodate"}:${baseId}:${p.spread || "nospread"}:${p.total || "nototal"}`;
-
-  // 1) in-memory cache first
-  if (typeof aiInsightCache !== "undefined" && aiInsightCache[cacheKey]) {
-    return aiInsightCache[cacheKey];
+  const cached = aiInsightCache[key];
+  if (isAiCacheFresh(cached)) {
+    return cached; // ✅ instant, prevents blank/flicker
   }
 
-  // 2) localStorage cache next (prevents refetch on refresh)
-  try {
-    const raw = localStorage.getItem(cacheKey);
-    if (raw) {
-      const cached = JSON.parse(raw);
-      if (typeof aiInsightCache !== "undefined") aiInsightCache[cacheKey] = cached;
-      return cached;
-    }
-  } catch (e) {
-    // ignore storage errors
-  }
-
-  // --- Call your Vercel API route ---
   try {
     const resp = await fetch("/api/ai-insight", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(p)
+      body: JSON.stringify(payload)
     });
 
-    if (!resp.ok) return null;
+    if (!resp.ok) return cached && cached.edge ? cached : null;
 
     const data = await resp.json();
 
-    // Store in both caches
-    if (typeof aiInsightCache !== "undefined") aiInsightCache[cacheKey] = data;
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify(data));
-    } catch (e) {}
+    // Store with timestamp
+    const stored = {
+      edge: data.edge || "—",
+      lean: data.lean || "",
+      confidence: (data.confidence ?? "—"),
+      ts: Date.now()
+    };
 
-    return data;
+    aiInsightCache[key] = stored;
+    saveAiCacheToSessionThrottled();
 
+    return stored;
   } catch (e) {
+    // If network fails, return stale cache instead of blanking
+    if (cached && cached.edge) return cached;
     return null;
   }
 }
