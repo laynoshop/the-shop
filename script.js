@@ -598,7 +598,12 @@ function saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD) {
 function getOddsLineElByEventId(eventId) {
   const card = document.querySelector(`.game[data-eventid="${CSS.escape(String(eventId))}"]`);
   if (!card) return null;
-  return card.querySelector(".gameMetaOddsLine");
+
+  // Support both old + new class names
+  return (
+    card.querySelector(".gameMetaOddsLine") ||
+    card.querySelector(".gameMetaOddsPlain")
+  );
 }
 
 function applyOddsToDom(eventId, favored, ou) {
@@ -2437,7 +2442,7 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
     </div>
   `;
 
-  setTimeout(() => replaceMichiganText(), 0);
+  setTimeout(() => replaceMichiganText(document.getElementById("content") || document.body), 0);
 }
 
 async function renderTopNews(showLoading) {
@@ -2528,27 +2533,7 @@ async function renderTopNews(showLoading) {
   }
 }
 
-/* ===== News filter clicks (delegated) ===== */
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("button");
-  if (!btn) return;
 
-  const filter = btn.getAttribute("data-newsfilter");
-  if (!filter) return;
-
-  currentNewsFilter = filter;
-  sessionStorage.setItem(NEWS_FILTER_KEY, filter);
-
-  // Re-render instantly from cache if available
-  const cached = loadNewsCache();
-  const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-  if (cached && cached.items && cached.items.length) {
-    renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
-  } else {
-    renderTopNews(true);
-  }
-});
 
 /* =========================
    SHOP CHAT (Firebase / Firestore)
@@ -2838,45 +2823,6 @@ function updateChatNameUI() {
     label.textContent = `You: ${getChatDisplayName()}`;
   }
 }
-
-/* =========================
-   HARDENED EVENTS
-   - Event delegation so buttons always work
-   ========================= */
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("button");
-  if (!btn) return;
-
-  // Tabs (bottom bar)
-  const tab = btn.getAttribute("data-tab");
-  if (tab) {
-    showTab(tab);
-    return;
-  }
-
-  // 💬 Shop Chat Send button
-  if (btn.id === "chatSendBtn") {
-    sendShopChatMessage();
-    return;
-  }
-
-  // 📰 News filters (kept for safety if they are buttons)
-  const filter = btn.getAttribute("data-newsfilter");
-  if (filter) {
-    currentNewsFilter = filter;
-    sessionStorage.setItem(NEWS_FILTER_KEY, filter);
-
-    const cached = loadNewsCache();
-    const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-    if (cached && cached.items && cached.items.length) {
-      renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
-    } else {
-      renderTopNews(true);
-    }
-    return;
-  }
-});
 
 /* =========================
    GLOBAL TTUN REPLACER
@@ -3447,33 +3393,63 @@ async function addPickFlowFromEvent(eventId, leagueKey, dateYYYYMMDD) {
   });
 }
 
-/* ===== Picks click handling (delegated) ===== */
 document.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
+  // Tabs
+  const tab = btn.getAttribute("data-tab");
+  if (tab) {
+    showTab(tab);
+    return;
+  }
+
+  // News filters
+  const filter = btn.getAttribute("data-newsfilter");
+  if (filter) {
+    currentNewsFilter = filter;
+    sessionStorage.setItem(NEWS_FILTER_KEY, filter);
+
+    const cached = loadNewsCache();
+    const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+    if (cached && cached.items && cached.items.length) {
+      renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
+    } else {
+      renderTopNews(true);
+    }
+    return;
+  }
+
+  // Shop Chat Send
+  if (btn.id === "chatSendBtn") {
+    sendShopChatMessage();
+    return;
+  }
+
+  // Picks actions
   const act = btn.getAttribute("data-picksaction");
-  if (!act) return;
+  if (act) {
+    if (act === "refresh") {
+      renderPicks(true);
+      return;
+    }
 
-  if (act === "refresh") {
-    renderPicks(true);
-    return;
-  }
+    if (act === "addQuick") {
+      alert("Tap Add on a game card below to attach it to a real matchup.");
+      return;
+    }
 
-  if (act === "addQuick") {
-    alert("Tap Add on a game card below to attach it to a real matchup.");
-    return;
-  }
+    if (act === "add") {
+      const eventId = btn.getAttribute("data-eventid");
+      const leagueKey = btn.getAttribute("data-league");
+      const dateYYYYMMDD = btn.getAttribute("data-date");
 
-  if (act === "add") {
-    const eventId = btn.getAttribute("data-eventid");
-    const leagueKey = btn.getAttribute("data-league");
-    const dateYYYYMMDD = btn.getAttribute("data-date");
-
-    addPickFlowFromEvent(eventId, leagueKey, dateYYYYMMDD)
-      .then(() => renderPicks(true))
-      .catch(() => alert("Couldn’t submit pick. Check Firebase rules/connection."));
-    return;
+      addPickFlowFromEvent(eventId, leagueKey, dateYYYYMMDD)
+        .then(() => renderPicks(true))
+        .catch(() => alert("Couldn’t submit pick. Check Firebase rules/connection."));
+      return;
+    }
   }
 });
 
