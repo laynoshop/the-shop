@@ -1237,13 +1237,64 @@ function isTTUNTeam(team) {
 }
 
 function getTeamDisplayNameUI(team) {
-  if (isTTUNTeam(team)) return "The Team Up North";
-  return team?.displayName || team?.shortDisplayName || "Team";
+  if (!team) return "";
+
+  const full = String(team.displayName || "").toLowerCase();
+  const short = String(team.name || "").toLowerCase();
+  const abbrev = String(team.abbreviation || "").toLowerCase();
+  const id = String(team.id || "");
+
+  // =============================
+  // TTUN (Michigan Wolverines)
+  // =============================
+  if (
+    full.includes("michigan wolverines") ||
+    (short === "wolverines" && full.includes("michigan")) ||
+    id === "130" // ESPN ID for Michigan
+  ) {
+    return "The Team Up North";
+  }
+
+  // =============================
+  // UNC (North Carolina Tar Heels)
+  // =============================
+  if (
+    full.includes("north carolina tar heels") ||
+    (short === "tar heels" && full.includes("north carolina")) ||
+    abbrev === "unc" ||
+    id === "153" // ESPN ID for UNC Chapel Hill
+  ) {
+    return "Paper Classes U";
+  }
+
+  return team.displayName || "";
 }
 
 function getTeamAbbrevUI(team) {
-  if (isTTUNTeam(team)) return "TTUN";
-  return getTeamAbbrev(team); // uses your existing abbrev helper
+  if (!team) return "";
+
+  const full = String(team.displayName || "").toLowerCase();
+  const abbrev = String(team.abbreviation || "").toLowerCase();
+  const id = String(team.id || "");
+
+  // TTUN
+  if (
+    full.includes("michigan wolverines") ||
+    id === "130"
+  ) {
+    return "TTUN";
+  }
+
+  // UNC
+  if (
+    full.includes("north carolina tar heels") ||
+    abbrev === "unc" ||
+    id === "153"
+  ) {
+    return "PCU";
+  }
+
+  return team.abbreviation || "";
 }
 
 /* =========================
