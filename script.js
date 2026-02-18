@@ -1619,7 +1619,7 @@ async function loadScores(showLoading) {
 }
 
 /* =========================
-   BEAT TTUN (HYPE MODE) – Countdown V2
+   BEAT TTUN (TUNNEL ENTRANCE MODE)
    ========================= */
 
 // ESPN CDN logos (fast + reliable)
@@ -1636,10 +1636,10 @@ const THE_GAME_ALL_TIME = {
 // Last 10 *played* matchups (excludes 2020 canceled)
 const THE_GAME_LAST_10 = [
   { year: 2025, winner: "Ohio State", score: "27–9" },
-  { year: 2024, winner: "Michigan",   score: "13–10" },
-  { year: 2023, winner: "Michigan",   score: "30–24" },
-  { year: 2022, winner: "Michigan",   score: "45–23" },
-  { year: 2021, winner: "Michigan",   score: "42–27" },
+  { year: 2024, winner: "TTUN",       score: "13–10" },
+  { year: 2023, winner: "TTUN",       score: "30–24" },
+  { year: 2022, winner: "TTUN",       score: "45–23" },
+  { year: 2021, winner: "TTUN",       score: "42–27" },
   { year: 2019, winner: "Ohio State", score: "56–27" },
   { year: 2018, winner: "Ohio State", score: "62–39" },
   { year: 2017, winner: "Ohio State", score: "31–20" },
@@ -1648,36 +1648,33 @@ const THE_GAME_LAST_10 = [
 ];
 
 let beatCountdownTimer = null;
+let beatRotateTimer = null;
 
 function stopBeatCountdown() {
   if (beatCountdownTimer) clearInterval(beatCountdownTimer);
   beatCountdownTimer = null;
+
+  if (beatRotateTimer) clearInterval(beatRotateTimer);
+  beatRotateTimer = null;
 }
 
 // “The Game” is typically the last Saturday of November.
-// We count down to **noon local** on that day to keep it stable.
+// Count down to **noon local** for consistency.
 function getNextTheGameDateLocalNoon() {
   const now = new Date();
   const year = now.getFullYear();
-
   const candidate = lastSaturdayOfNovemberAtNoon(year);
   if (candidate.getTime() > now.getTime()) return candidate;
-
   return lastSaturdayOfNovemberAtNoon(year + 1);
 }
 
 function lastSaturdayOfNovemberAtNoon(year) {
-  // Start at Nov 30, walk backward to Saturday
   const d = new Date(year, 10, 30, 12, 0, 0, 0); // month 10 = November
   while (d.getDay() !== 6) d.setDate(d.getDate() - 1); // 6 = Saturday
   return d;
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-
-function calcCountdownParts(ms) {
+function countdownParts(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const days = Math.floor(total / 86400);
   const hrs  = Math.floor((total % 86400) / 3600);
@@ -1686,12 +1683,51 @@ function calcCountdownParts(ms) {
   return { days, hrs, mins, secs };
 }
 
+function isGameWeek(targetDate) {
+  const now = new Date();
+  const diffMs = targetDate.getTime() - now.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  return diffDays >= 0 && diffDays <= 7;
+}
+
+// Calculate current streak from THE_GAME_LAST_10 (most recent first)
+function computeCurrentStreak() {
+  const list = Array.isArray(THE_GAME_LAST_10) ? THE_GAME_LAST_10 : [];
+  if (!list.length) return { label: "—", owner: "" };
+
+  const first = String(list[0].winner || "").trim();
+  if (!first) return { label: "—", owner: "" };
+
+  let streak = 0;
+  for (const g of list) {
+    if (String(g.winner || "").trim() === first) streak++;
+    else break;
+  }
+
+  if (first === "Ohio State") {
+    return { label: `CURRENT STREAK: ${streak}`, owner: "osu" };
+  }
+  // If they’ve been winning recently:
+  return { label: `REVENGE PENDING: ${streak}`, owner: "ttun" };
+}
+
 function renderBeatTTUN() {
   const content = document.getElementById("content");
   stopBeatCountdown();
 
   const target = getNextTheGameDateLocalNoon();
   const targetLabel = target.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+
+  const hypeLines = [
+    "SILENCE THEIR STADIUM.",
+    "FINISH THE FIGHT.",
+    "LEAVE NO DOUBT.",
+    "NO MERCY.",
+    "DOMINATE."
+  ];
+
+  const streak = computeCurrentStreak();
+  const gameWeek = isGameWeek(target);
 
   content.innerHTML = `
     <div class="header">
@@ -1702,46 +1738,37 @@ function renderBeatTTUN() {
         </div>
       </div>
       <div class="subline">
-        <div>Scarlet Mode</div>
+        <div>${gameWeek ? "IT’S GAME WEEK." : "Scarlet Mode"}</div>
         <div>❌ichigan Week Energy</div>
       </div>
     </div>
 
-    <!-- Countdown V2 -->
-    <div class="ttunCountdownWrap">
-      <div class="beatBubbleTop" style="margin-bottom:10px;">
-        <div class="beatBubbleTitle">Countdown to The Game</div>
-        <div class="beatBubbleDate">${escapeHtml(targetLabel)}</div>
+    <!-- TUNNEL HERO -->
+    <div class="beatHero ${gameWeek ? "gameWeek" : ""}">
+      <div class="beatHeroTop">
+        <div class="beatHeroTitle">MISSION: BEAT TTUN</div>
+        <div class="beatHeroSub">Ohio State vs The Team Up North • ${escapeHtml(targetLabel)} • Noon</div>
       </div>
 
-      <div class="ttunMatchupLine">Ohio State vs TTUN</div>
-
-      <div class="ttunCountdownGrid">
-        <div class="ttunTimeBox">
-          <div id="ttunDays" class="ttunTimeNum">--</div>
-          <div class="ttunTimeLabel">Days</div>
-        </div>
-
-        <div class="ttunTimeBox">
-          <div id="ttunHours" class="ttunTimeNum">--</div>
-          <div class="ttunTimeLabel">Hours</div>
-        </div>
-
-        <div class="ttunTimeBox">
-          <div id="ttunMins" class="ttunTimeNum">--</div>
-          <div class="ttunTimeLabel">Minutes</div>
-        </div>
-
-        <div class="ttunTimeBox">
-          <div id="ttunSecs" class="ttunTimeNum">--</div>
-          <div class="ttunTimeLabel">Seconds</div>
-        </div>
+      <div class="beatBig">
+        <div id="beatDays" class="beatBigDays">—</div>
+        <div class="beatBigLabel">DAYS</div>
       </div>
+
+      <div class="beatHmsRow" aria-label="Hours minutes seconds">
+        <div class="beatHmsUnit"><span id="beatHrs">—</span><small>HRS</small></div>
+        <div class="beatHmsUnit"><span id="beatMins">—</span><small>MINS</small></div>
+        <div class="beatHmsUnit"><span id="beatSecs">—</span><small>SECS</small></div>
+      </div>
+
+      <div class="beatDivider"></div>
+
+      <div id="beatHypeLine" class="beatHypeLine">${hypeLines[0]}</div>
+      <div class="beatStreak ${streak.owner === "osu" ? "osu" : "ttun"}">${escapeHtml(streak.label)}</div>
     </div>
 
     <div class="notice">
       <div style="font-weight:800; letter-spacing:0.5px;">ALL-TIME RECORD</div>
-
       <div style="margin-top:6px; opacity:0.9;">TTUN are cheating bastards</div>
 
       <div class="rivalRecordRow">
@@ -1752,7 +1779,7 @@ function renderBeatTTUN() {
 
         <div class="rivalTeam">
           <img class="rivalLogo" src="${TTUN_LOGO}" alt="TTUN logo" loading="lazy" decoding="async" />
-          <div class="rivalText"><strong>TTUN:</strong> ${THE_GAME_ALL_TIME.michWins}</div>
+          <div class="rivalText"><strong>The Team Up North:</strong> ${THE_GAME_ALL_TIME.michWins}</div>
         </div>
 
         <div class="rivalTie"><strong>Ties:</strong> ${THE_GAME_ALL_TIME.ties}</div>
@@ -1763,8 +1790,8 @@ function renderBeatTTUN() {
       <div style="font-weight:800; letter-spacing:0.5px;">LAST 10 MATCHUPS</div>
       <div class="last10List">
         ${THE_GAME_LAST_10.map(g => {
-          const winner = escapeHtml(g.winner);
-          const score  = escapeHtml(g.score);
+          const winner = escapeHtml(String(g.winner || ""));
+          const score  = escapeHtml(String(g.score || ""));
           return `
             <div class="last10Row">
               <div class="last10Year">${g.year}</div>
@@ -1777,29 +1804,32 @@ function renderBeatTTUN() {
     </div>
   `;
 
-  // Countdown tick (updates the 4 boxes)
-  const dEl = document.getElementById("ttunDays");
-  const hEl = document.getElementById("ttunHours");
-  const mEl = document.getElementById("ttunMins");
-  const sEl = document.getElementById("ttunSecs");
+  // Countdown tick (updates big days + h/m/s)
+  const daysEl = document.getElementById("beatDays");
+  const hrsEl  = document.getElementById("beatHrs");
+  const minsEl = document.getElementById("beatMins");
+  const secsEl = document.getElementById("beatSecs");
 
   const tick = () => {
     const ms = target.getTime() - Date.now();
-    const { days, hrs, mins, secs } = calcCountdownParts(ms);
+    const p = countdownParts(ms);
 
-    if (dEl) dEl.textContent = String(days);
-    if (hEl) hEl.textContent = pad2(hrs);
-    if (mEl) mEl.textContent = pad2(mins);
-    if (sEl) sEl.textContent = pad2(secs);
+    if (daysEl) daysEl.textContent = String(p.days);
+    if (hrsEl)  hrsEl.textContent  = String(p.hrs).padStart(2, "0");
+    if (minsEl) minsEl.textContent = String(p.mins).padStart(2, "0");
+    if (secsEl) secsEl.textContent = String(p.secs).padStart(2, "0");
   };
 
   tick();
   beatCountdownTimer = setInterval(tick, 1000);
 
-  // TTUN enforcement (in case last-10 data includes that word)
-  setTimeout(() => {
-    if (typeof replaceMichiganText === "function") replaceMichiganText();
-  }, 0);
+  // Rotate hype line every 5s
+  const hypeEl = document.getElementById("beatHypeLine");
+  let idx = 0;
+  beatRotateTimer = setInterval(() => {
+    idx = (idx + 1) % hypeLines.length;
+    if (hypeEl) hypeEl.textContent = hypeLines[idx];
+  }, 5000);
 }
 
 /* =========================
