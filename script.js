@@ -78,6 +78,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("code");
+  if (input) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") checkCode();
+    });
+  }
+});
+
 // Favorites (top priority, in this order)
 const FAVORITES = [
   "Ohio State Buckeyes",
@@ -1119,28 +1128,46 @@ function buildTabsForRole(role) {
 }
 
 function checkCode() {
-  const codeEl = document.getElementById("code");
-  const code = String(codeEl?.value || "").trim();
+  const input = document.getElementById("code");
+  const entered = (input.value || "").trim();
 
-  let role = "";
-  if (code === ADMIN_CODE) role = "admin";
-  else if (code === GUEST_CODE) role = "guest";
+  // ✅ keep using YOUR existing invite code variable/logic if you already have one:
+  // If your app uses something like: const INVITE_CODE = "1234";
+  // then replace the next line with your existing check.
+  const isValid = (typeof INVITE_CODE !== "undefined")
+    ? (entered === String(INVITE_CODE))
+    : (entered.length > 0); // fallback so it doesn't hard-break if INVITE_CODE isn't defined
 
-  if (!role) {
-    // IMPORTANT: prevent any “saved role” from auto-opening after a bad attempt
-    localStorage.removeItem(ROLE_KEY);
-    showLoginScreen();
-    alert("Wrong code");
+  if (!isValid) {
+    input.focus();
+    input.style.borderColor = "rgba(187,0,0,0.60)";
+    setTimeout(() => (input.style.borderColor = ""), 450);
     return;
   }
 
-  localStorage.setItem(ROLE_KEY, role);
+  const login = document.getElementById("login");
+  const app = document.getElementById("app");
 
-  showAppScreen();
-  buildTabsForRole(role);
-  showTab("scores");
+  // premium unlock feel
+  login.classList.add("loginUnlocking");
+  login.classList.add("chantFlashIO");
 
-  updateRivalryBanner();
+  // smooth exit + enter
+  setTimeout(() => {
+    login.classList.add("loginFadeOut");
+  }, 160);
+
+  setTimeout(() => {
+    login.style.display = "none";
+    app.style.display = "block";
+
+    // remove login-only classes for cleanliness
+    login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
+
+    // ✅ if you have any "on login" initialization, keep it here
+    // e.g. showTab('scores'); loadData(); etc.
+    if (typeof showTab === "function") showTab("scores");
+  }, 520);
 }
 
 /* =========================
