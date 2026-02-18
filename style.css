@@ -542,51 +542,63 @@ button {
   color: rgba(255,255,255,0.75);
 }
 
-/* ✅ TABS (fully tightened — no extra bottom gap) */
-.tabs {
+/* ✅ TABS — fixed height so spacing is predictable */
+.tabs{
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
+  bottom: 0;
 
-  width: 100%;
   display: flex;
+  width: 100%;
 
   background: rgba(22,22,22,0.96);
   border-top: 1px solid rgba(255,255,255,0.08);
 
-  /* ONLY safe area, no bonus padding */
+  /* lock the bar height (safe-area handled separately) */
+  height: 64px;
   padding-bottom: env(safe-area-inset-bottom);
 
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Make buttons control the height — not the container */
-.tabs button {
+.tabs button{
   flex: 1;
-  padding: 12px 6px 14px; /* tighter vertical space */
   background: none;
-  color: white;
+  color: #fff;
   font-weight: 900;
   letter-spacing: 0.2px;
+
+  /* make labels perfectly centered with no extra bloat */
+  padding: 0;
+  height: 64px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+
   line-height: 1.05;
 }
 
-/* Active indicator stays snug */
-.tabs button.active {
-  position: relative;
-}
+.tabs button.active{ position: relative; }
 
-.tabs button.active::after {
-  content: "";
-  position: absolute;
+.tabs button.active::after{
+  content:"";
+  position:absolute;
   left: 25%;
   right: 25%;
-  bottom: 4px; /* slightly tighter */
+  bottom: 6px;
   height: 3px;
   border-radius: 999px;
   background: var(--scarlet);
+}
+
+/* ✅ BANNER — FORCE it directly above tabs (overrides JS inline bottom) */
+.rivalryBanner{
+  bottom: calc(env(safe-area-inset-bottom) + 64px + 6px) !important;
 }
 
 /* =========================
