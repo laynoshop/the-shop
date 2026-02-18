@@ -542,12 +542,14 @@ button {
   color: rgba(255,255,255,0.75);
 }
 
-/* ✅ TABS — single, predictable height INCLUDING safe-area */
+/* ✅ TABS — sit directly ABOVE the rivalry banner */
 .tabs{
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+
+  /* 48px = banner height (approx 44–50px) */
+  bottom: calc(48px + env(safe-area-inset-bottom));
 
   display: flex;
   width: 100%;
@@ -555,9 +557,7 @@ button {
   background: rgba(22,22,22,0.96);
   border-top: 1px solid rgba(255,255,255,0.08);
 
-  /* total bar height INCLUDING iPhone safe area */
-  height: calc(64px + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
+  height: 64px;
 
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -813,27 +813,27 @@ button {
   white-space:nowrap;
 }
 
-/* ✅ Rivalry banner — always sits directly ABOVE the tabs */
+/* ✅ RIVALRY BANNER — LOCKED TO VERY BOTTOM */
 .rivalryBanner{
   position: fixed;
   left: 0;
   right: 0;
+  bottom: 0;
 
-  margin: 0;
-  border-radius: 0;
-  padding: 10px 12px;
+  height: 48px;
 
-  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0 12px;
+
+  background: rgba(0,0,0,0.75);
   border-top: 1px solid rgba(255,255,255,0.14);
 
   font-weight: 900;
   letter-spacing: 0.4px;
   text-align: center;
-
-  /* tabs are 64px tall + safe area; banner sits right above them */
-  bottom: calc(64px + env(safe-area-inset-bottom) + 6px) !important;
-
-  z-index: 1000;
 
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
