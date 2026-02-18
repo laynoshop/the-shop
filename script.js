@@ -277,6 +277,17 @@ function getStartTimeMs(event, competition) {
 /* =========================
    VENUE + ODDS HELPERS
    ========================= */
+
+// Safe team-name helper (uses TTUN override if present)
+function getSafeTeamNameForOdds(team, fallback) {
+  try {
+    if (typeof getTeamDisplayNameUI === "function") {
+      return getTeamDisplayNameUI(team);
+    }
+  } catch (_) {}
+  return team?.displayName || team?.shortDisplayName || team?.name || fallback || "Team";
+}
+
 function getVenuePartsFromVenueObj(venue) {
   if (!venue) return { venueName: "", location: "" };
 
@@ -367,8 +378,9 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     const competitors = comp?.competitors || [];
     const home = competitors.find(t => t.homeAway === "home");
     const away = competitors.find(t => t.homeAway === "away");
-    const homeName = home?.team?.displayName || "Home";
-    const awayName = away?.team?.displayName || "Away";
+
+    const homeName = getSafeTeamNameForOdds(home?.team, "Home");
+    const awayName = getSafeTeamNameForOdds(away?.team, "Away");
 
     const parsed = parseOddsFromPickcenter(pcArr[0], homeName, awayName);
     if (parsed.favored || parsed.ou) return parsed;
@@ -381,8 +393,10 @@ function parseOddsFromSummary(summaryData, fallbackComp) {
     const competitors = sc0?.competitors || [];
     const home = competitors.find(t => t.homeAway === "home");
     const away = competitors.find(t => t.homeAway === "away");
-    const homeName = home?.team?.displayName || "Home";
-    const awayName = away?.team?.displayName || "Away";
+
+    const homeName = getSafeTeamNameForOdds(home?.team, "Home");
+    const awayName = getSafeTeamNameForOdds(away?.team, "Away");
+
     const parsed = parseOddsFromPickcenter(pc2, homeName, awayName);
     if (parsed.favored || parsed.ou) return parsed;
   }
@@ -424,8 +438,10 @@ function parseOddsFromScoreboardCompetition(competition) {
     const competitors = competition?.competitors || [];
     const home = competitors.find(t => t.homeAway === "home");
     const away = competitors.find(t => t.homeAway === "away");
-    const homeName = home?.team?.displayName || "Home";
-    const awayName = away?.team?.displayName || "Away";
+
+    const homeName = getSafeTeamNameForOdds(home?.team, "Home");
+    const awayName = getSafeTeamNameForOdds(away?.team, "Away");
+
     const parsed = parseOddsFromPickcenter(pc, homeName, awayName);
     if (parsed.favored || parsed.ou) return parsed;
   }
@@ -1196,6 +1212,40 @@ function homeAwayWithRecord(homeAwayLabel, competitor, leagueKey) {
 
   const rec = getOverallRecordFromCompetitor(competitor);
   return rec ? `${homeAwayLabel} • ${rec}` : homeAwayLabel;
+}
+
+/* =========================
+   TTUN Display Override (Michigan Wolverines only)
+   ========================= */
+
+// ESPN team id for Michigan Wolverines is 130
+function isWolverinesTeam(team) {
+  if (!team) return false;
+
+  const id = String(team.id || "");
+  if (id === "130") return true;
+
+  const displayName = String(team.displayName || "");
+  const location = String(team.location || "");
+  const name = String(team.name || "");
+
+  // Fallback detection (only Wolverines)
+  if (location === "Michigan" && name === "Wolverines") return true;
+  if (/Michigan\s+Wolverines/i.test(displayName)) return true;
+
+  return false;
+}
+
+function getTeamDisplayNameUI(team) {
+  if (isWolverinesTeam(team)) return "The Team Up North";
+  return team?.displayName || team?.shortDisplayName || team?.name || "Team";
+}
+
+function getTeamAbbrevUI(team) {
+  if (isWolverinesTeam(team)) return "TTUN";
+  // fall back to your existing abbrev helper if you have it
+  if (typeof getTeamAbbrev === "function") return getTeamAbbrev(team);
+  return team?.abbreviation || "";
 }
 
 /* =========================
