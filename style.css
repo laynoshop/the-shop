@@ -12,8 +12,8 @@
   --upcoming:#f59e0b;
 
   /* Heights for bottom UI */
-  --tabsH: 64px;
-  --bannerH: 48px;
+  --tabsH: 54px;
+  --bannerH: 38px;
 
   /* New “premium” accents */
   --glowScarlet: rgba(187,0,0,0.28);
@@ -557,18 +557,19 @@ button {
   position: fixed;
   left: 0;
   right: 0;
-
-  /* ✅ Kill any JS/inlines that set top */
   top: auto !important;
 
-  /* ✅ Tabs sit directly on top of the banner (including safe-area) */
+  /* tabs sit directly above banner */
   bottom: calc(var(--bannerH) + env(safe-area-inset-bottom)) !important;
 
   display: flex;
   width: 100%;
 
-  /* ✅ Tabs background also fills to safe-area so no “gap” feeling */
+  /* total footprint includes safe area */
   height: calc(var(--tabsH) + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+
+  /* BUT keep the *visible* bar compact */
   padding-bottom: env(safe-area-inset-bottom);
 
   background: rgba(22,22,22,0.96);
@@ -587,8 +588,10 @@ button {
   font-weight: 900;
   letter-spacing: 0.2px;
 
-  padding: 0;
-  height: 64px; /* keep label area consistent */
+  /* lock the button area to the compact height */
+  height: var(--tabsH);
+  margin: 0;
+  padding: 8px 0 0 0;
 
   display: flex;
   align-items: center;
@@ -597,6 +600,7 @@ button {
   gap: 4px;
 
   line-height: 1.05;
+  font-size: 14px;           /* ✅ this is a big part of the “huge” feel */
 }
 
 .tabs button.active{ position: relative; }
@@ -835,12 +839,11 @@ button {
   position: fixed;
   left: 0;
   right: 0;
-
   top: auto !important;
   bottom: 0 !important;
 
-  /* ✅ Banner background reaches the very bottom */
   height: calc(var(--bannerH) + env(safe-area-inset-bottom));
+  box-sizing: border-box;
   padding: 0 12px env(safe-area-inset-bottom);
 
   display: flex !important;
@@ -858,6 +861,8 @@ button {
   -webkit-backdrop-filter: blur(10px);
 
   z-index: 1100;
+
+  font-size: 16px;           /* ✅ keeps banner text from blowing up */
 }
 
 /* ✅ CONTENT SAFE SPACE so nothing gets covered */
