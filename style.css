@@ -15,14 +15,7 @@
   --tabsH: 44px;
   --bannerH: 28px;
 
-  /* New “premium” accents */
-  --glowScarlet: rgba(187,0,0,0.28);
-  --glowLive: rgba(34,197,94,0.24);
-  --glowGold: rgba(245,158,11,0.22);
-  --glowGray: rgba(156,163,175,0.18);
-}
-
-  /* New “premium” accents */
+  /* Premium accents */
   --glowScarlet: rgba(187,0,0,0.28);
   --glowLive: rgba(34,197,94,0.24);
   --glowGold: rgba(245,158,11,0.22);
@@ -559,17 +552,14 @@ button {
   right: 0;
   top: auto !important;
 
-  /* sit above banner + safe-area */
-  bottom: calc(var(--bannerH) + env(safe-area-inset-bottom)) !important;
+  /* Tabs sit above banner (safe-area handled by padding, NOT extra row) */
+  bottom: var(--bannerH) !important;
 
   display: flex;
   width: 100%;
 
-  /* ✅ visible bar height ONLY */
-  height: var(--tabsH);
-
-  padding: 0;
-  margin: 0;
+  height: calc(var(--tabsH) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
 
   background: rgba(22,22,22,0.96);
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -580,18 +570,6 @@ button {
   z-index: 1000;
 }
 
-/* ✅ separate safe-area “spacer” below the tabs (so it doesn't inflate the bar) */
-.tabs::after{
-  content:"";
-  position:absolute;
-  left:0;
-  right:0;
-  top:100%;
-  height: env(safe-area-inset-bottom);
-  background: rgba(22,22,22,0.96);
-  border-top: 1px solid rgba(255,255,255,0.08);
-}
-
 .tabs button{
   flex: 1;
   background: none;
@@ -599,7 +577,12 @@ button {
   font-weight: 900;
   letter-spacing: 0.2px;
 
-  height: 100%;
+  /* ✅ make underline anchor correctly */
+  position: relative;
+
+  /* ✅ keep visible button area tight */
+  height: var(--tabsH);
+
   padding: 6px 0 0 0;
   margin: 0;
 
@@ -610,17 +593,20 @@ button {
 
   gap: 2px;
   line-height: 1.0;
-
-  font-size: 13px; /* ✅ smaller label */
+  font-size: 13px;
 }
 
-/* Active underline stays tight */
 .tabs button.active::after{
   content:"";
   position:absolute;
-  left: 25%;
-  right: 25%;
+
+  /* ✅ center underline under the label */
+  left: 22%;
+  right: 22%;
+
+  /* ✅ underline sits inside the visible bar */
   bottom: 4px;
+
   height: 3px;
   border-radius: 999px;
   background: var(--scarlet);
