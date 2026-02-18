@@ -924,7 +924,7 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
 }
 
 /* =========================
-   UI: League + Calendar (Native picker)
+   UI: League + Calendar (iOS-safe native picker)
    ========================= */
 
 // Convert YYYYMMDD -> YYYY-MM-DD (for <input type="date">)
@@ -934,11 +934,11 @@ function yyyymmddToInputValue(yyyymmdd) {
   return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
 }
 
-// Convert YYYY-MM-DD -> YYYYMMDD (for your saved format)
+// Convert YYYY-MM-DD -> YYYYMMDD
 function inputValueToYYYYMMDD(v) {
   const s = String(v || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
-  return s.replace(/-/g, "");
+  return s.replaceAll("-", "");
 }
 
 function buildLeagueSelectHTML(selectedKey) {
@@ -955,51 +955,37 @@ function buildLeagueSelectHTML(selectedKey) {
 }
 
 /**
- * Show ONLY the 📅 button.
- * Keep a hidden native <input type="date"> in the DOM so iOS can render its picker.
+ * iOS-safe approach:
+ * - Render a normal 📅 button for visuals
+ * - Overlay the REAL <input type="date"> on top (opacity 0)
+ * - User tap is on the input itself → picker always opens in Safari + PWA
  */
 function buildCalendarButtonHTML() {
   const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
 
   return `
-    <button id="dateBtn" class="iconBtn" aria-label="Choose date" type="button">📅</button>
-    <input
-      id="nativeDateInput"
-      type="date"
-      value="${escapeHtml(current)}"
-      aria-hidden="true"
-      tabindex="-1"
-      style="position:fixed; left:-9999px; top:-9999px; width:1px; height:1px; opacity:0; pointer-events:none;"
-    />
+    <span class="datePickerWrap" aria-label="Choose date">
+      <button id="dateBtn" class="iconBtn" aria-label="Choose date" type="button">📅</button>
+      <input
+        id="nativeDateInput"
+        class="nativeDateInput"
+        type="date"
+        value="${escapeHtml(current)}"
+        aria-label="Choose date"
+      />
+    </span>
   `;
 }
 
-// Open native picker (called from delegated click so it counts as a user gesture)
-function openNativeDatePicker() {
-  const el = document.getElementById("nativeDateInput");
-  if (!el) return;
-
-  // Keep the hidden input synced to current saved date every time we open
-  const saved = getSavedDateYYYYMMDD();
-  const inputVal = yyyymmddToInputValue(saved);
-  if (inputVal) el.value = inputVal;
-
-  if (typeof el.showPicker === "function") {
-    el.showPicker();
-  } else {
-    el.focus({ preventScroll: true });
-    el.click();
-  }
-}
-
-function handleNativeDateChangeFromInput(inputEl) {
-  const v = inputEl?.value || "";
+// Handle date changes (wired via delegated change listener below)
+function handleNativeDateChangeFromEl(el) {
+  const v = el?.value || "";
   const yyyymmdd = inputValueToYYYYMMDD(v);
   if (!yyyymmdd) return;
 
   saveDateYYYYMMDD(yyyymmdd);
 
-  // Reload Scores (date affects scoreboard)
+  // Reload scores (date affects scores)
   loadScores(true);
 }
 
@@ -1069,14 +1055,21 @@ function checkCode() {
    ========================= */
 
 /* ===== Tabs click (delegated) ===== */
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest(".tabs button");
-  if (!btn) return;
+document.addEventListener("change", (e) => {
+  const el = e.target;
 
-  const tab = btn.getAttribute("data-tab");
-  if (!tab) return;
+  // League dropdown
+  if (el instanceof HTMLSelectElement && el.id === "leagueSelect") {
+    saveLeagueKey(el.value);
+    loadScores(true);
+    return;
+  }
 
-  showTab(tab);
+  // Native date picker
+  if (el instanceof HTMLInputElement && el.id === "nativeDateInput") {
+    handleNativeDateChangeFromEl(el);
+    return;
+  }
 });
 
 /* =========================
@@ -2663,7 +2656,6 @@ document.addEventListener("click", (e) => {
   if (!btn) return;
 
   // 📅 Date picker (Scores tab)
-  if (btn.id === "dateBtn") {
     // Use the native picker (hidden input[type=date])
     if (typeof openNativeDatePicker === "function") {
       openNativeDatePicker();
