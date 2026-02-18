@@ -596,11 +596,6 @@ button {
   background: var(--scarlet);
 }
 
-/* ✅ BANNER — FORCE it directly above tabs (overrides JS inline bottom) */
-.rivalryBanner{
-  bottom: calc(env(safe-area-inset-bottom) + 64px + 6px) !important;
-}
-
 /* =========================
    BEAT TTUN — Tunnel Entrance Mode
    ========================= */
