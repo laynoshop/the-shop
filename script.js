@@ -434,7 +434,26 @@ function parseOddsFromScoreboardCompetition(competition) {
 }
 
 function buildOddsLine(favored, ou) {
-  return `Favored: ${favored || "—"} • O/U: ${ou || "—"}`;
+  const hasFav = favored && favored !== "-" && favored !== "";
+  const hasOu = ou && ou !== "-" && ou !== "";
+
+  if (!hasFav && !hasOu) {
+    return ""; // Nothing to show
+  }
+
+  if (hasFav && hasOu) {
+    return `Favored: ${favored} • O/U: ${ou}`;
+  }
+
+  if (hasFav) {
+    return `Favored: ${favored}`;
+  }
+
+  if (hasOu) {
+    return `O/U: ${ou}`;
+  }
+
+  return "";
 }
 
 /* =========================
@@ -1327,9 +1346,11 @@ const awayName = teamDisplayNameWithRank(awayNameRaw, away, selectedKey);
   ${escapeHtml(venueLine)}
 </div>
 
-<div class="gameMetaOddsPlain" aria-label="Betting line">
-  ${escapeHtml(initialOddsText)}
-</div>
+${initialOddsText ? `
+  <div class="gameMetaOddsPlain" aria-label="Betting line">
+    ${escapeHtml(initialOddsText)}
+  </div>
+` : ""}
 
         <div class="teamRow">
           <div class="teamLeft">
