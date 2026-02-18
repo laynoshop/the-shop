@@ -183,6 +183,15 @@ button {
   .grid { grid-template-columns: 1fr 1fr; }
 }
 
+.nativeDateInput{
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* GAME CARDS */
 .game {
   background: linear-gradient(180deg, rgba(187,0,0,0.12), transparent 55%), var(--card);
