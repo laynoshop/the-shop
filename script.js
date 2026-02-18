@@ -1132,6 +1132,54 @@ function showTab(tab) {
 }
 
 /* =========================
+   RANK + RECORD (NCAAM/CFB)
+   ========================= */
+
+function getTop25RankFromCompetitor(competitor) {
+  // ESPN college scoreboards often expose rank on competitor.curatedRank or competitor.rank
+  const r =
+    competitor?.curatedRank?.current ??
+    competitor?.curatedRank?.rank ??
+    competitor?.rank ??
+    competitor?.team?.rank ??
+    competitor?.team?.curatedRank?.current ??
+    null;
+
+  const n = Number(r);
+  if (Number.isFinite(n) && n >= 1 && n <= 25) return n;
+  return null;
+}
+
+function getOverallRecordFromCompetitor(competitor) {
+  const recs = competitor?.records;
+  if (!Array.isArray(recs) || !recs.length) return "";
+
+  // Prefer "overall"
+  const overall =
+    recs.find(r => String(r?.name || "").toLowerCase() === "overall") ||
+    recs.find(r => String(r?.type || "").toLowerCase() === "total") ||
+    recs[0];
+
+  return String(overall?.summary || "").trim();
+}
+
+function teamDisplayNameWithRank(teamName, competitor, leagueKey) {
+  // Only apply to college sports per your request
+  if (leagueKey !== "ncaam" && leagueKey !== "cfb") return teamName;
+
+  const rank = getTop25RankFromCompetitor(competitor);
+  return rank ? `#${rank} ${teamName}` : teamName;
+}
+
+function homeAwayWithRecord(homeAwayLabel, competitor, leagueKey) {
+  // Only apply to college sports per your request
+  if (leagueKey !== "ncaam" && leagueKey !== "cfb") return homeAwayLabel;
+
+  const rec = getOverallRecordFromCompetitor(competitor);
+  return rec ? `${homeAwayLabel} • ${rec}` : homeAwayLabel;
+}
+
+/* =========================
    SCORES TAB (Updated header layout)
    ========================= */
 async function loadScores(showLoading) {
@@ -1245,8 +1293,11 @@ async function loadScores(showLoading) {
       const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
       const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
 
-      const homeName = home?.team?.displayName || "Home";
-      const awayName = away?.team?.displayName || "Away";
+      const homeNameRaw = home?.team?.displayName || "Home";
+const awayNameRaw = away?.team?.displayName || "Away";
+
+const homeName = teamDisplayNameWithRank(homeNameRaw, home, selectedKey);
+const awayName = teamDisplayNameWithRank(awayNameRaw, away, selectedKey);
 
       const homeTeam = home?.team || null;
       const awayTeam = away?.team || null;
@@ -1290,7 +1341,7 @@ async function loadScores(showLoading) {
               }
               <div class="teamText">
                 <div class="teamName">${escapeHtml(awayName)}</div>
-                <div class="teamMeta">Away</div>
+<div class="teamMeta">${escapeHtml(homeAwayWithRecord("Away", away, selectedKey))}</div>
               </div>
             </div>
           </div>
@@ -1307,7 +1358,7 @@ async function loadScores(showLoading) {
               }
               <div class="teamText">
                 <div class="teamName">${escapeHtml(homeName)}</div>
-                <div class="teamMeta">Home</div>
+                <div class="teamMeta">${escapeHtml(homeAwayWithRecord("Home", home, selectedKey))}</div>
               </div>
             </div>
           </div>
