@@ -1141,7 +1141,6 @@ function checkCode() {
   showTab("scores");
 
   updateRivalryBanner();
-  window.addEventListener("resize", positionRivalryBanner);
 }
 
 /* =========================
@@ -1188,35 +1187,9 @@ function updateRivalryBanner() {
   const days = daysSince(LAST_TTUN_WIN_DATE);
   banner.textContent = `${days} days since TTUN has won in The Game`;
   banner.style.display = "block";
-
-  positionRivalryBanner();
 }
 
-function positionRivalryBanner() {
-  const banner = document.getElementById("rivalryBanner");
-  const tabs = document.querySelector(".tabs");
-  const content = document.getElementById("content");
-  if (!banner || !tabs || !content) return;
 
-  // Make banner feel like a real bottom bar (full width)
-  banner.style.left = "0";
-  banner.style.right = "0";
-  banner.style.margin = "0";
-  banner.style.borderRadius = "0";
-
-  // Put banner at the very bottom
-  banner.style.bottom = "0px";
-
-  // Measure banner after it’s visible
-  const bannerH = banner.offsetHeight || 0;
-
-  // Push the tabs UP so they sit above the banner
-  tabs.style.bottom = `${bannerH}px`;
-
-  // Keep content from hiding behind tabs + banner
-  const tabsH = tabs.offsetHeight || 0;
-  content.style.paddingBottom = `${bannerH + tabsH}px`;
-}
 
 function setActiveTabButton(tab) {
   document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
