@@ -2057,26 +2057,31 @@ function renderShopChatMessages(items) {
   const myName = getChatDisplayName();
 
   const html = (items || []).map(m => {
+    const sender = escapeHtml(sanitizeTTUNText(m?.name || "Anon"));
     const text = escapeHtml(sanitizeTTUNText(m?.text || ""));
-    const t = m?.ts?.toDate ? m.ts.toDate() : null;
-    const time = t
-      ? t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      : "";
 
-    const isMine = m?.name === myName;
+    const t = m?.ts?.toDate ? m.ts.toDate() : null;
+    const time = t ? t.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+
+    const isMine = (m?.name || "") === myName;
 
     return `
-      <div class="chatMsgBubble ${isMine ? "mine" : ""}">
-        <div class="chatMsgText">${text}</div>
-        ${time ? `<div class="chatMsgTime">${escapeHtml(time)}</div>` : ``}
+      <div class="chatMsgWrap ${isMine ? "mine" : ""}">
+        <div class="chatMsgName">${sender}</div>
+        <div class="chatMsgBubble ${isMine ? "mine" : ""}">
+          <div class="chatMsgText">${text}</div>
+          ${time ? `<div class="chatMsgTime">${escapeHtml(time)}</div>` : ``}
+        </div>
       </div>
     `;
   }).join("");
 
   list.innerHTML = html || `<div class="notice">No messages yet. Start it up.</div>`;
 
+  // Keep newest visible
   list.scrollTop = list.scrollHeight;
 
+  // TTUN enforcement
   setTimeout(() => replaceMichiganText(), 0);
 }
 
