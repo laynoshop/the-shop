@@ -57,25 +57,26 @@ body::before {
 }
 /* ---------------------------------------- */
 
-/* ===== Buckeye Battle Cry Header ===== */
-
+/* ===== Buckeye Battle Cry Header (LOGIN) ===== */
 .battleCryBar{
-  position:absolute;
-  top:18px;
-  left:0;
-  right:0;
-
+  width: 100%;
   display:flex;
   justify-content:center;
   align-items:center;
-  gap:14px;
+  gap: 14px;
 
-  z-index:5;
+  margin: 0 0 16px 0; /* space between header and card */
+  padding: 0 10px;
+
+  z-index: 5;
 }
 
 .battleLeaf{
-  width:72px;
-  height:auto;
+  width: 64px;
+  height: 64px;          /* hard cap so it can’t blow up */
+  object-fit: contain;
+  flex: 0 0 64px;
+
   display:block;
   filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
 }
@@ -84,21 +85,22 @@ body::before {
   display:flex;
   flex-direction:column;
   text-align:left;
-  line-height:1.05;
-  font-weight:800;
+  line-height:1.1;
+  font-weight:900;
   letter-spacing:0.3px;
   color:white;
+  text-shadow: 0 6px 18px rgba(0,0,0,0.35);
 }
 
 .battleLyrics div{
-  font-size:16px;
-  opacity:0.95;
+  font-size: 15px;
+  opacity: 0.95;
 }
 
 .battleFinal{
-  font-size:18px;
-  letter-spacing:1px;
-  opacity:1;
+  font-size: 17px;
+  letter-spacing: 1px;
+  opacity: 1;
 }
 
 /* ===== LOGIN SCREEN (Elite Members Club) ===== */
