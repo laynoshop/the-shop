@@ -1276,3 +1276,34 @@ button {
   opacity:0.8;
   font-size:13px;
 }
+
+/* ===============================
+   HARD FIX: Buckeye header sizing
+   =============================== */
+
+.battleCryBar{
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+
+  margin: 0 0 16px 0;
+  padding: 0 12px;
+
+  position: relative;     /* ensure it behaves normally */
+  z-index: 10;
+}
+
+/* Force the image to NEVER exceed this size even if you have img{width:100%} elsewhere */
+.battleCryBar img.battleLeaf{
+  width: 64px !important;
+  height: 64px !important;
+  max-width: 64px !important;
+  max-height: 64px !important;
+
+  object-fit: contain !important;
+  flex: 0 0 64px !important;
+
+  display: block !important;
+}
