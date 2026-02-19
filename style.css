@@ -60,45 +60,54 @@ body::before {
 /* ===== Buckeye Battle Cry Header (LOGIN) ===== */
 .battleCryBar{
   width: 100%;
-  display:flex;
-  justify-content:center;
-  align-items:center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   gap: 14px;
 
-  margin: 0 0 16px 0; /* space between header and card */
-  padding: 0 10px;
+  /* keep it in normal layout flow (NOT absolute) */
+  position: relative;
+  z-index: 10;
 
-  z-index: 5;
+  /* spacing above the login card */
+  margin: 0 0 16px 0;
+  padding: 0 12px;
+
+  /* prevent any weird overflow pushing layout */
+  overflow: hidden;
 }
 
-.battleLeaf{
-  width: 64px;
-  height: 64px;          /* hard cap so it can’t blow up */
-  object-fit: contain;
-  flex: 0 0 64px;
+/* HARD CLAMP the buckeye leaf */
+.battleCryBar img.battleLeaf{
+  width: 64px !important;
+  height: 64px !important;
+  max-width: 64px !important;
+  max-height: 64px !important;
 
-  display:block;
+  object-fit: contain !important;
+  flex: 0 0 64px !important;
+  display: block !important;
+
   filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
 }
 
 .battleLyrics{
-  display:flex;
-  flex-direction:column;
-  text-align:left;
-  line-height:1.1;
-  font-weight:900;
-  letter-spacing:0.3px;
-  color:white;
-  text-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  line-height: 1.05;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  color: #fff;
 }
 
 .battleLyrics div{
-  font-size: 15px;
+  font-size: 16px;
   opacity: 0.95;
 }
 
 .battleFinal{
-  font-size: 17px;
+  font-size: 18px;
   letter-spacing: 1px;
   opacity: 1;
 }
