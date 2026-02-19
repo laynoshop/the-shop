@@ -63,39 +63,19 @@ body::before {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 14px;
 
-  /* keep it in normal layout flow (NOT absolute) */
   position: relative;
   z-index: 10;
 
-  /* spacing above the login card */
   margin: 0 0 16px 0;
   padding: 0 12px;
-
-  /* prevent any weird overflow pushing layout */
-  overflow: hidden;
-}
-
-/* HARD CLAMP the buckeye leaf */
-.battleCryBar img.battleLeaf{
-  width: 64px !important;
-  height: 64px !important;
-  max-width: 64px !important;
-  max-height: 64px !important;
-
-  object-fit: contain !important;
-  flex: 0 0 64px !important;
-  display: block !important;
-
-  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
 }
 
 .battleLyrics{
   display: flex;
   flex-direction: column;
-  text-align: left;
-  line-height: 1.05;
+  text-align: center;     /* centered since no image */
+  line-height: 1.1;
   font-weight: 900;
   letter-spacing: 0.3px;
   color: #fff;
@@ -1284,35 +1264,4 @@ button {
   margin-top:4px;
   opacity:0.8;
   font-size:13px;
-}
-
-/* ===============================
-   HARD FIX: Buckeye header sizing
-   =============================== */
-
-.battleCryBar{
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 14px;
-
-  margin: 0 0 16px 0;
-  padding: 0 12px;
-
-  position: relative;     /* ensure it behaves normally */
-  z-index: 10;
-}
-
-/* Force the image to NEVER exceed this size even if you have img{width:100%} elsewhere */
-.battleCryBar img.battleLeaf{
-  width: 64px !important;
-  height: 64px !important;
-  max-width: 64px !important;
-  max-height: 64px !important;
-
-  object-fit: contain !important;
-  flex: 0 0 64px !important;
-
-  display: block !important;
 }
