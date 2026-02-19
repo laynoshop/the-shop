@@ -3531,6 +3531,22 @@ document.addEventListener("click", (e) => {
   }
 });
 
+function updateDaysSinceWin(){
+  // Michigan’s last win over Ohio State (football)
+  const lastWinDate = new Date("2024-11-30T00:00:00");
+  const now = new Date();
+  const diffTime = Math.abs(now - lastWinDate);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  const el = document.getElementById("daysSinceWin");
+  if(el){
+    el.textContent = `${diffDays} day${diffDays === 1 ? "" : "s"} since Michigan last beat Ohio State`;
+  }
+}
+
+// Call it right away on load
+updateDaysSinceWin();
+
 /* =========================
    Window exports (keeps inline onclick working)
    ========================= */
