@@ -57,6 +57,50 @@ body::before {
 }
 /* ---------------------------------------- */
 
+/* ===== Buckeye Battle Cry Header ===== */
+
+.battleCryBar{
+  position:absolute;
+  top:18px;
+  left:0;
+  right:0;
+
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:14px;
+
+  z-index:5;
+}
+
+.battleLeaf{
+  width:72px;
+  height:auto;
+  display:block;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
+}
+
+.battleLyrics{
+  display:flex;
+  flex-direction:column;
+  text-align:left;
+  line-height:1.05;
+  font-weight:800;
+  letter-spacing:0.3px;
+  color:white;
+}
+
+.battleLyrics div{
+  font-size:16px;
+  opacity:0.95;
+}
+
+.battleFinal{
+  font-size:18px;
+  letter-spacing:1px;
+  opacity:1;
+}
+
 /* ===== LOGIN SCREEN (Elite Members Club) ===== */
 .loginScreen{
   min-height: 100vh;
