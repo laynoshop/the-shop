@@ -107,6 +107,17 @@ body::before {
   z-index: 1;
 }
 
+/* tunnel “hit” on unlock */
+.loginUnlocking .days-since{
+  animation: tunnelHit 320ms ease-out both;
+}
+
+@keyframes tunnelHit{
+  0%   { transform: translateY(0) scale(1); filter: brightness(1); }
+  60%  { transform: translateY(-2px) scale(1.02); filter: brightness(1.08); }
+  100% { transform: translateY(0) scale(1.00); filter: brightness(1.02); }
+}
+
 /* ===== LOGIN SCREEN (Elite Members Club) ===== */
 /* ===== LOGIN SCREEN (Elite Members Club) ===== */
 .loginScreen{
