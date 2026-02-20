@@ -243,29 +243,64 @@ body::before {
 }
 
 /* ✅ slightly upgraded: match card width so it “belongs” */
+/* ===== Days Since (LOGIN header module) ===== */
 .days-since{
   width: min(420px, 92vw);
-  margin: 0 0 16px 0;
+  margin: 0 0 18px 0;
+  padding: 12px 14px;
+
   text-align: center;
+
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+
+  background:
+    radial-gradient(520px 160px at 50% -60px, rgba(187,0,0,0.28), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+    rgba(0,0,0,0.22);
+
+  box-shadow:
+    0 18px 45px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(255,255,255,0.04) inset;
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .daysNumber{
-  font-size: 42px;
+  font-size: 46px;
   font-weight: 1000;
   letter-spacing: 2px;
   line-height: 1;
+
   color: #ffffff;
   text-shadow:
     0 0 20px rgba(187,0,0,0.35),
-    0 0 40px rgba(187,0,0,0.15);
+    0 0 40px rgba(187,0,0,0.18);
 }
 
 .daysLabel{
   margin-top: 6px;
   font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  opacity: 0.75;
+  font-weight: 1000;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* subtle divider line inside the module */
+.daysLabel::before{
+  content:"";
+  display:block;
+  width: 64%;
+  height: 1px;
+  margin: 10px auto 10px auto;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255,255,255,0.22),
+    transparent
+  );
 }
 
 /* Success transition (premium “unlock”) */
