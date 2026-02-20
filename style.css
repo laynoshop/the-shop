@@ -222,7 +222,7 @@ body::before {
 
 .loginTitle{
   margin: 0 0 6px;
-  font-size: 44px;
+  font-size: 48px;
   font-weight: 1000;
   letter-spacing: 0.2px;
   color: var(--scarlet);
@@ -355,7 +355,7 @@ body::before {
 }
 
 .daysNumber{
-  font-size: 64px;
+  font-size: 78px;
   font-weight: 1000;
   letter-spacing: 3px;
   line-height: 0.95;
