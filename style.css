@@ -58,18 +58,22 @@ body::before {
 /* ---------------------------------------- */
 
 /* ===== LOGIN SCREEN (Elite Members Club) ===== */
+/* ===== LOGIN SCREEN (Elite Members Club) ===== */
 .loginScreen{
   min-height: 100vh;
-  display:flex;
+  display: flex;
 
-  /* 👇 Push card toward the top instead of center */
-  align-items: flex-start;
-  justify-content: center;
+  /* ✅ FIX: stack “days-since” ABOVE the login card (not side-by-side) */
+  flex-direction: column;
 
-  /* 👇 Controlled top spacing */
+  /* ✅ center the whole stack */
+  align-items: center;
+  justify-content: flex-start;
+
+  /* keep your spacing (adjust if you want it higher/lower) */
   padding: 110px 18px 70px;
 
-  text-align:center;
+  text-align: center;
   position: relative;
 }
 
@@ -238,13 +242,17 @@ body::before {
   z-index: 1;
 }
 
+/* ✅ slightly upgraded: match card width so it “belongs” */
 .days-since{
+  width: min(420px, 92vw);
   text-align: center;
+
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 1px;
   color: rgba(255,255,255,0.88);
-  margin-bottom: 14px;
+
+  margin: 0 0 14px 0;
 }
 
 /* Success transition (premium “unlock”) */
