@@ -221,7 +221,7 @@ body::before {
 }
 
 .loginTitle{
-  margin: 6px 0 4px;
+  margin: 0 0 6px;
   font-size: 44px;
   font-weight: 1000;
   letter-spacing: 0.2px;
