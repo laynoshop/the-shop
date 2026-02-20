@@ -3532,17 +3532,21 @@ document.addEventListener("click", (e) => {
 });
 
 function updateDaysSinceWin(){
-  // TTUN’s last win over Ohio State (football)
   const lastWinDate = new Date("2024-11-30T00:00:00");
   const now = new Date();
   const diffDays = Math.floor((now - lastWinDate) / (1000 * 60 * 60 * 24));
+  const d = Math.max(0, diffDays);
 
   const el = document.getElementById("daysSinceWin");
   if (el){
-    const d = Math.max(0, diffDays);
-    el.textContent = `${d} day${d === 1 ? "" : "s"} since TTUN last beat Ohio State`;
+    el.innerHTML = `
+      <div class="daysNumber">${d}</div>
+      <div class="daysLabel">DAYS SINCE TTUN WON</div>
+    `;
   }
 }
+
+document.addEventListener("DOMContentLoaded", updateDaysSinceWin);
 
 document.addEventListener("DOMContentLoaded", updateDaysSinceWin);
 
