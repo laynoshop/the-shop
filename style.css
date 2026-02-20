@@ -129,6 +129,24 @@ body::before {
     0 18px 55px rgba(0,0,0,0.65);
 }
 
+.daysNumber,
+.days-number{
+  animation: daysPulse 3.5s ease-in-out infinite;
+}
+
+@keyframes daysPulse{
+  0%,100%{
+    text-shadow:
+      0 0 18px rgba(187,0,0,0.20),
+      0 18px 55px rgba(0,0,0,0.65);
+  }
+  50%{
+    text-shadow:
+      0 0 28px rgba(187,0,0,0.40),
+      0 18px 55px rgba(0,0,0,0.65);
+  }
+}
+
 /* ===== LOGIN SCREEN (Elite Members Club) ===== */
 /* ===== LOGIN SCREEN (Elite Members Club) ===== */
 .loginScreen{
