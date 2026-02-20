@@ -129,10 +129,7 @@ body::before {
     0 18px 55px rgba(0,0,0,0.65);
 }
 
-.daysNumber,
-.days-number{
-  animation: daysPulse 3.5s ease-in-out infinite;
-}
+
 
 @keyframes daysPulse{
   0%,100%{
