@@ -303,6 +303,21 @@ body::before {
   );
 }
 
+.days-since{
+  animation: daysFadeIn 500ms ease-out;
+}
+
+@keyframes daysFadeIn{
+  from{
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to{
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Success transition (premium “unlock”) */
 .loginUnlocking .loginCard{
   animation: unlockPop 320ms ease-out forwards;
