@@ -3541,7 +3541,7 @@ function updateDaysSinceWin(){
   if (el){
     el.innerHTML = `
       <div class="daysNumber">${d}</div>
-      <div class="daysLabel">DAYS SINCE TTUN WON</div>
+      <div class="daysLabel">DAYS SINCE TTUN WON IN THE GAME</div>
     `;
   }
 }
