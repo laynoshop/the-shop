@@ -1112,26 +1112,27 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
     return false;
   }
 
+  // ✅ Always try higher limits for ALL leagues (today can be partial/empty otherwise)
+  const baseLimit500 = addOrReplaceParam(baseUrl, "limit", "500");
+  const baseLimit1000 = addOrReplaceParam(baseUrl, "limit", "1000");
+
   const attempts = [
     { label: "selectedDate", url: baseUrl },
+    { label: "selectedDate-limit-500", url: baseLimit500 },
+    { label: "selectedDate-limit-1000", url: baseLimit1000 },
 
-    // NCAAM often needs a bigger limit for full slates
+    // NCAAM-specific oddities
     ...(isNcaam ? [
-      { label: "ncaam-limit-500", url: addOrReplaceParam(baseUrl, "limit", "500") },
-      { label: "ncaam-limit-1000", url: addOrReplaceParam(baseUrl, "limit", "1000") },
-      { label: "ncaam-noGroups-limit-1000", url: addOrReplaceParam(baseUrl.replace(/&groups=50/i, ""), "limit", "1000") },
       { label: "ncaam-noGroups", url: baseUrl.replace(/&groups=50/i, "") },
+      { label: "ncaam-noGroups-limit-1000", url: addOrReplaceParam(baseUrl.replace(/&groups=50/i, ""), "limit", "1000") },
     ] : []),
 
     { label: "noDate", url: removeDatesParam(baseUrl) },
-    { label: "yesterday", url: league.endpoint(yDate) },
-    { label: "tomorrow", url: league.endpoint(tDate) }
+    { label: "yesterday", url: addOrReplaceParam(league.endpoint(yDate), "limit", "1000") },
+    { label: "tomorrow", url: addOrReplaceParam(league.endpoint(tDate), "limit", "1000") }
   ];
 
   let lastError = null;
-
-  // ✅ NEW: keep the first non-empty result as a fallback,
-  // but prefer a result that includes scheduled ("pre") games for NCAAM.
   let firstNonEmpty = null;
 
   for (const a of attempts) {
@@ -1146,25 +1147,27 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
       const events = Array.isArray(data?.events) ? data.events : [];
       if (events.length === 0) continue;
 
-      // Save first non-empty response
       if (!firstNonEmpty) {
         firstNonEmpty = { data, events, used: a.label, url: a.url };
       }
 
-      // If NCAAM and this response includes scheduled games, it's the best one — return it
+      // Prefer "pre" games for NCAAM if available, but never discard valid results
       if (isNcaam && hasAnyScheduledPreGames(events)) {
         return { data, events, used: a.label, url: a.url };
       }
 
-      // For all non-NCAAM, or NCAAM without pre-games, keep looping to see if a better one exists
+      // For non-NCAAM, first non-empty is fine
+      if (!isNcaam) {
+        return { data, events, used: a.label, url: a.url };
+      }
+
+      // For NCAAM without pre-games, keep looking for a better response
     } catch (e) {
       lastError = e;
     }
   }
 
-  // If we found any games at all, return them (even if none were "pre")
   if (firstNonEmpty) return firstNonEmpty;
-
   return { data: null, events: [], used: "none", url: "", error: lastError };
 }
 
