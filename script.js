@@ -296,20 +296,24 @@ function updateTheGameCountdown() {
   const diffMs = target - now;
 
   const card = document.getElementById("countdownCard");
-  const sub  = document.getElementById("countdownSub");
+  if (!card) return; // if not on this screen, bail safely
 
-  // If elements aren't on the page, bail safely
-  if (!card || !sub) return;
+  const elDays  = document.getElementById("cdDays");
+  const elHours = document.getElementById("cdHours");
+  const elMins  = document.getElementById("cdMins");
+  const elSecs  = document.getElementById("cdSecs");
 
-  // Clear levels
+  // If any counters are missing, bail safely
+  if (!elDays || !elHours || !elMins || !elSecs) return;
+
+  // Clear intensity levels (if you still have these styles)
   card.classList.remove("level30", "level7", "level1");
 
   if (diffMs <= 0) {
-    document.getElementById("cdDays").textContent  = "0";
-    document.getElementById("cdHours").textContent = "0";
-    document.getElementById("cdMins").textContent  = "0";
-    document.getElementById("cdSecs").textContent  = "0";
-    sub.textContent = "IT’S GAME DAY.";
+    elDays.textContent  = "0";
+    elHours.textContent = "00";
+    elMins.textContent  = "00";
+    elSecs.textContent  = "00";
     card.classList.add("level1");
     return;
   }
@@ -320,18 +324,17 @@ function updateTheGameCountdown() {
   const mins  = Math.floor((totalSec % 3600) / 60);
   const secs  = totalSec % 60;
 
-  document.getElementById("cdDays").textContent  = String(days);
-  document.getElementById("cdHours").textContent = pad2(hours);
-  document.getElementById("cdMins").textContent  = pad2(mins);
-  document.getElementById("cdSecs").textContent  = pad2(secs);
+  elDays.textContent  = String(days);
+  elHours.textContent = pad2(hours);
+  elMins.textContent  = pad2(mins);
+  elSecs.textContent  = pad2(secs);
 
-  // Intensity (Option B)
+  // Intensity classes (optional; keep if you like)
   if (days <= 1) card.classList.add("level1");
   else if (days <= 7) card.classList.add("level7");
   else if (days <= 30) card.classList.add("level30");
 
-  // Nice readable date line
-  sub.textContent = `Target: ${target.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" })}`;
+  // ✅ Removed "Target: ..." line entirely (no countdownSub)
 }
 
 let countdownTimerHandle = null;
@@ -340,6 +343,9 @@ function showEntryScreen() {
   const login = document.getElementById("login");
   const entry = document.getElementById("entry");
   const app   = document.getElementById("app");
+
+  // ✅ Entry-only vibe
+  document.body.classList.add("entryMode");
 
   if (login) login.style.display = "none";
   if (app) app.style.display = "none";
@@ -350,28 +356,35 @@ function showEntryScreen() {
   if (countdownTimerHandle) clearInterval(countdownTimerHandle);
   countdownTimerHandle = setInterval(updateTheGameCountdown, 1000);
 
-  // Door clicks
-  document.querySelectorAll(".doorBtn").forEach(btn => {
-    btn.onclick = () => {
-      const tab = btn.getAttribute("data-go");
-      // Enter app normally (tabs should remain protected)
-      enterAppToTab(tab);
-    };
-  });
+  // Bind door clicks once (prevents stacking handlers)
+  if (!showEntryScreen._bound) {
+    document.querySelectorAll(".doorBtn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const tab = btn.getAttribute("data-go");
+        enterAppToTab(tab);
+      });
+    });
+    showEntryScreen._bound = true;
+  }
 }
 
 function enterAppToTab(tabName) {
   const entry = document.getElementById("entry");
   const app   = document.getElementById("app");
 
+  // ✅ Turn off Entry-only vibe
+  document.body.classList.remove("entryMode");
+
   if (entry) entry.style.display = "none";
   if (app) app.style.display = "block";
 
-  // Stop countdown (optional; keeps things lighter)
-  if (countdownTimerHandle) clearInterval(countdownTimerHandle);
+  // Stop countdown (keeps things lighter)
+  if (countdownTimerHandle) {
+    clearInterval(countdownTimerHandle);
+    countdownTimerHandle = null;
+  }
 
-  // IMPORTANT: Use YOUR existing navigation function if you already have one.
-  // Replace showTab(tabName) with whatever you currently use.
+  // Keep your existing navigation
   if (typeof showTab === "function") {
     showTab(tabName);
   } else {
