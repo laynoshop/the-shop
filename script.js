@@ -271,6 +271,114 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+// ===== ENTRY + COUNTDOWN TO "THE GAME" (Yearly calc) =====
+
+// The Game: last Saturday in November, local time, 12:00 PM by default (change if you want)
+function getTheGameDate(year) {
+  // Start at Nov 30 and walk backward to Saturday
+  const d = new Date(year, 10, 30, 12, 0, 0, 0); // month is 0-based: 10 = November
+  while (d.getDay() !== 6) d.setDate(d.getDate() - 1); // 6 = Saturday
+  return d;
+}
+
+function getNextTheGameDate(now = new Date()) {
+  const year = now.getFullYear();
+  const thisYears = getTheGameDate(year);
+  if (now <= thisYears) return thisYears;
+  return getTheGameDate(year + 1);
+}
+
+function pad2(n){ return String(n).padStart(2, "0"); }
+
+function updateTheGameCountdown() {
+  const now = new Date();
+  const target = getNextTheGameDate(now);
+  const diffMs = target - now;
+
+  const card = document.getElementById("countdownCard");
+  const sub  = document.getElementById("countdownSub");
+
+  // If elements aren't on the page, bail safely
+  if (!card || !sub) return;
+
+  // Clear levels
+  card.classList.remove("level30", "level7", "level1");
+
+  if (diffMs <= 0) {
+    document.getElementById("cdDays").textContent  = "0";
+    document.getElementById("cdHours").textContent = "0";
+    document.getElementById("cdMins").textContent  = "0";
+    document.getElementById("cdSecs").textContent  = "0";
+    sub.textContent = "IT’S GAME DAY.";
+    card.classList.add("level1");
+    return;
+  }
+
+  const totalSec = Math.floor(diffMs / 1000);
+  const days  = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
+  const mins  = Math.floor((totalSec % 3600) / 60);
+  const secs  = totalSec % 60;
+
+  document.getElementById("cdDays").textContent  = String(days);
+  document.getElementById("cdHours").textContent = pad2(hours);
+  document.getElementById("cdMins").textContent  = pad2(mins);
+  document.getElementById("cdSecs").textContent  = pad2(secs);
+
+  // Intensity (Option B)
+  if (days <= 1) card.classList.add("level1");
+  else if (days <= 7) card.classList.add("level7");
+  else if (days <= 30) card.classList.add("level30");
+
+  // Nice readable date line
+  sub.textContent = `Target: ${target.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" })}`;
+}
+
+let countdownTimerHandle = null;
+
+function showEntryScreen() {
+  const login = document.getElementById("login");
+  const entry = document.getElementById("entry");
+  const app   = document.getElementById("app");
+
+  if (login) login.style.display = "none";
+  if (app) app.style.display = "none";
+  if (entry) entry.style.display = "flex";
+
+  // Start countdown tick
+  updateTheGameCountdown();
+  if (countdownTimerHandle) clearInterval(countdownTimerHandle);
+  countdownTimerHandle = setInterval(updateTheGameCountdown, 1000);
+
+  // Door clicks
+  document.querySelectorAll(".doorBtn").forEach(btn => {
+    btn.onclick = () => {
+      const tab = btn.getAttribute("data-go");
+      // Enter app normally (tabs should remain protected)
+      enterAppToTab(tab);
+    };
+  });
+}
+
+function enterAppToTab(tabName) {
+  const entry = document.getElementById("entry");
+  const app   = document.getElementById("app");
+
+  if (entry) entry.style.display = "none";
+  if (app) app.style.display = "block";
+
+  // Stop countdown (optional; keeps things lighter)
+  if (countdownTimerHandle) clearInterval(countdownTimerHandle);
+
+  // IMPORTANT: Use YOUR existing navigation function if you already have one.
+  // Replace showTab(tabName) with whatever you currently use.
+  if (typeof showTab === "function") {
+    showTab(tabName);
+  } else {
+    console.warn("showTab(tabName) not found — wire this to your existing tab navigation.");
+  }
+}
+
 /* =========================
    FAVORITES SORTING
    ========================= */
@@ -1151,13 +1259,32 @@ function checkCode() {
   }
 
   setTimeout(() => {
+    // Hide login
     if (login) login.style.display = "none";
-    if (app) app.style.display = "block";
 
+    // IMPORTANT: do NOT show the app yet — entry screen comes first
+    if (app) app.style.display = "none";
+
+    // clean up classes so future loads don't inherit them
     if (login) login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
 
+    // Build tabs now (so when they enter, it’s already correct)
     buildTabsForRole(role);
-    showTab("scores");
+
+    // If you have adminOnly tiles on the entry screen, reveal them here
+    document.querySelectorAll(".adminOnly").forEach(el => {
+      el.style.display = (role === "admin") ? "" : "none";
+    });
+
+    // Show the entry screen + start countdown
+    if (typeof showEntryScreen === "function") {
+      showEntryScreen();
+    } else {
+      console.warn("showEntryScreen() not found — did you paste the entry/countdown block?");
+      // Fallback: old behavior
+      if (app) app.style.display = "block";
+      showTab("scores");
+    }
   }, 520);
 }
 
