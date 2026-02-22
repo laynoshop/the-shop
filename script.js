@@ -1262,12 +1262,15 @@ function checkCode() {
   // Persist role
   localStorage.setItem(ROLE_KEY, role);
 
+  // Optional: clear input so the key isn't visible after unlock
+  input.value = "";
+
   // Transition UI
   const login = document.getElementById("login");
-  const app = document.getElementById("app");
+  const app   = document.getElementById("app");
 
   if (login) {
-    login.classList.add("loginUnlocking", "chantFlashIO");
+    login.classList.add("loginUnlocking");
     setTimeout(() => login.classList.add("loginFadeOut"), 160);
   }
 
@@ -1278,16 +1281,19 @@ function checkCode() {
     // IMPORTANT: do NOT show the app yet — entry screen comes first
     if (app) app.style.display = "none";
 
-    // clean up classes so future loads don't inherit them
-    if (login) login.classList.remove("loginUnlocking", "loginFadeOut", "chantFlashIO");
+    // Clean up classes so future loads don't inherit them
+    if (login) login.classList.remove("loginUnlocking", "loginFadeOut");
 
     // Build tabs now (so when they enter, it’s already correct)
-    buildTabsForRole(role);
+    if (typeof buildTabsForRole === "function") buildTabsForRole(role);
 
-    // If you have adminOnly tiles on the entry screen, reveal them here
-    document.querySelectorAll(".adminOnly").forEach(el => {
-      el.style.display = (role === "admin") ? "" : "none";
-    });
+    // ✅ Only toggle adminOnly elements INSIDE the entry screen
+    const entry = document.getElementById("entry");
+    if (entry) {
+      entry.querySelectorAll(".adminOnly").forEach(el => {
+        el.style.display = (role === "admin") ? "" : "none";
+      });
+    }
 
     // Show the entry screen + start countdown
     if (typeof showEntryScreen === "function") {
@@ -1296,7 +1302,7 @@ function checkCode() {
       console.warn("showEntryScreen() not found — did you paste the entry/countdown block?");
       // Fallback: old behavior
       if (app) app.style.display = "block";
-      showTab("scores");
+      if (typeof showTab === "function") showTab("scores");
     }
   }, 520);
 }
