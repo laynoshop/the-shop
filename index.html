@@ -50,9 +50,56 @@
 
   </div>
 
+<!-- ENTRY (shows after login) -->
+<div id="entry" class="entryScreen" style="display:none;">
+  <div class="entryWrap">
+    <div class="entryTop">
+      <div class="entryChant">4 to 6. A to B.</div>
+
+      <div class="countdownCard" id="countdownCard">
+        <div class="countdownTitle">Countdown to The Game</div>
+
+        <div class="countdownNums" id="countdownNums">
+          <div class="cdUnit">
+            <div class="cdNum" id="cdDays">--</div>
+            <div class="cdLab">DAYS</div>
+          </div>
+          <div class="cdUnit">
+            <div class="cdNum" id="cdHours">--</div>
+            <div class="cdLab">HRS</div>
+          </div>
+          <div class="cdUnit">
+            <div class="cdNum" id="cdMins">--</div>
+            <div class="cdLab">MIN</div>
+          </div>
+          <div class="cdUnit">
+            <div class="cdNum" id="cdSecs">--</div>
+            <div class="cdLab">SEC</div>
+          </div>
+        </div>
+
+        <div class="countdownSub" id="countdownSub"></div>
+      </div>
+    </div>
+
+    <div class="entryDoors">
+      <button class="doorBtn" data-go="scores">Scores</button>
+      <button class="doorBtn" data-go="picks">Picks</button>
+      <button class="doorBtn" data-go="beat">Beat TTUN</button>
+      <button class="doorBtn" data-go="news">Top News</button>
+
+      <!-- Admin only (we’ll show/hide in JS if you already do role logic) -->
+      <button class="doorBtn adminOnly" data-go="shop" style="display:none;">Shop</button>
+    </div>
+  </div>
+</div>
+
   <!-- APP -->
   <div id="app" style="display:none;">
-    <div id="content"></div>
+  <div id="content"></div>
+  <div class="tabs">...</div>
+  <div id="rivalryBanner" class="rivalryBanner" style="display:none;"></div>
+</div>
 
     <!-- Bottom tabs (JS will replace buttons based on role) -->
     <div class="tabs">
