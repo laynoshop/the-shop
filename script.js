@@ -1108,7 +1108,7 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
     const iso = ev?.date || comp?.date || "";
     const d = new Date(iso);
     if (!iso || isNaN(d.getTime())) return "";
-    return formatDateYYYYMMDD(d); // uses local timezone
+    return formatDateYYYYMMDD(d); // local timezone
   }
 
   function hasAnyScheduledPreGames(events) {
@@ -1128,24 +1128,27 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
     return { data, events };
   }
 
-  // ✅ NORMALIZED DAY MODE:
-  // Fetch yesterday/today/tomorrow with high limit, then filter to the exact selected day in LOCAL time.
-  // This fixes the "today shows tomorrow" issue.
+  // ✅ NORMALIZED DAY MODE (safe: always returns data object)
   try {
     const urlToday = addOrReplaceParam(baseUrl, "limit", "1000");
     const urlY = addOrReplaceParam(league.endpoint(yDate), "limit", "1000");
     const urlT = addOrReplaceParam(league.endpoint(tDate), "limit", "1000");
 
-    const [rToday, rY, rT] = await Promise.allSettled([
+    const results = await Promise.allSettled([
       fetchEvents(urlToday),
       fetchEvents(urlY),
       fetchEvents(urlT),
     ]);
 
+    // Pick a "best available" data payload for downstream UI (never null)
+    const firstFulfilled = results.find(r => r.status === "fulfilled");
+    const baseData = firstFulfilled && firstFulfilled.status === "fulfilled" ? firstFulfilled.value.data : { events: [] };
+
+    // Combine events from fulfilled calls
     const combined = [];
     const seen = new Set();
 
-    for (const r of [rToday, rY, rT]) {
+    for (const r of results) {
       if (r.status !== "fulfilled") continue;
       for (const ev of (r.value.events || [])) {
         const id = String(ev?.id || "");
@@ -1158,17 +1161,15 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
     const filtered = combined.filter(ev => eventLocalYYYYMMDD(ev) === yyyymmdd);
 
     if (filtered.length > 0) {
-      // Prefer the response that contains scheduled games for NCAAM when possible,
-      // but we already filtered to the right day so this is safe.
+      // Return with a valid data object so Scores/Picks don't crash
       return {
-        data: null,
+        data: { ...(baseData || {}), events: filtered },
         events: filtered,
         used: "normalized-day",
         url: urlToday
       };
     }
   } catch (e) {
-    // If normalized mode fails, we fall back to classic attempts below.
     console.warn("normalized-day fetch failed, falling back:", e);
   }
 
@@ -1223,7 +1224,7 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
   }
 
   if (firstNonEmpty) return firstNonEmpty;
-  return { data: null, events: [], used: "none", url: "", error: lastError };
+  return { data: { events: [] }, events: [], used: "none", url: "", error: lastError };
 }
 
 /**
