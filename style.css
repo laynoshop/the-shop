@@ -418,9 +418,14 @@ body.entryMode::before{
   filter: saturate(1.1);
 }
 
-/* Entry screen layout */
+/* Entry screen layout (LOCKED — no scroll) */
 .entryScreen{
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -434,6 +439,9 @@ body.entryMode::before{
   display: flex;
   flex-direction: column;
   gap: 18px;
+
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Big rally cry */
@@ -489,10 +497,10 @@ body.entryMode::before{
   margin-bottom: 12px;
 }
 
-/* Countdown units */
+/* Countdown units (DAYS featured) */
 .countdownNums{
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1.25fr 1fr 1fr 1fr; /* Days gets more space */
   gap: 10px;
 }
 
@@ -507,8 +515,9 @@ body.entryMode::before{
   -webkit-backdrop-filter: blur(10px);
 }
 
+/* Default numbers (HRS/MIN/SEC) */
 .cdNum{
-  font-size: 44px;
+  font-size: 40px; /* slightly smaller */
   font-weight: 1000;
   letter-spacing: 1px;
   line-height: 1;
@@ -520,10 +529,22 @@ body.entryMode::before{
 
 .cdLab{
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 11px; /* slightly smaller */
   font-weight: 1000;
   letter-spacing: 2.2px;
   opacity: 0.78;
+}
+
+/* DAYS tile (first one) — bigger + more impact */
+.countdownNums .cdUnit:first-child .cdNum{
+  font-size: 58px;
+  letter-spacing: 2px;
+}
+
+.countdownNums .cdUnit:first-child .cdLab{
+  font-size: 12px;
+  letter-spacing: 2.4px;
+  opacity: 0.88;
 }
 
 /* Doors grid */
@@ -532,6 +553,8 @@ body.entryMode::before{
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+
+  overflow: hidden; /* helps prevent iOS scroll jiggle */
 }
 
 /* OPTION A — SCARLET GLASS DOORS */
@@ -578,7 +601,8 @@ body.entryMode::before{
 /* Mobile tightening */
 @media (max-width: 380px){
   .entryChant{ font-size: 40px; }
-  .cdNum{ font-size: 38px; }
+  .cdNum{ font-size: 34px; }
+  .countdownNums .cdUnit:first-child .cdNum{ font-size: 52px; }
   .doorBtn{ font-size: 20px; height: 74px; }
 }
 
