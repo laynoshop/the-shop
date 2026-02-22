@@ -1158,6 +1158,12 @@ function buildLeagueSelectHTML(selectedKey) {
  * - Overlay the REAL <input type="date"> on top (opacity 0)
  * - User tap is on the input itself → picker always opens in Safari + PWA
  */
+/**
+ * iOS-safe approach:
+ * - Render a normal 📅 button for visuals
+ * - Overlay the REAL <input type="date"> on top (opacity 0)
+ * - Wire onchange/oninput directly so date selection actually reloads scores
+ */
 function buildCalendarButtonHTML() {
   const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
 
@@ -1170,6 +1176,8 @@ function buildCalendarButtonHTML() {
         type="date"
         value="${escapeHtml(current)}"
         aria-label="Choose date"
+        onchange="handleNativeDateChangeFromEl(this)"
+        oninput="handleNativeDateChangeFromEl(this)"
       />
     </span>
   `;
