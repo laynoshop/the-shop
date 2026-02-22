@@ -19,17 +19,13 @@
   </noscript>
 
   <!-- LOGIN -->
-  <!-- LOGIN -->
   <div id="login" class="loginScreen">
+    <div class="days-since">
+      <div class="daysNumber" id="daysSinceNumber">446</div>
+      <div class="daysLabel">DAYS SINCE TTUN WON IN THE GAME</div>
+    </div>
 
-<div class="days-since">
-  <div class="daysNumber" id="daysSinceNumber">446</div>
-  <div class="daysLabel">DAYS SINCE TTUN WON IN THE GAME</div>
-</div>
-
-    <!-- CARD -->
     <div class="loginCard">
-
       <h1 class="loginTitle">The Shop</h1>
       <div class="loginSubtitle">Enter the Scarlet Key</div>
 
@@ -42,77 +38,71 @@
           inputmode="numeric"
           autocomplete="one-time-code"
         />
-        <button class="loginBtn" onclick="checkCode()">Unlock</button>
+        <button class="loginBtn" type="button" onclick="checkCode()">Unlock</button>
       </div>
 
       <div class="loginHint">Authorized members only</div>
     </div>
-
   </div>
 
-<!-- ENTRY (shows after login) -->
-<div id="entry" class="entryScreen" style="display:none;">
-  <div class="entryWrap">
-    <div class="entryTop">
-      <div class="entryChant">4 to 6. A to B.</div>
+  <!-- ENTRY (shows after login) -->
+  <div id="entry" class="entryScreen" style="display:none;">
+    <div class="entryWrap">
+      <div class="entryTop">
+        <div class="entryChant">4 to 6. A to B.</div>
 
-      <div class="countdownCard" id="countdownCard">
-        <div class="countdownTitle">Countdown to The Game</div>
+        <div class="countdownCard" id="countdownCard">
+          <div class="countdownTitle">Countdown to The Game</div>
 
-        <div class="countdownNums" id="countdownNums">
-          <div class="cdUnit">
-            <div class="cdNum" id="cdDays">--</div>
-            <div class="cdLab">DAYS</div>
+          <div class="countdownNums" id="countdownNums">
+            <div class="cdUnit">
+              <div class="cdNum" id="cdDays">--</div>
+              <div class="cdLab">DAYS</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdHours">--</div>
+              <div class="cdLab">HRS</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdMins">--</div>
+              <div class="cdLab">MIN</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdSecs">--</div>
+              <div class="cdLab">SEC</div>
+            </div>
           </div>
-          <div class="cdUnit">
-            <div class="cdNum" id="cdHours">--</div>
-            <div class="cdLab">HRS</div>
-          </div>
-          <div class="cdUnit">
-            <div class="cdNum" id="cdMins">--</div>
-            <div class="cdLab">MIN</div>
-          </div>
-          <div class="cdUnit">
-            <div class="cdNum" id="cdSecs">--</div>
-            <div class="cdLab">SEC</div>
-          </div>
+
+          <div class="countdownSub" id="countdownSub"></div>
         </div>
+      </div>
 
-        <div class="countdownSub" id="countdownSub"></div>
+      <div class="entryDoors">
+        <button class="doorBtn" type="button" data-go="scores">Scores</button>
+        <button class="doorBtn" type="button" data-go="picks">Picks</button>
+        <button class="doorBtn" type="button" data-go="beat">Beat TTUN</button>
+        <button class="doorBtn" type="button" data-go="news">Top News</button>
+
+        <!-- Admin only -->
+        <button class="doorBtn adminOnly" type="button" data-go="shop" style="display:none;">Shop</button>
       </div>
     </div>
-
-    <div class="entryDoors">
-      <button class="doorBtn" data-go="scores">Scores</button>
-      <button class="doorBtn" data-go="picks">Picks</button>
-      <button class="doorBtn" data-go="beat">Beat TTUN</button>
-      <button class="doorBtn" data-go="news">Top News</button>
-
-      <!-- Admin only (we’ll show/hide in JS if you already do role logic) -->
-      <button class="doorBtn adminOnly" data-go="shop" style="display:none;">Shop</button>
-    </div>
   </div>
-</div>
 
-  <!-- APP -->
+  <!-- APP (tabs live ONLY in here) -->
   <div id="app" style="display:none;">
-  <div id="content"></div>
-  <div class="tabs">...</div>
-  <div id="rivalryBanner" class="rivalryBanner" style="display:none;"></div>
-</div>
+    <div id="content"></div>
 
-    <!-- Bottom tabs (JS will replace buttons based on role) -->
+    <!-- Bottom tabs (JS can rebuild based on role) -->
     <div class="tabs">
-  <button type="button" data-tab="scores">Scores</button>
-  <button type="button" data-tab="picks">Picks</button>
-  <button type="button" data-tab="beat">Beat<br/>TTUN</button>
-  <button type="button" data-tab="news">Top<br/>News</button>
+      <button type="button" data-tab="scores">Scores</button>
+      <button type="button" data-tab="picks">Picks</button>
+      <button type="button" data-tab="beat">Beat<br/>TTUN</button>
+      <button type="button" data-tab="news">Top<br/>News</button>
+      <button type="button" data-tab="shop" class="adminOnly" style="display:none;">Shop</button>
+    </div>
 
-  <!-- ✅ Present always, only shown for admin -->
-  <button type="button" data-tab="shop" class="adminOnly" style="display:none;">Shop</button>
-</div>
-
-    <!-- Rivalry banner sits below tabs; JS positions it -->
+    <!-- Rivalry banner sits below tabs -->
     <div id="rivalryBanner" class="rivalryBanner" style="display:none;"></div>
   </div>
 
@@ -123,18 +113,20 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 
   <!-- Your app code -->
-  <!-- IMPORTANT: this must match your actual filename in GitHub -->
   <script src="script.js" defer></script>
 
-  <!-- Optional: make the Enter button trigger checkCode even if onclick gets weird -->
+  <!-- Enter key triggers login -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      const btn = document.getElementById("enterBtn");
       const code = document.getElementById("code");
-      if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); window.checkCode && window.checkCode(); });
-      if (code) code.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); window.checkCode && window.checkCode(); }
-      });
+      if (code) {
+        code.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            window.checkCode && window.checkCode();
+          }
+        });
+      }
     });
   </script>
 
