@@ -2604,46 +2604,62 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
     const title = escapeHtml(safeTitle);
 
     const descText = sanitizeTTUNText(it.description || "");
-    const desc = descText
-      ? `<div style="margin-top:8px;opacity:0.85;font-size:13px;line-height:1.25;">${escapeHtml(descText)}</div>`
-      : "";
 
     const when = it.publishedTs ? timeAgoLabel(it.publishedTs) : "";
     const sourceLabel = it.source
       ? escapeHtml(sanitizeTTUNText(it.source))
       : "ESPN";
 
-    // 🔥 CATEGORY • SOURCE • TIME
-    const pillParts = [
+    // CATEGORY • SOURCE • TIME
+    const metaParts = [
       categoryLabel,
       sourceLabel,
       when ? escapeHtml(when) : ""
     ].filter(Boolean);
 
-    const pillText = pillParts.join(" • ");
+    const metaLine = metaParts.join(" • ");
 
     const href = it.link
       ? it.link
       : `https://www.espn.com/search/results?q=${encodeURIComponent(safeTitle || "")}`;
 
+    // Headline is now the clear click target (bolder + bigger)
     const headlineLink = `
       <a href="${href}"
          target="_blank"
          rel="noopener noreferrer"
-         style="display:block;color:inherit;text-decoration:none;">
+         style="
+           display:block;
+           color:inherit;
+           text-decoration:none;
+           font-weight:1000;
+           font-size:17px;
+           line-height:1.25;
+           margin-bottom:6px;
+         ">
         ${title}
       </a>
     `;
 
+    // Snippet NOT bold, NOT in a pill
+    const desc = descText
+      ? `<div style="opacity:0.85;font-size:14px;line-height:1.35;margin-bottom:8px;">
+           ${escapeHtml(descText)}
+         </div>`
+      : "";
+
+    // Meta line under snippet, subtle
+    const meta = metaLine
+      ? `<div style="opacity:0.65;font-size:12px;letter-spacing:0.4px;">
+           ${metaLine}
+         </div>`
+      : "";
+
     return `
       <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill status-other">${pillText}</div>
-        </div>
-        <div class="gameMetaTopLine">${headlineLink}</div>
-        <div style="padding:0 2px 2px 2px;">
-          ${desc}
-        </div>
+        ${headlineLink}
+        ${desc}
+        ${meta}
       </div>
     `;
   }).join("");
