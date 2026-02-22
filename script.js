@@ -44,6 +44,26 @@ const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
 // =========================
 // LOGIN HARDENING (prevents iOS "submit/reload" issue)
 // =========================
+// League dropdown changes (Scores + Picks)
+document.addEventListener("change", (e) => {
+  const sel = e.target;
+  if (!sel || sel.id !== "leagueSelect") return;
+
+  const key = String(sel.value || "").trim();
+  if (!key) return;
+
+  saveLeagueKey(key);
+
+  // Re-render current tab after league change
+  const tab = window.__activeTab || currentTab || "scores";
+  showTab(tab);
+});
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  ...
 document.addEventListener("DOMContentLoaded", () => {
   const codeEl = document.getElementById("code");
   const loginWrap = document.getElementById("login");
@@ -1233,6 +1253,25 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
  * - Overlay the REAL <input type="date"> on top (opacity 0)
  * - Wire onchange/oninput directly so date selection actually reloads scores
  */
+/* =========================
+   LEAGUE SELECT (missing fix)
+   - Builds the league dropdown used in Scores + Picks headers
+   ========================= */
+function buildLeagueSelectHTML(selectedKey) {
+  const opts = (LEAGUES || []).map(l => {
+    const k = String(l.key || "");
+    const name = String(l.name || k);
+    const sel = (k === String(selectedKey || "")) ? "selected" : "";
+    return `<option value="${escapeHtml(k)}" ${sel}>${escapeHtml(name)}</option>`;
+  }).join("");
+
+  return `
+    <select id="leagueSelect" class="leagueSelect" aria-label="Select league">
+      ${opts}
+    </select>
+  `;
+}
+
 function buildCalendarButtonHTML() {
   const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
 
