@@ -1103,6 +1103,14 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
     }
   }
 
+  function eventLocalYYYYMMDD(ev) {
+    const comp = ev?.competitions?.[0];
+    const iso = ev?.date || comp?.date || "";
+    const d = new Date(iso);
+    if (!iso || isNaN(d.getTime())) return "";
+    return formatDateYYYYMMDD(d); // uses local timezone
+  }
+
   function hasAnyScheduledPreGames(events) {
     for (const ev of (events || [])) {
       const comp = ev?.competitions?.[0];
@@ -1112,7 +1120,59 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
     return false;
   }
 
-  // ✅ Always try higher limits for ALL leagues (today can be partial/empty otherwise)
+  async function fetchEvents(url) {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    const events = Array.isArray(data?.events) ? data.events : [];
+    return { data, events };
+  }
+
+  // ✅ NORMALIZED DAY MODE:
+  // Fetch yesterday/today/tomorrow with high limit, then filter to the exact selected day in LOCAL time.
+  // This fixes the "today shows tomorrow" issue.
+  try {
+    const urlToday = addOrReplaceParam(baseUrl, "limit", "1000");
+    const urlY = addOrReplaceParam(league.endpoint(yDate), "limit", "1000");
+    const urlT = addOrReplaceParam(league.endpoint(tDate), "limit", "1000");
+
+    const [rToday, rY, rT] = await Promise.allSettled([
+      fetchEvents(urlToday),
+      fetchEvents(urlY),
+      fetchEvents(urlT),
+    ]);
+
+    const combined = [];
+    const seen = new Set();
+
+    for (const r of [rToday, rY, rT]) {
+      if (r.status !== "fulfilled") continue;
+      for (const ev of (r.value.events || [])) {
+        const id = String(ev?.id || "");
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        combined.push(ev);
+      }
+    }
+
+    const filtered = combined.filter(ev => eventLocalYYYYMMDD(ev) === yyyymmdd);
+
+    if (filtered.length > 0) {
+      // Prefer the response that contains scheduled games for NCAAM when possible,
+      // but we already filtered to the right day so this is safe.
+      return {
+        data: null,
+        events: filtered,
+        used: "normalized-day",
+        url: urlToday
+      };
+    }
+  } catch (e) {
+    // If normalized mode fails, we fall back to classic attempts below.
+    console.warn("normalized-day fetch failed, falling back:", e);
+  }
+
+  // ---------- Classic fallback attempts ----------
   const baseLimit500 = addOrReplaceParam(baseUrl, "limit", "500");
   const baseLimit1000 = addOrReplaceParam(baseUrl, "limit", "1000");
 
@@ -1121,7 +1181,6 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
     { label: "selectedDate-limit-500", url: baseLimit500 },
     { label: "selectedDate-limit-1000", url: baseLimit1000 },
 
-    // NCAAM-specific oddities
     ...(isNcaam ? [
       { label: "ncaam-noGroups", url: baseUrl.replace(/&groups=50/i, "") },
       { label: "ncaam-noGroups-limit-1000", url: addOrReplaceParam(baseUrl.replace(/&groups=50/i, ""), "limit", "1000") },
@@ -1151,17 +1210,13 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
         firstNonEmpty = { data, events, used: a.label, url: a.url };
       }
 
-      // Prefer "pre" games for NCAAM if available, but never discard valid results
       if (isNcaam && hasAnyScheduledPreGames(events)) {
         return { data, events, used: a.label, url: a.url };
       }
 
-      // For non-NCAAM, first non-empty is fine
       if (!isNcaam) {
         return { data, events, used: a.label, url: a.url };
       }
-
-      // For NCAAM without pre-games, keep looking for a better response
     } catch (e) {
       lastError = e;
     }
@@ -1171,43 +1226,6 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
   return { data: null, events: [], used: "none", url: "", error: lastError };
 }
 
-/* =========================
-   UI: League + Calendar (iOS-safe native picker)
-   ========================= */
-
-// Convert YYYYMMDD -> YYYY-MM-DD (for <input type="date">)
-function yyyymmddToInputValue(yyyymmdd) {
-  const s = String(yyyymmdd || "").trim();
-  if (!/^\d{8}$/.test(s)) return "";
-  return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
-}
-
-// Convert YYYY-MM-DD -> YYYYMMDD
-function inputValueToYYYYMMDD(v) {
-  const s = String(v || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
-  return s.replaceAll("-", "");
-}
-
-function buildLeagueSelectHTML(selectedKey) {
-  const options = LEAGUES.map(l => {
-    const sel = l.key === selectedKey ? "selected" : "";
-    return `<option value="${l.key}" ${sel}>${l.name}</option>`;
-  }).join("");
-
-  return `
-    <select id="leagueSelect" class="leagueSelect" aria-label="Select league">
-      ${options}
-    </select>
-  `;
-}
-
-/**
- * iOS-safe approach:
- * - Render a normal 📅 button for visuals
- * - Overlay the REAL <input type="date"> on top (opacity 0)
- * - User tap is on the input itself → picker always opens in Safari + PWA
- */
 /**
  * iOS-safe approach:
  * - Render a normal 📅 button for visuals
