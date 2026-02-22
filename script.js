@@ -59,11 +59,6 @@ document.addEventListener("change", (e) => {
   showTab(tab);
 });
 
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("button");
-  if (!btn) return;
-
-  ...
 document.addEventListener("DOMContentLoaded", () => {
   const codeEl = document.getElementById("code");
   const loginWrap = document.getElementById("login");
