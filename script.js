@@ -1192,8 +1192,7 @@ function handleNativeDateChangeFromEl(el) {
    - 1024 = Admin (shows Shop)
    - 2026 = Guest (no Shop tab)
    ========================= */
-const ADMIN_CODE = "1024";
-const GUEST_CODE = "2026";
+
 const ROLE_KEY = "theShopRole_v1"; // "admin" | "guest"
 let isLoggedIn = false;
 
@@ -1241,33 +1240,49 @@ function buildTabsForRole(role) {
   showTab(exists ? current : "scores");
 }
 
-function checkCode() {
+async function checkCode() {
   const input = document.getElementById("code");
   if (!input) return;
 
   const entered = String(input.value || "").trim();
 
-  // Validate
-  let role = "";
-  if (entered === ADMIN_CODE) role = "admin";
-  else if (entered === GUEST_CODE) role = "guest";
-
-  if (!role) {
+  // Keep the same quick UX behavior if empty
+  if (!entered) {
     input.focus();
     input.style.borderColor = "rgba(187,0,0,0.60)";
     setTimeout(() => (input.style.borderColor = ""), 450);
     return;
   }
 
-  // Persist role
+  let role = "";
+
+  try {
+    // This already exists in your app for Shop chat and anonymous auth
+    await ensureFirebaseChatReady();
+
+    // Call the secure Firebase Function (invite code never exposed in client)
+    const fn = firebase.functions().httpsCallable("redeemInviteCode");
+    const res = await fn({ code: entered });
+
+    role = String(res?.data?.role || "");
+    if (role !== "admin" && role !== "guest") throw new Error("Bad role");
+  } catch (e) {
+    // Same invalid-code UX (no details leaked)
+    input.focus();
+    input.style.borderColor = "rgba(187,0,0,0.60)";
+    setTimeout(() => (input.style.borderColor = ""), 450);
+    return;
+  }
+
+  // Persist role (unchanged behavior)
   localStorage.setItem(ROLE_KEY, role);
 
-  // Optional: clear input so the key isn't visible after unlock
+  // Clear input so code isn't sitting on the screen
   input.value = "";
 
-  // Transition UI
+  // ---- Everything below stays the same UX flow ----
   const login = document.getElementById("login");
-  const app   = document.getElementById("app");
+  const app = document.getElementById("app");
 
   if (login) {
     login.classList.add("loginUnlocking");
@@ -1275,19 +1290,13 @@ function checkCode() {
   }
 
   setTimeout(() => {
-    // Hide login
     if (login) login.style.display = "none";
-
-    // IMPORTANT: do NOT show the app yet — entry screen comes first
     if (app) app.style.display = "none";
 
-    // Clean up classes so future loads don't inherit them
     if (login) login.classList.remove("loginUnlocking", "loginFadeOut");
 
-    // Build tabs now (so when they enter, it’s already correct)
     if (typeof buildTabsForRole === "function") buildTabsForRole(role);
 
-    // ✅ Only toggle adminOnly elements INSIDE the entry screen
     const entry = document.getElementById("entry");
     if (entry) {
       entry.querySelectorAll(".adminOnly").forEach(el => {
@@ -1295,12 +1304,10 @@ function checkCode() {
       });
     }
 
-    // Show the entry screen + start countdown
     if (typeof showEntryScreen === "function") {
       showEntryScreen();
     } else {
-      console.warn("showEntryScreen() not found — did you paste the entry/countdown block?");
-      // Fallback: old behavior
+      // fallback (shouldn't happen in your current build)
       if (app) app.style.display = "block";
       if (typeof showTab === "function") showTab("scores");
     }
