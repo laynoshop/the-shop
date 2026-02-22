@@ -1481,6 +1481,7 @@ setTimeout(() => {
   // Show the Entry (doors) screen after login
   showEntryScreen();
 }, 320);
+}
 
 /* =========================
    BUCKEYE BANNER (above tabs)
