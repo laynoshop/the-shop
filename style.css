@@ -516,7 +516,7 @@ body.entryMode{
 /* Hide the “Target: …” line without changing JS */
 .countdownSub{ display:none; }
 
-/* ===== THE FIX: Beat-TTUN style layout using your existing 4 cdUnit elements ===== */
+/* ===== Beat-TTUN style layout using your existing 4 cdUnit elements ===== */
 .countdownNums{
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -542,7 +542,6 @@ body.entryMode{
 
   padding: 12px 10px;
 
-  /* prevents any weird bleed on iOS */
   overflow: hidden;
   min-width: 0;
 
@@ -576,18 +575,20 @@ body.entryMode{
   opacity: 0.75;
 }
 
-/* ===== DAYS row: NOT a bubble, big + left-ish like Beat TTUN ===== */
+/* ===== DAYS row: centered number with DAYS stacked underneath ===== */
 .countdownNums .cdUnit:nth-child(1){
   border: 0;
   background: transparent;
   box-shadow: none;
   padding: 2px 2px 6px;
-  text-align: left;
 
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  justify-content: flex-start;
+  flex-direction: column;     /* stack */
+  align-items: center;        /* center */
+  justify-content: center;
+  text-align: center;
+
+  gap: 6px;
 }
 
 /* BIG days number */
@@ -600,7 +601,7 @@ body.entryMode{
     0 0 45px rgba(187,0,0,0.22);
 }
 
-/* DAYS label to the right of the number */
+/* DAYS label underneath (keep same font styling you had) */
 .countdownNums .cdUnit:nth-child(1) .cdLab{
   margin-top: 0;
   font-size: 14px;
@@ -672,6 +673,7 @@ body.entryMode{
   .cdNum{ font-size: 24px; }
 }
 
+/* Extra insurance against iOS bounce */
 html, body { overscroll-behavior: none; }
 
 /* quick I-O flash when unlocking */
