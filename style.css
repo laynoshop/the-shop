@@ -606,6 +606,8 @@ body.entryMode::before{
   .doorBtn{ font-size: 20px; height: 74px; }
 }
 
+html, body { overscroll-behavior: none; }
+
 /* quick I-O flash when unlocking */
 .chantFlashIO .chantIO{
   opacity: 1;
