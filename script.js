@@ -1383,25 +1383,40 @@ async function checkCode() {
 
     const token = await user.getIdToken();
 
-    // Call HTTPS endpoint (CORS-safe)
-    const resp = await fetch(
+    // Try both URLs (2nd Gen prints the Cloud Run URL on deploy)
+    const redeemUrls = [
       "https://us-central1-the-shop-chat.cloudfunctions.net/redeemInviteCodeHttp",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + token
-        },
-        body: JSON.stringify({ code: entered })
+      "https://redeeminvitecodehttp-an5l4al3xa-uc.a.run.app"
+    ];
+
+    let lastErr = null;
+
+    for (const url of redeemUrls) {
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({ code: entered })
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        role = String(data?.role || "");
+
+        if (resp.ok && (role === "admin" || role === "guest")) {
+          lastErr = null;
+          break; // success
+        }
+
+        lastErr = new Error("Invalid code");
+      } catch (e) {
+        lastErr = e;
       }
-    );
-
-    const data = await resp.json().catch(() => ({}));
-
-    role = String(data?.role || "");
-    if (!resp.ok || (role !== "admin" && role !== "guest")) {
-      throw new Error("Invalid code");
     }
+
+    if (lastErr) throw lastErr;
   } catch (e) {
     // Same invalid-code UX (no details leaked)
     input.focus();
@@ -1427,27 +1442,14 @@ async function checkCode() {
 
   setTimeout(() => {
     if (login) login.style.display = "none";
-    if (app) app.style.display = "none";
+    if (app) app.style.display = "block";
 
-    if (login) login.classList.remove("loginUnlocking", "loginFadeOut");
+    // Build tabs based on role and go to default
+    buildTabsForRole(role);
 
-    if (typeof buildTabsForRole === "function") buildTabsForRole(role);
-
-    const entry = document.getElementById("entry");
-    if (entry) {
-      entry.querySelectorAll(".adminOnly").forEach(el => {
-        el.style.display = (role === "admin") ? "" : "none";
-      });
-    }
-
-    if (typeof showEntryScreen === "function") {
-      showEntryScreen();
-    } else {
-      // fallback (shouldn't happen in your current build)
-      if (app) app.style.display = "block";
-      if (typeof showTab === "function") showTab("scores");
-    }
-  }, 520);
+    // Keep your existing “enter app” behavior
+    enterAppToTab("scores");
+  }, 320);
 }
 
 /* =========================
