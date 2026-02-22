@@ -3608,54 +3608,26 @@ async function renderPicks(showLoading) {
   }
 
   try {
-    await ensureFirebaseChatReady(); // re-uses your firebase init/auth
+    await ensureFirebaseChatReady();
     const db = firebase.firestore();
 
-    // 1) Load scoreboard for current league/date (we’ll use it to show games + grade finals)
+    // 1) Load scoreboard events (this should work since Scores works)
     const sb = await fetchScoreboardWithFallbacks(league, selectedDate);
     const events = sb.events || [];
 
-    // 2) Load recent picks for THIS league/date (shared competition)
-    const picksSnap = await picksCollectionRef(db)
-      .where("leagueKey", "==", selectedKey)
-      .where("dateYYYYMMDD", "==", selectedDate)
-      .orderBy("createdAt", "desc")
-      .limit(250)
-      .get();
-
-    const picks = [];
-    picksSnap.forEach(doc => picks.push({ id: doc.id, ...doc.data() }));
-
-    // 3) Auto-grade any pending picks where the game is FINAL
-    await autoGradePicksForEvents(db, picks, events);
-
-    // Re-read (so UI reflects grading)
-    const picksSnap2 = await picksCollectionRef(db)
-      .where("leagueKey", "==", selectedKey)
-      .where("dateYYYYMMDD", "==", selectedDate)
-      .orderBy("createdAt", "desc")
-      .limit(250)
-      .get();
-
-    const picks2 = [];
-    picksSnap2.forEach(doc => picks2.push({ id: doc.id, ...doc.data() }));
-
-    // 4) GROUP PICKS (Pick’em) — render ABOVE Units Picks
+    // 2) GROUP PICKS (Pick’em) — always try to render this first
     let groupPicksHTML = "";
     try {
       const role = getRole();
-      const user = firebase.auth().currentUser;
-      const uid = user?.uid || "";
+      const uid = firebase.auth().currentUser?.uid || "";
 
-      // For now, skip Group Picks on PGA since it's a tournament not head-to-head
+      // Skip PGA for now (not head-to-head)
       if (!isPgaLeagueKey(selectedKey)) {
-        // Admin builder UI
         const eventsSorted = [...events].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
         const adminHTML = (role === "admin")
           ? gpBuildAdminSlateHTML(eventsSorted, selectedKey, selectedDate)
           : "";
 
-        // Published slate UI
         const publishedSlate = await gpGetPublishedSlate(db, selectedKey, selectedDate);
 
         if (!publishedSlate) {
@@ -3688,26 +3660,65 @@ async function renderPicks(showLoading) {
           <div class="gameHeader">
             <div class="statusPill status-other">GROUP PICKS</div>
           </div>
-          <div class="gameMetaTopLine">Couldn’t load Group Picks</div>
-          <div class="gameMetaOddsLine">Try Refresh.</div>
+          <div class="gameMetaTopLine">Group Picks error</div>
+          <div class="gameMetaOddsLine">Open console for details.</div>
         </div>
       `;
     }
 
-    // 5) Units Picks (existing system) — keep intact under Group Picks
-    const leaderboard = computeLeaderboard(picks2);
-    const leaderboardHTML = renderLeaderboardHTML(leaderboard);
+    // 3) Units Picks (OLD system) — do NOT let it kill the page
+    let leaderboardHTML = `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">UNITS PICKS</div>
+        </div>
+        <div class="gameMetaTopLine">Units Picks not enabled</div>
+        <div class="gameMetaOddsLine">We’re rebuilding Picks from scratch.</div>
+      </div>
+    `;
+    let myPicksHTML = "";
+    let allPicksHTML = "";
+    let gamesHTML = "";
 
-    const myName = getPicksDisplayName();
-    const myPicks = picks2.filter(p => String(p.name || "") === myName);
+    try {
+      const picksSnap = await picksCollectionRef(db)
+        .where("leagueKey", "==", selectedKey)
+        .where("dateYYYYMMDD", "==", selectedDate)
+        .orderBy("createdAt", "desc")
+        .limit(250)
+        .get();
 
-    const myPicksHTML = renderPicksListHTML(myPicks, "My Picks");
-    const allPicksHTML = renderPicksListHTML(picks2, "All Picks");
+      const picks = [];
+      picksSnap.forEach(doc => picks.push({ id: doc.id, ...doc.data() }));
 
-    // 6) Render games list (Add Pick buttons)
-    const gamesHTML = renderGamesForPickEntryHTML(events, selectedKey, selectedDate);
+      await autoGradePicksForEvents(db, picks, events);
 
-    // 7) Final render
+      const picksSnap2 = await picksCollectionRef(db)
+        .where("leagueKey", "==", selectedKey)
+        .where("dateYYYYMMDD", "==", selectedDate)
+        .orderBy("createdAt", "desc")
+        .limit(250)
+        .get();
+
+      const picks2 = [];
+      picksSnap2.forEach(doc => picks2.push({ id: doc.id, ...doc.data() }));
+
+      const leaderboard = computeLeaderboard(picks2);
+      leaderboardHTML = renderLeaderboardHTML(leaderboard);
+
+      const myName = getPicksDisplayName();
+      const myPicks = picks2.filter(p => String(p.name || "") === myName);
+
+      myPicksHTML = renderPicksListHTML(myPicks, "My Picks");
+      allPicksHTML = renderPicksListHTML(picks2, "All Picks");
+
+      gamesHTML = renderGamesForPickEntryHTML(events, selectedKey, selectedDate);
+    } catch (unitsErr) {
+      console.warn("Units Picks blocked or failed (this is OK for now):", unitsErr);
+      // keep the placeholder card above
+    }
+
+    // 4) Render page
     const nowLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
     content.innerHTML = `
@@ -3722,7 +3733,7 @@ async function renderPicks(showLoading) {
       </div>
     `;
   } catch (e) {
-    console.error("renderPicks error:", e);
+    console.error("renderPicks fatal error:", e);
     content.innerHTML = `
       ${renderPicksHeaderHTML("Error")}
       <div class="notice">Couldn’t load Picks. Try Refresh.</div>
