@@ -1230,6 +1230,7 @@ function buildCalendarButtonHTML() {
 }
 
 // Handle date changes (wired via delegated change listener below)
+// Handle date changes (wired via onchange/oninput on the date input)
 function handleNativeDateChangeFromEl(el) {
   const v = el?.value || "";
   const yyyymmdd = inputValueToYYYYMMDD(v);
@@ -1237,10 +1238,10 @@ function handleNativeDateChangeFromEl(el) {
 
   saveDateYYYYMMDD(yyyymmdd);
 
-  // Reload scores (date affects scores)
-  loadScores(true);
+  // ✅ Re-render the CURRENT tab (not always Scores)
+  const tab = window.__activeTab || currentTab || "scores";
+  showTab(tab);
 }
-
 /* =========================
    Login (ROLE-BASED)
    - 1024 = Admin (shows Shop)
