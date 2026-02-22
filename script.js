@@ -1168,69 +1168,6 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
   return { data: null, events: [], used: "none", url: "", error: lastError };
 }
 
-  function hasAnyScheduledPreGames(events) {
-    for (const ev of (events || [])) {
-      const comp = ev?.competitions?.[0];
-      const state = comp?.status?.type?.state || "";
-      // ESPN uses "pre" for scheduled (not started)
-      if (String(state).toLowerCase() === "pre") return true;
-    }
-    return false;
-  }
-
-  // Build attempts
-  const attempts = [
-    { label: "selectedDate", url: baseUrl },
-
-    // For NCAAM, ESPN often needs a bigger limit to include all scheduled games
-    ...(isNcaam ? [
-      { label: "ncaam-limit-500", url: addOrReplaceParam(baseUrl, "limit", "500") },
-      { label: "ncaam-limit-1000", url: addOrReplaceParam(baseUrl, "limit", "1000") },
-      // Some endpoints behave differently without groups
-      { label: "ncaam-noGroups-limit-1000", url: addOrReplaceParam(baseUrl.replace(/&groups=50/i, ""), "limit", "1000") },
-    ] : []),
-
-    // Existing fallbacks
-    ...(isNcaam ? [{ label: "ncaam-noGroups", url: baseUrl.replace(/&groups=50/i, "") }] : []),
-    { label: "noDate", url: removeDatesParam(baseUrl) },
-    { label: "yesterday", url: league.endpoint(yDate) },
-    { label: "tomorrow", url: league.endpoint(tDate) }
-  ];
-
-  let lastError = null;
-
-  for (const a of attempts) {
-    try {
-      const resp = await fetch(a.url, { cache: "no-store" });
-      if (!resp.ok) {
-        lastError = new Error(`HTTP ${resp.status}`);
-        continue;
-      }
-
-      const data = await resp.json();
-      const events = Array.isArray(data?.events) ? data.events : [];
-
-      if (events.length === 0) continue;
-
-      // ✅ Key improvement:
-      // If NCAAM and we got events but NONE are scheduled ("pre"),
-      // keep trying the higher-limit URLs instead of returning early.
-      if (isNcaam && !hasAnyScheduledPreGames(events)) {
-        // Don't early-return on the low-quality responses
-        // Continue loop to try better attempts
-        lastError = new Error(`NCAAM response had events but no scheduled games (used=${a.label})`);
-        continue;
-      }
-
-      return { data, events, used: a.label, url: a.url };
-    } catch (e) {
-      lastError = e;
-    }
-  }
-
-  return { data: null, events: [], used: "none", url: "", error: lastError };
-}
-
 /* =========================
    UI: League + Calendar (iOS-safe native picker)
    ========================= */
