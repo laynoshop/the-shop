@@ -72,6 +72,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+// League dropdown changes (Scores + Picks)
+document.addEventListener("change", (e) => {
+  const sel = e.target;
+  if (!sel || sel.id !== "leagueSelect") return;
+
+  const key = String(sel.value || "").trim();
+  if (!key) return;
+
+  saveLeagueKey(key);
+
+  // Re-render current tab after league change
+  const tab = window.__activeTab || currentTab || "scores";
+  showTab(tab);
+});
+
   // Make sure the Enter button is not treated as submit
   const btn = loginWrap ? loginWrap.querySelector("button") : null;
   if (btn) {
@@ -91,6 +106,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+});
+
+window.addEventListener("error", (e) => {
+  console.error("APP ERROR:", e?.message || e);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("PROMISE ERROR:", e?.reason || e);
 });
 
 // Favorites (top priority, in this order)
