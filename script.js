@@ -2480,130 +2480,117 @@ async function fetchTopNewsItemsFromESPN() {
     return q ? `https://www.espn.com/search/results?q=${q}` : "https://www.espn.com/";
   }
 
-  function normalizeHttps(url) {
-    const u = String(url || "").trim();
-    if (!u) return "";
-    // protocol-relative -> https
-    if (u.startsWith("//")) return "https:" + u;
-    // http -> https (helps avoid mixed content issues)
-    if (u.startsWith("http://")) return "https://" + u.slice(7);
-    return u;
-  }
+  function pickBestImageUrlFromESPNArticle(a) {
+    // ESPN shapes vary by endpoint — try lots of common paths
+    const candidates = [];
 
-  function getBestImageUrlFromArticle(a) {
-    // ESPN JSON shapes vary; try a handful of common patterns.
-    // We only return a URL string; no transforms.
-    const candidates = [
-      a?.images?.[0]?.url,
-      a?.images?.[0]?.href,
-      a?.image?.url,
-      a?.image?.href,
-      a?.thumbnail?.url,
-      a?.thumbnail?.href,
-      a?.promoImage?.url,
-      a?.promoImage?.href,
-
-      // Sometimes nested in links/assets-ish fields:
-      a?.links?.api?.self?.href, // (usually NOT an image, but kept out of candidates below)
-    ].filter(Boolean);
-
-    // Some feeds use "images" as an array of objects with "url" but also "name"/"type".
-    // Prefer the first usable URL-looking candidate.
-    for (const c of candidates) {
-      const u = normalizeHttps(c);
-      if (u && /^https?:\/\//i.test(u)) return u;
+    // Most common: images: [{url, href, ...}]
+    if (Array.isArray(a?.images)) {
+      for (const im of a.images) {
+        if (im?.url) candidates.push(im.url);
+        if (im?.href) candidates.push(im.href);
+      }
     }
 
-    // If an "images" array exists, scan deeper for any url-ish field
-    const imgs = Array.isArray(a?.images) ? a.images : [];
-    for (const img of imgs) {
-      const u = normalizeHttps(img?.url || img?.href || img?.src);
-      if (u && /^https?:\/\//i.test(u)) return u;
-    }
+    // Sometimes: image: { url }
+    if (a?.image?.url) candidates.push(a.image.url);
+    if (a?.image?.href) candidates.push(a.image.href);
 
-    return "";
+    // Sometimes embedded in promo/thumbnail fields
+    if (a?.thumbnail) candidates.push(a.thumbnail);
+    if (a?.promoImage) candidates.push(a.promoImage);
+
+    // Dedup + pick first usable https
+    const cleaned = candidates
+      .filter(Boolean)
+      .map(String)
+      .map(s => s.trim())
+      .filter(s => s.length > 8);
+
+    // Prefer https
+    const httpsFirst = cleaned.find(u => u.startsWith("https://")) || cleaned[0] || "";
+    return httpsFirst;
   }
 
   function normalizeItem(a) {
-    const publishedIso = a?.published || "";
+    const publishedIso = a?.published || a?.publishedAt || "";
     const publishedTs = Date.parse(publishedIso);
 
     const item = {
-      headline: sanitizeTTUNText(a?.headline || ""),
-      description: sanitizeTTUNText(a?.description || ""),
+      headline: sanitizeTTUNText(a?.headline || a?.title || ""),
+      description: sanitizeTTUNText(a?.description || a?.summary || ""),
       source: sanitizeTTUNText(a?.source || "ESPN"),
       publishedIso,
       publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
-      link: a?.links?.web?.href || a?.links?.[0]?.href || "",
-
-      // ✅ NEW: story image
-      imageUrl: getBestImageUrlFromArticle(a)
+      link: a?.links?.web?.href || a?.links?.[0]?.href || a?.url || "",
+      imageUrl: pickBestImageUrlFromESPNArticle(a) || ""
     };
 
     item.link = ensureLinkOrSearch(item);
     return item;
   }
 
-  function extractImageUrlFromRssItemNode(node) {
-    // 1) <media:content url="...">
-    const mediaContent =
-      node.querySelector("media\\:content") ||
-      node.querySelector("content"); // sometimes namespaced weirdly
-
-    const mediaUrl = mediaContent?.getAttribute?.("url");
-    if (mediaUrl) return normalizeHttps(mediaUrl);
-
-    // 2) <enclosure url="...">
-    const enclosure = node.querySelector("enclosure");
-    const encUrl = enclosure?.getAttribute?.("url");
-    if (encUrl) return normalizeHttps(encUrl);
-
-    // 3) Pull first <img src="..."> out of description (if RSS includes HTML)
-    const descHtml = node.querySelector("description")?.textContent || "";
-    const m = descHtml.match(/<img[^>]+src=["']([^"']+)["']/i);
-    if (m && m[1]) return normalizeHttps(m[1]);
-
-    return "";
-  }
-
   function parseRssItems(xmlText) {
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
     const items = Array.from(doc.querySelectorAll("item")).slice(0, 30);
 
-    return items
-      .map((node) => {
-        const title = node.querySelector("title")?.textContent || "";
-        const link = node.querySelector("link")?.textContent || "";
-        const desc = node.querySelector("description")?.textContent || "";
-        const pub = node.querySelector("pubDate")?.textContent || "";
+    function text(q, node) {
+      return node.querySelector(q)?.textContent || "";
+    }
 
-        const publishedTs = Date.parse(pub);
-        const imageUrl = extractImageUrlFromRssItemNode(node);
+    function rssImageUrl(node) {
+      // Try <enclosure url="...">
+      const enc = node.querySelector("enclosure");
+      const encUrl = enc?.getAttribute("url") || "";
+      if (encUrl) return encUrl;
 
-        const it = {
-          headline: sanitizeTTUNText(title),
-          description: sanitizeTTUNText(desc.replace(/<[^>]*>/g, "").trim()),
-          source: "ESPN",
-          publishedIso: pub,
-          publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
-          link: link || "",
+      // Try Media RSS tags (namespace can vary)
+      // <media:content url="..."> or <media:thumbnail url="...">
+      const mediaContent =
+        node.querySelector("media\\:content") ||
+        node.getElementsByTagName("media:content")?.[0];
+      const mediaThumb =
+        node.querySelector("media\\:thumbnail") ||
+        node.getElementsByTagName("media:thumbnail")?.[0];
 
-          // ✅ NEW: story image (RSS)
-          imageUrl: imageUrl || ""
-        };
+      const mcUrl = mediaContent?.getAttribute?.("url") || "";
+      if (mcUrl) return mcUrl;
 
-        it.link = ensureLinkOrSearch(it);
-        return it;
-      })
-      .filter((x) => x.headline);
+      const mtUrl = mediaThumb?.getAttribute?.("url") || "";
+      if (mtUrl) return mtUrl;
+
+      return "";
+    }
+
+    return items.map((node) => {
+      const title = text("title", node);
+      const link = text("link", node);
+      const desc = text("description", node);
+      const pub = text("pubDate", node);
+
+      const publishedTs = Date.parse(pub);
+
+      const it = {
+        headline: sanitizeTTUNText(title),
+        description: sanitizeTTUNText(desc.replace(/<[^>]*>/g, "").trim()),
+        source: "ESPN",
+        publishedIso: pub,
+        publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
+        link: link || "",
+        imageUrl: rssImageUrl(node) || ""
+      };
+
+      it.link = ensureLinkOrSearch(it);
+      return it;
+    }).filter(x => x.headline);
   }
 
   // --- 1) Try ESPN JSON (multiple endpoints + lang/region) ---
   const jsonBases = [
-    "https://site.api.espn.com/apis/v2/sports/news",
-    "https://site.api.espn.com/apis/site/v2/sports/news",
     "https://site.api.espn.com/apis/v2/sports/news?limit=50",
-    "https://site.api.espn.com/apis/site/v2/sports/news?limit=50"
+    "https://site.api.espn.com/apis/site/v2/sports/news?limit=50",
+    "https://site.api.espn.com/apis/v2/sports/news",
+    "https://site.api.espn.com/apis/site/v2/sports/news"
   ];
 
   const jsonUrls = [];
@@ -2618,9 +2605,9 @@ async function fetchTopNewsItemsFromESPN() {
       const data = await fetchJsonWithTimeout(url, 9000);
       const articles = Array.isArray(data?.articles) ? data.articles : [];
       if (articles.length) {
-        const items = articles.slice(0, 30).map(normalizeItem).filter((x) => x.headline);
+        const items = articles.slice(0, 30).map(normalizeItem).filter(x => x.headline);
 
-        const tagged = items.map((it) => ({ ...it, tags: tagNewsItem(it) }));
+        const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
         const deduped = dedupeNewsItems(tagged);
 
         deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
@@ -2637,7 +2624,7 @@ async function fetchTopNewsItemsFromESPN() {
     const xml = await fetchTextWithTimeout(rssUrl, 9000);
     const items = parseRssItems(xml);
 
-    const tagged = items.map((it) => ({ ...it, tags: tagNewsItem(it) }));
+    const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
     const deduped = dedupeNewsItems(tagged);
 
     deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
@@ -2652,7 +2639,7 @@ async function fetchTopNewsItemsFromESPN() {
     const xml = await fetchTextWithTimeout(proxied, 9000);
     const items = parseRssItems(xml);
 
-    const tagged = items.map((it) => ({ ...it, tags: tagNewsItem(it) }));
+    const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
     const deduped = dedupeNewsItems(tagged);
 
     deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
@@ -2661,7 +2648,7 @@ async function fetchTopNewsItemsFromESPN() {
     lastErr = e;
   }
 
-  throw lastErr || new Error("News fetch failed");
+  throw (lastErr || new Error("News fetch failed"));
 }
 
 function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
@@ -2669,7 +2656,6 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
 
   const filtered = (items || []).filter(it => passesNewsFilter(it, currentNewsFilter));
 
-  // Determine category label from active filter
   const categoryLabel = (currentNewsFilter || "all").toUpperCase();
 
   const cards = filtered.map((it) => {
@@ -2679,59 +2665,41 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
     const descText = sanitizeTTUNText(it.description || "");
 
     const when = it.publishedTs ? timeAgoLabel(it.publishedTs) : "";
-    const sourceLabel = it.source
-      ? escapeHtml(sanitizeTTUNText(it.source))
-      : "ESPN";
+    const sourceLabel = it.source ? escapeHtml(sanitizeTTUNText(it.source)) : "ESPN";
 
-    // CATEGORY • SOURCE • TIME
-    const metaParts = [
-      categoryLabel,
-      sourceLabel,
-      when ? escapeHtml(when) : ""
-    ].filter(Boolean);
-
-    const metaLine = metaParts.join(" • ");
+    const metaLine = [categoryLabel, sourceLabel, when ? escapeHtml(when) : ""].filter(Boolean).join(" • ");
 
     const href = it.link
       ? it.link
       : `https://www.espn.com/search/results?q=${encodeURIComponent(safeTitle || "")}`;
 
-    // ✅ Story image (if present)
     const imgUrl = (it.imageUrl || "").trim();
-    const imageBlock = imgUrl
-      ? `
-        <a href="${href}"
-           target="_blank"
-           rel="noopener noreferrer"
-           style="display:block;text-decoration:none;">
-          <div style="
-            width:100%;
-            height:156px;
-            border-radius:16px;
-            overflow:hidden;
-            margin-bottom:10px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.10);
-          ">
-            <img src="${escapeHtml(imgUrl)}"
-                 alt=""
-                 loading="lazy"
-                 referrerpolicy="no-referrer"
-                 style="
-                   width:100%;
-                   height:100%;
-                   object-fit:cover;
-                   display:block;
-                   transform: scale(1.01);
-                 "
-                 onerror="this.closest('a')?.remove();"
-            />
-          </div>
-        </a>
-      `
-      : "";
 
-    // ✅ Headline displayed in a “pill” (clickable)
+    const imageBlock = imgUrl ? `
+      <a href="${href}"
+         target="_blank"
+         rel="noopener noreferrer"
+         style="display:block;text-decoration:none;">
+        <div class="newsImgWrap" style="
+          width:100%;
+          height:156px;
+          border-radius:16px;
+          overflow:hidden;
+          margin-bottom:10px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.10);
+        ">
+          <img src="${escapeHtml(imgUrl)}"
+               alt=""
+               loading="lazy"
+               referrerpolicy="no-referrer"
+               style="width:100%;height:100%;object-fit:cover;display:block;"
+               onerror="this.parentElement.style.display='none';"
+          />
+        </div>
+      </a>
+    ` : "";
+
     const headlinePill = `
       <a href="${href}"
          target="_blank"
@@ -2753,14 +2721,12 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
       </a>
     `;
 
-    // Snippet NOT bold, NOT in a pill
     const desc = descText
       ? `<div style="opacity:0.85;font-size:14px;line-height:1.35;margin:10px 2px 8px;">
            ${escapeHtml(descText)}
          </div>`
       : "";
 
-    // Meta line under snippet, subtle
     const meta = metaLine
       ? `<div style="opacity:0.65;font-size:12px;letter-spacing:0.4px;margin:0 2px;">
            ${metaLine}
