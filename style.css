@@ -419,32 +419,29 @@ body.entryMode::before{
 }
 
 /* =========================
-   ENTRY SCREEN — Tunnel Mode (Beat-Hero Style)
+   ENTRY SCREEN — Tunnel Mode (Beat-TTUN Countdown Layout)
    ========================= */
 
-/* Juice up the Block-O background on Entry */
 body.entryMode::before{
   opacity: 0.10;
   transform: scale(1.02);
   filter: saturate(1.1);
 }
 
-/* Stop the “float scroll” feel on the entry screen */
+/* Stop “float scroll” on Entry */
 body.entryMode{
+  height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
-  height: 100%;
 }
 
-/* Entry screen layout */
 .entryScreen{
   min-height: 100svh;
   display: flex;
   align-items: flex-start;
   justify-content: center;
 
-  /* tighter so it doesn’t create phantom scroll */
-  padding: 64px 16px calc(20px + env(safe-area-inset-bottom));
+  padding: 64px 16px calc(18px + env(safe-area-inset-bottom));
 
   position: relative;
   z-index: 1;
@@ -461,7 +458,7 @@ body.entryMode{
   gap: 16px;
 }
 
-/* Big rally cry */
+/* Rally cry */
 .entryChant{
   text-align: center;
   font-weight: 1000;
@@ -475,16 +472,9 @@ body.entryMode{
   text-shadow:
     0 10px 28px rgba(0,0,0,0.55),
     0 0 26px rgba(187,0,0,0.32);
-
-  animation: entryPop 420ms ease-out;
 }
 
-@keyframes entryPop{
-  from{ opacity:0; transform: translateY(-10px); }
-  to{ opacity:1; transform: translateY(0); }
-}
-
-/* Countdown card — match Beat TTUN hero vibes */
+/* Countdown hero card */
 .countdownCard{
   width: 100%;
   padding: 16px 16px 14px;
@@ -514,87 +504,107 @@ body.entryMode{
   margin-bottom: 12px;
 }
 
-/* Kill the Target date line without touching JS */
+/* Hide the “Target: …” line without changing JS */
 .countdownSub{ display:none; }
 
-/* Countdown units — Beat-style layout (DAYS slightly wider) */
+/* ===== THE FIX: Beat-TTUN style layout using your existing 4 cdUnit elements ===== */
 .countdownNums{
   display: grid;
-  grid-template-columns: 1.45fr 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    "days days days"
+    "hrs  mins secs";
   gap: 12px;
-
-  /* iOS: avoid weird overflows */
   width: 100%;
 }
 
+/* Map the existing elements to areas (NO HTML changes) */
+.countdownNums .cdUnit:nth-child(1){ grid-area: days; }
+.countdownNums .cdUnit:nth-child(2){ grid-area: hrs; }
+.countdownNums .cdUnit:nth-child(3){ grid-area: mins; }
+.countdownNums .cdUnit:nth-child(4){ grid-area: secs; }
+
+/* Default bubbles (HRS/MIN/SEC) */
 .cdUnit{
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.05);
   text-align: center;
 
-  padding: 14px 10px 12px;
+  padding: 12px 10px;
 
-  /* ✅ THIS is the hard fix so big text can’t bleed behind neighbors */
+  /* prevents any weird bleed on iOS */
   overflow: hidden;
-  position: relative;
+  min-width: 0;
 
   box-shadow: 0 16px 40px rgba(0,0,0,0.45);
-
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-
-  min-width: 0;
 }
 
-/* Default (HRS/MIN/SEC) */
 .cdNum{
-  font-size: clamp(28px, 5.2vw, 40px);
+  display:block;
+  font-size: 26px;
   font-weight: 1000;
   letter-spacing: 1px;
   line-height: 1;
 
   color: #fff;
   text-shadow:
-    0 0 18px rgba(187,0,0,0.30),
+    0 0 18px rgba(187,0,0,0.28),
     0 0 40px rgba(187,0,0,0.14);
 
   font-variant-numeric: tabular-nums;
 }
 
 .cdLab{
-  margin-top: 6px;
+  display:block;
+  margin-top: 4px;
   font-size: 11px;
   font-weight: 1000;
   letter-spacing: 2px;
-  opacity: 0.78;
   text-transform: uppercase;
+  opacity: 0.75;
 }
 
-/* DAYS = hero tile (bigger, scarlet glow) */
-.countdownNums .cdUnit:first-child{
-  border-color: rgba(187,0,0,0.28);
-  background:
-    radial-gradient(520px 220px at 30% 10%, rgba(187,0,0,0.22), transparent 65%),
-    rgba(255,255,255,0.04);
-  box-shadow:
-    0 18px 44px rgba(0,0,0,0.50),
-    0 0 22px rgba(187,0,0,0.18);
+/* ===== DAYS row: NOT a bubble, big + left-ish like Beat TTUN ===== */
+.countdownNums .cdUnit:nth-child(1){
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 2px 2px 6px;
+  text-align: left;
+
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  justify-content: flex-start;
 }
 
-.countdownNums .cdUnit:first-child .cdNum{
-  font-size: clamp(46px, 9.2vw, 72px);
+/* BIG days number */
+.countdownNums .cdUnit:nth-child(1) .cdNum{
+  font-size: clamp(64px, 12vw, 86px);
+  line-height: 0.9;
   letter-spacing: 2px;
-  line-height: 0.92;
   text-shadow:
     0 0 25px rgba(187,0,0,0.45),
     0 0 45px rgba(187,0,0,0.22);
 }
 
-.countdownNums .cdUnit:first-child .cdLab{
-  font-size: 12px;
-  letter-spacing: 2.4px;
-  opacity: 0.90;
+/* DAYS label to the right of the number */
+.countdownNums .cdUnit:nth-child(1) .cdLab{
+  margin-top: 0;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  opacity: 0.82;
+}
+
+/* Slight scarlet glow on the H/M/S bubbles */
+.countdownNums .cdUnit:nth-child(n+2){
+  box-shadow:
+    0 16px 40px rgba(0,0,0,0.45),
+    0 0 18px rgba(187,0,0,0.12);
 }
 
 /* Doors grid */
@@ -605,7 +615,7 @@ body.entryMode{
   gap: 14px;
 }
 
-/* OPTION A — Scarlet glass doors */
+/* Scarlet glass doors */
 .doorBtn{
   height: 84px;
   border-radius: 24px;
@@ -640,18 +650,17 @@ body.entryMode{
     0 0 28px rgba(187,0,0,0.30);
 }
 
-/* Admin Shop full width row */
 .entryDoors .doorBtn.adminOnly{
   grid-column: 1 / span 2;
   height: 84px;
 }
 
-/* Mobile tightening */
+/* Small screens */
 @media (max-width: 380px){
   .entryScreen{ padding-top: 56px; }
   .doorBtn{ font-size: 22px; height: 80px; }
-  .countdownNums{ gap: 10px; }
-  .cdUnit{ padding: 12px 8px 11px; border-radius: 16px; }
+  .cdUnit{ padding: 11px 9px; }
+  .cdNum{ font-size: 24px; }
 }
 
 html, body { overscroll-behavior: none; }
