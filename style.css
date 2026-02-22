@@ -407,6 +407,156 @@ body::before {
   }
 }
 
+/* ===== ENTRY SCREEN (post-login) ===== */
+.entryScreen{
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 90px 18px 70px;
+  text-align: center;
+  position: relative;
+}
+
+.entryWrap{
+  width: min(420px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* BIG chant line */
+.entryChant{
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    0 0 18px rgba(187,0,0,0.28),
+    0 10px 34px rgba(0,0,0,0.45);
+  margin-bottom: 10px;
+}
+
+/* Countdown module */
+.countdownCard{
+  padding: 14px 14px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background:
+    radial-gradient(620px 200px at 50% -60px, rgba(187,0,0,0.28), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+    rgba(0,0,0,0.22);
+
+  box-shadow:
+    0 18px 45px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(255,255,255,0.04) inset;
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.countdownTitle{
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 2.4px;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-bottom: 10px;
+}
+
+/* 4-up grid */
+.countdownNums{
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.cdUnit{
+  padding: 10px 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+}
+
+.cdNum{
+  font-size: 30px;
+  font-weight: 1000;
+  letter-spacing: 1px;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 20px rgba(187,0,0,0.30),
+    0 0 40px rgba(187,0,0,0.16);
+}
+
+.cdLab{
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 2px;
+  opacity: 0.75;
+}
+
+.countdownSub{
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  opacity: 0.78;
+}
+
+/* Doors (2x2 + optional admin) */
+.entryDoors{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.doorBtn{
+  padding: 14px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.28);
+  color: #fff;
+  font-weight: 1000;
+  letter-spacing: 0.6px;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.40);
+}
+
+.doorBtn:active{
+  transform: translateY(1px) scale(0.99);
+}
+
+/* ===== OPTION B: intensity levels ===== */
+.countdownCard.level30{
+  border-color: rgba(245,158,11,0.22);
+  box-shadow:
+    0 18px 45px rgba(0,0,0,0.45),
+    0 0 22px rgba(245,158,11,0.10);
+}
+
+.countdownCard.level7{
+  border-color: rgba(187,0,0,0.30);
+  box-shadow:
+    0 22px 55px rgba(0,0,0,0.55),
+    0 0 28px rgba(187,0,0,0.20);
+}
+
+.countdownCard.level1{
+  border-color: rgba(187,0,0,0.45);
+  box-shadow:
+    0 26px 65px rgba(0,0,0,0.60),
+    0 0 40px rgba(187,0,0,0.28);
+  animation: tunnelPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tunnelPulse{
+  0%,100%{ transform: scale(1); filter: brightness(1); }
+  50%{ transform: scale(1.01); filter: brightness(1.08); }
+}
+
 /* Success transition (premium “unlock”) */
 .loginUnlocking .loginCard{
   animation: unlockPop 320ms ease-out forwards;
