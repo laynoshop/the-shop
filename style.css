@@ -419,11 +419,11 @@ body.entryMode::before{
 }
 
 /* =========================
-   ENTRY SCREEN — Tunnel Mode (UPDATED)
+   ENTRY SCREEN — Tunnel Mode (FIXED)
    ========================= */
 
 body.entryMode::before{
-  /* your existing Block-O background layer gets juiced up on Entry */
+  /* Block-O background layer gets juiced up on Entry */
   opacity: 0.085;
   transform: scale(1.02);
   filter: saturate(1.1);
@@ -510,14 +510,16 @@ body.entryMode{
   margin-bottom: 12px;
 }
 
-/* Countdown units — HARD FIX for iOS clipping */
+/* Countdown units — FIXED (no overlap, no clipping) */
 .countdownNums{
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)); /* ✅ allows shrink so “SEC” never clips */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
 .cdUnit{
+  position: relative;
+  overflow: hidden;                 /* ✅ prevents DAYS spilling under HRS */
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.25);
@@ -528,19 +530,24 @@ body.entryMode{
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 
-  min-width: 0; /* ✅ critical in grids */
+  min-width: 0;                     /* ✅ critical in grids */
 }
 
-/* Default (HRS/MIN/SEC) smaller */
 .cdNum{
-  font-size: 38px;          /* smaller base */
+  display: block;
+  width: 100%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   font-weight: 1000;
-  letter-spacing: 0.5px;
   line-height: 1;
   color: #fff;
   text-shadow:
     0 0 18px rgba(187,0,0,0.35),
     0 0 40px rgba(187,0,0,0.16);
+
+  /* Default (HRS/MIN/SEC) */
+  font-size: clamp(30px, 7.5vw, 38px);
+  letter-spacing: 0.5px;
 }
 
 .cdLab{
@@ -557,11 +564,13 @@ body.entryMode{
   background:
     radial-gradient(420px 140px at 50% -40px, rgba(187,0,0,0.18), transparent 70%),
     rgba(0,0,0,0.26);
+  padding: 14px 10px 12px;
 }
 
 .countdownNums .cdUnit:first-child .cdNum{
-  font-size: 56px;          /* ✅ bigger days */
+  font-size: clamp(44px, 10.5vw, 56px); /* ✅ big days, but never overlaps */
   letter-spacing: 1px;
+  line-height: 0.95;
 }
 
 .countdownNums .cdUnit:first-child .cdLab{
@@ -623,8 +632,8 @@ body.entryMode{
 @media (max-width: 380px){
   .entryChant{ font-size: 40px; }
 
-  .cdNum{ font-size: 34px; }
-  .countdownNums .cdUnit:first-child .cdNum{ font-size: 50px; }
+  .cdNum{ font-size: clamp(28px, 7.2vw, 34px); }
+  .countdownNums .cdUnit:first-child .cdNum{ font-size: clamp(42px, 10.8vw, 50px); }
 
   .doorBtn{ font-size: 20px; height: 74px; }
 }
