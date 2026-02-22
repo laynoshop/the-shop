@@ -1290,6 +1290,19 @@ function buildLeagueSelectHTML(selectedKey) {
   `;
 }
 
+function yyyymmddToInputValue(yyyymmdd) {
+  const s = String(yyyymmdd || "");
+  if (!/^\d{8}$/.test(s)) return "";
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+}
+
+function inputValueToYYYYMMDD(v) {
+  const s = String(v || "").trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  return `${m[1]}${m[2]}${m[3]}`;
+}
+
 function buildCalendarButtonHTML() {
   const current = yyyymmddToInputValue(getSavedDateYYYYMMDD());
 
@@ -1458,17 +1471,16 @@ async function checkCode() {
     setTimeout(() => login.classList.add("loginFadeOut"), 160);
   }
 
-  setTimeout(() => {
-    if (login) login.style.display = "none";
-    if (app) app.style.display = "block";
+setTimeout(() => {
+  if (login) login.style.display = "none";
+  if (app) app.style.display = "block";
 
-    // Build tabs based on role and go to default
-    buildTabsForRole(role);
+  // Build tabs based on role and go to default
+  buildTabsForRole(role);
 
-    // Keep your existing “enter app” behavior
-    enterAppToTab("scores");
-  }, 320);
-}
+  // Show the Entry (doors) screen after login
+  showEntryScreen();
+}, 320);
 
 /* =========================
    BUCKEYE BANNER (above tabs)
