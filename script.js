@@ -1091,8 +1091,42 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
 
   const isNcaam = league.key === "ncaam";
 
+  function addOrReplaceParam(url, key, value) {
+    try {
+      const u = new URL(url);
+      u.searchParams.set(key, value);
+      return u.toString();
+    } catch {
+      // If URL() fails (shouldn't), fallback string append
+      const hasQ = url.includes("?");
+      const sep = hasQ ? "&" : "?";
+      return `${url}${sep}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+    }
+  }
+
+  function hasAnyScheduledPreGames(events) {
+    for (const ev of (events || [])) {
+      const comp = ev?.competitions?.[0];
+      const state = comp?.status?.type?.state || "";
+      // ESPN uses "pre" for scheduled (not started)
+      if (String(state).toLowerCase() === "pre") return true;
+    }
+    return false;
+  }
+
+  // Build attempts
   const attempts = [
     { label: "selectedDate", url: baseUrl },
+
+    // For NCAAM, ESPN often needs a bigger limit to include all scheduled games
+    ...(isNcaam ? [
+      { label: "ncaam-limit-500", url: addOrReplaceParam(baseUrl, "limit", "500") },
+      { label: "ncaam-limit-1000", url: addOrReplaceParam(baseUrl, "limit", "1000") },
+      // Some endpoints behave differently without groups
+      { label: "ncaam-noGroups-limit-1000", url: addOrReplaceParam(baseUrl.replace(/&groups=50/i, ""), "limit", "1000") },
+    ] : []),
+
+    // Existing fallbacks
     ...(isNcaam ? [{ label: "ncaam-noGroups", url: baseUrl.replace(/&groups=50/i, "") }] : []),
     { label: "noDate", url: removeDatesParam(baseUrl) },
     { label: "yesterday", url: league.endpoint(yDate) },
@@ -1108,11 +1142,23 @@ async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
         lastError = new Error(`HTTP ${resp.status}`);
         continue;
       }
+
       const data = await resp.json();
       const events = Array.isArray(data?.events) ? data.events : [];
-      if (events.length > 0) {
-        return { data, events, used: a.label, url: a.url };
+
+      if (events.length === 0) continue;
+
+      // ✅ Key improvement:
+      // If NCAAM and we got events but NONE are scheduled ("pre"),
+      // keep trying the higher-limit URLs instead of returning early.
+      if (isNcaam && !hasAnyScheduledPreGames(events)) {
+        // Don't early-return on the low-quality responses
+        // Continue loop to try better attempts
+        lastError = new Error(`NCAAM response had events but no scheduled games (used=${a.label})`);
+        continue;
       }
+
+      return { data, events, used: a.label, url: a.url };
     } catch (e) {
       lastError = e;
     }
