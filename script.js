@@ -424,6 +424,15 @@ function showEntryScreen() {
   if (app) app.style.display = "none";
   if (entry) entry.style.display = "flex";
 
+  // ✅ Admin-only: Shop door visibility
+  try {
+    const role = String(localStorage.getItem(ROLE_KEY) || "guest").trim();
+    const shopDoor = document.querySelector('.doorBtn[data-go="shop"]');
+    if (shopDoor) {
+      shopDoor.style.display = (role === "admin") ? "" : "none";
+    }
+  } catch {}
+
   // Start countdown tick
   updateTheGameCountdown();
   if (countdownTimerHandle) clearInterval(countdownTimerHandle);
