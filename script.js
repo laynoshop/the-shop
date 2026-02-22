@@ -1260,12 +1260,31 @@ async function checkCode() {
     // This already exists in your app for Shop chat and anonymous auth
     await ensureFirebaseChatReady();
 
-    // Call the secure Firebase Function (invite code never exposed in client)
-    const fn = firebase.functions().httpsCallable("redeemInviteCode");
-    const res = await fn({ code: entered });
+    // Get Firebase ID token from the (anonymous) signed-in user
+    const user = firebase.auth().currentUser;
+    if (!user) throw new Error("No auth user");
 
-    role = String(res?.data?.role || "");
-    if (role !== "admin" && role !== "guest") throw new Error("Bad role");
+    const token = await user.getIdToken();
+
+    // Call HTTPS endpoint (CORS-safe)
+    const resp = await fetch(
+      "https://us-central1-the-shop-chat.cloudfunctions.net/redeemInviteCodeHttp",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({ code: entered })
+      }
+    );
+
+    const data = await resp.json().catch(() => ({}));
+
+    role = String(data?.role || "");
+    if (!resp.ok || (role !== "admin" && role !== "guest")) {
+      throw new Error("Invalid code");
+    }
   } catch (e) {
     // Same invalid-code UX (no details leaked)
     input.focus();
@@ -1313,28 +1332,6 @@ async function checkCode() {
     }
   }, 520);
 }
-
-/* =========================
-   Tabs
-   ========================= */
-
-/* ===== Tabs click (delegated) ===== */
-document.addEventListener("change", (e) => {
-  const el = e.target;
-
-  // League dropdown
-  if (el instanceof HTMLSelectElement && el.id === "leagueSelect") {
-    saveLeagueKey(el.value);
-    loadScores(true);
-    return;
-  }
-
-  // Native date picker
-  if (el instanceof HTMLInputElement && el.id === "nativeDateInput") {
-    handleNativeDateChangeFromEl(el);
-    return;
-  }
-});
 
 /* =========================
    BUCKEYE BANNER (above tabs)
