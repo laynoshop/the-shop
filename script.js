@@ -21,6 +21,41 @@ const FIREBASE_CONFIG = {
   appId: "1:98648984848:web:c4e876c8acdb00d8ba2995"
 };
 
+// ===== ScarletKey Crash Guard + Build Stamp (PHONE SAFE) =====
+(function () {
+  function showCrash(msg) {
+    try {
+      const el = document.createElement("div");
+      el.id = "skCrash";
+      el.style.cssText =
+        "position:fixed;inset:0;z-index:999999;background:#0b0b0b;color:#fff;padding:16px;font-family:system-ui;overflow:auto;";
+      el.innerHTML = `
+        <h2 style="margin:0 0 8px 0;">ScarletKey Error</h2>
+        <div style="opacity:.9;line-height:1.4;white-space:pre-wrap;">${String(msg || "Unknown error")}</div>
+        <div style="margin-top:12px;opacity:.7;font-size:12px;">
+          Tip: This usually means a paste/truncation happened.<br/>
+          Revert the last script.js edit in GitHub.
+        </div>
+      `;
+      document.body.appendChild(el);
+    } catch {}
+  }
+
+  window.addEventListener("error", (e) => {
+    console.error("APP ERROR:", e);
+    showCrash(e?.message || e);
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    console.error("PROMISE ERROR:", e);
+    showCrash(e?.reason?.message || e?.reason || e);
+  });
+})();
+
+// ===== Build Stamp (confirms correct deploy loaded) =====
+window.__SCARLETKEY_BUILD = "2026-02-22-01";
+console.log("ScarletKey build:", window.__SCARLETKEY_BUILD);
+
 /* ====== SAFETY: CSS.escape polyfill (fixes iOS/PWA crashes) ====== */
 (function ensureCssEscape(){
   if (!window.CSS) window.CSS = {};
