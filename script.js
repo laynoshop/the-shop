@@ -3354,18 +3354,33 @@ async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid) {
 }
 
 function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
-  // Default: pre-select all games
-  const rows = (events || []).map(ev => {
+  const now = Date.now();
+
+  // Sort by kickoff time
+  const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+
+  // Default view = only games that have NOT started yet
+  const futureOnly = sorted.filter(ev => {
+    const t = kickoffMsFromEvent(ev);
+    return t && t > now;
+  });
+
+  const listToRender = futureOnly.length ? futureOnly : sorted;
+
+  const rows = listToRender.map(ev => {
     const eventId = String(ev?.id || "");
     if (!eventId) return "";
     const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
 
+    const startMs = kickoffMsFromEvent(ev);
+    const started = startMs ? (startMs <= now) : false;
+
     return `
       <div class="gpAdminRow">
         <label class="gpAdminLabel">
-          <input type="checkbox" checked data-gpcheck="1" data-eid="${escapeHtml(eventId)}" />
+          <input type="checkbox" ${started ? "" : "checked"} data-gpcheck="1" data-eid="${escapeHtml(eventId)}" />
           <span class="gpAdminText">${escapeHtml(awayName)} @ ${escapeHtml(homeName)}</span>
-          <span class="muted gpAdminTime">${escapeHtml(fmtKickoff(iso))}</span>
+          <span class="muted gpAdminTime">${escapeHtml(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
         </label>
       </div>
     `;
@@ -3376,11 +3391,11 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
       <div class="gameHeader">
         <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
       </div>
-      <div class="gameMetaTopLine">${escapeHtml(leagueKey.toUpperCase())} • ${escapeHtml(dateYYYYMMDD)}</div>
-      <div class="gameMetaOddsLine">Select games, then Create/Replace, then Publish</div>
+      <div class="gameMetaTopLine">${escapeHtml(String(leagueKey || "").toUpperCase())} • ${escapeHtml(dateYYYYMMDD)}</div>
+      <div class="gameMetaOddsLine">Defaults to future games. You can still check started games if you want.</div>
 
       <div style="margin-top:8px;">
-        ${rows || `<div class="notice">No games to build a slate from.</div>`}
+        ${rows || `<div class="notice">No games found for this date.</div>`}
       </div>
 
       <div style="margin-top:12px; display:flex; gap:8px;">
