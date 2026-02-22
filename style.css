@@ -419,58 +419,62 @@ body.entryMode::before{
 }
 
 /* =========================
-   ENTRY SCREEN — Tunnel Mode (FIXED)
+   ENTRY SCREEN — Tunnel Mode (Beat-Hero Style)
    ========================= */
 
+/* Juice up the Block-O background on Entry */
 body.entryMode::before{
-  /* Block-O background layer gets juiced up on Entry */
-  opacity: 0.085;
+  opacity: 0.10;
   transform: scale(1.02);
   filter: saturate(1.1);
 }
 
-/* Prevent the “floating scroll” feel on entry */
+/* Stop the “float scroll” feel on the entry screen */
 body.entryMode{
   overflow: hidden;
   overscroll-behavior: none;
+  height: 100%;
 }
 
 /* Entry screen layout */
 .entryScreen{
-  min-height: 100svh;              /* better on iOS than 100vh */
+  min-height: 100svh;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 80px 18px 70px;
+
+  /* tighter so it doesn’t create phantom scroll */
+  padding: 64px 16px calc(20px + env(safe-area-inset-bottom));
+
   position: relative;
   z-index: 1;
 
-  overflow: hidden;                 /* keep it locked */
+  overflow: hidden;
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
 }
 
 .entryWrap{
-  width: min(520px, 92vw);
+  width: min(560px, 92vw);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 /* Big rally cry */
 .entryChant{
   text-align: center;
   font-weight: 1000;
-  letter-spacing: 2.5px;
+  letter-spacing: 3px;
   text-transform: uppercase;
 
-  font-size: 46px;
-  line-height: 1.05;
+  font-size: clamp(44px, 7.6vw, 64px);
+  line-height: 1.02;
 
   color: #fff;
   text-shadow:
     0 10px 28px rgba(0,0,0,0.55),
-    0 0 24px rgba(187,0,0,0.30);
+    0 0 26px rgba(187,0,0,0.32);
 
   animation: entryPop 420ms ease-out;
 }
@@ -480,7 +484,7 @@ body.entryMode{
   to{ opacity:1; transform: translateY(0); }
 }
 
-/* Countdown card — more punch */
+/* Countdown card — match Beat TTUN hero vibes */
 .countdownCard{
   width: 100%;
   padding: 16px 16px 14px;
@@ -488,16 +492,16 @@ body.entryMode{
   border: 1px solid rgba(255,255,255,0.14);
 
   background:
-    radial-gradient(900px 260px at 50% -90px, rgba(187,0,0,0.32), transparent 60%),
-    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
-    rgba(0,0,0,0.24);
+    radial-gradient(900px 500px at 50% -10%, rgba(187,0,0,0.35), transparent 60%),
+    linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0.25)),
+    rgba(255,255,255,0.04);
 
   box-shadow:
-    0 22px 60px rgba(0,0,0,0.55),
-    0 0 0 1px rgba(255,255,255,0.04) inset;
+    0 20px 50px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(187,0,0,0.18) inset;
 
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .countdownTitle{
@@ -506,77 +510,91 @@ body.entryMode{
   font-weight: 1000;
   letter-spacing: 3px;
   text-transform: uppercase;
-  opacity: 0.9;
+  opacity: 0.92;
   margin-bottom: 12px;
 }
 
-/* Countdown units — FIXED (no overlap, no clipping) */
+/* Kill the Target date line without touching JS */
+.countdownSub{ display:none; }
+
+/* Countdown units — Beat-style layout (DAYS slightly wider) */
 .countdownNums{
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: 1.45fr 1fr 1fr 1fr;
+  gap: 12px;
+
+  /* iOS: avoid weird overflows */
+  width: 100%;
 }
 
 .cdUnit{
-  position: relative;
-  overflow: hidden;                 /* ✅ prevents DAYS spilling under HRS */
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(0,0,0,0.25);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.45);
-  padding: 12px 10px;
+  background: rgba(255,255,255,0.05);
   text-align: center;
+
+  padding: 14px 10px 12px;
+
+  /* ✅ THIS is the hard fix so big text can’t bleed behind neighbors */
+  overflow: hidden;
+  position: relative;
+
+  box-shadow: 0 16px 40px rgba(0,0,0,0.45);
 
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 
-  min-width: 0;                     /* ✅ critical in grids */
+  min-width: 0;
 }
 
+/* Default (HRS/MIN/SEC) */
 .cdNum{
-  display: block;
-  width: 100%;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  font-size: clamp(28px, 5.2vw, 40px);
   font-weight: 1000;
+  letter-spacing: 1px;
   line-height: 1;
+
   color: #fff;
   text-shadow:
-    0 0 18px rgba(187,0,0,0.35),
-    0 0 40px rgba(187,0,0,0.16);
+    0 0 18px rgba(187,0,0,0.30),
+    0 0 40px rgba(187,0,0,0.14);
 
-  /* Default (HRS/MIN/SEC) */
-  font-size: clamp(30px, 7.5vw, 38px);
-  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .cdLab{
   margin-top: 6px;
   font-size: 11px;
   font-weight: 1000;
-  letter-spacing: 2.0px;
+  letter-spacing: 2px;
   opacity: 0.78;
+  text-transform: uppercase;
 }
 
-/* Make DAYS the hero (first tile) */
+/* DAYS = hero tile (bigger, scarlet glow) */
 .countdownNums .cdUnit:first-child{
-  border-color: rgba(187,0,0,0.22);
+  border-color: rgba(187,0,0,0.28);
   background:
-    radial-gradient(420px 140px at 50% -40px, rgba(187,0,0,0.18), transparent 70%),
-    rgba(0,0,0,0.26);
-  padding: 14px 10px 12px;
+    radial-gradient(520px 220px at 30% 10%, rgba(187,0,0,0.22), transparent 65%),
+    rgba(255,255,255,0.04);
+  box-shadow:
+    0 18px 44px rgba(0,0,0,0.50),
+    0 0 22px rgba(187,0,0,0.18);
 }
 
 .countdownNums .cdUnit:first-child .cdNum{
-  font-size: clamp(44px, 10.5vw, 56px); /* ✅ big days, but never overlaps */
-  letter-spacing: 1px;
-  line-height: 0.95;
+  font-size: clamp(46px, 9.2vw, 72px);
+  letter-spacing: 2px;
+  line-height: 0.92;
+  text-shadow:
+    0 0 25px rgba(187,0,0,0.45),
+    0 0 45px rgba(187,0,0,0.22);
 }
 
 .countdownNums .cdUnit:first-child .cdLab{
   font-size: 12px;
   letter-spacing: 2.4px;
-  opacity: 0.9;
+  opacity: 0.90;
 }
 
 /* Doors grid */
@@ -587,25 +605,25 @@ body.entryMode{
   gap: 14px;
 }
 
-/* OPTION A — SCARLET GLASS DOORS */
+/* OPTION A — Scarlet glass doors */
 .doorBtn{
-  height: 78px;
-  border-radius: 22px;
-  border: 1px solid rgba(187,0,0,0.35);
+  height: 84px;
+  border-radius: 24px;
+  border: 1px solid rgba(187,0,0,0.38);
 
   background:
-    radial-gradient(420px 140px at 50% -40px, rgba(187,0,0,0.30), transparent 65%),
+    radial-gradient(520px 180px at 50% -40px, rgba(187,0,0,0.34), transparent 65%),
     linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
-    rgba(0,0,0,0.30);
+    rgba(0,0,0,0.32);
 
   color: #fff;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 1000;
   letter-spacing: 0.6px;
 
   box-shadow:
     0 22px 55px rgba(0,0,0,0.55),
-    0 0 22px rgba(187,0,0,0.18);
+    0 0 24px rgba(187,0,0,0.22);
 
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -616,26 +634,24 @@ body.entryMode{
 .doorBtn:active{
   transform: translateY(1px) scale(0.99);
   filter: brightness(1.10);
-  border-color: rgba(187,0,0,0.55);
+  border-color: rgba(187,0,0,0.60);
   box-shadow:
     0 16px 40px rgba(0,0,0,0.55),
-    0 0 26px rgba(187,0,0,0.28);
+    0 0 28px rgba(187,0,0,0.30);
 }
 
-/* Make the single admin "Shop" tile match size and sit on its own row */
+/* Admin Shop full width row */
 .entryDoors .doorBtn.adminOnly{
   grid-column: 1 / span 2;
-  height: 78px;
+  height: 84px;
 }
 
 /* Mobile tightening */
 @media (max-width: 380px){
-  .entryChant{ font-size: 40px; }
-
-  .cdNum{ font-size: clamp(28px, 7.2vw, 34px); }
-  .countdownNums .cdUnit:first-child .cdNum{ font-size: clamp(42px, 10.8vw, 50px); }
-
-  .doorBtn{ font-size: 20px; height: 74px; }
+  .entryScreen{ padding-top: 56px; }
+  .doorBtn{ font-size: 22px; height: 80px; }
+  .countdownNums{ gap: 10px; }
+  .cdUnit{ padding: 12px 8px 11px; border-radius: 16px; }
 }
 
 html, body { overscroll-behavior: none; }
