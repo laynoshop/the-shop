@@ -2596,6 +2596,9 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
 
   const filtered = (items || []).filter(it => passesNewsFilter(it, currentNewsFilter));
 
+  // Determine category label from active filter
+  const categoryLabel = (currentNewsFilter || "all").toUpperCase();
+
   const cards = filtered.map((it) => {
     const safeTitle = sanitizeTTUNText(it.headline);
     const title = escapeHtml(safeTitle);
@@ -2606,15 +2609,23 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
       : "";
 
     const when = it.publishedTs ? timeAgoLabel(it.publishedTs) : "";
-    const metaParts = [
-      it.source ? escapeHtml(sanitizeTTUNText(it.source)) : "ESPN",
+    const sourceLabel = it.source
+      ? escapeHtml(sanitizeTTUNText(it.source))
+      : "ESPN";
+
+    // 🔥 CATEGORY • SOURCE • TIME
+    const pillParts = [
+      categoryLabel,
+      sourceLabel,
       when ? escapeHtml(when) : ""
     ].filter(Boolean);
 
-    const meta = metaParts.join(" • ");
-    const href = it.link ? it.link : `https://www.espn.com/search/results?q=${encodeURIComponent(safeTitle || "")}`;
+    const pillText = pillParts.join(" • ");
 
-    // Headline is now the link (opens Safari)
+    const href = it.link
+      ? it.link
+      : `https://www.espn.com/search/results?q=${encodeURIComponent(safeTitle || "")}`;
+
     const headlineLink = `
       <a href="${href}"
          target="_blank"
@@ -2627,10 +2638,9 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
     return `
       <div class="game">
         <div class="gameHeader">
-          <div class="statusPill status-other">TOP</div>
+          <div class="statusPill status-other">${pillText}</div>
         </div>
         <div class="gameMetaTopLine">${headlineLink}</div>
-        <div class="gameMetaOddsLine">${meta || "—"}</div>
         <div style="padding:0 2px 2px 2px;">
           ${desc}
         </div>
@@ -2673,7 +2683,6 @@ async function renderTopNews(showLoading) {
   const content = document.getElementById("content");
   const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-  // 1) Instant render from cache if present
   const cached = loadNewsCache();
   if (cached && Array.isArray(cached.items) && cached.items.length) {
     renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
@@ -2682,7 +2691,6 @@ async function renderTopNews(showLoading) {
     return;
   }
 
-  // 2) No cache: show loading
   if (showLoading) {
     content.innerHTML = `
       <div class="header">
@@ -2710,7 +2718,6 @@ async function renderTopNews(showLoading) {
     saveNewsCache(items, cacheLabel);
     renderNewsList(items, headerUpdated, cacheLabel);
   } catch (e) {
-    // 3) If fetch fails, try showing ANY cached data if it exists (even if old)
     const fallback = loadNewsCache();
     if (fallback && Array.isArray(fallback.items) && fallback.items.length) {
       renderNewsList(fallback.items, headerUpdated, fallback.updatedLabel || "");
@@ -2756,8 +2763,6 @@ async function renderTopNews(showLoading) {
     }
   }
 }
-
-
 
 /* =========================
    SHOP CHAT (Firebase / Firestore)
