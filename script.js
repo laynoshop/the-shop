@@ -2696,41 +2696,81 @@ function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
       ? it.link
       : `https://www.espn.com/search/results?q=${encodeURIComponent(safeTitle || "")}`;
 
-    // Headline is now the clear click target (bolder + bigger)
-    const headlineLink = `
+    // ✅ Story image (if present)
+    const imgUrl = (it.imageUrl || "").trim();
+    const imageBlock = imgUrl
+      ? `
+        <a href="${href}"
+           target="_blank"
+           rel="noopener noreferrer"
+           style="display:block;text-decoration:none;">
+          <div style="
+            width:100%;
+            height:156px;
+            border-radius:16px;
+            overflow:hidden;
+            margin-bottom:10px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+          ">
+            <img src="${escapeHtml(imgUrl)}"
+                 alt=""
+                 loading="lazy"
+                 referrerpolicy="no-referrer"
+                 style="
+                   width:100%;
+                   height:100%;
+                   object-fit:cover;
+                   display:block;
+                   transform: scale(1.01);
+                 "
+                 onerror="this.closest('a')?.remove();"
+            />
+          </div>
+        </a>
+      `
+      : "";
+
+    // ✅ Headline displayed in a “pill” (clickable)
+    const headlinePill = `
       <a href="${href}"
          target="_blank"
          rel="noopener noreferrer"
-         style="
-           display:block;
-           color:inherit;
-           text-decoration:none;
-           font-weight:1000;
-           font-size:17px;
-           line-height:1.25;
-           margin-bottom:6px;
-         ">
-        ${title}
+         style="display:block;color:inherit;text-decoration:none;">
+        <div style="
+          display:block;
+          padding: 12px 12px;
+          border-radius: 14px;
+          background: rgba(0,0,0,0.20);
+          border: 1px solid rgba(255,255,255,0.10);
+          box-shadow: 0 10px 26px rgba(0,0,0,0.28);
+          font-weight: 1000;
+          font-size: 18px;
+          line-height: 1.22;
+        ">
+          ${title}
+        </div>
       </a>
     `;
 
     // Snippet NOT bold, NOT in a pill
     const desc = descText
-      ? `<div style="opacity:0.85;font-size:14px;line-height:1.35;margin-bottom:8px;">
+      ? `<div style="opacity:0.85;font-size:14px;line-height:1.35;margin:10px 2px 8px;">
            ${escapeHtml(descText)}
          </div>`
       : "";
 
     // Meta line under snippet, subtle
     const meta = metaLine
-      ? `<div style="opacity:0.65;font-size:12px;letter-spacing:0.4px;">
+      ? `<div style="opacity:0.65;font-size:12px;letter-spacing:0.4px;margin:0 2px;">
            ${metaLine}
          </div>`
       : "";
 
     return `
       <div class="game">
-        ${headlineLink}
+        ${imageBlock}
+        ${headlinePill}
         ${desc}
         ${meta}
       </div>
