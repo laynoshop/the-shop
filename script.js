@@ -2476,9 +2476,52 @@ async function fetchTopNewsItemsFromESPN() {
 
   function ensureLinkOrSearch(it) {
     if (it.link) return it.link;
-    // Failsafe: ESPN search URL so headline is always clickable
     const q = encodeURIComponent(it.headline || "");
     return q ? `https://www.espn.com/search/results?q=${q}` : "https://www.espn.com/";
+  }
+
+  function normalizeHttps(url) {
+    const u = String(url || "").trim();
+    if (!u) return "";
+    // protocol-relative -> https
+    if (u.startsWith("//")) return "https:" + u;
+    // http -> https (helps avoid mixed content issues)
+    if (u.startsWith("http://")) return "https://" + u.slice(7);
+    return u;
+  }
+
+  function getBestImageUrlFromArticle(a) {
+    // ESPN JSON shapes vary; try a handful of common patterns.
+    // We only return a URL string; no transforms.
+    const candidates = [
+      a?.images?.[0]?.url,
+      a?.images?.[0]?.href,
+      a?.image?.url,
+      a?.image?.href,
+      a?.thumbnail?.url,
+      a?.thumbnail?.href,
+      a?.promoImage?.url,
+      a?.promoImage?.href,
+
+      // Sometimes nested in links/assets-ish fields:
+      a?.links?.api?.self?.href, // (usually NOT an image, but kept out of candidates below)
+    ].filter(Boolean);
+
+    // Some feeds use "images" as an array of objects with "url" but also "name"/"type".
+    // Prefer the first usable URL-looking candidate.
+    for (const c of candidates) {
+      const u = normalizeHttps(c);
+      if (u && /^https?:\/\//i.test(u)) return u;
+    }
+
+    // If an "images" array exists, scan deeper for any url-ish field
+    const imgs = Array.isArray(a?.images) ? a.images : [];
+    for (const img of imgs) {
+      const u = normalizeHttps(img?.url || img?.href || img?.src);
+      if (u && /^https?:\/\//i.test(u)) return u;
+    }
+
+    return "";
   }
 
   function normalizeItem(a) {
@@ -2491,37 +2534,68 @@ async function fetchTopNewsItemsFromESPN() {
       source: sanitizeTTUNText(a?.source || "ESPN"),
       publishedIso,
       publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
-      link: a?.links?.web?.href || a?.links?.[0]?.href || ""
+      link: a?.links?.web?.href || a?.links?.[0]?.href || "",
+
+      // ✅ NEW: story image
+      imageUrl: getBestImageUrlFromArticle(a)
     };
 
     item.link = ensureLinkOrSearch(item);
     return item;
   }
 
+  function extractImageUrlFromRssItemNode(node) {
+    // 1) <media:content url="...">
+    const mediaContent =
+      node.querySelector("media\\:content") ||
+      node.querySelector("content"); // sometimes namespaced weirdly
+
+    const mediaUrl = mediaContent?.getAttribute?.("url");
+    if (mediaUrl) return normalizeHttps(mediaUrl);
+
+    // 2) <enclosure url="...">
+    const enclosure = node.querySelector("enclosure");
+    const encUrl = enclosure?.getAttribute?.("url");
+    if (encUrl) return normalizeHttps(encUrl);
+
+    // 3) Pull first <img src="..."> out of description (if RSS includes HTML)
+    const descHtml = node.querySelector("description")?.textContent || "";
+    const m = descHtml.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (m && m[1]) return normalizeHttps(m[1]);
+
+    return "";
+  }
+
   function parseRssItems(xmlText) {
     const doc = new DOMParser().parseFromString(xmlText, "text/xml");
     const items = Array.from(doc.querySelectorAll("item")).slice(0, 30);
 
-    return items.map((node) => {
-      const title = node.querySelector("title")?.textContent || "";
-      const link = node.querySelector("link")?.textContent || "";
-      const desc = node.querySelector("description")?.textContent || "";
-      const pub = node.querySelector("pubDate")?.textContent || "";
+    return items
+      .map((node) => {
+        const title = node.querySelector("title")?.textContent || "";
+        const link = node.querySelector("link")?.textContent || "";
+        const desc = node.querySelector("description")?.textContent || "";
+        const pub = node.querySelector("pubDate")?.textContent || "";
 
-      const publishedTs = Date.parse(pub);
+        const publishedTs = Date.parse(pub);
+        const imageUrl = extractImageUrlFromRssItemNode(node);
 
-      const it = {
-        headline: sanitizeTTUNText(title),
-        description: sanitizeTTUNText(desc.replace(/<[^>]*>/g, "").trim()),
-        source: "ESPN",
-        publishedIso: pub,
-        publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
-        link: link || ""
-      };
+        const it = {
+          headline: sanitizeTTUNText(title),
+          description: sanitizeTTUNText(desc.replace(/<[^>]*>/g, "").trim()),
+          source: "ESPN",
+          publishedIso: pub,
+          publishedTs: Number.isFinite(publishedTs) ? publishedTs : 0,
+          link: link || "",
 
-      it.link = ensureLinkOrSearch(it);
-      return it;
-    }).filter(x => x.headline);
+          // ✅ NEW: story image (RSS)
+          imageUrl: imageUrl || ""
+        };
+
+        it.link = ensureLinkOrSearch(it);
+        return it;
+      })
+      .filter((x) => x.headline);
   }
 
   // --- 1) Try ESPN JSON (multiple endpoints + lang/region) ---
@@ -2544,9 +2618,9 @@ async function fetchTopNewsItemsFromESPN() {
       const data = await fetchJsonWithTimeout(url, 9000);
       const articles = Array.isArray(data?.articles) ? data.articles : [];
       if (articles.length) {
-        const items = articles.slice(0, 30).map(normalizeItem).filter(x => x.headline);
+        const items = articles.slice(0, 30).map(normalizeItem).filter((x) => x.headline);
 
-        const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
+        const tagged = items.map((it) => ({ ...it, tags: tagNewsItem(it) }));
         const deduped = dedupeNewsItems(tagged);
 
         deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
@@ -2563,7 +2637,7 @@ async function fetchTopNewsItemsFromESPN() {
     const xml = await fetchTextWithTimeout(rssUrl, 9000);
     const items = parseRssItems(xml);
 
-    const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
+    const tagged = items.map((it) => ({ ...it, tags: tagNewsItem(it) }));
     const deduped = dedupeNewsItems(tagged);
 
     deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
@@ -2573,13 +2647,12 @@ async function fetchTopNewsItemsFromESPN() {
   }
 
   // --- 3) Try RSS via AllOrigins (CORS escape hatch) ---
-  // This is a fallback only (used when ESPN blocks CORS)
   try {
     const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
     const xml = await fetchTextWithTimeout(proxied, 9000);
     const items = parseRssItems(xml);
 
-    const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
+    const tagged = items.map((it) => ({ ...it, tags: tagNewsItem(it) }));
     const deduped = dedupeNewsItems(tagged);
 
     deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
@@ -2588,7 +2661,7 @@ async function fetchTopNewsItemsFromESPN() {
     lastErr = e;
   }
 
-  throw (lastErr || new Error("News fetch failed"));
+  throw lastErr || new Error("News fetch failed");
 }
 
 function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
