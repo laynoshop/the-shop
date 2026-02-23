@@ -3522,15 +3522,24 @@ async function gpGetMyPicksMap(db, slateId, uid) {
 }
 
 async function gpSaveMyPick(db, slateId, uid, eventId, side) {
-  const ref = db.collection("pickSlates").doc(slateId)
-    .collection("picks").doc(uid)
-    .collection("games").doc(eventId);
+  const picksUserRef = db.collection("pickSlates").doc(slateId)
+    .collection("picks").doc(uid);
+
+  const gameRef = picksUserRef.collection("games").doc(eventId);
 
   const name = (typeof getPicksDisplayName === "function")
     ? String(getPicksDisplayName() || "Someone").trim()
     : "Someone";
 
-  await ref.set({
+  // ✅ Ensure parent doc exists so "everyone's picks" can find users
+  await picksUserRef.set({
+    uid: String(uid || ""),
+    name,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  // Save the actual pick
+  await gameRef.set({
     uid: String(uid || ""),
     name,
     side: String(side || ""),
