@@ -74,6 +74,7 @@ let refreshIntervalId = null;
 let currentTab = null;
 
 const STORAGE_KEY = "theShopLeague_v1";
+const LEAGUE_KEY = STORAGE_KEY;
 const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
 
 // =========================
@@ -4461,7 +4462,7 @@ document.addEventListener("click", async (e) => {
 
   renderPicks(true);
   return;
-}
+}}
 
   // Tabs
   const tab = btn.getAttribute("data-tab");
