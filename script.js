@@ -3551,18 +3551,13 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
     createdBy: uid
   }, { merge: true });
 
-  // ✅ TRUE REPLACE: delete any existing games not in the new selection
+  // ✅ TRUE REPLACE: delete ALL existing game docs first
   const existingSnap = await slateRef.collection("games").get();
-  const deletes = [];
-  existingSnap.forEach(doc => {
-    const eventId = String(doc.id || "");
-    if (!selectedEventIds.has(eventId)) {
-      deletes.push(slateRef.collection("games").doc(eventId).delete());
-    }
-  });
-  await Promise.all(deletes);
+  const deleteBatch = db.batch();
+  existingSnap.forEach(doc => deleteBatch.delete(doc.ref));
+  await deleteBatch.commit();
 
-  // ✅ Upsert the selected games
+  // ✅ Write ONLY the selected games
   for (const ev of (events || [])) {
     const eventId = String(ev?.id || "");
     if (!eventId) continue;
@@ -3575,8 +3570,9 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
       eventId,
       homeName,
       awayName,
-      startTime: startDate && !isNaN(startDate.getTime()) ? startDate : null,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      // Store as Timestamp (Firestore will convert Date -> Timestamp)
+      startTime: (startDate && !isNaN(startDate.getTime())) ? startDate : null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   }
 
@@ -3594,19 +3590,9 @@ async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid) {
 
 function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
   const now = Date.now();
-
-  // Sort by kickoff time
   const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
 
-  // Default view = only games that have NOT started yet
-  const futureOnly = sorted.filter(ev => {
-    const t = kickoffMsFromEvent(ev);
-    return t && t > now;
-  });
-
-  const listToRender = futureOnly.length ? futureOnly : sorted;
-
-  const rows = listToRender.map(ev => {
+  const rows = sorted.map(ev => {
     const eventId = String(ev?.id || "");
     if (!eventId) return "";
     const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
@@ -3617,7 +3603,7 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
     return `
       <div class="gpAdminRow">
         <label class="gpAdminLabel">
-          <input type="checkbox" ${started ? "" : "checked"} data-gpcheck="1" data-eid="${escapeHtml(eventId)}" />
+          <input type="checkbox" data-gpcheck="1" data-eid="${escapeHtml(eventId)}" />
           <span class="gpAdminText">${escapeHtml(awayName)} @ ${escapeHtml(homeName)}</span>
           <span class="muted gpAdminTime">${escapeHtml(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
         </label>
@@ -3631,7 +3617,7 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
         <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
       </div>
       <div class="gameMetaTopLine">${escapeHtml(String(leagueKey || "").toUpperCase())} • ${escapeHtml(dateYYYYMMDD)}</div>
-      <div class="gameMetaOddsLine">Defaults to future games. You can still check started games if you want.</div>
+      <div class="gameMetaOddsLine">Select games, then Create/Replace, then Publish.</div>
 
       <div style="margin-top:8px;">
         ${rows || `<div class="notice">No games found for this date.</div>`}
