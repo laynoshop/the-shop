@@ -3546,31 +3546,33 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
   await slateRef.set({
     leagueKey,
     dateYYYYMMDD,
-    published: false,
+    published: false, // NOTE: Create/Replace always resets to unpublished
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     createdBy: uid
   }, { merge: true });
 
-  // ✅ TRUE REPLACE: delete ALL existing game docs first
+  // Delete ALL existing game docs (true replace)
   const existingSnap = await slateRef.collection("games").get();
-  const deleteBatch = db.batch();
-  existingSnap.forEach(doc => deleteBatch.delete(doc.ref));
-  await deleteBatch.commit();
+  const batch = db.batch();
+  existingSnap.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
 
-  // ✅ Write ONLY the selected games
+  // Write ONLY the selected games
   for (const ev of (events || [])) {
     const eventId = String(ev?.id || "");
     if (!eventId) continue;
     if (!selectedEventIds.has(eventId)) continue;
 
-    const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
-    const startDate = iso ? new Date(iso) : null;
+    const { homeName, awayName } = getMatchupNamesFromEvent(ev);
+
+    // ✅ Use kickoffMsFromEvent so startTime is always correct
+    const startMs = kickoffMsFromEvent(ev);
+    const startDate = startMs ? new Date(startMs) : null;
 
     await slateRef.collection("games").doc(eventId).set({
       eventId,
       homeName,
       awayName,
-      // Store as Timestamp (Firestore will convert Date -> Timestamp)
       startTime: (startDate && !isNaN(startDate.getTime())) ? startDate : null,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
@@ -3581,11 +3583,15 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
 
 async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid) {
   const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
-  await db.collection("pickSlates").doc(slateId).set({
+  const slateRef = db.collection("pickSlates").doc(slateId);
+
+  await slateRef.set({
     published: true,
     publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
     publishedBy: uid
   }, { merge: true });
+
+  return slateId;
 }
 
 function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
@@ -3880,51 +3886,78 @@ async function renderPicks(showLoading) {
     const events = sb.events || [];
 
     // 2) GROUP PICKS (Pick’em) — always try to render this first
-    let groupPicksHTML = "";
-    try {
-      const role = getRole();
-      const uid = firebase.auth().currentUser?.uid || "";
+let groupPicksHTML = "";
+try {
+  const role = getRole();
+  const uid = firebase.auth().currentUser?.uid || "";
 
-      // Skip PGA for now (not head-to-head)
-      if (!isPgaLeagueKey(selectedKey)) {
-        const eventsSorted = [...events].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
-        const adminHTML = (role === "admin")
-          ? gpBuildAdminSlateHTML(eventsSorted, selectedKey, selectedDate)
-          : "";
+  // Skip PGA for now (not head-to-head)
+  if (!isPgaLeagueKey(selectedKey)) {
+    const eventsSorted = [...events].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+    const adminHTML = (role === "admin")
+      ? gpBuildAdminSlateHTML(eventsSorted, selectedKey, selectedDate)
+      : "";
 
-        const publishedSlate = await gpGetPublishedSlate(db, selectedKey, selectedDate);
+    // ✅ Always use deterministic slate ID (prevents mismatched publish/read)
+    const sid = slateIdFor(selectedKey, selectedDate);
+    const slateRef = db.collection("pickSlates").doc(sid);
+    const slateSnap = await slateRef.get();
 
-        if (!publishedSlate) {
-          groupPicksHTML =
-            adminHTML +
-            gpBuildGroupPicksCardHTML({ slateId: slateIdFor(selectedKey, selectedDate), games: [], myMap: {}, allPicks: {}, published: false });
-        } else {
-          const sid = publishedSlate.id;
-          const slateGames = await gpGetSlateGames(db, sid);
-const myMap = uid ? await gpGetMyPicksMap(db, sid, uid) : {};
-const allPicks = await gpGetAllPicksForSlate(db, sid);
+    if (!slateSnap.exists) {
+      // No slate at all yet
+      groupPicksHTML =
+        adminHTML +
+        gpBuildGroupPicksCardHTML({
+          slateId: sid,
+          games: [],
+          myMap: {},
+          allPicks: {},
+          published: false
+        });
+    } else {
+      const slateData = slateSnap.data() || {};
+      const isPublished = slateData.published === true;
 
-groupPicksHTML = adminHTML + gpBuildGroupPicksCardHTML({
-  slateId: sid,
-  games: slateGames,
-  myMap,
-  allPicks,
-  published: true
-});
-        }
+      // Guest cannot see unpublished slate
+      if (!isPublished && role !== "admin") {
+        groupPicksHTML =
+          gpBuildGroupPicksCardHTML({
+            slateId: sid,
+            games: [],
+            myMap: {},
+            allPicks: {},
+            published: false
+          });
+      } else {
+        // Admin can preview unpublished; everyone can see published
+        const slateGames = await gpGetSlateGames(db, sid);
+        const myMap = uid ? await gpGetMyPicksMap(db, sid, uid) : {};
+        const allPicks = await gpGetAllPicksForSlate(db, sid);
+
+        groupPicksHTML =
+          adminHTML +
+          gpBuildGroupPicksCardHTML({
+            slateId: sid,
+            games: slateGames,
+            myMap,
+            allPicks,
+            published: isPublished
+          });
       }
-    } catch (e) {
-      console.error("Group Picks load error:", e);
-      groupPicksHTML = `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">GROUP PICKS</div>
-          </div>
-          <div class="gameMetaTopLine">Group Picks error</div>
-          <div class="gameMetaOddsLine">Open console for details.</div>
-        </div>
-      `;
     }
+  }
+} catch (e) {
+  console.error("Group Picks load error:", e);
+  groupPicksHTML = `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">GROUP PICKS</div>
+      </div>
+      <div class="gameMetaTopLine">Group Picks error</div>
+      <div class="gameMetaOddsLine">Open console for details.</div>
+    </div>
+  `;
+}
 
     // 3) Units Picks (OLD system) — do NOT let it kill the page
     let leaderboardHTML = `
@@ -4349,9 +4382,11 @@ document.addEventListener("click", (e) => {
       })
       .then(() => renderPicks(true))
       .catch((err) => {
-        console.error("gpSaveMyPick error:", err);
-        alert("Couldn’t save pick (it may be locked or blocked by rules).");
-      });
+  console.error("gpSaveMyPick error:", err);
+  const code = err?.code ? `\n\nCode: ${err.code}` : "";
+  const msg = err?.message ? `\n${err.message}` : "";
+  alert("Couldn’t save pick." + code + msg);
+});
 
     return;
   }
