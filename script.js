@@ -3407,6 +3407,43 @@ function logout() {
    - Locks at game start (rules enforce it)
    ========================= */
 
+async function gpGetAllPicksForSlate(db, slateId) {
+  // Returns:
+  // { [eventId]: [ { uid, name, side } ] }
+  const out = {};
+
+  // Get all users who have any picks doc under this slate
+  const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
+  const userDocs = usersSnap.docs || [];
+
+  // For each user, read their per-game picks
+  for (const u of userDocs) {
+    const uid = u.id;
+
+    const gamesSnap = await db.collection("pickSlates").doc(slateId)
+      .collection("picks").doc(uid)
+      .collection("games")
+      .get();
+
+    gamesSnap.forEach(d => {
+      const eventId = d.id;
+      const data = d.data() || {};
+      const name = String(data.name || "Someone");
+      const side = String(data.side || "");
+
+      if (!out[eventId]) out[eventId] = [];
+      out[eventId].push({ uid, name, side });
+    });
+  }
+
+  // Sort each game’s list by name so it’s stable
+  Object.keys(out).forEach(eventId => {
+    out[eventId].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  });
+
+  return out;
+}
+
 function getRole() {
   return (localStorage.getItem(ROLE_KEY) || "guest").trim();
 }
@@ -3489,7 +3526,13 @@ async function gpSaveMyPick(db, slateId, uid, eventId, side) {
     .collection("picks").doc(uid)
     .collection("games").doc(eventId);
 
+  const name = (typeof getPicksDisplayName === "function")
+    ? String(getPicksDisplayName() || "Someone").trim()
+    : "Someone";
+
   await ref.set({
+    uid: String(uid || ""),
+    name,
     side: String(side || ""),
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -3594,7 +3637,7 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
   `;
 }
 
-function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published }) {
+function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks }) {
   if (!published) {
     return `
       <div class="game">
@@ -3607,6 +3650,7 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published }) {
     `;
   }
 
+  // Build rows + also build the "Everyone's Picks" view per game
   const rows = (games || []).map(g => {
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
@@ -3619,11 +3663,27 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published }) {
 
     const my = myMap?.[eventId]?.side || "";
 
+    // Everyone's picks for this game: array of { name, side }
+    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+
+    // Render as "Name: Team"
+    const everyoneLines = everyone.length
+      ? everyone.map(p => {
+          const nm = String(p?.name || "Someone");
+          const side = String(p?.side || "");
+          const pickedTeam = (side === "away") ? awayName : (side === "home" ? homeName : "—");
+          return `<div class="gpPickLine"><b>${escapeHtml(nm)}:</b> ${escapeHtml(pickedTeam)}</div>`;
+        }).join("")
+      : `<div class="muted">No picks yet.</div>`;
+
     return `
       <div class="gpGameRow">
         <div class="gpMatchup">
           <div class="gpTeams">${escapeHtml(awayName)} @ ${escapeHtml(homeName)}</div>
-          <div class="muted">${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}${locked ? " • LOCKED" : ""}</div>
+          <div class="muted">
+            ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
+            ${locked ? " • LOCKED" : ""}
+          </div>
         </div>
 
         <div class="gpButtons">
@@ -3637,6 +3697,13 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published }) {
             ${escapeHtml(homeName)}
           </button>
         </div>
+
+        <details class="gpEveryone" ${locked ? "open" : ""}>
+          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
+          <div class="gpEveryoneBody">
+            ${everyoneLines}
+          </div>
+        </details>
       </div>
     `;
   }).join("");
@@ -3834,24 +3901,20 @@ async function renderPicks(showLoading) {
         if (!publishedSlate) {
           groupPicksHTML =
             adminHTML +
-            gpBuildGroupPicksCardHTML({
-              slateId: slateIdFor(selectedKey, selectedDate),
-              games: [],
-              myMap: {},
-              published: false
-            });
+            gpBuildGroupPicksCardHTML({ slateId: slateIdFor(selectedKey, selectedDate), games: [], myMap: {}, allPicks: {}, published: false });
         } else {
           const sid = publishedSlate.id;
           const slateGames = await gpGetSlateGames(db, sid);
-          const myMap = uid ? await gpGetMyPicksMap(db, sid, uid) : {};
-          groupPicksHTML =
-            adminHTML +
-            gpBuildGroupPicksCardHTML({
-              slateId: sid,
-              games: slateGames,
-              myMap,
-              published: true
-            });
+const myMap = uid ? await gpGetMyPicksMap(db, sid, uid) : {};
+const allPicks = await gpGetAllPicksForSlate(db, sid);
+
+groupPicksHTML = adminHTML + gpBuildGroupPicksCardHTML({
+  slateId: sid,
+  games: slateGames,
+  myMap,
+  allPicks,
+  published: true
+});
         }
       }
     } catch (e) {
