@@ -3766,6 +3766,13 @@ const PICKS_NAME_KEY = "theShopPicksName_v1";
 function getPicksDisplayName(opts) {
   const askIfMissing = (opts && opts.askIfMissing === false) ? false : true;
 
+  // 1) Prefer Firebase Auth displayName (works even when localStorage is blocked)
+  try {
+    const u = firebase?.auth?.().currentUser;
+    const dn = String(u?.displayName || "").trim();
+    if (dn) return dn.slice(0, 20);
+  } catch {}
+
   // Storage-safe helpers (private mode can throw)
   function safeGet(key) {
     try { return (localStorage.getItem(key) || ""); }
@@ -3779,10 +3786,11 @@ function getPicksDisplayName(opts) {
     }
   }
 
-  // Prefer existing chat name if it exists
+  // 2) Prefer existing chat name if it exists
   const existingChat = safeGet("shopChatName").trim();
   if (existingChat) return existingChat.slice(0, 20);
 
+  // 3) Then local picks name
   let name = safeGet(PICKS_NAME_KEY).trim();
 
   if (!name && askIfMissing) {
@@ -4376,7 +4384,7 @@ async function addPickFlowFromEvent(eventId, leagueKey, dateYYYYMMDD) {
   });
 }
 
-document.addEventListener("click", (e) => {
+document.addEventListener("click", async (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
@@ -4390,23 +4398,35 @@ document.addEventListener("click", (e) => {
     }
 
     if (picksAction === "setName") {
-      const current = getPicksDisplayName({ askIfMissing: false });
-      const newName = (prompt("Name for Picks (example: Victor):", current) || "").trim();
+  const current = getPicksDisplayName({ askIfMissing: false });
+  const newName = (prompt("Name for Picks (example: Victor):", current) || "").trim();
 
-      if (newName) {
-        const val = newName.slice(0, 20);
-        try {
-          localStorage.setItem(PICKS_NAME_KEY, val);
-        } catch (err) {
-          window.__SK_MEM = window.__SK_MEM || {};
-          window.__SK_MEM[PICKS_NAME_KEY] = val;
-        }
+  if (newName) {
+    const val = newName.slice(0, 20);
+
+    // Save locally (normal mode)
+    try {
+      localStorage.setItem(PICKS_NAME_KEY, val);
+    } catch (err) {
+      window.__SK_MEM = window.__SK_MEM || {};
+      window.__SK_MEM[PICKS_NAME_KEY] = val;
+    }
+
+    // ✅ Save to Firebase Auth profile (works even in private mode)
+    try {
+      await ensureFirebaseChatReady();
+      const user = firebase.auth().currentUser;
+      if (user && typeof user.updateProfile === "function") {
+        await user.updateProfile({ displayName: val });
       }
-
-      renderPicks(true);
-      return;
+    } catch (e) {
+      console.warn("updateProfile failed:", e);
     }
   }
+
+  renderPicks(true);
+  return;
+}
 
   // Tabs
   const tab = btn.getAttribute("data-tab");
