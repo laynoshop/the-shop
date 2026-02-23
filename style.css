@@ -1600,3 +1600,9 @@ button {
   opacity:0.8;
   font-size:13px;
 }
+
+.gpEveryone { margin-top: 10px; }
+.gpEveryoneSummary { cursor: pointer; font-weight: 600; }
+.gpEveryoneBody { margin-top: 8px; }
+.gpPickLine { padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.08); }
+.gpPickLine:first-child { border-top: none; }
