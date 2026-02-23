@@ -4380,6 +4380,34 @@ document.addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
+  // ✅ PICKS HEADER ACTIONS (Name / Refresh)
+  const picksAction = btn.getAttribute("data-picksaction");
+  if (picksAction) {
+
+    if (picksAction === "refresh") {
+      renderPicks(true);
+      return;
+    }
+
+    if (picksAction === "setName") {
+      const current = getPicksDisplayName({ askIfMissing: false });
+      const newName = (prompt("Name for Picks (example: Victor):", current) || "").trim();
+
+      if (newName) {
+        const val = newName.slice(0, 20);
+        try {
+          localStorage.setItem(PICKS_NAME_KEY, val);
+        } catch (err) {
+          window.__SK_MEM = window.__SK_MEM || {};
+          window.__SK_MEM[PICKS_NAME_KEY] = val;
+        }
+      }
+
+      renderPicks(true);
+      return;
+    }
+  }
+
   // Tabs
   const tab = btn.getAttribute("data-tab");
   if (tab) {
