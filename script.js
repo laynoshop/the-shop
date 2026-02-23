@@ -296,12 +296,30 @@ function parseUserDateToYYYYMMDD(input) {
 }
 
 function getSavedDateYYYYMMDD() {
-  const saved = localStorage.getItem(DATE_KEY);
+  let saved = null;
+
+  // Private browsing can throw on localStorage access — never crash the app.
+  try {
+    saved = localStorage.getItem(DATE_KEY);
+  } catch (e) {
+    // fallback to in-memory storage
+    saved = (window.__SK_MEM && window.__SK_MEM[DATE_KEY]) || null;
+  }
+
   if (saved && /^\d{8}$/.test(saved)) return saved;
+
   const today = formatDateYYYYMMDD(new Date());
-  localStorage.setItem(DATE_KEY, today);
+
+  try {
+    localStorage.setItem(DATE_KEY, today);
+  } catch (e) {
+    window.__SK_MEM = window.__SK_MEM || {};
+    window.__SK_MEM[DATE_KEY] = today;
+  }
+
   return today;
 }
+
 function saveDateYYYYMMDD(yyyymmdd) { localStorage.setItem(DATE_KEY, yyyymmdd); }
 
 function yyyymmddToPretty(yyyymmdd) {
@@ -3745,18 +3763,35 @@ const PICKS_ROOM_ID = "main";
 const PICKS_COLLECTION = "picks";
 const PICKS_NAME_KEY = "theShopPicksName_v1";
 
-function getPicksDisplayName() {
+function getPicksDisplayName(opts) {
+  const askIfMissing = (opts && opts.askIfMissing === false) ? false : true;
+
+  // Storage-safe helpers (private mode can throw)
+  function safeGet(key) {
+    try { return (localStorage.getItem(key) || ""); }
+    catch (e) { return (window.__SK_MEM && window.__SK_MEM[key]) || ""; }
+  }
+  function safeSet(key, val) {
+    try { localStorage.setItem(key, val); }
+    catch (e) {
+      window.__SK_MEM = window.__SK_MEM || {};
+      window.__SK_MEM[key] = val;
+    }
+  }
+
   // Prefer existing chat name if it exists
-  const existingChat = (localStorage.getItem("shopChatName") || "").trim();
+  const existingChat = safeGet("shopChatName").trim();
   if (existingChat) return existingChat.slice(0, 20);
 
-  let name = (localStorage.getItem(PICKS_NAME_KEY) || "").trim();
-  if (!name) {
-    name = (prompt("Name for Picks leaderboard (example: Victor):", "") || "").trim();
+  let name = safeGet(PICKS_NAME_KEY).trim();
+
+  if (!name && askIfMissing) {
+    name = (prompt("Name for Picks (example: Victor):", "") || "").trim();
     if (!name) name = "Anon";
-    localStorage.setItem(PICKS_NAME_KEY, name.slice(0, 20));
+    safeSet(PICKS_NAME_KEY, name.slice(0, 20));
   }
-  return name.slice(0, 20);
+
+  return (name || "Anon").slice(0, 20);
 }
 
 function picksDocRef(db, id) {
@@ -3860,6 +3895,7 @@ function renderPicksHeaderHTML(rightLabel) {
         </div>
 
         <div class="headerActions">
+          <button class="smallBtn" data-picksaction="setName">Name</button>
           <button class="smallBtn" data-picksaction="refresh">Refresh</button>
         </div>
       </div>
