@@ -232,11 +232,46 @@ const LEAGUES = [
 ];
 
 function getSavedLeagueKey() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved && LEAGUES.some(l => l.key === saved)) return saved;
-  return "ncaam"; // default
+  let saved = "";
+
+  // Private browsing can throw on localStorage access
+  try {
+    saved = String(localStorage.getItem(LEAGUE_KEY) || "").trim();
+  } catch (e) {
+    saved = String((window.__SK_MEM && window.__SK_MEM[LEAGUE_KEY]) || "").trim();
+  }
+
+  // Must match a real league
+  try {
+    if (saved && typeof getLeagueByKey === "function" && getLeagueByKey(saved)) return saved;
+  } catch (e) {}
+
+  // Fallback to your first league in LEAGUES (or nfl if missing)
+  const fallback =
+    (Array.isArray(LEAGUES) && LEAGUES[0] && LEAGUES[0].key)
+      ? String(LEAGUES[0].key)
+      : "nfl";
+
+  try {
+    localStorage.setItem(LEAGUE_KEY, fallback);
+  } catch (e) {
+    window.__SK_MEM = window.__SK_MEM || {};
+    window.__SK_MEM[LEAGUE_KEY] = fallback;
+  }
+
+  return fallback;
 }
-function saveLeagueKey(key) { localStorage.setItem(STORAGE_KEY, key); }
+function saveLeagueKey(k) {
+  const val = String(k || "").trim();
+  if (!val) return;
+
+  try {
+    localStorage.setItem(LEAGUE_KEY, val);
+  } catch (e) {
+    window.__SK_MEM = window.__SK_MEM || {};
+    window.__SK_MEM[LEAGUE_KEY] = val;
+  }
+}
 function getLeagueByKey(key) { return LEAGUES.find(l => l.key === key) || LEAGUES[0]; }
 
 function formatDateYYYYMMDD(d) {
