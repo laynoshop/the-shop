@@ -4399,8 +4399,8 @@ if (gpAdmin) {
 
   ensureFirebaseChatReady()
     .then(async () => {
-      const role = getRole();
-      if (role !== "admin") {
+      const roleLocal = getRole();
+      if (roleLocal !== "admin") {
         alert("Admin only.");
         return;
       }
@@ -4408,6 +4408,20 @@ if (gpAdmin) {
       const db = firebase.firestore();
       const uid = firebase.auth().currentUser?.uid || "";
       if (!uid) throw new Error("No uid (not signed in)");
+
+      // ✅ CRITICAL: confirm server-side role doc exists (rules depend on this)
+      const userSnap = await db.collection("users").doc(uid).get();
+      const serverRole = userSnap.exists ? String((userSnap.data() || {}).role || "") : "";
+      if (serverRole !== "admin") {
+        alert(
+          "Your account is not admin on the server yet.\n\n" +
+          "Fix:\n" +
+          "1) Log out\n" +
+          "2) Enter the ADMIN invite code again\n\n" +
+          "This creates users/{uid}.role = admin, which Firestore rules require."
+        );
+        return;
+      }
 
       const statusEl = document.getElementById("gpAdminStatus");
       if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
@@ -4421,39 +4435,46 @@ if (gpAdmin) {
           .filter(Boolean)
       );
 
-      // Re-fetch scoreboard so we have the full event objects to write
+      if (selected.size === 0) {
+        if (statusEl) statusEl.textContent = "Select at least 1 game first.";
+        alert("Select at least 1 game first.");
+        return;
+      }
+
+      // Re-fetch scoreboard so we have full event objects to write
       const league = getLeagueByKey(leagueKey);
       const sb = await fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
       const events = sb.events || [];
 
-      if (gpAdmin === "create") {
-        if (selected.size === 0) {
-          if (statusEl) statusEl.textContent = "Select at least 1 game first.";
-          alert("Select at least 1 game, then press Create/Replace.");
-          return;
-        }
-        const sid = await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
-        if (statusEl) statusEl.textContent = `Slate saved: ${sid}`;
-      }
+      // Always save selected games first (true replace)
+      const sid = await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
+
+      // Read back slate games count to prove it saved
+      const gamesSnap = await db.collection("pickSlates").doc(sid).collection("games").get();
+      const gameCount = gamesSnap.size || 0;
 
       if (gpAdmin === "publish") {
-        if (selected.size === 0) {
-          if (statusEl) statusEl.textContent = "Select at least 1 game first.";
-          alert("Select at least 1 game, then press Publish.");
-          return;
-        }
-
-        // ✅ IMPORTANT: publish should ALSO save checked games first
-        const sid = await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
         await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid);
+      }
 
-        if (statusEl) statusEl.textContent = `Slate published ✅ (${sid})`;
+      const pubLabel = (gpAdmin === "publish") ? "published" : "saved";
+      if (statusEl) statusEl.textContent = `Slate ${pubLabel} ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
+
+      // If somehow 0 saved, stop here and tell you
+      if (gameCount === 0) {
+        alert(
+          "Slate saved with 0 games.\n\n" +
+          "This usually means the selected event IDs were not found in the ESPN events list.\n" +
+          "Try Refresh, then select again."
+        );
       }
     })
     .then(() => renderPicks(true))
     .catch((err) => {
       console.error("gpAdmin error:", err);
-      alert("Admin action failed (check console).");
+      const code = err?.code ? `\n\nCode: ${err.code}` : "";
+      const msg = err?.message ? `\n${err.message}` : "";
+      alert("Admin action failed." + code + msg);
     });
 
   return;
