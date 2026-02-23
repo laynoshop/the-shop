@@ -4392,58 +4392,72 @@ document.addEventListener("click", (e) => {
   }
 
   // (B) Admin slate buttons (create/publish)
-  const gpAdmin = btn.getAttribute("data-gpadmin");
-  if (gpAdmin) {
-    const leagueKey = btn.getAttribute("data-league") || "";
-    const dateYYYYMMDD = btn.getAttribute("data-date") || "";
+const gpAdmin = btn.getAttribute("data-gpadmin");
+if (gpAdmin) {
+  const leagueKey = btn.getAttribute("data-league") || "";
+  const dateYYYYMMDD = btn.getAttribute("data-date") || "";
 
-    ensureFirebaseChatReady()
-      .then(async () => {
-        const role = getRole();
-        if (role !== "admin") {
-          alert("Admin only.");
+  ensureFirebaseChatReady()
+    .then(async () => {
+      const role = getRole();
+      if (role !== "admin") {
+        alert("Admin only.");
+        return;
+      }
+
+      const db = firebase.firestore();
+      const uid = firebase.auth().currentUser?.uid || "";
+      if (!uid) throw new Error("No uid (not signed in)");
+
+      const statusEl = document.getElementById("gpAdminStatus");
+      if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
+
+      // Read the checked games from the Admin UI
+      const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
+      const selected = new Set(
+        checks
+          .filter(c => c.checked)
+          .map(c => String(c.getAttribute("data-eid") || ""))
+          .filter(Boolean)
+      );
+
+      // Re-fetch scoreboard so we have the full event objects to write
+      const league = getLeagueByKey(leagueKey);
+      const sb = await fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
+      const events = sb.events || [];
+
+      if (gpAdmin === "create") {
+        if (selected.size === 0) {
+          if (statusEl) statusEl.textContent = "Select at least 1 game first.";
+          alert("Select at least 1 game, then press Create/Replace.");
+          return;
+        }
+        const sid = await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
+        if (statusEl) statusEl.textContent = `Slate saved: ${sid}`;
+      }
+
+      if (gpAdmin === "publish") {
+        if (selected.size === 0) {
+          if (statusEl) statusEl.textContent = "Select at least 1 game first.";
+          alert("Select at least 1 game, then press Publish.");
           return;
         }
 
-        const db = firebase.firestore();
-        const uid = firebase.auth().currentUser?.uid || "";
-        if (!uid) throw new Error("No uid (not signed in)");
+        // ✅ IMPORTANT: publish should ALSO save checked games first
+        const sid = await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
+        await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid);
 
-        const statusEl = document.getElementById("gpAdminStatus");
-        if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
+        if (statusEl) statusEl.textContent = `Slate published ✅ (${sid})`;
+      }
+    })
+    .then(() => renderPicks(true))
+    .catch((err) => {
+      console.error("gpAdmin error:", err);
+      alert("Admin action failed (check console).");
+    });
 
-        // Read the checked games from the Admin UI
-        const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
-        const selected = new Set(
-          checks
-            .filter(c => c.checked)
-            .map(c => String(c.getAttribute("data-eid") || ""))
-            .filter(Boolean)
-        );
-
-        // Re-fetch scoreboard so we have the full event objects to write
-        const league = getLeagueByKey(leagueKey);
-        const sb = await fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
-        const events = sb.events || [];
-
-        if (gpAdmin === "create") {
-          const sid = await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
-          if (statusEl) statusEl.textContent = `Slate saved: ${sid}`;
-        }
-
-        if (gpAdmin === "publish") {
-          await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid);
-          if (statusEl) statusEl.textContent = "Slate published ✅";
-        }
-      })
-      .then(() => renderPicks(true))
-      .catch((err) => {
-        console.error("gpAdmin error:", err);
-        alert("Admin action failed (check console).");
-      });
-
-    return;
-  }
+  return;
+}
 
   // =========================
   // Units Picks actions (existing)
