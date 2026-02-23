@@ -1555,7 +1555,8 @@ async function checkCode() {
   }
 
   // Persist role (unchanged behavior)
-  localStorage.setItem(ROLE_KEY, role);
+  safeRoleSet(role);
+__serverRoleCache = role;
 
   // Clear input so code isn't sitting on the screen
   input.value = "";
@@ -3498,8 +3499,52 @@ async function gpGetAllPicksForSlate(db, slateId) {
   return out;
 }
 
+// ===== Server-role cache (fixes admin UI missing in private / cleared storage) =====
+let __serverRoleCache = "";
+
+function safeRoleGet() {
+  try { return String(localStorage.getItem(ROLE_KEY) || "").trim(); }
+  catch (e) { return String((window.__SK_MEM && window.__SK_MEM[ROLE_KEY]) || "").trim(); }
+}
+
+function safeRoleSet(val) {
+  const v = String(val || "").trim();
+  try { localStorage.setItem(ROLE_KEY, v); }
+  catch (e) {
+    window.__SK_MEM = window.__SK_MEM || {};
+    window.__SK_MEM[ROLE_KEY] = v;
+  }
+}
+
+async function refreshServerRoleCache(db) {
+  try {
+    await ensureFirebaseChatReady();
+    const uid = firebase.auth().currentUser?.uid || "";
+    if (!uid) return "";
+
+    const snap = await db.collection("users").doc(uid).get();
+    const r = snap.exists ? String((snap.data() || {}).role || "").trim() : "";
+    if (r === "admin" || r === "guest") {
+      __serverRoleCache = r;
+      // also persist locally so UI is consistent
+      safeRoleSet(r);
+      return r;
+    }
+  } catch (e) {
+    // ignore; we'll fall back
+  }
+  return "";
+}
+
 function getRole() {
-  return (localStorage.getItem(ROLE_KEY) || "guest").trim();
+  // Prefer server-cached role (most reliable)
+  if (__serverRoleCache === "admin" || __serverRoleCache === "guest") return __serverRoleCache;
+
+  // Fallback to local storage
+  const r = safeRoleGet();
+  if (r === "admin" || r === "guest") return r;
+
+  return "guest";
 }
 
 function slateIdFor(leagueKey, dateYYYYMMDD) {
@@ -3972,6 +4017,7 @@ async function renderPicks(showLoading) {
   try {
     await ensureFirebaseChatReady();
     const db = firebase.firestore();
+    await refreshServerRoleCache(db);
 
     // 1) Load scoreboard events (this should work since Scores works)
     const sb = await fetchScoreboardWithFallbacks(league, selectedDate);
