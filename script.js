@@ -3551,7 +3551,18 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
     createdBy: uid
   }, { merge: true });
 
-  // write games docs
+  // ✅ TRUE REPLACE: delete any existing games not in the new selection
+  const existingSnap = await slateRef.collection("games").get();
+  const deletes = [];
+  existingSnap.forEach(doc => {
+    const eventId = String(doc.id || "");
+    if (!selectedEventIds.has(eventId)) {
+      deletes.push(slateRef.collection("games").doc(eventId).delete());
+    }
+  });
+  await Promise.all(deletes);
+
+  // ✅ Upsert the selected games
   for (const ev of (events || [])) {
     const eventId = String(ev?.id || "");
     if (!eventId) continue;
@@ -3564,7 +3575,6 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
       eventId,
       homeName,
       awayName,
-      // store as Firestore timestamp
       startTime: startDate && !isNaN(startDate.getTime()) ? startDate : null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
