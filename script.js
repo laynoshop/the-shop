@@ -3543,21 +3543,23 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
   const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
   const slateRef = db.collection("pickSlates").doc(slateId);
 
+  // ✅ Do NOT touch "published" here (prevents accidental unpublish)
   await slateRef.set({
     leagueKey,
     dateYYYYMMDD,
-    published: false, // NOTE: Create/Replace always resets to unpublished
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    createdBy: uid
+    createdBy: uid,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy: uid
   }, { merge: true });
 
-  // Delete ALL existing game docs (true replace)
+  // ✅ TRUE REPLACE: delete all existing game docs
   const existingSnap = await slateRef.collection("games").get();
   const batch = db.batch();
   existingSnap.forEach(doc => batch.delete(doc.ref));
   await batch.commit();
 
-  // Write ONLY the selected games
+  // ✅ Write ONLY selected games with startTime as Timestamp
   for (const ev of (events || [])) {
     const eventId = String(ev?.id || "");
     if (!eventId) continue;
@@ -3565,15 +3567,16 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
 
     const { homeName, awayName } = getMatchupNamesFromEvent(ev);
 
-    // ✅ Use kickoffMsFromEvent so startTime is always correct
     const startMs = kickoffMsFromEvent(ev);
-    const startDate = startMs ? new Date(startMs) : null;
+    const startTime = startMs
+      ? firebase.firestore.Timestamp.fromMillis(startMs)
+      : null;
 
     await slateRef.collection("games").doc(eventId).set({
       eventId,
       homeName,
       awayName,
-      startTime: (startDate && !isNaN(startDate.getTime())) ? startDate : null,
+      startTime,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   }
