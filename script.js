@@ -3783,7 +3783,7 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
                 alert('UID:\\n'+t);
               }
             }catch(e){
-              alert('UID:\\n'+((document.getElementById('gpUidText')||{}).textContent||''));
+              alert('UID:\\n'+((document.getElementById('gpUidText')||{}).textContent||'')); 
             }
           })()">
           Copy UID
@@ -3811,8 +3811,12 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
     `;
   }).join("");
 
+  // ✅ IMPORTANT: no global #id for lock input (prevents duplicate-id bugs + lets handler find it per-card)
+  // Your click handler should read it like:
+  // const wrap = btn.closest('[data-gpadminwrap="1"]');
+  // const lockVal = (wrap?.querySelector('[data-gplock="1"]')?.value || "").trim();
   return `
-    <div class="game">
+    <div class="game" data-gpadminwrap="1" data-leaguekey="${escapeHtml(leagueKey)}" data-date="${escapeHtml(dateYYYYMMDD)}">
       <div class="gameHeader">
         <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
       </div>
@@ -3827,12 +3831,13 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
 
       ${uidToolsHTML()}
 
-      <!-- 🔒 LOCK TIME INPUT -->
+      <!-- 🔒 LOCK TIME INPUT (used by Create/Replace; Publish should NOT prompt again) -->
       <div style="margin-top:12px;">
         <label style="display:block; margin-bottom:6px;">
           Lock Time:
-          <input type="datetime-local" id="gpLockTimeInput" />
+          <input type="datetime-local" data-gplock="1" />
         </label>
+        <div class="muted" style="margin-top:4px;">Local time on this device.</div>
       </div>
 
       <div style="margin-top:8px;">
