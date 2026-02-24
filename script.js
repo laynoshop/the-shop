@@ -3461,6 +3461,9 @@ function logout() {
    - Users submit home/away pick
    - Locks at game start (rules enforce it)
    ========================= */
+function getCurrentUidSafe() {
+  try { return firebase?.auth?.().currentUser?.uid || ""; } catch { return ""; }
+}
 
 async function gpGetAllPicksForSlate(db, slateId) {
   // Returns:
@@ -3750,6 +3753,41 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
   const now = Date.now();
   const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
 
+  // ✅ Show the *actual* UID the phone is currently using (anonymous auth can change on iOS)
+  function currentUid() {
+    try { return firebase?.auth?.().currentUser?.uid || ""; } catch { return ""; }
+  }
+
+  // ✅ iOS-safe copy helper (clipboard if available, fallback alert)
+  function uidToolsHTML() {
+    const uid = currentUid() || "—";
+    return `
+      <div class="muted" style="margin-top:8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <span>UID: <span id="gpUidText" style="font-weight:700;">${escapeHtml(uid)}</span></span>
+        <button
+          class="smallBtn"
+          type="button"
+          style="padding:6px 10px;border-radius:10px;"
+          onclick="(function(){
+            try{
+              var t=(document.getElementById('gpUidText')||{}).textContent||'';
+              if(!t){ alert('UID not available yet. Try refreshing the Picks page.'); return; }
+              if(navigator.clipboard && navigator.clipboard.writeText){
+                navigator.clipboard.writeText(t).then(function(){ alert('UID copied:\\n'+t); })
+                .catch(function(){ alert('UID:\\n'+t); });
+              } else {
+                alert('UID:\\n'+t);
+              }
+            }catch(e){
+              alert('UID:\\n'+((document.getElementById('gpUidText')||{}).textContent||''));
+            }
+          })()">
+          Copy UID
+        </button>
+      </div>
+    `;
+  }
+
   const rows = sorted.map(ev => {
     const eventId = String(ev?.id || "");
     if (!eventId) return "";
@@ -3776,6 +3814,8 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
       </div>
       <div class="gameMetaTopLine">${escapeHtml(String(leagueKey || "").toUpperCase())} • ${escapeHtml(dateYYYYMMDD)}</div>
       <div class="gameMetaOddsLine">Select games, then Create/Replace, then Publish.</div>
+
+      ${uidToolsHTML()}
 
       <div style="margin-top:8px;">
         ${rows || `<div class="notice">No games found for this date.</div>`}
