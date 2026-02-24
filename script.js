@@ -109,6 +109,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 // League dropdown changes (Scores + Picks)
+document.addEventListener("change", (e) => {
+  const sel = e.target;
+  if (!sel || sel.id !== "leagueSelect") return;
+
+  const key = String(sel.value || "").trim();
+  if (!key) return;
+
+  saveLeagueKey(key);
 
   // Re-render current tab after league change
   const tab = window.__activeTab || currentTab || "scores";
@@ -348,17 +356,7 @@ function getSavedDateYYYYMMDD() {
   return today;
 }
 
-function saveDateYYYYMMDD(yyyymmdd) {
-  const v = String(yyyymmdd || "").trim();
-  if (!/^\d{8}$/.test(v)) return;
-
-  try {
-    localStorage.setItem(DATE_KEY, v);
-  } catch (e) {
-    window.__SK_MEM = window.__SK_MEM || {};
-    window.__SK_MEM[DATE_KEY] = v;
-  }
-}
+function saveDateYYYYMMDD(yyyymmdd) { localStorage.setItem(DATE_KEY, yyyymmdd); }
 
 function yyyymmddToPretty(yyyymmdd) {
   if (!yyyymmdd || !/^\d{8}$/.test(yyyymmdd)) return "";
@@ -3685,21 +3683,14 @@ async function gpSaveMyPick(db, slateId, uid, eventId, side) {
   }, { merge: true });
 }
 
-async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events, lockDate) {
+async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events) {
   const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
   const slateRef = db.collection("pickSlates").doc(slateId);
 
-  // ✅ Require a lock time on create/replace (so Publish never has to prompt)
-  let lockAtTs = null;
-  if (lockDate instanceof Date && !isNaN(lockDate.getTime())) {
-    lockAtTs = firebase.firestore.Timestamp.fromDate(lockDate);
-  }
-
-  // ✅ Do NOT touch "published" here
+  // ✅ Do NOT touch "published" here (prevents accidental unpublish)
   await slateRef.set({
     leagueKey,
     dateYYYYMMDD,
-    lockAt: lockAtTs, // stored here
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     createdBy: uid,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -3741,13 +3732,24 @@ async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid) {
   const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
   const slateRef = db.collection("pickSlates").doc(slateId);
 
-  // ✅ Publish should NOT prompt. It just flips the flag.
+  // Get lock time input from admin UI
+  const lockInput = document.getElementById("gpLockTimeInput");
+  if (!lockInput || !lockInput.value) {
+    alert("Please set a lock time before publishing.");
+    return;
+  }
+
+  const lockDate = new Date(lockInput.value);
+  if (isNaN(lockDate.getTime())) {
+    alert("Invalid lock time.");
+    return;
+  }
+
   await slateRef.set({
     published: true,
     publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
     publishedBy: uid,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedBy: uid
+    lockAt: firebase.firestore.Timestamp.fromDate(lockDate)
   }, { merge: true });
 
   return slateId;
@@ -4726,17 +4728,11 @@ if (gpAdmin) {
         return;
       }
 
-      // Scope everything to this admin card (prevents duplicate-id issues)
-      const wrap = btn.closest('[data-gpadminwrap="1"]');
-      const statusEl = wrap ? wrap.querySelector("#gpAdminStatus") : document.getElementById("gpAdminStatus");
-
+      const statusEl = document.getElementById("gpAdminStatus");
       if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
 
-      // Read checked games (scoped to this card)
-      const checks = wrap
-        ? Array.from(wrap.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'))
-        : Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
-
+      // Read checked games
+      const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
       const selected = new Set(
         checks
           .filter(c => c.checked)
@@ -4747,21 +4743,11 @@ if (gpAdmin) {
       const sid = slateIdFor(leagueKey, dateYYYYMMDD);
       const slateRef = db.collection("pickSlates").doc(sid);
 
-      // Read lock time from the input in the admin card
-      const lockVal = (wrap?.querySelector('[data-gplock="1"]')?.value || "").trim();
-      const lockDate = lockVal ? new Date(lockVal) : null;
-      const lockOk = lockDate instanceof Date && !isNaN(lockDate.getTime());
-
+      // CREATE requires selections; PUBLISH does not.
       if (gpAdmin === "create") {
         if (selected.size === 0) {
           if (statusEl) statusEl.textContent = "Select at least 1 game first.";
           alert("Select at least 1 game first.");
-          return;
-        }
-
-        if (!lockOk) {
-          if (statusEl) statusEl.textContent = "Set a valid lock time first.";
-          alert("Set a valid lock time first.");
           return;
         }
 
@@ -4770,17 +4756,17 @@ if (gpAdmin) {
         const sb = await fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
         const events = sb.events || [];
 
-        await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events, lockDate);
+        await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
 
         const gamesSnap = await slateRef.collection("games").get();
         const gameCount = gamesSnap.size || 0;
 
-        if (statusEl) statusEl.textContent =
-          `Slate saved ✅ (${gameCount} game${gameCount === 1 ? "" : "s"}) • Locks ${lockDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+        if (statusEl) statusEl.textContent = `Slate saved ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
         return;
       }
 
       if (gpAdmin === "publish") {
+        // Ensure slate exists before publishing (or tell admin to create first)
         const slateSnap = await slateRef.get();
         if (!slateSnap.exists) {
           if (statusEl) statusEl.textContent = "Create the slate first.";
@@ -4788,23 +4774,17 @@ if (gpAdmin) {
           return;
         }
 
-        const slateData = slateSnap.data() || {};
-        const hasLockAt = !!slateData.lockAt;
-
-        if (!hasLockAt) {
-          if (statusEl) statusEl.textContent = "Set lock time + Create/Replace first.";
-          alert("No lock time saved yet. Set lock time and tap Create/Replace Slate first.");
+        const lockAt = promptForLockAtDate(dateYYYYMMDD);
+        if (lockAt === null) {
+          if (statusEl) statusEl.textContent = "Publish canceled.";
           return;
         }
 
-        await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid);
+        await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockAt);
 
-        const lockAtMs = slateData.lockAt?.toMillis ? slateData.lockAt.toMillis() : 0;
-        const lockAtLabel = lockAtMs
-          ? new Date(lockAtMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-          : "—";
+        if (statusEl) statusEl.textContent =
+          `Slate published ✅ (locks at ${lockAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
 
-        if (statusEl) statusEl.textContent = `Slate published ✅ (locks at ${lockAtLabel})`;
         return;
       }
     })
