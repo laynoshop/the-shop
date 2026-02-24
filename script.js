@@ -3555,6 +3555,39 @@ function isPgaLeagueKey(k) {
   return String(k || "").toLowerCase() === "pga";
 }
 
+function promptForLockAtDate(defaultYYYYMMDD) {
+  // Default: 6:00 PM local on the slate date
+  const yyyy = Number(defaultYYYYMMDD.slice(0, 4));
+  const mm = Number(defaultYYYYMMDD.slice(4, 6));
+  const dd = Number(defaultYYYYMMDD.slice(6, 8));
+
+  const def = new Date(yyyy, mm - 1, dd, 18, 0, 0, 0);
+  const defStr =
+    `${def.getFullYear()}-${String(def.getMonth() + 1).padStart(2, "0")}-${String(def.getDate()).padStart(2, "0")} ` +
+    `${String(def.getHours()).padStart(2, "0")}:${String(def.getMinutes()).padStart(2, "0")}`;
+
+  const raw = prompt(
+    "Lock picks at (local time)\nFormat: YYYY-MM-DD HH:MM\n\nExample: 2026-02-24 18:00",
+    defStr
+  );
+
+  if (raw === null) return null; // cancel
+
+  const m = String(raw).trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})$/);
+  if (!m) {
+    alert("Invalid format. Use: YYYY-MM-DD HH:MM");
+    return null;
+  }
+
+  const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), 0, 0);
+  if (isNaN(dt.getTime())) {
+    alert("Invalid date/time.");
+    return null;
+  }
+
+  return dt;
+}
+
 function fmtKickoff(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -3692,20 +3725,24 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
   return slateId;
 }
 
-async function gpAdminPublishSlate(db, leagueKey, slateKey, uid, lockAtDate) {
-  // slateKey can be dateYYYYMMDD OR "2026W09" OR anything you decide
-  const slateId = slateIdFor(leagueKey, slateKey);
+async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockAtDateOrNull) {
+  const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
   const slateRef = db.collection("pickSlates").doc(slateId);
 
-  await slateRef.set({
+  const patch = {
     published: true,
-    lockAt: firebase.firestore.Timestamp.fromDate(lockAtDate),
     publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
     publishedBy: uid,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy: uid
-  }, { merge: true });
+  };
 
+  // Optional lockAt (if you pass a Date)
+  if (lockAtDateOrNull instanceof Date && !isNaN(lockAtDateOrNull.getTime())) {
+    patch.lockAt = firebase.firestore.Timestamp.fromDate(lockAtDateOrNull);
+  }
+
+  await slateRef.set(patch, { merge: true });
   return slateId;
 }
 
@@ -4090,7 +4127,19 @@ try {
   }
 } catch (e) {
   console.error("Group Picks load error:", e);
+
+  // ✅ Keep admin slate builder visible even if Group Picks fails
+  let adminHTML = "";
+  try {
+    const role2 = getRole();
+    if (role2 === "admin" && !isPgaLeagueKey(selectedKey)) {
+      const eventsSorted2 = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+      adminHTML = gpBuildAdminSlateHTML(eventsSorted2, selectedKey, selectedDate);
+    }
+  } catch (_) {}
+
   groupPicksHTML = `
+    ${adminHTML}
     <div class="game">
       <div class="gameHeader">
         <div class="statusPill status-other">GROUP PICKS</div>
@@ -4573,7 +4622,7 @@ document.addEventListener("click", async (e) => {
     return;
   }
 
-  // (B) Admin slate buttons (create/publish)
+// (B) Admin slate buttons (create/publish)
 const gpAdmin = btn.getAttribute("data-gpadmin");
 if (gpAdmin) {
   const leagueKey = btn.getAttribute("data-league") || "";
@@ -4591,16 +4640,14 @@ if (gpAdmin) {
       const uid = firebase.auth().currentUser?.uid || "";
       if (!uid) throw new Error("No uid (not signed in)");
 
-      // ✅ CRITICAL: confirm server-side role doc exists (rules depend on this)
+      // Confirm server role doc exists (rules depend on this)
       const userSnap = await db.collection("users").doc(uid).get();
       const serverRole = userSnap.exists ? String((userSnap.data() || {}).role || "") : "";
       if (serverRole !== "admin") {
         alert(
           "Your account is not admin on the server yet.\n\n" +
-          "Fix:\n" +
-          "1) Log out\n" +
-          "2) Enter the ADMIN invite code again\n\n" +
-          "This creates users/{uid}.role = admin, which Firestore rules require."
+          "Fix:\n1) Log out\n2) Enter the ADMIN invite code again\n\n" +
+          "That creates users/{uid}.role = admin."
         );
         return;
       }
@@ -4608,7 +4655,7 @@ if (gpAdmin) {
       const statusEl = document.getElementById("gpAdminStatus");
       if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
 
-      // Read the checked games from the Admin UI
+      // Read checked games
       const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
       const selected = new Set(
         checks
@@ -4617,38 +4664,52 @@ if (gpAdmin) {
           .filter(Boolean)
       );
 
-      if (selected.size === 0) {
-        if (statusEl) statusEl.textContent = "Select at least 1 game first.";
-        alert("Select at least 1 game first.");
+      const sid = slateIdFor(leagueKey, dateYYYYMMDD);
+      const slateRef = db.collection("pickSlates").doc(sid);
+
+      // CREATE requires selections; PUBLISH does not.
+      if (gpAdmin === "create") {
+        if (selected.size === 0) {
+          if (statusEl) statusEl.textContent = "Select at least 1 game first.";
+          alert("Select at least 1 game first.");
+          return;
+        }
+
+        // Re-fetch scoreboard so we have full event objects to write
+        const league = getLeagueByKey(leagueKey);
+        const sb = await fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
+        const events = sb.events || [];
+
+        await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
+
+        const gamesSnap = await slateRef.collection("games").get();
+        const gameCount = gamesSnap.size || 0;
+
+        if (statusEl) statusEl.textContent = `Slate saved ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
         return;
       }
 
-      // Re-fetch scoreboard so we have full event objects to write
-      const league = getLeagueByKey(leagueKey);
-      const sb = await fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
-      const events = sb.events || [];
-
-      // Always save selected games first (true replace)
-      const sid = await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
-
-      // Read back slate games count to prove it saved
-      const gamesSnap = await db.collection("pickSlates").doc(sid).collection("games").get();
-      const gameCount = gamesSnap.size || 0;
-
       if (gpAdmin === "publish") {
-        await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid);
-      }
+        // Ensure slate exists before publishing (or tell admin to create first)
+        const slateSnap = await slateRef.get();
+        if (!slateSnap.exists) {
+          if (statusEl) statusEl.textContent = "Create the slate first.";
+          alert("No slate exists yet. Tap Create/Replace Slate first.");
+          return;
+        }
 
-      const pubLabel = (gpAdmin === "publish") ? "published" : "saved";
-      if (statusEl) statusEl.textContent = `Slate ${pubLabel} ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
+        const lockAt = promptForLockAtDate(dateYYYYMMDD);
+        if (lockAt === null) {
+          if (statusEl) statusEl.textContent = "Publish canceled.";
+          return;
+        }
 
-      // If somehow 0 saved, stop here and tell you
-      if (gameCount === 0) {
-        alert(
-          "Slate saved with 0 games.\n\n" +
-          "This usually means the selected event IDs were not found in the ESPN events list.\n" +
-          "Try Refresh, then select again."
-        );
+        await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockAt);
+
+        if (statusEl) statusEl.textContent =
+          `Slate published ✅ (locks at ${lockAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
+
+        return;
       }
     })
     .then(() => renderPicks(true))
