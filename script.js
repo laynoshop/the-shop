@@ -3692,14 +3692,18 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
   return slateId;
 }
 
-async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid) {
-  const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
+async function gpAdminPublishSlate(db, leagueKey, slateKey, uid, lockAtDate) {
+  // slateKey can be dateYYYYMMDD OR "2026W09" OR anything you decide
+  const slateId = slateIdFor(leagueKey, slateKey);
   const slateRef = db.collection("pickSlates").doc(slateId);
 
   await slateRef.set({
     published: true,
+    lockAt: firebase.firestore.Timestamp.fromDate(lockAtDate),
     publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    publishedBy: uid
+    publishedBy: uid,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy: uid
   }, { merge: true });
 
   return slateId;
