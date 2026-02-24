@@ -3728,24 +3728,30 @@ async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, sel
   return slateId;
 }
 
-async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockAtDateOrNull) {
+async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid) {
   const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
   const slateRef = db.collection("pickSlates").doc(slateId);
 
-  const patch = {
+  // Get lock time input from admin UI
+  const lockInput = document.getElementById("gpLockTimeInput");
+  if (!lockInput || !lockInput.value) {
+    alert("Please set a lock time before publishing.");
+    return;
+  }
+
+  const lockDate = new Date(lockInput.value);
+  if (isNaN(lockDate.getTime())) {
+    alert("Invalid lock time.");
+    return;
+  }
+
+  await slateRef.set({
     published: true,
     publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
     publishedBy: uid,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedBy: uid
-  };
+    lockAt: firebase.firestore.Timestamp.fromDate(lockDate)
+  }, { merge: true });
 
-  // Optional lockAt (if you pass a Date)
-  if (lockAtDateOrNull instanceof Date && !isNaN(lockAtDateOrNull.getTime())) {
-    patch.lockAt = firebase.firestore.Timestamp.fromDate(lockAtDateOrNull);
-  }
-
-  await slateRef.set(patch, { merge: true });
   return slateId;
 }
 
@@ -3753,12 +3759,10 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
   const now = Date.now();
   const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
 
-  // ✅ Show the *actual* UID the phone is currently using (anonymous auth can change on iOS)
   function currentUid() {
     try { return firebase?.auth?.().currentUser?.uid || ""; } catch { return ""; }
   }
 
-  // ✅ iOS-safe copy helper (clipboard if available, fallback alert)
   function uidToolsHTML() {
     const uid = currentUid() || "—";
     return `
@@ -3812,18 +3816,45 @@ function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
       <div class="gameHeader">
         <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
       </div>
-      <div class="gameMetaTopLine">${escapeHtml(String(leagueKey || "").toUpperCase())} • ${escapeHtml(dateYYYYMMDD)}</div>
-      <div class="gameMetaOddsLine">Select games, then Create/Replace, then Publish.</div>
+
+      <div class="gameMetaTopLine">
+        ${escapeHtml(String(leagueKey || "").toUpperCase())} • ${escapeHtml(dateYYYYMMDD)}
+      </div>
+
+      <div class="gameMetaOddsLine">
+        Select games, set lock time, then Create/Replace and Publish.
+      </div>
 
       ${uidToolsHTML()}
+
+      <!-- 🔒 LOCK TIME INPUT -->
+      <div style="margin-top:12px;">
+        <label style="display:block; margin-bottom:6px;">
+          Lock Time:
+          <input type="datetime-local" id="gpLockTimeInput" />
+        </label>
+      </div>
 
       <div style="margin-top:8px;">
         ${rows || `<div class="notice">No games found for this date.</div>`}
       </div>
 
       <div style="margin-top:12px; display:flex; gap:8px;">
-        <button class="smallBtn" data-gpadmin="create" data-league="${escapeHtml(leagueKey)}" data-date="${escapeHtml(dateYYYYMMDD)}">Create/Replace Slate</button>
-        <button class="smallBtn" data-gpadmin="publish" data-league="${escapeHtml(leagueKey)}" data-date="${escapeHtml(dateYYYYMMDD)}">Publish Slate</button>
+        <button
+          class="smallBtn"
+          data-gpadmin="create"
+          data-league="${escapeHtml(leagueKey)}"
+          data-date="${escapeHtml(dateYYYYMMDD)}">
+          Create/Replace Slate
+        </button>
+
+        <button
+          class="smallBtn"
+          data-gpadmin="publish"
+          data-league="${escapeHtml(leagueKey)}"
+          data-date="${escapeHtml(dateYYYYMMDD)}">
+          Publish Slate
+        </button>
       </div>
 
       <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
