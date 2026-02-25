@@ -48,14 +48,23 @@
   }
 
   function getSavedDateYYYYMMDDSafe() {
-    if (typeof window.getSavedDateYYYYMMDD === "function") return window.getSavedDateYYYYMMDD();
-    // fallback: today
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const da = String(d.getDate()).padStart(2, "0");
-    return `${y}${m}${da}`;
-  }
+  // Prefer the shared/global implementation
+  if (typeof window.getSavedDateYYYYMMDD === "function") return window.getSavedDateYYYYMMDD();
+
+  // Fallback to the same key used in the big script:
+  const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
+
+  let saved = "";
+  try { saved = String(localStorage.getItem(DATE_KEY) || "").trim(); } catch { saved = ""; }
+  if (/^\d{8}$/.test(saved)) return saved;
+
+  // fallback: today
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${da}`;
+}
 
   function yyyymmddToPrettySafe(yyyymmdd) {
     if (typeof window.yyyymmddToPretty === "function") return window.yyyymmddToPretty(yyyymmdd);
@@ -72,9 +81,64 @@
   }
 
   function buildCalendarButtonHTMLSafe() {
-    if (typeof window.buildCalendarButtonHTML === "function") return window.buildCalendarButtonHTML();
-    return "";
+  // If the shared/global version exists, use it
+  if (typeof window.buildCalendarButtonHTML === "function") return window.buildCalendarButtonHTML();
+
+  const DATE_KEY = "theShopDate_v1";
+
+  function yyyymmddToInputValue(yyyymmdd) {
+    const s = String(yyyymmdd || "");
+    if (!/^\d{8}$/.test(s)) return "";
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
   }
+
+  function inputValueToYYYYMMDD(v) {
+    const s = String(v || "").trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    return `${m[1]}${m[2]}${m[3]}`;
+  }
+
+  // ✅ Inline handler needs to exist on window
+  if (typeof window.handleNativeDateChangeFromEl !== "function") {
+    window.handleNativeDateChangeFromEl = function (el) {
+      const v = el?.value || "";
+      const yyyymmdd = inputValueToYYYYMMDD(v);
+      if (!yyyymmdd) return;
+
+      // Save date (prefer shared/global saver if present)
+      if (typeof window.saveDateYYYYMMDD === "function") {
+        window.saveDateYYYYMMDD(yyyymmdd);
+      } else {
+        try { localStorage.setItem(DATE_KEY, yyyymmdd); } catch {}
+      }
+
+      // Re-render Picks (prefer showTab so tabs stay consistent)
+      if (typeof window.showTab === "function") {
+        window.showTab("picks");
+      } else if (typeof window.renderPicks === "function") {
+        window.renderPicks(true);
+      }
+    };
+  }
+
+  const current = yyyymmddToInputValue(getSavedDateYYYYMMDDSafe());
+
+  return `
+    <span class="datePickerWrap" aria-label="Choose date">
+      <button id="dateBtn" class="iconBtn" aria-label="Choose date" type="button">📅</button>
+      <input
+        id="nativeDateInput"
+        class="nativeDateInput"
+        type="date"
+        value="${esc(current)}"
+        aria-label="Choose date"
+        onchange="handleNativeDateChangeFromEl(this)"
+        oninput="handleNativeDateChangeFromEl(this)"
+      />
+    </span>
+  `;
+}
 
   function getLeagueByKeySafe(key) {
     if (typeof window.getLeagueByKey === "function") return window.getLeagueByKey(key);
