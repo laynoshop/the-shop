@@ -68,7 +68,20 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-    <script src="script.js" defer></script>
+  <!-- ✅ SPLIT BUILD (order matters) -->
+  <script src="split/boot.js" defer></script>
+  <script src="split/shared.js" defer></script>
+
+  <script src="split/scores.js" defer></script>
+  <script src="split/news.js" defer></script>
+  <script src="split/beat.js" defer></script>
+  <script src="split/shop.js" defer></script>
+
+  <script src="split/unitsPicks.js" defer></script>
+  <script src="split/groupPicks.js" defer></script>
+
+  <!-- App exports LAST -->
+  <script src="split/app.js" defer></script>
 
   <!-- ✅ READY GATE: enables login only when checkCode exists -->
   <script>
