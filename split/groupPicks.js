@@ -26,7 +26,8 @@
     if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
     return String(s ?? "")
       .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
 
@@ -43,28 +44,23 @@
 
   function getSavedLeagueKeySafe() {
     if (typeof window.getSavedLeagueKey === "function") return window.getSavedLeagueKey();
-    // fallback
     return safeGetLS("theShopLeague_v1").trim() || "nfl";
   }
 
   function getSavedDateYYYYMMDDSafe() {
-  // Prefer the shared/global implementation
-  if (typeof window.getSavedDateYYYYMMDD === "function") return window.getSavedDateYYYYMMDD();
+    if (typeof window.getSavedDateYYYYMMDD === "function") return window.getSavedDateYYYYMMDD();
 
-  // Fallback to the same key used in the big script:
-  const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
+    const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
+    let saved = "";
+    try { saved = String(localStorage.getItem(DATE_KEY) || "").trim(); } catch { saved = ""; }
+    if (/^\d{8}$/.test(saved)) return saved;
 
-  let saved = "";
-  try { saved = String(localStorage.getItem(DATE_KEY) || "").trim(); } catch { saved = ""; }
-  if (/^\d{8}$/.test(saved)) return saved;
-
-  // fallback: today
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const da = String(d.getDate()).padStart(2, "0");
-  return `${y}${m}${da}`;
-}
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    return `${y}${m}${da}`;
+  }
 
   function yyyymmddToPrettySafe(yyyymmdd) {
     if (typeof window.yyyymmddToPretty === "function") return window.yyyymmddToPretty(yyyymmdd);
@@ -76,189 +72,222 @@
   }
 
   // -----------------------------
-// ✅ LEAGUE SELECT + LEAGUE LOOKUP (SAFE + SELF-CONTAINED)
-// -----------------------------
+  // ✅ LEAGUE SELECT + LEAGUE LOOKUP + ESPN EVENTS (SINGLE COPY)
+  // -----------------------------
+  const __LEAGUES_FALLBACK_FULL = [
+    {
+      key: "ncaam",
+      name: "Men’s College Basketball",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
+    },
+    {
+      key: "cfb",
+      name: "College Football",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
+    },
+    {
+      key: "nba",
+      name: "NBA",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
+    },
+    {
+      key: "nhl",
+      name: "NHL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
+    },
+    {
+      key: "nfl",
+      name: "NFL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
+    },
+    {
+      key: "mlb",
+      name: "MLB",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
+    },
+    {
+      key: "pga",
+      name: "Golf (PGA)",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
+    }
+  ];
 
-const __LEAGUES_FALLBACK_FULL = [
-  {
-    key: "ncaam",
-    name: "Men’s College Basketball",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
-  },
-  {
-    key: "cfb",
-    name: "College Football",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
-  },
-  {
-    key: "nba",
-    name: "NBA",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
-  },
-  {
-    key: "nhl",
-    name: "NHL",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
-  },
-  {
-    key: "nfl",
-    name: "NFL",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
-  },
-  {
-    key: "mlb",
-    name: "MLB",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
-  },
-  {
-    key: "pga",
-    name: "Golf (PGA)",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
-  }
-];
-
-function __getLeaguesFullList() {
-  const g = Array.isArray(window.LEAGUES) ? window.LEAGUES : null;
-  // Only trust global list if it actually has endpoint()
-  if (g && g.length && typeof g[0]?.endpoint === "function") return g;
-  return __LEAGUES_FALLBACK_FULL;
-}
-
-function __coerceValidLeagueKey(k) {
-  const list = __getLeaguesFullList();
-  const wanted = String(k || "").trim();
-  if (wanted && list.some(l => String(l.key) === wanted)) return wanted;
-  return list[0] ? String(list[0].key) : "nfl";
-}
-
-function getLeagueByKeySafe(key) {
-  if (typeof window.getLeagueByKey === "function") {
-    const found = window.getLeagueByKey(key);
-    if (found) return found;
-  }
-  const list = __getLeaguesFullList();
-  const k = String(key || "").trim();
-  return list.find(l => String(l.key) === k) || null;
-}
-
-function buildLeagueSelectHTMLSafe(selectedKey) {
-  // Use shared/global builder if available
-  if (typeof window.buildLeagueSelectHTML === "function") {
-    return window.buildLeagueSelectHTML(selectedKey);
+  function __getLeaguesFullList() {
+    const g = Array.isArray(window.LEAGUES) ? window.LEAGUES : null;
+    if (g && g.length && typeof g[0]?.endpoint === "function") return g;
+    return __LEAGUES_FALLBACK_FULL;
   }
 
-  const LEAGUE_KEY = "theShopLeague_v1";
-
-  function saveLeagueKeyLocal(k) {
-    try { localStorage.setItem(LEAGUE_KEY, String(k)); } catch {}
+  function __coerceValidLeagueKey(k) {
+    const list = __getLeaguesFullList();
+    const wanted = String(k || "").trim();
+    if (wanted && list.some(l => String(l.key) === wanted)) return wanted;
+    return list[0] ? String(list[0].key) : "nfl";
   }
 
-  // Inline handler for onchange
-  if (typeof window.handleLeagueChangeFromEl !== "function") {
-    window.handleLeagueChangeFromEl = function (el) {
-      const v = String(el?.value || "").trim();
-      if (!v) return;
-
-      if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(v);
-      else saveLeagueKeyLocal(v);
-
-      if (typeof window.showTab === "function") window.showTab("picks");
-      else if (typeof window.renderPicks === "function") window.renderPicks(true);
-    };
+  function getLeagueByKeySafe(key) {
+    if (typeof window.getLeagueByKey === "function") {
+      const found = window.getLeagueByKey(key);
+      if (found) return found;
+    }
+    const list = __getLeaguesFullList();
+    const k = String(key || "").trim();
+    return list.find(l => String(l.key) === k) || null;
   }
 
-  const leagues = __getLeaguesFullList();
-  const sel = __coerceValidLeagueKey(selectedKey);
+  function buildLeagueSelectHTMLSafe(selectedKey) {
+    if (typeof window.buildLeagueSelectHTML === "function") {
+      return window.buildLeagueSelectHTML(selectedKey);
+    }
 
-  // Persist corrected key (prevents “empty league”)
-  if (String(selectedKey || "") !== sel) {
-    if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(sel);
-    else saveLeagueKeyLocal(sel);
+    const LEAGUE_KEY = "theShopLeague_v1";
+    function saveLeagueKeyLocal(k) {
+      try { localStorage.setItem(LEAGUE_KEY, String(k)); } catch {}
+    }
+
+    if (typeof window.handleLeagueChangeFromEl !== "function") {
+      window.handleLeagueChangeFromEl = function (el) {
+        const v = String(el?.value || "").trim();
+        if (!v) return;
+
+        if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(v);
+        else saveLeagueKeyLocal(v);
+
+        if (typeof window.showTab === "function") window.showTab("picks");
+        else if (typeof window.renderPicks === "function") window.renderPicks(true);
+      };
+    }
+
+    const leagues = __getLeaguesFullList();
+    const sel = __coerceValidLeagueKey(selectedKey);
+
+    // Persist corrected key so fetch uses a valid league immediately
+    if (String(selectedKey || "") !== sel) {
+      if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(sel);
+      else saveLeagueKeyLocal(sel);
+    }
+
+    const options = leagues.map(l => {
+      const k = String(l.key || "");
+      const nm = String(l.name || k);
+      return `<option value="${esc(k)}"${k === sel ? " selected" : ""}>${esc(nm)}</option>`;
+    }).join("");
+
+    return `
+      <select class="leagueSelect" aria-label="Choose league" onchange="handleLeagueChangeFromEl(this)">
+        ${options}
+      </select>
+    `;
   }
 
-  const options = leagues.map(l => {
-    const k = String(l.key || "");
-    const nm = String(l.name || k);
-    return `<option value="${esc(k)}"${k === sel ? " selected" : ""}>${esc(nm)}</option>`;
-  }).join("");
+  // Debug bucket so we can see why ESPN might be empty/blocked
+  window.__GP_LAST_FETCH_DEBUG = "";
 
-  return `
-    <select class="leagueSelect" aria-label="Choose league" onchange="handleLeagueChangeFromEl(this)">
-      ${options}
-    </select>
-  `;
-}
+  async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
+    const league = getLeagueByKeySafe(leagueKey);
+    if (!league) {
+      window.__GP_LAST_FETCH_DEBUG = `No league found for key: ${leagueKey}`;
+      return [];
+    }
+
+    // Prefer your robust helper if present
+    if (typeof window.fetchScoreboardWithFallbacks === "function") {
+      try {
+        const sb = await window.fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
+        const events = Array.isArray(sb?.events) ? sb.events : [];
+        window.__GP_LAST_FETCH_DEBUG = `fetchScoreboardWithFallbacks ok • events=${events.length}`;
+        return events;
+      } catch (e) {
+        window.__GP_LAST_FETCH_DEBUG = `fetchScoreboardWithFallbacks failed: ${String(e?.message || e)}`;
+        // fall through to direct fetch
+      }
+    }
+
+    const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
+    if (!url) {
+      window.__GP_LAST_FETCH_DEBUG = `League endpoint missing for ${leagueKey}`;
+      return [];
+    }
+
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      const status = `${r.status} ${r.statusText || ""}`.trim();
+      if (!r.ok) {
+        window.__GP_LAST_FETCH_DEBUG = `Direct ESPN fetch not ok • ${status} • ${url}`;
+        return [];
+      }
+      const j = await r.json().catch(() => ({}));
+      const events = Array.isArray(j?.events) ? j.events : [];
+      window.__GP_LAST_FETCH_DEBUG = `Direct ESPN fetch ok • ${status} • events=${events.length}`;
+      return events;
+    } catch (e) {
+      window.__GP_LAST_FETCH_DEBUG = `Direct ESPN fetch threw: ${String(e?.message || e)}`;
+      return [];
+    }
+  }
 
   function buildCalendarButtonHTMLSafe() {
-  // If the shared/global version exists, use it
-  if (typeof window.buildCalendarButtonHTML === "function") return window.buildCalendarButtonHTML();
+    if (typeof window.buildCalendarButtonHTML === "function") return window.buildCalendarButtonHTML();
 
-  const DATE_KEY = "theShopDate_v1";
+    const DATE_KEY = "theShopDate_v1";
 
-  function yyyymmddToInputValue(yyyymmdd) {
-    const s = String(yyyymmdd || "");
-    if (!/^\d{8}$/.test(s)) return "";
-    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+    function yyyymmddToInputValue(yyyymmdd) {
+      const s = String(yyyymmdd || "");
+      if (!/^\d{8}$/.test(s)) return "";
+      return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+    }
+
+    function inputValueToYYYYMMDD(v) {
+      const s = String(v || "").trim();
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return "";
+      return `${m[1]}${m[2]}${m[3]}`;
+    }
+
+    if (typeof window.handleNativeDateChangeFromEl !== "function") {
+      window.handleNativeDateChangeFromEl = function (el) {
+        const v = el?.value || "";
+        const yyyymmdd = inputValueToYYYYMMDD(v);
+        if (!yyyymmdd) return;
+
+        if (typeof window.saveDateYYYYMMDD === "function") {
+          window.saveDateYYYYMMDD(yyyymmdd);
+        } else {
+          try { localStorage.setItem(DATE_KEY, yyyymmdd); } catch {}
+        }
+
+        if (typeof window.showTab === "function") window.showTab("picks");
+        else if (typeof window.renderPicks === "function") window.renderPicks(true);
+      };
+    }
+
+    const current = yyyymmddToInputValue(getSavedDateYYYYMMDDSafe());
+
+    return `
+      <span class="datePickerWrap" aria-label="Choose date">
+        <button id="dateBtn" class="iconBtn" aria-label="Choose date" type="button">📅</button>
+        <input
+          id="nativeDateInput"
+          class="nativeDateInput"
+          type="date"
+          value="${esc(current)}"
+          aria-label="Choose date"
+          onchange="handleNativeDateChangeFromEl(this)"
+          oninput="handleNativeDateChangeFromEl(this)"
+        />
+      </span>
+    `;
   }
-
-  function inputValueToYYYYMMDD(v) {
-    const s = String(v || "").trim();
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!m) return "";
-    return `${m[1]}${m[2]}${m[3]}`;
-  }
-
-  // ✅ Inline handler needs to exist on window
-  if (typeof window.handleNativeDateChangeFromEl !== "function") {
-    window.handleNativeDateChangeFromEl = function (el) {
-      const v = el?.value || "";
-      const yyyymmdd = inputValueToYYYYMMDD(v);
-      if (!yyyymmdd) return;
-
-      // Save date (prefer shared/global saver if present)
-      if (typeof window.saveDateYYYYMMDD === "function") {
-        window.saveDateYYYYMMDD(yyyymmdd);
-      } else {
-        try { localStorage.setItem(DATE_KEY, yyyymmdd); } catch {}
-      }
-
-      // Re-render Picks (prefer showTab so tabs stay consistent)
-      if (typeof window.showTab === "function") {
-        window.showTab("picks");
-      } else if (typeof window.renderPicks === "function") {
-        window.renderPicks(true);
-      }
-    };
-  }
-
-  const current = yyyymmddToInputValue(getSavedDateYYYYMMDDSafe());
-
-  return `
-    <span class="datePickerWrap" aria-label="Choose date">
-      <button id="dateBtn" class="iconBtn" aria-label="Choose date" type="button">📅</button>
-      <input
-        id="nativeDateInput"
-        class="nativeDateInput"
-        type="date"
-        value="${esc(current)}"
-        aria-label="Choose date"
-        onchange="handleNativeDateChangeFromEl(this)"
-        oninput="handleNativeDateChangeFromEl(this)"
-      />
-    </span>
-  `;
-}
 
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
-    // minimal fallback: init app if needed
     if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
       firebase.initializeApp(window.FIREBASE_CONFIG);
       try { await firebase.auth().signInAnonymously(); } catch {}
@@ -266,7 +295,6 @@ function buildLeagueSelectHTMLSafe(selectedKey) {
   }
 
   function getPicksDisplayName() {
-    // Prefer chat name if present
     const existingChat = (safeGetLS("shopChatName") || "").trim();
     if (existingChat) return existingChat.slice(0, 20);
 
@@ -286,11 +314,6 @@ function buildLeagueSelectHTMLSafe(selectedKey) {
 
   // -----------------------------
   // Group picks storage model
-  // pickSlates/{league__date}
-  //   fields: leagueKey,dateYYYYMMDD,published,lockAt,...
-  //   games/{eventId} fields: eventId,homeName,awayName,startTime
-  //   picks/{uid} fields: uid,name,updatedAt
-  //     games/{eventId} fields: uid,name,side,updatedAt
   // -----------------------------
   function slateIdFor(leagueKey, dateYYYYMMDD) {
     return `${leagueKey}__${dateYYYYMMDD}`;
@@ -327,167 +350,6 @@ function buildLeagueSelectHTMLSafe(selectedKey) {
     const iso = ev?.date || comp?.date || "";
     return { homeName, awayName, iso };
   }
-  
-// -----------------------------
-// ✅ LEAGUE SELECT + LEAGUE LOOKUP (FIXED)
-// - Keeps full league objects INCLUDING endpoint()
-// - Works even if shared.js didn't expose window.LEAGUES / getLeagueByKey
-// -----------------------------
-
-// Full fallback league objects (endpoint included)
-const __LEAGUES_FALLBACK_FULL = [
-  {
-    key: "ncaam",
-    name: "Men’s College Basketball",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
-  },
-  {
-    key: "cfb",
-    name: "College Football",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
-  },
-  {
-    key: "nba",
-    name: "NBA",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
-  },
-  {
-    key: "nhl",
-    name: "NHL",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
-  },
-  {
-    key: "nfl",
-    name: "NFL",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
-  },
-  {
-    key: "mlb",
-    name: "MLB",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
-  },
-  {
-    key: "pga",
-    name: "Golf (PGA)",
-    endpoint: (date) =>
-      `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
-  }
-];
-
-function __getLeaguesFullList() {
-  // Prefer global LEAGUES if present (and has endpoint), else fallback full list
-  const g = Array.isArray(window.LEAGUES) ? window.LEAGUES : null;
-  if (g && g.length && typeof g[0]?.endpoint === "function") return g;
-  return __LEAGUES_FALLBACK_FULL;
-}
-
-function __coerceValidLeagueKey(k) {
-  const list = __getLeaguesFullList();
-  const wanted = String(k || "").trim();
-  if (wanted && list.some(l => String(l.key) === wanted)) return wanted;
-  return list[0] ? String(list[0].key) : "nfl";
-}
-
-// ✅ Replace your existing getLeagueByKeySafe with this:
-function getLeagueByKeySafe(key) {
-  if (typeof window.getLeagueByKey === "function") {
-    const found = window.getLeagueByKey(key);
-    if (found) return found;
-  }
-  const list = __getLeaguesFullList();
-  const k = String(key || "").trim();
-  return list.find(l => String(l.key) === k) || null;
-}
-
-// ✅ Replace your existing buildLeagueSelectHTMLSafe with this:
-function buildLeagueSelectHTMLSafe(selectedKey) {
-  // If the shared/global version exists, use it
-  if (typeof window.buildLeagueSelectHTML === "function") {
-    return window.buildLeagueSelectHTML(selectedKey);
-  }
-
-  const LEAGUE_KEY = "theShopLeague_v1";
-
-  function saveLeagueKeyLocal(k) {
-    try { localStorage.setItem(LEAGUE_KEY, String(k)); } catch {}
-  }
-
-  // Inline handler used by the <select onchange="...">
-  if (typeof window.handleLeagueChangeFromEl !== "function") {
-    window.handleLeagueChangeFromEl = function (el) {
-      const v = String(el?.value || "").trim();
-      if (!v) return;
-
-      if (typeof window.saveLeagueKey === "function") {
-        window.saveLeagueKey(v);
-      } else {
-        saveLeagueKeyLocal(v);
-      }
-
-      // Re-render Picks (prefer router)
-      if (typeof window.showTab === "function") window.showTab("picks");
-      else if (typeof window.renderPicks === "function") window.renderPicks(true);
-    };
-  }
-
-  const leagues = __getLeaguesFullList();
-  const sel = __coerceValidLeagueKey(selectedKey);
-
-  // If selectedKey was invalid, persist the fixed one so fetchEventsFor works immediately
-  if (String(selectedKey || "") !== sel) {
-    if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(sel);
-    else saveLeagueKeyLocal(sel);
-  }
-
-  const options = leagues
-    .map(l => {
-      const k = String(l.key || "");
-      const nm = String(l.name || k);
-      return `<option value="${esc(k)}"${k === sel ? " selected" : ""}>${esc(nm)}</option>`;
-    })
-    .join("");
-
-  return `
-    <select class="leagueSelect" aria-label="Choose league" onchange="handleLeagueChangeFromEl(this)">
-      ${options}
-    </select>
-  `;
-}
-
-async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
-  const league = getLeagueByKeySafe(leagueKey);
-  if (!league) return [];
-
-  // Prefer your existing robust fetch helper if present
-  if (typeof window.fetchScoreboardWithFallbacks === "function") {
-    try {
-      const sb = await window.fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
-      return Array.isArray(sb?.events) ? sb.events : [];
-    } catch (e) {
-      // fall through to direct fetch
-      console.warn("fetchScoreboardWithFallbacks failed, using direct ESPN fetch:", e);
-    }
-  }
-
-  // Direct ESPN fetch using endpoint()
-  const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
-  if (!url) return [];
-
-  try {
-    const r = await fetch(url, { cache: "no-store" });
-    const j = await r.json().catch(() => ({}));
-    return Array.isArray(j?.events) ? j.events : [];
-  } catch (e) {
-    console.error("Direct ESPN fetch failed:", e);
-    return [];
-  }
-}
 
   async function gpGetSlateGames(db, slateId) {
     const snap = await db.collection("pickSlates").doc(slateId).collection("games").get();
@@ -649,6 +511,9 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
       `;
     }).join("");
 
+    const dbg = String(window.__GP_LAST_FETCH_DEBUG || "");
+    const dbgLine = dbg ? `<div class="muted" style="margin-top:8px;">ESPN: ${esc(dbg)}</div>` : "";
+
     return `
       <div class="game" data-gpadminwrap="1" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
         <div class="gameHeader">
@@ -657,6 +522,7 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
 
         <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(dateYYYYMMDD)}</div>
         <div class="gameMetaOddsLine">Select games, set lock time, then Create/Replace and Publish.</div>
+        ${dbgLine}
 
         <div style="margin-top:12px;">
           <label style="display:block; margin-bottom:6px;">
@@ -708,10 +574,6 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
       const awayName = String(g?.awayName || "Away");
 
       const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-
-      // Lock behavior:
-      // - If lockAt exists, lock at lockAt
-      // - Otherwise lock at game start
       const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
       const my = myMap?.[eventId]?.side || "";
@@ -719,11 +581,11 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
       const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
       const everyoneLines = everyone.length
         ? everyone.map(p => {
-            const nm = String(p?.name || "Someone");
-            const side = String(p?.side || "");
-            const pickedTeam = (side === "away") ? awayName : (side === "home" ? homeName : "—");
-            return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(pickedTeam)}</div>`;
-          }).join("")
+          const nm = String(p?.name || "Someone");
+          const side = String(p?.side || "");
+          const pickedTeam = (side === "away") ? awayName : (side === "home" ? homeName : "—");
+          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(pickedTeam)}</div>`;
+        }).join("")
         : `<div class="muted">No picks yet.</div>`;
 
       return `
@@ -769,7 +631,7 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
   }
 
   // -----------------------------
-  // Main Picks renderer (this is what showTab('picks') calls)
+  // Main Picks renderer
   // -----------------------------
   async function renderPicks(showLoading) {
     const content = document.getElementById("content");
@@ -789,18 +651,14 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
     try {
       await ensureFirebaseReadySafe();
 
-      // Ensure auth user exists
       const user = firebase?.auth?.().currentUser;
       if (!user) {
-        // If your ensureFirebaseChatReady signs in, this will usually be non-null.
-        // If not, attempt anonymous sign-in.
         try { await firebase.auth().signInAnonymously(); } catch {}
       }
 
       const db = firebase.firestore();
       const uid = firebase.auth().currentUser?.uid || "";
 
-      // Fetch ESPN events for admin slate builder
       const role = getRole();
       const events = await fetchEventsFor(selectedKey, selectedDate);
 
@@ -825,7 +683,6 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
       const slateData = slateSnap.data() || {};
       const published = slateData.published === true;
 
-      // Guests shouldn’t see builder; they’ll just see waiting card until published
       if (!published && role !== "admin") {
         content.innerHTML = `
           ${renderPicksHeaderHTML(prettyDate, "Updated", selectedKey)}
@@ -864,7 +721,6 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
   }
 
   function renderPicksHeaderHTML(prettyDate, rightLabel, selectedKey) {
-    // Match your header pattern used elsewhere
     return `
       <div class="header">
         <div class="headerTop">
@@ -909,7 +765,6 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
       const btn = e.target && e.target.closest ? e.target.closest("button") : null;
       if (!btn) return;
 
-      // Header actions
       const act = btn.getAttribute("data-gpaction");
       if (act === "refresh") {
         renderPicks(true);
@@ -928,7 +783,6 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
         return;
       }
 
-      // User pick buttons
       const gpPick = btn.getAttribute("data-gppick");
       if (gpPick) {
         const slateId = btn.getAttribute("data-slate") || "";
@@ -952,7 +806,6 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
         return;
       }
 
-      // Admin actions
       const gpAdmin = btn.getAttribute("data-gpadmin");
       if (gpAdmin) {
         const leagueKey = btn.getAttribute("data-league") || "";
@@ -977,7 +830,6 @@ async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
             const lockVal = (wrap?.querySelector('input[data-gplock="1"]')?.value || "").trim();
             const lockDate = lockVal ? new Date(lockVal) : null;
 
-            // Read checked games
             const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
             const selected = new Set(
               checks
