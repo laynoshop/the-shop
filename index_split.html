@@ -11,67 +11,121 @@
 </head>
 
 <body>
-  <!-- LOGIN -->
-  <div id="login">
-    <div class="loginCard">
-      <div class="loginTop">
-        <div class="loginKicker">The Shop</div>
-        <div class="loginTitle">Enter the Scarlet Key</div>
-      </div>
 
-      <div class="loginRow">
+  <noscript>
+    <div style="padding:16px;font-family:-apple-system,system-ui;">
+      This app requires JavaScript to run.
+    </div>
+  </noscript>
+
+  <!-- =========================
+       LOGIN (ELITE LIVE VERSION)
+       ========================= -->
+  <div id="login" class="loginScreen">
+    <div class="days-since">
+      <div class="daysNumber" id="daysSinceNumber">446</div>
+      <div class="daysLabel">DAYS SINCE TTUN WON IN THE GAME</div>
+    </div>
+
+    <div class="loginCard">
+      <h1 class="loginTitle">The Shop</h1>
+      <div class="loginSubtitle">Enter the Scarlet Key</div>
+
+      <div class="loginForm">
         <input
           type="password"
           id="code"
+          class="loginInput"
           placeholder="Scarlet Key"
           inputmode="numeric"
           autocomplete="one-time-code"
         />
-        <button id="loginBtn" type="button" disabled>Loading…</button>
+        <button class="loginBtn" id="loginBtn" type="button" disabled>
+          Loading…
+        </button>
       </div>
 
-      <div class="loginSub">Authorized members only</div>
+      <div class="loginHint">Authorized members only</div>
     </div>
   </div>
 
-  <!-- ENTRY (Doors) -->
-  <div id="entry" style="display:none;">
+  <!-- =========================
+       ENTRY (LIVE VERSION)
+       ========================= -->
+  <div id="entry" class="entryScreen" style="display:none;">
     <div class="entryWrap">
-      <div class="entryHeader">
-        <div class="entryTitle">The Shop</div>
-        <div class="entrySub">446 DAYS SINCE TTUN WON IN THE GAME</div>
+      <div class="entryTop">
+        <div class="entryChant">
+          <span>4 TO 6</span>
+          <span>A TO B</span>
+        </div>
+
+        <div class="countdownCard" id="countdownCard">
+          <div class="countdownTitle">Countdown to The Game</div>
+
+          <div class="countdownNums" id="countdownNums">
+            <div class="cdUnit">
+              <div class="cdNum" id="cdDays">--</div>
+              <div class="cdLab">DAYS</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdHours">--</div>
+              <div class="cdLab">HRS</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdMins">--</div>
+              <div class="cdLab">MIN</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdSecs">--</div>
+              <div class="cdLab">SEC</div>
+            </div>
+          </div>
+
+          <div class="countdownSub" id="countdownSub"></div>
+        </div>
       </div>
 
-      <div class="doors">
-        <button class="doorBtn" data-go="scores">Scores</button>
-        <button class="doorBtn" data-go="picks">Picks</button>
-        <button class="doorBtn" data-go="beat">Beat TTUN</button>
-        <button class="doorBtn" data-go="news">Top News</button>
-        <button class="doorBtn" data-go="shop">Shop</button>
+      <div class="entryDoors">
+        <button class="doorBtn" type="button" data-go="scores">Scores</button>
+        <button class="doorBtn" type="button" data-go="picks">Picks</button>
+        <button class="doorBtn" type="button" data-go="beat">Beat TTUN</button>
+        <button class="doorBtn" type="button" data-go="news">Top News</button>
+        <button class="doorBtn adminOnly" type="button" data-go="shop" style="display:none;">Shop</button>
       </div>
     </div>
   </div>
 
-  <!-- APP -->
+  <!-- =========================
+       APP
+       ========================= -->
   <div id="app" style="display:none;">
     <div id="content"></div>
     <div class="tabs"></div>
     <div id="rivalryBanner" class="rivalryBanner"></div>
   </div>
 
+  <!-- =========================
+       SPLIT LOAD FAILURE ALERT
+       ========================= -->
   <script>
-    // If any script 404s, you'll get an instant alert telling you which one.
     window.__splitFail = function (file) {
-      alert("❌ Failed to load: " + file + "\nCheck that it exists at /" + file + " (case-sensitive) and is pushed to GitHub.");
+      alert("❌ Failed to load: " + file +
+        "\nCheck that it exists in /split/ and was pushed to GitHub.");
     };
   </script>
 
-  <!-- Firebase SDKs (compat) -->
+  <!-- =========================
+       FIREBASE (Compat)
+       ========================= -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-  <!-- ✅ SPLIT BUILD (order matters) -->
+  <!-- =========================
+       SPLIT ARCHITECTURE
+       (ORDER MATTERS)
+       ========================= -->
   <script src="split/boot.js" defer onerror="__splitFail('split/boot.js')"></script>
   <script src="split/shared.js" defer onerror="__splitFail('split/shared.js')"></script>
 
@@ -79,50 +133,52 @@
   <script src="split/news.js" defer onerror="__splitFail('split/news.js')"></script>
   <script src="split/beat.js" defer onerror="__splitFail('split/beat.js')"></script>
   <script src="split/shop.js" defer onerror="__splitFail('split/shop.js')"></script>
-  <script src="split/logout.js" defer></script>
+  <script src="split/logout.js" defer onerror="__splitFail('split/logout.js')"></script>
   <script src="split/groupPicks.js" defer onerror="__splitFail('split/groupPicks.js')"></script>
 
   <script src="split/app.js" defer onerror="__splitFail('split/app.js')"></script>
 
-  <!-- ✅ READY GATE -->
+  <!-- =========================
+       READY GATE (wait for checkCode)
+       ========================= -->
   <script>
     (function () {
       const btn = document.getElementById("loginBtn");
       const code = document.getElementById("code");
 
-      function tryEnable() {
+      function enableIfReady() {
         if (typeof window.checkCode === "function") {
-          if (btn) { btn.disabled = false; btn.textContent = "Unlock"; }
-          if (btn) btn.onclick = () => window.checkCode();
-          if (code) {
-            code.addEventListener("keydown", (e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                window.checkCode();
-              }
-            });
-          }
+          btn.disabled = false;
+          btn.textContent = "Unlock";
+          btn.onclick = () => window.checkCode();
+
+          code.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              window.checkCode();
+            }
+          });
+
           return true;
         }
         return false;
       }
 
-      if (tryEnable()) return;
+      if (enableIfReady()) return;
 
       let ticks = 0;
       const t = setInterval(() => {
         ticks++;
-        if (tryEnable()) return clearInterval(t);
+        if (enableIfReady()) return clearInterval(t);
+
         if (ticks >= 160) {
           clearInterval(t);
-          if (btn) {
-            btn.disabled = true;
-            btn.textContent = "Load error";
-            btn.onclick = () => alert("Split scripts loaded but checkCode was not found. Next step: tell me if you saw ANY ❌ alert and which file it named.");
-          }
+          btn.textContent = "Load error";
+          btn.disabled = true;
         }
       }, 50);
     })();
   </script>
+
 </body>
 </html>
