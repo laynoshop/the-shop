@@ -76,9 +76,56 @@
   }
 
   function buildLeagueSelectHTMLSafe(selectedKey) {
-    if (typeof window.buildLeagueSelectHTML === "function") return window.buildLeagueSelectHTML(selectedKey);
-    return "";
+  // If the shared/global version exists, use it
+  if (typeof window.buildLeagueSelectHTML === "function") return window.buildLeagueSelectHTML(selectedKey);
+
+  const LEAGUE_KEY = "theShopLeague_v1";
+  const leagues = Array.isArray(window.LEAGUES) ? window.LEAGUES : [];
+
+  // If LEAGUES isn't available yet, fail soft (but don't break the page)
+  if (!leagues.length) return "";
+
+  // Ensure a valid selected key
+  const keys = new Set(leagues.map(l => String(l?.key || "")));
+  let cur = String(selectedKey || "").trim();
+  if (!cur || !keys.has(cur)) cur = String(leagues[0]?.key || "nfl");
+
+  // Global handler (needed for inline onchange)
+  if (typeof window.handleLeagueChangeFromEl !== "function") {
+    window.handleLeagueChangeFromEl = function (el) {
+      const v = String(el?.value || "").trim();
+      if (!v) return;
+
+      try { localStorage.setItem(LEAGUE_KEY, v); } catch {}
+
+      // Prefer shared/global saver if it exists
+      if (typeof window.saveLeagueKey === "function") {
+        try { window.saveLeagueKey(v); } catch {}
+      }
+
+      // Re-render Picks
+      if (typeof window.showTab === "function") {
+        window.showTab("picks");
+      } else if (typeof window.renderPicks === "function") {
+        window.renderPicks(true);
+      }
+    };
   }
+
+  const options = leagues.map(l => {
+    const key = String(l?.key || "");
+    const label = String(l?.label || l?.name || key.toUpperCase());
+    const sel = (key === cur) ? "selected" : "";
+    return `<option value="${esc(key)}" ${sel}>${esc(label)}</option>`;
+  }).join("");
+
+  // This matches the “pill select” look your CSS already styles
+  return `
+    <select class="leagueSelect" aria-label="Select league" onchange="handleLeagueChangeFromEl(this)">
+      ${options}
+    </select>
+  `;
+}
 
   function buildCalendarButtonHTMLSafe() {
   // If the shared/global version exists, use it
