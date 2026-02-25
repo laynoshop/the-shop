@@ -227,7 +227,6 @@
 
   // ------------------------------------------------------------
   // Login (invite code -> role)
-  // NOTE: this relies on ensureFirebaseChatReady() existing (in split/shop.js)
   // ------------------------------------------------------------
   async function checkCode() {
     const input = document.getElementById("code");
@@ -240,7 +239,6 @@
       return;
     }
 
-    // Guard: if split scripts aren’t fully loaded yet
     if (typeof window.ensureFirebaseChatReady !== "function" || !window.firebase) {
       alert("App is still loading — try again in a second.");
       return;
@@ -290,14 +288,11 @@
 
       if (lastErr) throw lastErr;
 
-      // Persist role + cache it
       safeRoleSet(role);
       window.__serverRoleCache = role;
 
-      // Clear input so code isn’t left on screen
       input.value = "";
 
-      // Move to entry screen + build tabs
       buildTabsForRole(role);
       showEntryScreen();
 
