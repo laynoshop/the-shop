@@ -1,136 +1,210 @@
-      // status accent classes (your “sexy up” styles)
-      if (state === "in") card.classList.add("statusLive");
-      else if (state === "pre") card.classList.add("statusPre");
-      else if (state === "post") card.classList.add("statusFinal");
-      if (!initialOdds?.favored && !initialOdds?.ou) card.classList.add("edgeNone");
+// split/scores.js
+// Scores tab only. Self-contained + resilient.
 
-      if (eventId) card.setAttribute("data-eventid", eventId);
+(function () {
+  "use strict";
 
-      const shouldShowAI = (state === "pre") && !!initialOddsText && !!eventId;
+  // ------------------------------------------------------------
+  // Safe helpers
+  // ------------------------------------------------------------
+  const escapeHtml =
+    (typeof window.escapeHtml === "function")
+      ? window.escapeHtml
+      : (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[c]));
 
-      card.innerHTML = `
-        <div class="gameHeader">
-          <div class="statusPill ${pillClass}">${pillText}</div>
-        </div>
+  const norm = (s) => String(s || "").trim().toLowerCase();
 
-        <div class="gameMetaTopPlain" aria-label="Venue">
-          ${escapeHtml(venueLine)}
-        </div>
+  function safeGet(key, fallback = "") {
+    try { return String(localStorage.getItem(key) ?? fallback); }
+    catch { return String(fallback); }
+  }
+  function safeSet(key, val) {
+    try { localStorage.setItem(key, String(val)); } catch {}
+  }
 
-        ${initialOddsText ? `
-          <div class="gameMetaOddsPlain" aria-label="Betting line">
-            ${escapeHtml(initialOddsText)}
-          </div>
-        ` : ""}
+  // ------------------------------------------------------------
+  // Preferences (league/date)
+  // ------------------------------------------------------------
+  const LEAGUE_KEY = "theShopLeagueKey_v1";
+  const DATE_KEY = "theShopDateYYYYMMDD_v1";
 
-        ${shouldShowAI ? `
-          <div class="gameMetaAIPlain" aria-label="AI insight">
-            <div class="aiRow" data-ai-line1="${escapeHtml(eventId)}">AI EDGE: — • Lean: —</div>
-            <div class="aiConfidenceRow" data-ai-line2="${escapeHtml(eventId)}">Confidence: —/10</div>
-          </div>
-        ` : ""}
+  const FAVORITES = [
+    "ohio state",
+    "buckeyes",
+    "duke",
+    "blue devils",
+    "west virginia",
+    "mountaineers",
+    "columbus blue jackets",
+    "blue jackets",
+    "carolina hurricanes",
+    "hurricanes",
+    "carolina panthers",
+    "panthers",
+    "dallas cowboys",
+    "cowboys",
+    "boston red sox",
+    "red sox",
+    "cleveland guardians",
+    "guardians"
+  ].map(norm);
 
-        <div class="teamRow">
-          <div class="teamLeft">
-            <div class="teamLine">
-              ${
-                awayLogo
-                  ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
-                  : `<div class="teamLogoFallback">${awayAbbrev || "—"}</div>`
-              }
-              <div class="teamText">
-                <div class="teamName">${escapeHtml(awayName)}</div>
-                <div class="teamMeta">${escapeHtml(homeAwayWithRecord("Away", away, selectedKey))}</div>
-              </div>
-            </div>
-          </div>
-          <div class="score">${awayScore}</div>
-        </div>
+  function yyyymmddTodayLocal() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}${m}${day}`;
+  }
 
-        <div class="teamRow">
-          <div class="teamLeft">
-            <div class="teamLine">
-              ${
-                homeLogo
-                  ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
-                  : `<div class="teamLogoFallback">${homeAbbrev || "—"}</div>`
-              }
-              <div class="teamText">
-                <div class="teamName">${escapeHtml(homeName)}</div>
-                <div class="teamMeta">${escapeHtml(homeAwayWithRecord("Home", home, selectedKey))}</div>
-              </div>
-            </div>
-          </div>
-          <div class="score">${homeScore}</div>
-        </div>
-      `;
+  function yyyymmddToPretty(v) {
+    const s = String(v || "");
+    if (s.length !== 8) return s || "—";
+    const y = s.slice(0, 4);
+    const m = s.slice(4, 6);
+    const d = s.slice(6, 8);
+    return `${m}/${d}/${y}`;
+  }
 
-      grid.appendChild(card);
+  function getSavedLeagueKey() {
+    const v = norm(safeGet(LEAGUE_KEY, "ncaaf"));
+    return v || "ncaaf";
+  }
 
-      if (shouldShowAI) {
-        aiJobs.push({
-          eventId,
-          leagueKey: selectedKey,
-          dateYYYYMMDD: selectedDate,
-          home: homeBaseName,
-          away: awayBaseName,
-          spread: initialOdds.favored || "",
-          total: initialOdds.ou || ""
-        });
-      }
-    });
+  function setSavedLeagueKey(v) {
+    safeSet(LEAGUE_KEY, String(v || "ncaaf"));
+  }
 
-    content.appendChild(grid);
+  function getSavedDateYYYYMMDD() {
+    const v = safeGet(DATE_KEY, "");
+    if (String(v).trim().length === 8) return String(v).trim();
+    const t = yyyymmddTodayLocal();
+    safeSet(DATE_KEY, t);
+    return t;
+  }
 
-    // Odds hydration
-    hydrateAllOdds(events, league, selectedKey, selectedDate);
+  function setSavedDateYYYYMMDD(v) {
+    const s = String(v || "").replace(/\D/g, "");
+    if (s.length === 8) safeSet(DATE_KEY, s);
+  }
 
-    // AI hydration (small concurrency)
-    const limit = 4;
-    let idx = 0;
+  // ------------------------------------------------------------
+  // League definitions + ESPN endpoints
+  // ------------------------------------------------------------
+  const LEAGUES = [
+    { key: "ncaaf", label: "CFB", sport: "football", league: "college-football" },
+    { key: "ncaab", label: "CBB", sport: "basketball", league: "mens-college-basketball" },
+    { key: "nfl",   label: "NFL", sport: "football", league: "nfl" },
+    { key: "nba",   label: "NBA", sport: "basketball", league: "nba" },
+    { key: "nhl",   label: "NHL", sport: "hockey", league: "nhl" },
+    { key: "mlb",   label: "MLB", sport: "baseball", league: "mlb" },
+  ];
 
-    async function runNext() {
-      while (idx < aiJobs.length) {
-        const job = aiJobs[idx++];
+  function leagueByKey(k) {
+    return LEAGUES.find(x => x.key === norm(k)) || LEAGUES[0];
+  }
 
-        const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(String(job.eventId))}"]`);
-        const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(String(job.eventId))}"]`);
+  function buildLeagueSelectHTML(selectedKey) {
+    const opts = LEAGUES.map(l =>
+      `<option value="${escapeHtml(l.key)}"${l.key === selectedKey ? " selected" : ""}>${escapeHtml(l.label)}</option>`
+    ).join("");
+    return `<select id="leagueSelect" class="leagueSelect" aria-label="League">${opts}</select>`;
+  }
 
-        const alreadyHasText =
-          (line1 && line1.textContent && line1.textContent.trim().length > 0) ||
-          (line2 && line2.textContent && line2.textContent.trim().length > 0);
+  function buildCalendarButtonHTML() {
+    // You asked for a calendar emoji button
+    return `<button class="iconBtn" id="dateBtn" title="Change date">📅</button>`;
+  }
 
-        if (!alreadyHasText) {
-          if (line1) line1.textContent = job.spread ? "AI EDGE: Analyzing…" : "AI EDGE: Waiting for line…";
-          if (line2) line2.textContent = "Confidence: —/10";
-        }
+  // ------------------------------------------------------------
+  // Scoreboard fetch
+  // ------------------------------------------------------------
+  function yyyymmddToESPNDate(v) {
+    // ESPN uses YYYYMMDD
+    return String(v || "").replace(/\D/g, "");
+  }
 
-        const data = await fetchAIInsight({
-          eventId: job.eventId,
-          league: job.leagueKey,
-          date: job.dateYYYYMMDD,
-          home: job.home,
-          away: job.away,
-          spread: job.spread || "",
-          total: job.total || ""
-        });
+  async function fetchJson(url) {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  }
 
-        if (!data) continue;
+  async function fetchScoreboard(leagueKey, dateYYYYMMDD) {
+    const L = leagueByKey(leagueKey);
+    const dates = yyyymmddToESPNDate(dateYYYYMMDD);
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${L.sport}/${L.league}/scoreboard?dates=${dates}`;
+    return await fetchJson(url);
+  }
 
-        const edge = (data.edge || "—");
-        const lean = (data.lean || "");
-        const conf = (data.confidence ?? "—");
+  // ------------------------------------------------------------
+  // Rendering helpers
+  // ------------------------------------------------------------
+  function statusFromEvent(ev) {
+    const st = ev?.status?.type?.state || "";
+    const detail = ev?.status?.type?.shortDetail || ev?.status?.type?.detail || "";
+    if (st === "pre")  return { pill: "PRE",  cls: "status-pre",  detail };
+    if (st === "in")   return { pill: "LIVE", cls: "status-live", detail };
+    if (st === "post") return { pill: "FINAL",cls: "status-final",detail };
+    return { pill: "—", cls: "status-other", detail: detail || "—" };
+  }
 
-        const leanPart = lean ? ` • Lean: ${lean}` : "";
-        if (line1) line1.textContent = `AI EDGE: ${edge}${leanPart}`;
-        if (line2) line2.textContent = `Confidence: ${conf}/10`;
-      }
-    }
+  function competitorBySide(comp, side /* home|away */) {
+    const arr = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    return arr.find(c => c.homeAway === side) || null;
+  }
 
-    await Promise.all(new Array(Math.min(limit, aiJobs.length)).fill(0).map(runNext));
+  function teamName(team) {
+    return team?.displayName || team?.name || team?.shortDisplayName || team?.abbreviation || "—";
+  }
 
-  } catch (error) {
-    content.innerHTML = `
+  function teamLogo(team) {
+    // ESPN commonly uses team.logo
+    return team?.logo || "";
+  }
+
+  function teamRecord(competitor) {
+    const recs = competitor?.records;
+    if (!Array.isArray(recs)) return "";
+    // Prefer "overall" or first record summary
+    const overall = recs.find(r => norm(r?.type) === "overall");
+    const summary = overall?.summary || recs[0]?.summary || "";
+    return summary ? `(${summary})` : "";
+  }
+
+  function favoredByFavorites(text) {
+    const t = norm(text);
+    return FAVORITES.some(f => t.includes(f));
+  }
+
+  function eventPriority(ev) {
+    const comp = ev?.competitions?.[0];
+    const home = competitorBySide(comp, "home");
+    const away = competitorBySide(comp, "away");
+    const hn = norm(teamName(home?.team));
+    const an = norm(teamName(away?.team));
+
+    const favHit = favoredByFavorites(hn) || favoredByFavorites(an);
+    if (favHit) return 1000;
+
+    // LIVE games next
+    const st = ev?.status?.type?.state || "";
+    if (st === "in") return 500;
+
+    return 0;
+  }
+
+  function renderHeader(rightText) {
+    const selectedKey = getSavedLeagueKey();
+    const selectedDate = getSavedDateYYYYMMDD();
+
+    return `
       <div class="header">
         <div class="headerTop">
           <div class="brand">
@@ -138,244 +212,212 @@
             <span class="badge">The Shop</span>
           </div>
           <div class="headerActions">
-            <button class="smallBtn" onclick="loadScores(true)">Retry</button>
+            <button class="smallBtn" id="scoresRefreshBtn">Refresh</button>
             <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
           </div>
         </div>
         <div class="subline">
           <div class="sublineLeft">
-            ${buildLeagueSelectHTML(getSavedLeagueKey())}
+            ${buildLeagueSelectHTML(selectedKey)}
             ${buildCalendarButtonHTML()}
           </div>
-          <div>Error</div>
+          <div>${escapeHtml(yyyymmddToPretty(selectedDate))}${rightText ? " • " + escapeHtml(rightText) : ""}</div>
         </div>
       </div>
-      <div class="notice">Couldn’t load scores right now.</div>
     `;
   }
-}
 
-/* =========================
-   AI fetch (cached + no flicker)
-   ========================= */
-async function fetchAIInsight(payload) {
-  const key = [
-    payload.league || "",
-    payload.date || "",
-    payload.eventId || "",
-    payload.home || "",
-    payload.away || "",
-    payload.spread || "",
-    payload.total || ""
-  ].join("|");
+  function renderScoreCards(events, selectedKey) {
+    const out = [];
 
-  const cached = aiInsightCache[key];
-  if (isAiCacheFresh(cached)) return cached;
+    (events || []).forEach(ev => {
+      const comp = ev?.competitions?.[0];
+      if (!comp) return;
 
-  // ---- LOCAL FALLBACK (always available) ----
-  function localCompute() {
-    // Use your existing helper (already in your script)
-    const g = generateAIInsight({
-      homeName: payload.home,
-      awayName: payload.away,
-      homeScore: "",   // pregame
-      awayScore: "",
-      favoredText: payload.spread || "",
-      ouText: payload.total || "",
-      state: "pre"
+      const home = competitorBySide(comp, "home");
+      const away = competitorBySide(comp, "away");
+
+      const homeName = teamName(home?.team);
+      const awayName = teamName(away?.team);
+
+      const homeLogo = teamLogo(home?.team);
+      const awayLogo = teamLogo(away?.team);
+
+      const homeScore = home?.score ?? "";
+      const awayScore = away?.score ?? "";
+
+      const stat = statusFromEvent(ev);
+
+      const venue = comp?.venue?.fullName || "";
+      const startISO = ev?.date || comp?.date || "";
+      const startTime = startISO ? new Date(startISO).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+
+      const metaTop = venue ? venue : (startTime ? startTime : "—");
+      const metaBottom = startTime && venue ? `${startTime}` : (stat.detail || "");
+
+      out.push(`
+        <div class="game ${stat.cls}">
+          <div class="gameHeader">
+            <div class="statusPill ${stat.cls}">${escapeHtml(stat.pill)}</div>
+          </div>
+
+          <div class="gameMetaTopLine">${escapeHtml(metaTop)}</div>
+          <div class="gameMetaOddsLine">${escapeHtml(metaBottom)}</div>
+
+          <div class="teamRow">
+            <div class="teamLeft">
+              <div class="teamLine">
+                ${
+                  awayLogo
+                    ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
+                    : `<div class="teamLogoFallback">${escapeHtml(String(away?.team?.abbreviation || "—"))}</div>`
+                }
+                <div class="teamText">
+                  <div class="teamName">${escapeHtml(awayName)}</div>
+                  <div class="teamMeta">${escapeHtml(`Away ${teamRecord(away)}`.trim())}</div>
+                </div>
+              </div>
+            </div>
+            <div class="score">${escapeHtml(String(awayScore))}</div>
+          </div>
+
+          <div class="teamRow">
+            <div class="teamLeft">
+              <div class="teamLine">
+                ${
+                  homeLogo
+                    ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
+                    : `<div class="teamLogoFallback">${escapeHtml(String(home?.team?.abbreviation || "—"))}</div>`
+                }
+                <div class="teamText">
+                  <div class="teamName">${escapeHtml(homeName)}</div>
+                  <div class="teamMeta">${escapeHtml(`Home ${teamRecord(home)}`.trim())}</div>
+                </div>
+              </div>
+            </div>
+            <div class="score">${escapeHtml(String(homeScore))}</div>
+          </div>
+        </div>
+      `);
     });
 
-    return {
-      edge: g.edge || "Stay Away",
-      lean: g.lean || "",
-      confidence: g.confidence ?? "5.0",
-      ts: Date.now()
-    };
-  }
-
-  // If no endpoint configured, just use local
-  if (!AI_ENDPOINT) {
-    const stored = localCompute();
-    aiInsightCache[key] = stored;
-    saveAiCacheToSessionThrottled();
-    return stored;
-  }
-
-  // ---- REMOTE (optional if you deploy later) ----
-  try {
-    const resp = await fetch(AI_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    // If remote fails, fallback local
-    if (!resp.ok) {
-      const stored = localCompute();
-      aiInsightCache[key] = stored;
-      saveAiCacheToSessionThrottled();
-      return stored;
+    if (!out.length) {
+      return `<div class="notice">No games found for this league/date.</div>`;
     }
 
-    const data = await resp.json();
-
-    const stored = {
-      edge: data.edge || "—",
-      lean: data.lean || "",
-      confidence: (data.confidence ?? "—"),
-      ts: Date.now()
-    };
-
-    aiInsightCache[key] = stored;
-    saveAiCacheToSessionThrottled();
-    return stored;
-
-  } catch {
-    const stored = localCompute();
-    aiInsightCache[key] = stored;
-    saveAiCacheToSessionThrottled();
-    return stored;
-  }
-}
-
-/* =========================
-   BEAT TTUN (TUNNEL ENTRANCE MODE)
-   ========================= */
-
-// ESPN CDN logos (fast + reliable)
-const OSU_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png";
-const TTUN_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png";
-
-// All-time series (update anytime you want)
-const THE_GAME_ALL_TIME = {
-  michWins: 62,
-  osuWins: 52,
-  ties: 6
-};
-
-// Last 10 *played* matchups (excludes 2020 canceled)
-const THE_GAME_LAST_10 = [
-  { year: 2025, winner: "Ohio State", score: "27–9" },
-  { year: 2024, winner: "TTUN",       score: "13–10" },
-  { year: 2023, winner: "TTUN",       score: "30–24" },
-  { year: 2022, winner: "TTUN",       score: "45–23" },
-  { year: 2021, winner: "TTUN",       score: "42–27" },
-  { year: 2019, winner: "Ohio State", score: "56–27" },
-  { year: 2018, winner: "Ohio State", score: "62–39" },
-  { year: 2017, winner: "Ohio State", score: "31–20" },
-  { year: 2016, winner: "Ohio State", score: "30–27 (2OT)" },
-  { year: 2015, winner: "Ohio State", score: "42–13" }
-];
-
-let beatCountdownTimer = null;
-let beatRotateTimer = null;
-
-function stopBeatCountdown() {
-  if (beatCountdownTimer) clearInterval(beatCountdownTimer);
-  beatCountdownTimer = null;
-
-  if (beatRotateTimer) clearInterval(beatRotateTimer);
-  beatRotateTimer = null;
-}
-
-// “The Game” is typically the last Saturday of November.
-// Count down to **noon local** for consistency.
-function getNextTheGameDateLocalNoon() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const candidate = lastSaturdayOfNovemberAtNoon(year);
-  if (candidate.getTime() > now.getTime()) return candidate;
-  return lastSaturdayOfNovemberAtNoon(year + 1);
-}
-
-function lastSaturdayOfNovemberAtNoon(year) {
-  const d = new Date(year, 10, 30, 12, 0, 0, 0); // month 10 = November
-  while (d.getDay() !== 6) d.setDate(d.getDate() - 1); // 6 = Saturday
-  return d;
-}
-
-function countdownParts(ms) {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const days = Math.floor(total / 86400);
-  const hrs  = Math.floor((total % 86400) / 3600);
-  const mins = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-  return { days, hrs, mins, secs };
-}
-
-function isGameWeek(targetDate) {
-  const now = new Date();
-  const diffMs = targetDate.getTime() - now.getTime();
-  const diffDays = Math.floor(diffMs / 86400000);
-  return diffDays >= 0 && diffDays <= 7;
-}
-
-// Calculate current streak from THE_GAME_LAST_10 (most recent first)
-function computeCurrentStreak() {
-  const list = Array.isArray(THE_GAME_LAST_10) ? THE_GAME_LAST_10 : [];
-  if (!list.length) return { label: "—", owner: "" };
-
-  const first = String(list[0].winner || "").trim();
-  if (!first) return { label: "—", owner: "" };
-
-  let streak = 0;
-  for (const g of list) {
-    if (String(g.winner || "").trim() === first) streak++;
-    else break;
+    return `<div class="grid">${out.join("")}</div>`;
   }
 
-  if (first === "Ohio State") {
-    return { label: `CURRENT STREAK: ${streak}`, owner: "osu" };
+  // ------------------------------------------------------------
+  // Auto refresh
+  // ------------------------------------------------------------
+  let refreshTimer = null;
+
+  function stopAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = null;
   }
-  // If they’ve been winning recently:
-  return { label: `REVENGE PENDING: ${streak}`, owner: "ttun" };
-}
+  window.stopAutoRefresh = stopAutoRefresh;
 
-function renderBeatTTUN() {
-  const content = document.getElementById("content");
-  stopBeatCountdown();
+  function shouldAutoRefresh(events) {
+    return (events || []).some(ev => (ev?.status?.type?.state || "") === "in");
+  }
 
-  const target = getNextTheGameDateLocalNoon();
-  const targetLabel = target.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  // ------------------------------------------------------------
+  // Main entry: loadScores
+  // ------------------------------------------------------------
+  async function loadScores(showLoading) {
+    const content = document.getElementById("content");
+    if (!content) return;
 
-  const hypeLines = [
-    "SILENCE THEIR STADIUM",
-    "FINISH THE FIGHT",
-    "LEAVE NO DOUBT",
-    "NO MERCY",
-    "DOMINATE"
-  ];
+    const selectedKey = getSavedLeagueKey();
+    const selectedDate = getSavedDateYYYYMMDD();
 
-  const streak = computeCurrentStreak();
-  const gameWeek = isGameWeek(target);
+    if (showLoading) {
+      content.innerHTML = renderHeader("Loading…") + `<div class="notice">Loading scoreboard…</div>`;
+      setTimeout(() => { try { window.replaceMichiganText && window.replaceMichiganText(content); } catch {} }, 0);
+    }
 
-  content.innerHTML = `
-    <div class="header">
-      <div class="headerTop">
-        <div class="brand">
-          <h2 style="margin:0;">Beat TTUN</h2>
-          <span class="badge">Hype</span>
-        </div>
-      </div>
-      <div class="subline">
-        <div>${gameWeek ? "IT’S GAME WEEK." : "Scarlet Mode"}</div>
-        <div>❌ichigan Week Energy</div>
-      </div>
-    </div>
+    stopAutoRefresh();
 
-    <!-- TUNNEL HERO -->
-    <div class="beatHero ${gameWeek ? "gameWeek" : ""}">
-      <div class="beatHeroTop">
-        <div class="beatHeroTitle">MISSION: BEAT TTUN</div>
-        <div class="beatHeroSub">Ohio State vs The Team Up North • ${escapeHtml(targetLabel)} • Noon</div>
-      </div>
+    try {
+      const data = await fetchScoreboard(selectedKey, selectedDate);
+      const events = Array.isArray(data?.events) ? data.events : [];
 
-      <div class="beatBig">
-        <div id="beatDays" class="beatBigDays">—</div>
-        <div class="beatBigLabel">DAYS</div>
-      </div>
+      // Sort: favorites first, then live, then kickoff
+      const sorted = [...events].sort((a, b) => {
+        const pa = eventPriority(a);
+        const pb = eventPriority(b);
+        if (pb !== pa) return pb - pa;
 
-      <div class="beatHmsRow" aria-label="Hours minutes seconds">
-        <div class="beatHmsUnit"><span id="beatHrs">—</span><small>HRS</small></div>
-        <div class="beatHmsUnit"><span id="beatMins">—</span><small>MINS</small></div>
-        <div class="beatHmsUnit"><span id="beatSecs">—</span><small>SECS</small></div>
+        const ta = Date.parse(a?.date || "") || 0;
+        const tb = Date.parse(b?.date || "") || 0;
+        return ta - tb;
+      });
+
+      const updated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+      content.innerHTML =
+        renderHeader(`Updated ${updated}`) +
+        renderScoreCards(sorted, selectedKey);
+
+      // TTUN enforcement
+      setTimeout(() => { try { window.replaceMichiganText && window.replaceMichiganText(content); } catch {} }, 0);
+
+      // Auto refresh if live games exist
+      if (shouldAutoRefresh(sorted)) {
+        refreshTimer = setInterval(() => {
+          loadScores(false).catch(() => {});
+        }, 30000);
+      }
+
+    } catch (err) {
+      console.error("loadScores failed:", err);
+      content.innerHTML =
+        renderHeader("Error") +
+        `<div class="notice">Couldn’t load scores right now. Try Refresh.</div>`;
+      setTimeout(() => { try { window.replaceMichiganText && window.replaceMichiganText(content); } catch {} }, 0);
+    }
+  }
+
+  // Export
+  window.loadScores = loadScores;
+
+  // ------------------------------------------------------------
+  // UI events (league change, date change, refresh)
+  // ------------------------------------------------------------
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (!el) return;
+
+    if (el.id === "leagueSelect") {
+      setSavedLeagueKey(el.value);
+      loadScores(true);
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("button") : null;
+    if (!btn) return;
+
+    if (btn.id === "scoresRefreshBtn") {
+      loadScores(true);
+      return;
+    }
+
+    if (btn.id === "dateBtn") {
+      const current = getSavedDateYYYYMMDD();
+      const picked = prompt("Enter date as YYYYMMDD (example: 20260225):", current);
+      if (picked === null) return;
+      const s = String(picked).replace(/\D/g, "");
+      if (s.length !== 8) {
+        alert("Date must be 8 digits (YYYYMMDD).");
+        return;
+      }
+      setSavedDateYYYYMMDD(s);
+      loadScores(true);
+      return;
+    }
+  });
+
+})();
