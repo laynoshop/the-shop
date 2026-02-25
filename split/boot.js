@@ -1,3 +1,13 @@
+window.__SPLIT_BOOT_OK = true;
+
+window.addEventListener("error", (e) => {
+  alert("JS ERROR: " + (e?.message || e));
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  alert("PROMISE ERROR: " + (e?.reason?.message || e?.reason || e));
+});
+
 /* =========================
    The Shop — Gold Standard v1 (Updated)
    - Scores (ESPN) + robust odds hydration
