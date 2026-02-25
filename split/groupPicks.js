@@ -75,63 +75,6 @@
     return dt.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 
-  function buildLeagueSelectHTMLSafe(selectedKey) {
-  // If the shared/global version exists, use it
-  if (typeof window.buildLeagueSelectHTML === "function") {
-    return window.buildLeagueSelectHTML(selectedKey);
-  }
-
-  // -----------------------------
-  // Split-build fallback league selector (self-contained)
-  // -----------------------------
-  const LEAGUE_KEY = "theShopLeague_v1";
-
-  // Minimal league list (matches the big script)
-  const LEAGUES_FALLBACK = [
-    {
-      key: "ncaam",
-      name: "Men’s College Basketball",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
-    },
-    {
-      key: "cfb",
-      name: "College Football",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
-    },
-    {
-      key: "nba",
-      name: "NBA",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
-    },
-    {
-      key: "nhl",
-      name: "NHL",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
-    },
-    {
-      key: "nfl",
-      name: "NFL",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
-    },
-    {
-      key: "mlb",
-      name: "MLB",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
-    },
-    {
-      key: "pga",
-      name: "Golf (PGA)",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
-    }
-  ];
-
   function getLeaguesList() {
     // Prefer a global list if your split build exposes one, else fallback
     const list = Array.isArray(window.LEAGUES) && window.LEAGUES.length ? window.LEAGUES : LEAGUES_FALLBACK;
@@ -321,84 +264,137 @@
     const iso = ev?.date || comp?.date || "";
     return { homeName, awayName, iso };
   }
+  
+// -----------------------------
+// ✅ LEAGUE SELECT + LEAGUE LOOKUP (FIXED)
+// - Keeps full league objects INCLUDING endpoint()
+// - Works even if shared.js didn't expose window.LEAGUES / getLeagueByKey
+// -----------------------------
 
+// Full fallback league objects (endpoint included)
+const __LEAGUES_FALLBACK_FULL = [
+  {
+    key: "ncaam",
+    name: "Men’s College Basketball",
+    endpoint: (date) =>
+      `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
+  },
+  {
+    key: "cfb",
+    name: "College Football",
+    endpoint: (date) =>
+      `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
+  },
+  {
+    key: "nba",
+    name: "NBA",
+    endpoint: (date) =>
+      `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
+  },
+  {
+    key: "nhl",
+    name: "NHL",
+    endpoint: (date) =>
+      `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
+  },
+  {
+    key: "nfl",
+    name: "NFL",
+    endpoint: (date) =>
+      `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
+  },
+  {
+    key: "mlb",
+    name: "MLB",
+    endpoint: (date) =>
+      `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
+  },
+  {
+    key: "pga",
+    name: "Golf (PGA)",
+    endpoint: (date) =>
+      `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
+  }
+];
+
+function __getLeaguesFullList() {
+  // Prefer global LEAGUES if present (and has endpoint), else fallback full list
+  const g = Array.isArray(window.LEAGUES) ? window.LEAGUES : null;
+  if (g && g.length && typeof g[0]?.endpoint === "function") return g;
+  return __LEAGUES_FALLBACK_FULL;
+}
+
+function __coerceValidLeagueKey(k) {
+  const list = __getLeaguesFullList();
+  const wanted = String(k || "").trim();
+  if (wanted && list.some(l => String(l.key) === wanted)) return wanted;
+  return list[0] ? String(list[0].key) : "nfl";
+}
+
+// ✅ Replace your existing getLeagueByKeySafe with this:
 function getLeagueByKeySafe(key) {
-  // Prefer the shared/global version if it exists
-  if (typeof window.getLeagueByKey === "function") return window.getLeagueByKey(key);
+  if (typeof window.getLeagueByKey === "function") {
+    const found = window.getLeagueByKey(key);
+    if (found) return found;
+  }
+  const list = __getLeaguesFullList();
+  const k = String(key || "").trim();
+  return list.find(l => String(l.key) === k) || null;
+}
 
-  const k = String(key || "").trim().toLowerCase();
-
-  // ✅ Hard fallback league defs WITH endpoint() so Picks can always fetch games
-  const FALLBACK = [
-    {
-      key: "ncaam",
-      name: "Men’s College Basketball",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
-    },
-    {
-      key: "cfb",
-      name: "College Football",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
-    },
-    {
-      key: "nba",
-      name: "NBA",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
-    },
-    {
-      key: "nhl",
-      name: "NHL",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
-    },
-    {
-      key: "nfl",
-      name: "NFL",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
-    },
-    {
-      key: "mlb",
-      name: "MLB",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
-    },
-    {
-      key: "pga",
-      name: "Golf (PGA)",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
-    }
-  ];
-
-  // If window.LEAGUES exists and contains endpoint(), use it.
-  const list = Array.isArray(window.LEAGUES) && window.LEAGUES.length ? window.LEAGUES : FALLBACK;
-
-  // Normalize items so we can always return something usable
-  const normalized = list
-    .map(l => ({
-      key: String(l?.key || "").trim().toLowerCase(),
-      name: String(l?.name || l?.label || l?.key || "").trim(),
-      endpoint: (typeof l?.endpoint === "function") ? l.endpoint : null
-    }))
-    .filter(l => l.key);
-
-  // Prefer a real match
-  const found = normalized.find(l => l.key === k);
-  if (found) {
-    // If endpoint missing, try to pull from fallback by key
-    if (typeof found.endpoint !== "function") {
-      const fb = FALLBACK.find(x => x.key === found.key);
-      return fb || found;
-    }
-    return found;
+// ✅ Replace your existing buildLeagueSelectHTMLSafe with this:
+function buildLeagueSelectHTMLSafe(selectedKey) {
+  // If the shared/global version exists, use it
+  if (typeof window.buildLeagueSelectHTML === "function") {
+    return window.buildLeagueSelectHTML(selectedKey);
   }
 
-  // Final fallback
-  return FALLBACK.find(x => x.key === "nfl") || FALLBACK[0] || null;
+  const LEAGUE_KEY = "theShopLeague_v1";
+
+  function saveLeagueKeyLocal(k) {
+    try { localStorage.setItem(LEAGUE_KEY, String(k)); } catch {}
+  }
+
+  // Inline handler used by the <select onchange="...">
+  if (typeof window.handleLeagueChangeFromEl !== "function") {
+    window.handleLeagueChangeFromEl = function (el) {
+      const v = String(el?.value || "").trim();
+      if (!v) return;
+
+      if (typeof window.saveLeagueKey === "function") {
+        window.saveLeagueKey(v);
+      } else {
+        saveLeagueKeyLocal(v);
+      }
+
+      // Re-render Picks (prefer router)
+      if (typeof window.showTab === "function") window.showTab("picks");
+      else if (typeof window.renderPicks === "function") window.renderPicks(true);
+    };
+  }
+
+  const leagues = __getLeaguesFullList();
+  const sel = __coerceValidLeagueKey(selectedKey);
+
+  // If selectedKey was invalid, persist the fixed one so fetchEventsFor works immediately
+  if (String(selectedKey || "") !== sel) {
+    if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(sel);
+    else saveLeagueKeyLocal(sel);
+  }
+
+  const options = leagues
+    .map(l => {
+      const k = String(l.key || "");
+      const nm = String(l.name || k);
+      return `<option value="${esc(k)}"${k === sel ? " selected" : ""}>${esc(nm)}</option>`;
+    })
+    .join("");
+
+  return `
+    <select class="leagueSelect" aria-label="Choose league" onchange="handleLeagueChangeFromEl(this)">
+      ${options}
+    </select>
+  `;
 }
 
 async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
