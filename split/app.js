@@ -25,3 +25,8 @@
   // Optional: stamp that split app loaded
   window.__SPLIT_READY = true;
 })();
+
+// --- REQUIRED GLOBAL EXPORTS (split build) ---
+try {
+  if (typeof checkCode === "function") window.checkCode = checkCode;
+} catch (e) {}
