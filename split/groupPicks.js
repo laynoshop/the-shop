@@ -250,13 +250,6 @@
   `;
 }
 
-  function getLeagueByKeySafe(key) {
-    if (typeof window.getLeagueByKey === "function") return window.getLeagueByKey(key);
-    // fallback: search LEAGUES
-    const list = Array.isArray(window.LEAGUES) ? window.LEAGUES : [];
-    return list.find(l => String(l.key) === String(key)) || null;
-  }
-
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
     // minimal fallback: init app if needed
@@ -329,23 +322,113 @@
     return { homeName, awayName, iso };
   }
 
-  async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
-    // Prefer your existing robust fetch helper if present
-    const league = getLeagueByKeySafe(leagueKey);
-    if (!league) return [];
+function getLeagueByKeySafe(key) {
+  // Prefer the shared/global version if it exists
+  if (typeof window.getLeagueByKey === "function") return window.getLeagueByKey(key);
 
-    if (typeof window.fetchScoreboardWithFallbacks === "function") {
+  const k = String(key || "").trim().toLowerCase();
+
+  // ✅ Hard fallback league defs WITH endpoint() so Picks can always fetch games
+  const FALLBACK = [
+    {
+      key: "ncaam",
+      name: "Men’s College Basketball",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
+    },
+    {
+      key: "cfb",
+      name: "College Football",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
+    },
+    {
+      key: "nba",
+      name: "NBA",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
+    },
+    {
+      key: "nhl",
+      name: "NHL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
+    },
+    {
+      key: "nfl",
+      name: "NFL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
+    },
+    {
+      key: "mlb",
+      name: "MLB",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
+    },
+    {
+      key: "pga",
+      name: "Golf (PGA)",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
+    }
+  ];
+
+  // If window.LEAGUES exists and contains endpoint(), use it.
+  const list = Array.isArray(window.LEAGUES) && window.LEAGUES.length ? window.LEAGUES : FALLBACK;
+
+  // Normalize items so we can always return something usable
+  const normalized = list
+    .map(l => ({
+      key: String(l?.key || "").trim().toLowerCase(),
+      name: String(l?.name || l?.label || l?.key || "").trim(),
+      endpoint: (typeof l?.endpoint === "function") ? l.endpoint : null
+    }))
+    .filter(l => l.key);
+
+  // Prefer a real match
+  const found = normalized.find(l => l.key === k);
+  if (found) {
+    // If endpoint missing, try to pull from fallback by key
+    if (typeof found.endpoint !== "function") {
+      const fb = FALLBACK.find(x => x.key === found.key);
+      return fb || found;
+    }
+    return found;
+  }
+
+  // Final fallback
+  return FALLBACK.find(x => x.key === "nfl") || FALLBACK[0] || null;
+}
+
+async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
+  const league = getLeagueByKeySafe(leagueKey);
+  if (!league) return [];
+
+  // Prefer your existing robust fetch helper if present
+  if (typeof window.fetchScoreboardWithFallbacks === "function") {
+    try {
       const sb = await window.fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
       return Array.isArray(sb?.events) ? sb.events : [];
+    } catch (e) {
+      // fall through to direct fetch
+      console.warn("fetchScoreboardWithFallbacks failed, using direct ESPN fetch:", e);
     }
+  }
 
-    // Basic fallback (direct ESPN)
-    const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
-    if (!url) return [];
-    const r = await fetch(url);
+  // Direct ESPN fetch using endpoint()
+  const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
+  if (!url) return [];
+
+  try {
+    const r = await fetch(url, { cache: "no-store" });
     const j = await r.json().catch(() => ({}));
     return Array.isArray(j?.events) ? j.events : [];
+  } catch (e) {
+    console.error("Direct ESPN fetch failed:", e);
+    return [];
   }
+}
 
   async function gpGetSlateGames(db, slateId) {
     const snap = await db.collection("pickSlates").doc(slateId).collection("games").get();
