@@ -44,3 +44,44 @@
   window.__SCARLETKEY_BUILD = "split-boot-OK";
   try { console.log("Boot OK:", window.__SCARLETKEY_BUILD); } catch {}
 })();
+
+// =========================
+// COUNTDOWN TO THE GAME
+// =========================
+(function () {
+
+  function getGameDate() {
+    // Adjust to the actual next Game date
+    // Example: Nov 29, 2025 at Noon
+    return new Date("November 29, 2025 12:00:00");
+  }
+
+  function updateCountdown() {
+    const target = getGameDate();
+    const now = new Date();
+    const diff = target - now;
+
+    if (diff <= 0) return;
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const mins = Math.floor((diff / (1000 * 60)) % 60);
+    const secs = Math.floor((diff / 1000) % 60);
+
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(val).padStart(2, "0");
+    };
+
+    set("cdDays", days);
+    set("cdHours", hours);
+    set("cdMins", mins);
+    set("cdSecs", secs);
+  }
+
+  window.startCountdown = function () {
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+  };
+
+})();
