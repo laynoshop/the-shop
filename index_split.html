@@ -27,7 +27,7 @@
           inputmode="numeric"
           autocomplete="one-time-code"
         />
-        <button id="loginBtn" type="button" onclick="window.checkCode && window.checkCode()">Unlock</button>
+        <button id="loginBtn" type="button" disabled>Loading…</button>
       </div>
 
       <div class="loginSub">Authorized members only</div>
@@ -67,46 +67,59 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-
-  <!-- Enter key triggers login + safe fallback if scripts still loading -->
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const code = document.getElementById("code");
-      const btn = document.getElementById("loginBtn");
-
-      function tryLogin() {
-        if (window.checkCode) return window.checkCode();
-        // If split scripts aren't loaded yet, give a clean message instead of doing nothing
-        alert("App is still loading — try again in a second.");
-      }
-
-      if (btn) btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        tryLogin();
-      });
-
-      if (code) {
-        code.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            tryLogin();
-          }
-        });
-      }
-    });
-  </script>
 
   <!-- Split scripts (order matters) -->
-  <script src="split/boot.js" defer></script>
-  <script src="split/shared.js" defer></script>
-  <script src="split/scores.js" defer></script>
-  <script src="split/beat.js" defer></script>
-  <script src="split/news.js" defer></script>
-  <script src="split/shop.js" defer></script>
-  <script src="split/logout.js" defer></script>
-  <script src="split/groupPicks.js" defer></script>
-  <script src="split/unitsPicks.js" defer></script>
-  <script src="split/app.js" defer></script>
+  <script src="split/boot.js"></script>
+  <script src="split/shared.js"></script>
+  <script src="split/scores.js"></script>
+  <script src="split/beat.js"></script>
+  <script src="split/news.js"></script>
+  <script src="split/shop.js"></script>
+  <script src="split/logout.js"></script>
+  <script src="split/groupPicks.js"></script>
+  <script src="split/unitsPicks.js"></script>
+  <script src="split/app.js"></script>
+
+  <!-- ✅ READY GATE: enables login only when checkCode exists -->
+  <script>
+    (function () {
+      const btn = document.getElementById("loginBtn");
+      const code = document.getElementById("code");
+
+      function tryEnable() {
+        if (typeof window.checkCode === "function") {
+          if (btn) { btn.disabled = false; btn.textContent = "Unlock"; }
+          if (btn) btn.onclick = () => window.checkCode();
+          if (code) {
+            code.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                window.checkCode();
+              }
+            });
+          }
+          return true;
+        }
+        return false;
+      }
+
+      if (tryEnable()) return;
+
+      // wait up to ~8 seconds, then show a clearer error
+      let ticks = 0;
+      const t = setInterval(() => {
+        ticks++;
+        if (tryEnable()) return clearInterval(t);
+        if (ticks >= 160) { // 160 * 50ms = 8s
+          clearInterval(t);
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Load error";
+            btn.onclick = () => alert("Split scripts failed to load. Open /index_split.html in Safari and check console.");
+          }
+        }
+      }, 50);
+    })();
+  </script>
 </body>
 </html>
