@@ -77,33 +77,97 @@
 
   function buildLeagueSelectHTMLSafe(selectedKey) {
   // If the shared/global version exists, use it
-  if (typeof window.buildLeagueSelectHTML === "function") return window.buildLeagueSelectHTML(selectedKey);
+  if (typeof window.buildLeagueSelectHTML === "function") {
+    return window.buildLeagueSelectHTML(selectedKey);
+  }
 
+  // -----------------------------
+  // Split-build fallback league selector (self-contained)
+  // -----------------------------
   const LEAGUE_KEY = "theShopLeague_v1";
-  const leagues = Array.isArray(window.LEAGUES) ? window.LEAGUES : [];
 
-  // If LEAGUES isn't available yet, fail soft (but don't break the page)
-  if (!leagues.length) return "";
+  // Minimal league list (matches the big script)
+  const LEAGUES_FALLBACK = [
+    {
+      key: "ncaam",
+      name: "Men’s College Basketball",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
+    },
+    {
+      key: "cfb",
+      name: "College Football",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
+    },
+    {
+      key: "nba",
+      name: "NBA",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
+    },
+    {
+      key: "nhl",
+      name: "NHL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
+    },
+    {
+      key: "nfl",
+      name: "NFL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
+    },
+    {
+      key: "mlb",
+      name: "MLB",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
+    },
+    {
+      key: "pga",
+      name: "Golf (PGA)",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
+    }
+  ];
 
-  // Ensure a valid selected key
-  const keys = new Set(leagues.map(l => String(l?.key || "")));
-  let cur = String(selectedKey || "").trim();
-  if (!cur || !keys.has(cur)) cur = String(leagues[0]?.key || "nfl");
+  function getLeaguesList() {
+    // Prefer a global list if your split build exposes one, else fallback
+    const list = Array.isArray(window.LEAGUES) && window.LEAGUES.length ? window.LEAGUES : LEAGUES_FALLBACK;
+    // ensure stable shape
+    return list
+      .map(l => ({ key: String(l.key || ""), name: String(l.name || l.label || l.key || "") }))
+      .filter(l => l.key);
+  }
 
-  // Global handler (needed for inline onchange)
+  function getValidSelectedKey(k) {
+    const list = getLeaguesList();
+    const wanted = String(k || "").trim();
+    if (list.some(x => x.key === wanted)) return wanted;
+    return (list[0] && list[0].key) ? list[0].key : "nfl";
+  }
+
+  function saveLeagueKey(k) {
+    const key = String(k || "").trim();
+    if (!key) return;
+    try { localStorage.setItem(LEAGUE_KEY, key); } catch {}
+  }
+
+  // Inline handler used by the <select onchange="...">
   if (typeof window.handleLeagueChangeFromEl !== "function") {
     window.handleLeagueChangeFromEl = function (el) {
       const v = String(el?.value || "").trim();
       if (!v) return;
 
-      try { localStorage.setItem(LEAGUE_KEY, v); } catch {}
-
-      // Prefer shared/global saver if it exists
+      // Prefer shared saver if it exists
       if (typeof window.saveLeagueKey === "function") {
-        try { window.saveLeagueKey(v); } catch {}
+        window.saveLeagueKey(v);
+      } else {
+        saveLeagueKey(v);
       }
 
-      // Re-render Picks
+      // Re-render Picks (prefer the router so tab state stays consistent)
       if (typeof window.showTab === "function") {
         window.showTab("picks");
       } else if (typeof window.renderPicks === "function") {
@@ -112,16 +176,15 @@
     };
   }
 
-  const options = leagues.map(l => {
-    const key = String(l?.key || "");
-    const label = String(l?.label || l?.name || key.toUpperCase());
-    const sel = (key === cur) ? "selected" : "";
-    return `<option value="${esc(key)}" ${sel}>${esc(label)}</option>`;
-  }).join("");
+  const leagues = getLeaguesList();
+  const sel = getValidSelectedKey(selectedKey);
 
-  // This matches the “pill select” look your CSS already styles
+  const options = leagues
+    .map(l => `<option value="${esc(l.key)}"${l.key === sel ? " selected" : ""}>${esc(l.name)}</option>`)
+    .join("");
+
   return `
-    <select class="leagueSelect" aria-label="Select league" onchange="handleLeagueChangeFromEl(this)">
+    <select class="leagueSelect" aria-label="Choose league" onchange="handleLeagueChangeFromEl(this)">
       ${options}
     </select>
   `;
