@@ -1,578 +1,733 @@
-/* =========================
-   GROUP PICKS (Pick'em Slate) — CLEAN + MATCHES WORKING UI
-   - Admin builds slate from ESPN games
-   - Admin sets lock time (datetime-local on card)
-   - Admin Create/Replace, then Publish
-   - Everyone sees published slate + everyone’s picks
+/* split/groupPicks.js
+   =========================
+   GROUP PICKS (Pick'em Slate) — SINGLE SOURCE for Picks tab
+   - Overrides any older Units picks renderPicks
+   - Admin: build slate from ESPN events, set lock time, Create/Replace, Publish
+   - Users: pick home/away, see everyone’s picks
    - NO UID UI
    ========================= */
 
-/** ✅ IMPORTANT FIX:
- * Ensure saved league key is REAL (must exist in LEAGUES).
- * This prevents “ncaab” (or any stale key) from breaking Picks/Slates.
- */
-function getSavedLeagueKey() {
-  let saved = "";
-  try {
-    saved = String(localStorage.getItem(LEAGUE_KEY) || "").trim();
-  } catch (e) {
-    saved = String((window.__SK_MEM && window.__SK_MEM[LEAGUE_KEY]) || "").trim();
+(function () {
+  "use strict";
+
+  // -----------------------------
+  // Safe helpers / fallbacks
+  // -----------------------------
+  const PICKS_NAME_KEY = "theShopPicksName_v1";
+
+  function safeGetLS(key) {
+    try { return String(localStorage.getItem(key) || ""); } catch { return ""; }
+  }
+  function safeSetLS(key, val) {
+    try { localStorage.setItem(key, String(val)); } catch {}
   }
 
-  const validKeys = new Set((LEAGUES || []).map(l => String(l.key || "")));
-  if (saved && validKeys.has(saved)) return saved;
-
-  const fallback =
-    (Array.isArray(LEAGUES) && LEAGUES[0] && LEAGUES[0].key)
-      ? String(LEAGUES[0].key)
-      : "nfl";
-
-  try { localStorage.setItem(LEAGUE_KEY, fallback); }
-  catch (e) {
-    window.__SK_MEM = window.__SK_MEM || {};
-    window.__SK_MEM[LEAGUE_KEY] = fallback;
+  function esc(s) {
+    if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
+    return String(s ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
-  return fallback;
-}
+  function norm(s) {
+    if (typeof window.norm === "function") return window.norm(s);
+    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
 
-function slateIdFor(leagueKey, dateYYYYMMDD) {
-  return `${leagueKey}__${dateYYYYMMDD}`;
-}
+  function getRole() {
+    if (typeof window.getRole === "function") return window.getRole();
+    const r = safeGetLS("theShopRole_v1").trim();
+    return (r === "admin" || r === "guest") ? r : "guest";
+  }
 
-function isPgaLeagueKey(k) {
-  return String(k || "").toLowerCase() === "pga";
-}
+  function getSavedLeagueKeySafe() {
+    if (typeof window.getSavedLeagueKey === "function") return window.getSavedLeagueKey();
+    // fallback
+    return safeGetLS("theShopLeague_v1").trim() || "nfl";
+  }
 
-function kickoffMsFromEvent(ev) {
-  const comp = ev?.competitions?.[0];
-  const iso = ev?.date || comp?.date || "";
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : 0;
-}
+  function getSavedDateYYYYMMDDSafe() {
+    if (typeof window.getSavedDateYYYYMMDD === "function") return window.getSavedDateYYYYMMDD();
+    // fallback: today
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    return `${y}${m}${da}`;
+  }
 
-function fmtKickoff(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
+  function yyyymmddToPrettySafe(yyyymmdd) {
+    if (typeof window.yyyymmddToPretty === "function") return window.yyyymmddToPretty(yyyymmdd);
+    const s = String(yyyymmdd || "");
+    if (s.length !== 8) return s;
+    const y = +s.slice(0, 4), m = +s.slice(4, 6) - 1, d = +s.slice(6, 8);
+    const dt = new Date(y, m, d);
+    return dt.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
 
-function getMatchupNamesFromEvent(ev) {
-  const comp = ev?.competitions?.[0];
-  const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-  const home = competitors.find(c => c.homeAway === "home");
-  const away = competitors.find(c => c.homeAway === "away");
+  function buildLeagueSelectHTMLSafe(selectedKey) {
+    if (typeof window.buildLeagueSelectHTML === "function") return window.buildLeagueSelectHTML(selectedKey);
+    return "";
+  }
 
-  const homeName = getTeamDisplayNameUI(home?.team) || "Home";
-  const awayName = getTeamDisplayNameUI(away?.team) || "Away";
-  const iso = ev?.date || comp?.date || "";
+  function buildCalendarButtonHTMLSafe() {
+    if (typeof window.buildCalendarButtonHTML === "function") return window.buildCalendarButtonHTML();
+    return "";
+  }
 
-  return { homeName, awayName, iso };
-}
+  function getLeagueByKeySafe(key) {
+    if (typeof window.getLeagueByKey === "function") return window.getLeagueByKey(key);
+    // fallback: search LEAGUES
+    const list = Array.isArray(window.LEAGUES) ? window.LEAGUES : [];
+    return list.find(l => String(l.key) === String(key)) || null;
+  }
 
-async function gpGetSlateGames(db, slateId) {
-  const snap = await db.collection("pickSlates").doc(slateId).collection("games").get();
-  const list = [];
-  snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+  async function ensureFirebaseReadySafe() {
+    if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
+    // minimal fallback: init app if needed
+    if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
+      firebase.initializeApp(window.FIREBASE_CONFIG);
+      try { await firebase.auth().signInAnonymously(); } catch {}
+    }
+  }
 
-  list.sort((a, b) => {
-    const at = a?.startTime?.toMillis ? a.startTime.toMillis() : 0;
-    const bt = b?.startTime?.toMillis ? b.startTime.toMillis() : 0;
-    return at - bt;
-  });
+  function getPicksDisplayName() {
+    // Prefer chat name if present
+    const existingChat = (safeGetLS("shopChatName") || "").trim();
+    if (existingChat) return existingChat.slice(0, 20);
 
-  return list;
-}
+    let name = (safeGetLS(PICKS_NAME_KEY) || "").trim();
+    if (!name) {
+      const picked = prompt("Name for Picks (example: Victor):", "") || "";
+      name = String(picked).trim() || "Anon";
+      safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
+    }
+    return name.slice(0, 20);
+  }
 
-async function gpGetMyPicksMap(db, slateId, uid) {
-  const snap = await db.collection("pickSlates").doc(slateId)
-    .collection("picks").doc(uid)
-    .collection("games")
-    .get();
+  function setPicksNameUI() {
+    const btn = document.querySelector('[data-gpaction="name"]');
+    if (btn) btn.textContent = "Name";
+  }
 
-  const map = {};
-  snap.forEach(d => map[d.id] = d.data());
-  return map;
-}
+  // -----------------------------
+  // Group picks storage model
+  // pickSlates/{league__date}
+  //   fields: leagueKey,dateYYYYMMDD,published,lockAt,...
+  //   games/{eventId} fields: eventId,homeName,awayName,startTime
+  //   picks/{uid} fields: uid,name,updatedAt
+  //     games/{eventId} fields: uid,name,side,updatedAt
+  // -----------------------------
+  function slateIdFor(leagueKey, dateYYYYMMDD) {
+    return `${leagueKey}__${dateYYYYMMDD}`;
+  }
 
-async function gpGetAllPicksForSlate(db, slateId) {
-  // Returns: { [eventId]: [ { uid, name, side } ] }
-  const out = {};
+  function kickoffMsFromEvent(ev) {
+    const comp = ev?.competitions?.[0];
+    const iso = ev?.date || comp?.date || "";
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? t : 0;
+  }
 
-  const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
-  const userDocs = usersSnap.docs || [];
+  function fmtKickoff(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
 
-  for (const u of userDocs) {
-    const uid = u.id;
+  function getMatchupNamesFromEvent(ev) {
+    const comp = ev?.competitions?.[0];
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const home = competitors.find(c => c.homeAway === "home");
+    const away = competitors.find(c => c.homeAway === "away");
 
-    const gamesSnap = await db.collection("pickSlates").doc(slateId)
-      .collection("picks").doc(uid)
-      .collection("games")
-      .get();
+    const homeName = (typeof window.getTeamDisplayNameUI === "function")
+      ? (window.getTeamDisplayNameUI(home?.team) || "Home")
+      : (home?.team?.displayName || home?.team?.name || "Home");
 
-    gamesSnap.forEach(d => {
-      const eventId = d.id;
-      const data = d.data() || {};
-      const name = String(data.name || "Someone");
-      const side = String(data.side || "");
+    const awayName = (typeof window.getTeamDisplayNameUI === "function")
+      ? (window.getTeamDisplayNameUI(away?.team) || "Away")
+      : (away?.team?.displayName || away?.team?.name || "Away");
 
-      if (!out[eventId]) out[eventId] = [];
-      out[eventId].push({ uid, name, side });
+    const iso = ev?.date || comp?.date || "";
+    return { homeName, awayName, iso };
+  }
+
+  async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
+    // Prefer your existing robust fetch helper if present
+    const league = getLeagueByKeySafe(leagueKey);
+    if (!league) return [];
+
+    if (typeof window.fetchScoreboardWithFallbacks === "function") {
+      const sb = await window.fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
+      return Array.isArray(sb?.events) ? sb.events : [];
+    }
+
+    // Basic fallback (direct ESPN)
+    const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
+    if (!url) return [];
+    const r = await fetch(url);
+    const j = await r.json().catch(() => ({}));
+    return Array.isArray(j?.events) ? j.events : [];
+  }
+
+  async function gpGetSlateGames(db, slateId) {
+    const snap = await db.collection("pickSlates").doc(slateId).collection("games").get();
+    const list = [];
+    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+
+    list.sort((a, b) => {
+      const at = a?.startTime?.toMillis ? a.startTime.toMillis() : 0;
+      const bt = b?.startTime?.toMillis ? b.startTime.toMillis() : 0;
+      return at - bt;
     });
+
+    return list;
   }
 
-  Object.keys(out).forEach(eventId => {
-    out[eventId].sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  });
+  async function gpGetMyPicksMap(db, slateId, uid) {
+    if (!uid) return {};
+    const snap = await db.collection("pickSlates").doc(slateId)
+      .collection("picks").doc(uid)
+      .collection("games").get();
 
-  return out;
-}
+    const map = {};
+    snap.forEach(d => map[d.id] = d.data());
+    return map;
+  }
 
-async function gpSaveMyPick(db, slateId, uid, eventId, side) {
-  const picksUserRef = db.collection("pickSlates").doc(slateId)
-    .collection("picks").doc(uid);
+  async function gpGetAllPicksForSlate(db, slateId) {
+    const out = {};
+    const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
+    const userDocs = usersSnap.docs || [];
 
-  const gameRef = picksUserRef.collection("games").doc(eventId);
+    for (const u of userDocs) {
+      const uid = u.id;
 
-  const name = (typeof getPicksDisplayName === "function")
-    ? String(getPicksDisplayName() || "Someone").trim()
-    : "Someone";
+      const gamesSnap = await db.collection("pickSlates").doc(slateId)
+        .collection("picks").doc(uid)
+        .collection("games").get();
 
-  // Ensure parent exists (so everyone-picks scan can find this user)
-  await picksUserRef.set({
-    uid: String(uid || ""),
-    name,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge: true });
+      gamesSnap.forEach(d => {
+        const eventId = d.id;
+        const data = d.data() || {};
+        const name = String(data.name || (u.data()?.name || "Someone"));
+        const side = String(data.side || "");
 
-  await gameRef.set({
-    uid: String(uid || ""),
-    name,
-    side: String(side || ""),
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-}
+        if (!out[eventId]) out[eventId] = [];
+        out[eventId].push({ uid, name, side });
+      });
+    }
 
-async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events) {
-  const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
-  const slateRef = db.collection("pickSlates").doc(slateId);
+    Object.keys(out).forEach(eventId => {
+      out[eventId].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    });
 
-  await slateRef.set({
-    leagueKey,
-    dateYYYYMMDD,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    createdBy: uid,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedBy: uid
-  }, { merge: true });
+    return out;
+  }
 
-  // TRUE replace: delete all existing games docs
-  const existingSnap = await slateRef.collection("games").get();
-  const batch = db.batch();
-  existingSnap.forEach(doc => batch.delete(doc.ref));
-  await batch.commit();
+  async function gpSaveMyPick(db, slateId, uid, eventId, side) {
+    const picksUserRef = db.collection("pickSlates").doc(slateId)
+      .collection("picks").doc(uid);
 
-  for (const ev of (events || [])) {
-    const eventId = String(ev?.id || "");
-    if (!eventId) continue;
-    if (!selectedEventIds.has(eventId)) continue;
+    const gameRef = picksUserRef.collection("games").doc(eventId);
 
-    const { homeName, awayName } = getMatchupNamesFromEvent(ev);
+    const name = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
 
-    const startMs = kickoffMsFromEvent(ev);
-    const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
-
-    await slateRef.collection("games").doc(eventId).set({
-      eventId,
-      homeName,
-      awayName,
-      startTime,
+    await picksUserRef.set({
+      uid: String(uid || ""),
+      name,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    await gameRef.set({
+      uid: String(uid || ""),
+      name,
+      side: String(side || ""),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   }
 
-  return slateId;
-}
+  async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events) {
+    const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
+    const slateRef = db.collection("pickSlates").doc(slateId);
 
-async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockDate) {
-  const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
-  const slateRef = db.collection("pickSlates").doc(slateId);
+    await slateRef.set({
+      leagueKey,
+      dateYYYYMMDD,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdBy: uid,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid
+    }, { merge: true });
 
-  if (!(lockDate instanceof Date) || isNaN(lockDate.getTime())) {
-    alert("Please set a valid Lock Time before publishing.");
-    return null;
+    // Replace games collection
+    const existingSnap = await slateRef.collection("games").get();
+    const batch = db.batch();
+    existingSnap.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    for (const ev of (events || [])) {
+      const eventId = String(ev?.id || "");
+      if (!eventId) continue;
+      if (!selectedEventIds.has(eventId)) continue;
+
+      const { homeName, awayName } = getMatchupNamesFromEvent(ev);
+
+      const startMs = kickoffMsFromEvent(ev);
+      const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
+
+      await slateRef.collection("games").doc(eventId).set({
+        eventId,
+        homeName,
+        awayName,
+        startTime,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
+    return slateId;
   }
 
-  await slateRef.set({
-    published: true,
-    publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    publishedBy: uid,
-    lockAt: firebase.firestore.Timestamp.fromDate(lockDate)
-  }, { merge: true });
+  async function gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockDate) {
+    const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
+    const slateRef = db.collection("pickSlates").doc(slateId);
 
-  return slateId;
-}
+    if (!(lockDate instanceof Date) || isNaN(lockDate.getTime())) {
+      alert("Please set a valid Lock Time before publishing.");
+      return null;
+    }
 
-function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
-  const now = Date.now();
-  const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+    await slateRef.set({
+      published: true,
+      publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      publishedBy: uid,
+      lockAt: firebase.firestore.Timestamp.fromDate(lockDate)
+    }, { merge: true });
 
-  const rows = sorted.map(ev => {
-    const eventId = String(ev?.id || "");
-    if (!eventId) return "";
-    const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
+    return slateId;
+  }
 
-    const startMs = kickoffMsFromEvent(ev);
-    const started = startMs ? (startMs <= now) : false;
+  function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
+    const now = Date.now();
+    const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+
+    const rows = sorted.map(ev => {
+      const eventId = String(ev?.id || "");
+      if (!eventId) return "";
+      const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
+
+      const startMs = kickoffMsFromEvent(ev);
+      const started = startMs ? (startMs <= now) : false;
+
+      return `
+        <div class="gpAdminRow">
+          <label class="gpAdminLabel">
+            <input type="checkbox" checked data-gpcheck="1" data-eid="${esc(eventId)}" />
+            <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
+            <span class="muted gpAdminTime">${esc(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
+          </label>
+        </div>
+      `;
+    }).join("");
 
     return `
-      <div class="gpAdminRow">
-        <label class="gpAdminLabel">
-          <input type="checkbox" data-gpcheck="1" data-eid="${escapeHtml(eventId)}" />
-          <span class="gpAdminText">${escapeHtml(awayName)} @ ${escapeHtml(homeName)}</span>
-          <span class="muted gpAdminTime">${escapeHtml(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
-        </label>
+      <div class="game" data-gpadminwrap="1" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
+        <div class="gameHeader">
+          <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
+        </div>
+
+        <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(dateYYYYMMDD)}</div>
+        <div class="gameMetaOddsLine">Select games, set lock time, then Create/Replace and Publish.</div>
+
+        <div style="margin-top:12px;">
+          <label style="display:block; margin-bottom:6px;">
+            Lock Time:
+            <input type="datetime-local" data-gplock="1" />
+          </label>
+          <div class="muted" style="margin-top:4px;">Local time on this device.</div>
+        </div>
+
+        <div style="margin-top:8px;">
+          ${rows || `<div class="notice">No games to build a slate from.</div>`}
+        </div>
+
+        <div style="margin-top:12px; display:flex; gap:8px;">
+          <button class="smallBtn" data-gpadmin="create" data-league="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">Create/Replace Slate</button>
+          <button class="smallBtn" data-gpadmin="publish" data-league="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">Publish Slate</button>
+        </div>
+
+        <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
       </div>
     `;
-  }).join("");
+  }
 
-  return `
-    <div class="game" data-gpadminwrap="1" data-leaguekey="${escapeHtml(leagueKey)}" data-date="${escapeHtml(dateYYYYMMDD)}">
-      <div class="gameHeader">
-        <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
-      </div>
+  function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
+    if (!published) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GROUP PICKS</div>
+          </div>
+          <div class="gameMetaTopLine">No slate published yet</div>
+          <div class="gameMetaOddsLine">Waiting on admin.</div>
+        </div>
+      `;
+    }
 
-      <div class="gameMetaTopLine">
-        ${escapeHtml(String(leagueKey || "").toUpperCase())} • ${escapeHtml(dateYYYYMMDD)}
-      </div>
+    const lockMs = lockAt?.toMillis ? lockAt.toMillis() : 0;
+    const lockLine = lockMs
+      ? `Locks at ${new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : "Picks lock at game start";
 
-      <div class="gameMetaOddsLine">
-        Select games, set lock time, then Create/Replace and Publish.
-      </div>
+    const now = Date.now();
 
-      <div style="margin-top:12px;">
-        <label style="display:block; margin-bottom:6px;">
-          Lock Time:
-          <input type="datetime-local" data-gplock="1" />
-        </label>
-        <div class="muted" style="margin-top:4px;">Local time on this device.</div>
-      </div>
+    const rows = (games || []).map(g => {
+      const eventId = String(g?.eventId || g?.id || "");
+      if (!eventId) return "";
 
-      <div style="margin-top:8px;">
-        ${rows || `<div class="notice">No games to build a slate from.</div>`}
-      </div>
+      const homeName = String(g?.homeName || "Home");
+      const awayName = String(g?.awayName || "Away");
 
-      <div style="margin-top:12px; display:flex; gap:8px;">
-        <button
-          class="smallBtn"
-          data-gpadmin="create"
-          data-league="${escapeHtml(leagueKey)}"
-          data-date="${escapeHtml(dateYYYYMMDD)}">
-          Create/Replace Slate
-        </button>
+      const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
 
-        <button
-          class="smallBtn"
-          data-gpadmin="publish"
-          data-league="${escapeHtml(leagueKey)}"
-          data-date="${escapeHtml(dateYYYYMMDD)}">
-          Publish Slate
-        </button>
-      </div>
+      // Lock behavior:
+      // - If lockAt exists, lock at lockAt
+      // - Otherwise lock at game start
+      const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
-      <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
-    </div>
-  `;
-}
+      const my = myMap?.[eventId]?.side || "";
 
-function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
-  if (!published) {
+      const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+      const everyoneLines = everyone.length
+        ? everyone.map(p => {
+            const nm = String(p?.name || "Someone");
+            const side = String(p?.side || "");
+            const pickedTeam = (side === "away") ? awayName : (side === "home" ? homeName : "—");
+            return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(pickedTeam)}</div>`;
+          }).join("")
+        : `<div class="muted">No picks yet.</div>`;
+
+      return `
+        <div class="gpGameRow">
+          <div class="gpMatchup">
+            <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
+            <div class="muted">
+              ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
+              ${locked ? " • LOCKED" : ""}
+            </div>
+          </div>
+
+          <div class="gpButtons">
+            <button class="gpBtn ${my === "away" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
+              data-gppick="away" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
+              ${esc(awayName)}
+            </button>
+
+            <button class="gpBtn ${my === "home" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
+              data-gppick="home" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
+              ${esc(homeName)}
+            </button>
+          </div>
+
+          <details class="gpEveryone" ${locked ? "open" : ""}>
+            <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
+            <div class="gpEveryoneBody">${everyoneLines}</div>
+          </details>
+        </div>
+      `;
+    }).join("");
+
     return `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">GROUP PICKS</div>
         </div>
-        <div class="gameMetaTopLine">No slate published yet</div>
-        <div class="gameMetaOddsLine">Waiting on admin.</div>
+        <div class="gameMetaTopLine">Slate is live</div>
+        <div class="gameMetaOddsLine">${esc(lockLine)}</div>
+        ${rows || `<div class="notice">No games in slate.</div>`}
       </div>
     `;
   }
 
-  const lockMs = lockAt?.toMillis ? lockAt.toMillis() : 0;
+  // -----------------------------
+  // Main Picks renderer (this is what showTab('picks') calls)
+  // -----------------------------
+  async function renderPicks(showLoading) {
+    const content = document.getElementById("content");
+    if (!content) return;
 
-  const rows = (games || []).map(g => {
-    const eventId = String(g?.eventId || g?.id || "");
-    if (!eventId) return "";
+    const selectedDate = getSavedDateYYYYMMDDSafe();
+    const selectedKey = getSavedLeagueKeySafe();
+    const prettyDate = yyyymmddToPrettySafe(selectedDate);
 
-    const homeName = String(g?.homeName || "Home");
-    const awayName = String(g?.awayName || "Away");
+    if (showLoading) {
+      content.innerHTML = `
+        ${renderPicksHeaderHTML(prettyDate, "Loading…", selectedKey)}
+        <div class="notice">Loading picks…</div>
+      `;
+    }
 
-    const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-    const locked = startMs ? (Date.now() >= startMs) : false;
+    try {
+      await ensureFirebaseReadySafe();
 
-    const my = myMap?.[eventId]?.side || "";
-
-    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
-    const everyoneLines = everyone.length
-      ? everyone.map(p => {
-          const nm = String(p?.name || "Someone");
-          const side = String(p?.side || "");
-          const pickedTeam = (side === "away") ? awayName : (side === "home" ? homeName : "—");
-          return `<div class="gpPickLine"><b>${escapeHtml(nm)}:</b> ${escapeHtml(pickedTeam)}</div>`;
-        }).join("")
-      : `<div class="muted">No picks yet.</div>`;
-
-    return `
-      <div class="gpGameRow">
-        <div class="gpMatchup">
-          <div class="gpTeams">${escapeHtml(awayName)} @ ${escapeHtml(homeName)}</div>
-          <div class="muted">
-            ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
-            ${locked ? " • LOCKED" : ""}
-          </div>
-        </div>
-
-        <div class="gpButtons">
-          <button class="gpBtn ${my === "away" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
-            data-gppick="away" data-slate="${escapeHtml(slateId)}" data-eid="${escapeHtml(eventId)}">
-            ${escapeHtml(awayName)}
-          </button>
-
-          <button class="gpBtn ${my === "home" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
-            data-gppick="home" data-slate="${escapeHtml(slateId)}" data-eid="${escapeHtml(eventId)}">
-            ${escapeHtml(homeName)}
-          </button>
-        </div>
-
-        <details class="gpEveryone" ${locked ? "open" : ""}>
-          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-          <div class="gpEveryoneBody">
-            ${everyoneLines}
-          </div>
-        </details>
-      </div>
-    `;
-  }).join("");
-
-  const lockLine = lockMs
-    ? `Locks at ${new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-    : "Picks lock at game start";
-
-  return `
-    <div class="game">
-      <div class="gameHeader">
-        <div class="statusPill status-other">GROUP PICKS</div>
-      </div>
-      <div class="gameMetaTopLine">Slate is live</div>
-      <div class="gameMetaOddsLine">${escapeHtml(lockLine)}</div>
-      ${rows || `<div class="notice">No games in slate.</div>`}
-    </div>
-  `;
-}
-
-/* =========================
-   ✅ Drop-in for renderPicks() GROUP PICKS section
-   Replace ONLY the "GROUP PICKS" part inside renderPicks with this helper.
-   ========================= */
-
-async function gpRenderSectionHTML({ db, selectedKey, selectedDate, events }) {
-  let groupPicksHTML = "";
-
-  const role = getRole();
-  const uid = firebase.auth().currentUser?.uid || "";
-
-  if (isPgaLeagueKey(selectedKey)) return ""; // skip PGA
-
-  const eventsSorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
-
-  const adminHTML = (role === "admin")
-    ? gpBuildAdminSlateHTML(eventsSorted, selectedKey, selectedDate)
-    : "";
-
-  const sid = slateIdFor(selectedKey, selectedDate);
-  const slateRef = db.collection("pickSlates").doc(sid);
-  const slateSnap = await slateRef.get();
-
-  if (!slateSnap.exists) {
-    groupPicksHTML =
-      adminHTML +
-      gpBuildGroupPicksCardHTML({
-        slateId: sid,
-        games: [],
-        myMap: {},
-        allPicks: {},
-        published: false
-      });
-    return groupPicksHTML;
-  }
-
-  const slateData = slateSnap.data() || {};
-  const isPublished = slateData.published === true;
-
-  if (!isPublished && role !== "admin") {
-    groupPicksHTML =
-      gpBuildGroupPicksCardHTML({
-        slateId: sid,
-        games: [],
-        myMap: {},
-        allPicks: {},
-        published: false
-      });
-    return groupPicksHTML;
-  }
-
-  const slateGames = await gpGetSlateGames(db, sid);
-  const myMap = uid ? await gpGetMyPicksMap(db, sid, uid) : {};
-  const allPicks = await gpGetAllPicksForSlate(db, sid);
-
-  groupPicksHTML =
-    adminHTML +
-    gpBuildGroupPicksCardHTML({
-      slateId: sid,
-      games: slateGames,
-      myMap,
-      allPicks,
-      published: isPublished,
-      lockAt: slateData.lockAt || null
-    });
-
-  return groupPicksHTML;
-}
-
-/* =========================
-   ✅ Replace your GROUP PICKS click handling with this
-   (inside your existing document.addEventListener("click", ...) )
-   ========================= */
-
-// --- GROUP PICKS actions ---
-// (A) User pick buttons (home/away)
-function __handleGroupPickClick(btn) {
-  const gpPick = btn.getAttribute("data-gppick");
-  if (!gpPick) return false;
-
-  const slateId = btn.getAttribute("data-slate") || "";
-  const eventId = btn.getAttribute("data-eid") || "";
-
-  ensureFirebaseChatReady()
-    .then(async () => {
-      const db = firebase.firestore();
-      const uid = firebase.auth().currentUser?.uid || "";
-      if (!uid) throw new Error("No uid (not signed in)");
-      await gpSaveMyPick(db, slateId, uid, eventId, gpPick);
-    })
-    .then(() => renderPicks(true))
-    .catch((err) => {
-      console.error("gpSaveMyPick error:", err);
-      const code = err?.code ? `\n\nCode: ${err.code}` : "";
-      const msg = err?.message ? `\n${err.message}` : "";
-      alert("Couldn’t save pick." + code + msg);
-    });
-
-  return true;
-}
-
-// (B) Admin slate buttons (create/publish)
-function __handleGroupAdminClick(btn) {
-  const gpAdmin = btn.getAttribute("data-gpadmin");
-  if (!gpAdmin) return false;
-
-  const leagueKey = btn.getAttribute("data-league") || "";
-  const dateYYYYMMDD = btn.getAttribute("data-date") || "";
-
-  ensureFirebaseChatReady()
-    .then(async () => {
-      const roleLocal = getRole();
-      if (roleLocal !== "admin") {
-        alert("Admin only.");
-        return;
+      // Ensure auth user exists
+      const user = firebase?.auth?.().currentUser;
+      if (!user) {
+        // If your ensureFirebaseChatReady signs in, this will usually be non-null.
+        // If not, attempt anonymous sign-in.
+        try { await firebase.auth().signInAnonymously(); } catch {}
       }
 
       const db = firebase.firestore();
       const uid = firebase.auth().currentUser?.uid || "";
-      if (!uid) throw new Error("No uid (not signed in)");
 
-      // Confirm server role doc exists (rules depend on this)
-      const userSnap = await db.collection("users").doc(uid).get();
-      const serverRole = userSnap.exists ? String((userSnap.data() || {}).role || "") : "";
-      if (serverRole !== "admin") {
-        alert(
-          "Your account is not admin on the server yet.\n\n" +
-          "Fix:\n1) Log out\n2) Enter the ADMIN invite code again\n\n" +
-          "That creates users/{uid}.role = admin."
-        );
-        return;
-      }
+      // Fetch ESPN events for admin slate builder
+      const role = getRole();
+      const events = await fetchEventsFor(selectedKey, selectedDate);
 
-      const statusEl = document.getElementById("gpAdminStatus");
-      if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
+      const adminHTML = (role === "admin")
+        ? gpBuildAdminSlateHTML(events, selectedKey, selectedDate)
+        : "";
 
-      const wrap = btn.closest('[data-gpadminwrap="1"]');
-      const lockVal = (wrap?.querySelector('input[data-gplock="1"]')?.value || "").trim();
-      const lockDate = lockVal ? new Date(lockVal) : null;
-
-      // Read checked games
-      const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
-      const selected = new Set(
-        checks
-          .filter(c => c.checked)
-          .map(c => String(c.getAttribute("data-eid") || ""))
-          .filter(Boolean)
-      );
-
-      const sid = slateIdFor(leagueKey, dateYYYYMMDD);
+      const sid = slateIdFor(selectedKey, selectedDate);
       const slateRef = db.collection("pickSlates").doc(sid);
+      const slateSnap = await slateRef.get();
 
-      if (gpAdmin === "create") {
-        if (selected.size === 0) {
-          if (statusEl) statusEl.textContent = "Select at least 1 game first.";
-          alert("Select at least 1 game first.");
-          return;
-        }
-
-        const league = getLeagueByKey(leagueKey);
-        const sb = await fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
-        const events = sb.events || [];
-
-        await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
-
-        const gamesSnap = await slateRef.collection("games").get();
-        const gameCount = gamesSnap.size || 0;
-
-        if (statusEl) statusEl.textContent = `Slate saved ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
+      if (!slateSnap.exists) {
+        content.innerHTML = `
+          ${renderPicksHeaderHTML(prettyDate, "Updated", selectedKey)}
+          ${adminHTML}
+          ${gpBuildGroupPicksCardHTML({ slateId: sid, games: [], myMap: {}, allPicks: {}, published: false })}
+        `;
+        postRender();
         return;
       }
 
-      if (gpAdmin === "publish") {
-        const slateSnap = await slateRef.get();
-        if (!slateSnap.exists) {
-          if (statusEl) statusEl.textContent = "Create the slate first.";
-          alert("No slate exists yet. Tap Create/Replace Slate first.");
-          return;
-        }
+      const slateData = slateSnap.data() || {};
+      const published = slateData.published === true;
 
-        if (!lockDate || isNaN(lockDate.getTime())) {
-          if (statusEl) statusEl.textContent = "Set a valid lock time first.";
-          alert("Set a valid lock time first (use the Lock Time field).");
-          return;
-        }
+      // Guests shouldn’t see builder; they’ll just see waiting card until published
+      if (!published && role !== "admin") {
+        content.innerHTML = `
+          ${renderPicksHeaderHTML(prettyDate, "Updated", selectedKey)}
+          ${gpBuildGroupPicksCardHTML({ slateId: sid, games: [], myMap: {}, allPicks: {}, published: false })}
+        `;
+        postRender();
+        return;
+      }
 
-        await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockDate);
+      const games = await gpGetSlateGames(db, sid);
+      const myMap = await gpGetMyPicksMap(db, sid, uid);
+      const allPicks = await gpGetAllPicksForSlate(db, sid);
 
-        if (statusEl) statusEl.textContent =
-          `Slate published ✅ (locks at ${lockDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
+      content.innerHTML = `
+        ${renderPicksHeaderHTML(prettyDate, "Updated", selectedKey)}
+        ${adminHTML}
+        ${gpBuildGroupPicksCardHTML({
+          slateId: sid,
+          games,
+          myMap,
+          allPicks,
+          published,
+          lockAt: slateData.lockAt || null
+        })}
+      `;
+
+      postRender();
+    } catch (err) {
+      console.error("renderPicks error:", err);
+      content.innerHTML = `
+        ${renderPicksHeaderHTML(yyyymmddToPrettySafe(getSavedDateYYYYMMDDSafe()), "Error", getSavedLeagueKeySafe())}
+        <div class="notice">Couldn’t load Picks right now.</div>
+      `;
+      postRender();
+    }
+  }
+
+  function renderPicksHeaderHTML(prettyDate, rightLabel, selectedKey) {
+    // Match your header pattern used elsewhere
+    return `
+      <div class="header">
+        <div class="headerTop">
+          <div class="brand">
+            <h2 style="margin:0;">Picks</h2>
+            <span class="badge">Group</span>
+          </div>
+
+          <div class="headerActions">
+            <button class="smallBtn" data-gpaction="name">Name</button>
+            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
+          </div>
+        </div>
+
+        <div class="subline">
+          <div class="sublineLeft">
+            ${buildLeagueSelectHTMLSafe(selectedKey)}
+            ${buildCalendarButtonHTMLSafe()}
+            <button class="iconBtn" data-gpaction="addQuick" title="Add pick">＋</button>
+          </div>
+          <div>${esc(prettyDate)} • ${esc(rightLabel || "")}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function postRender() {
+    try { setPicksNameUI(); } catch {}
+    try {
+      if (typeof window.replaceMichiganText === "function") setTimeout(() => window.replaceMichiganText(), 0);
+    } catch {}
+    try {
+      if (typeof window.updateRivalryBanner === "function") window.updateRivalryBanner();
+    } catch {}
+  }
+
+  // -----------------------------
+  // Click handling (delegated)
+  // -----------------------------
+  if (!window.__GP_CLICK_BOUND) {
+    document.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest("button") : null;
+      if (!btn) return;
+
+      // Header actions
+      const act = btn.getAttribute("data-gpaction");
+      if (act === "refresh") {
+        renderPicks(true);
+        return;
+      }
+      if (act === "name") {
+        const cur = getPicksDisplayName();
+        const picked = prompt("Enter name for Picks:", cur) || "";
+        const name = String(picked).trim();
+        if (name) safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
+        renderPicks(true);
+        return;
+      }
+      if (act === "addQuick") {
+        alert("Quick-add is coming soon. Group Picks slate is the main workflow.");
+        return;
+      }
+
+      // User pick buttons
+      const gpPick = btn.getAttribute("data-gppick");
+      if (gpPick) {
+        const slateId = btn.getAttribute("data-slate") || "";
+        const eventId = btn.getAttribute("data-eid") || "";
+
+        ensureFirebaseReadySafe()
+          .then(async () => {
+            const db = firebase.firestore();
+            const uid = firebase.auth().currentUser?.uid || "";
+            if (!uid) throw new Error("No uid (not signed in)");
+            await gpSaveMyPick(db, slateId, uid, eventId, gpPick);
+          })
+          .then(() => renderPicks(true))
+          .catch((err) => {
+            console.error("gpSaveMyPick error:", err);
+            const code = err?.code ? `\n\nCode: ${err.code}` : "";
+            const msg = err?.message ? `\n${err.message}` : "";
+            alert("Couldn’t save pick." + code + msg);
+          });
 
         return;
       }
-    })
-    .then(() => renderPicks(true))
-    .catch((err) => {
-      console.error("gpAdmin error:", err);
-      const code = err?.code ? `\n\nCode: ${err.code}` : "";
-      const msg = err?.message ? `\n${err.message}` : "";
-      alert("Admin action failed." + code + msg);
+
+      // Admin actions
+      const gpAdmin = btn.getAttribute("data-gpadmin");
+      if (gpAdmin) {
+        const leagueKey = btn.getAttribute("data-league") || "";
+        const dateYYYYMMDD = btn.getAttribute("data-date") || "";
+
+        ensureFirebaseReadySafe()
+          .then(async () => {
+            const role = getRole();
+            if (role !== "admin") {
+              alert("Admin only.");
+              return;
+            }
+
+            const db = firebase.firestore();
+            const uid = firebase.auth().currentUser?.uid || "";
+            if (!uid) throw new Error("No uid (not signed in)");
+
+            const statusEl = document.getElementById("gpAdminStatus");
+            if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
+
+            const wrap = btn.closest('[data-gpadminwrap="1"]');
+            const lockVal = (wrap?.querySelector('input[data-gplock="1"]')?.value || "").trim();
+            const lockDate = lockVal ? new Date(lockVal) : null;
+
+            // Read checked games
+            const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
+            const selected = new Set(
+              checks
+                .filter(c => c.checked)
+                .map(c => String(c.getAttribute("data-eid") || ""))
+                .filter(Boolean)
+            );
+
+            const sid = slateIdFor(leagueKey, dateYYYYMMDD);
+            const slateRef = db.collection("pickSlates").doc(sid);
+
+            if (gpAdmin === "create") {
+              if (selected.size === 0) {
+                if (statusEl) statusEl.textContent = "Select at least 1 game first.";
+                alert("Select at least 1 game first.");
+                return;
+              }
+
+              const events = await fetchEventsFor(leagueKey, dateYYYYMMDD);
+              await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
+
+              const gamesSnap = await slateRef.collection("games").get();
+              const gameCount = gamesSnap.size || 0;
+
+              if (statusEl) statusEl.textContent = `Slate saved ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
+              return;
+            }
+
+            if (gpAdmin === "publish") {
+              const slateSnap = await slateRef.get();
+              if (!slateSnap.exists) {
+                if (statusEl) statusEl.textContent = "Create the slate first.";
+                alert("No slate exists yet. Tap Create/Replace Slate first.");
+                return;
+              }
+
+              if (!lockDate || isNaN(lockDate.getTime())) {
+                if (statusEl) statusEl.textContent = "Set a valid lock time first.";
+                alert("Set a valid lock time first (use the Lock Time field).");
+                return;
+              }
+
+              await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockDate);
+
+              if (statusEl) statusEl.textContent =
+                `Slate published ✅ (locks at ${lockDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
+
+              return;
+            }
+          })
+          .then(() => renderPicks(true))
+          .catch((err) => {
+            console.error("gpAdmin error:", err);
+            const code = err?.code ? `\n\nCode: ${err.code}` : "";
+            const msg = err?.message ? `\n${err.message}` : "";
+            alert("Admin action failed." + code + msg);
+          });
+
+        return;
+      }
     });
 
-  return true;
-}
+    window.__GP_CLICK_BOUND = true;
+  }
+
+  // Expose renderer used by shared tab router
+  window.renderPicks = renderPicks;
+
+})();
