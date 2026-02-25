@@ -55,13 +55,16 @@
   <!-- APP -->
   <div id="app" style="display:none;">
     <div id="content"></div>
-
-    <!-- Tabs row (must sit directly above rivalry banner) -->
     <div class="tabs"></div>
-
-    <!-- Rivalry banner fixed at the VERY bottom -->
     <div id="rivalryBanner" class="rivalryBanner"></div>
   </div>
+
+  <script>
+    // If any script 404s, you'll get an instant alert telling you which one.
+    window.__splitFail = function (file) {
+      alert("❌ Failed to load: " + file + "\nCheck that it exists at /" + file + " (case-sensitive) and is pushed to GitHub.");
+    };
+  </script>
 
   <!-- Firebase SDKs (compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -69,21 +72,20 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
   <!-- ✅ SPLIT BUILD (order matters) -->
-  <script src="split/boot.js" defer></script>
-  <script src="split/shared.js" defer></script>
+  <script src="split/boot.js" defer onerror="__splitFail('split/boot.js')"></script>
+  <script src="split/shared.js" defer onerror="__splitFail('split/shared.js')"></script>
 
-  <script src="split/scores.js" defer></script>
-  <script src="split/news.js" defer></script>
-  <script src="split/beat.js" defer></script>
-  <script src="split/shop.js" defer></script>
+  <script src="split/scores.js" defer onerror="__splitFail('split/scores.js')"></script>
+  <script src="split/news.js" defer onerror="__splitFail('split/news.js')"></script>
+  <script src="split/beat.js" defer onerror="__splitFail('split/beat.js')"></script>
+  <script src="split/shop.js" defer onerror="__splitFail('split/shop.js')"></script>
 
-  <script src="split/unitsPicks.js" defer></script>
-  <script src="split/groupPicks.js" defer></script>
+  <script src="split/unitsPicks.js" defer onerror="__splitFail('split/unitsPicks.js')"></script>
+  <script src="split/groupPicks.js" defer onerror="__splitFail('split/groupPicks.js')"></script>
 
-  <!-- App exports LAST -->
-  <script src="split/app.js" defer></script>
+  <script src="split/app.js" defer onerror="__splitFail('split/app.js')"></script>
 
-  <!-- ✅ READY GATE: enables login only when checkCode exists -->
+  <!-- ✅ READY GATE -->
   <script>
     (function () {
       const btn = document.getElementById("loginBtn");
@@ -108,17 +110,16 @@
 
       if (tryEnable()) return;
 
-      // wait up to ~8 seconds, then show a clearer error
       let ticks = 0;
       const t = setInterval(() => {
         ticks++;
         if (tryEnable()) return clearInterval(t);
-        if (ticks >= 160) { // 160 * 50ms = 8s
+        if (ticks >= 160) {
           clearInterval(t);
           if (btn) {
             btn.disabled = true;
             btn.textContent = "Load error";
-            btn.onclick = () => alert("Split scripts failed to load. Open /index_split.html in Safari and check console.");
+            btn.onclick = () => alert("Split scripts loaded but checkCode was not found. Next step: tell me if you saw ANY ❌ alert and which file it named.");
           }
         }
       }, 50);
