@@ -1,1 +1,98 @@
-TEST
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#bb0000" />
+  <title>The Shop</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <!-- LOGIN -->
+  <div id="login">
+    <div class="loginCard">
+      <div class="loginTop">
+        <div class="loginKicker">The Shop</div>
+        <div class="loginTitle">Enter the Scarlet Key</div>
+      </div>
+
+      <div class="loginRow">
+        <input
+          type="password"
+          id="code"
+          placeholder="Scarlet Key"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+        />
+        <button id="loginBtn" type="button" onclick="checkCode()">Unlock</button>
+      </div>
+
+      <div class="loginSub">Authorized members only</div>
+    </div>
+  </div>
+
+  <!-- ENTRY (Doors) -->
+  <div id="entry" style="display:none;">
+    <div class="entryWrap">
+      <div class="entryHeader">
+        <div class="entryTitle">The Shop</div>
+        <div class="entrySub">446 DAYS SINCE TTUN WON IN THE GAME</div>
+      </div>
+
+      <div class="doors">
+        <button class="doorBtn" data-go="scores">Scores</button>
+        <button class="doorBtn" data-go="picks">Picks</button>
+        <button class="doorBtn" data-go="beat">Beat TTUN</button>
+        <button class="doorBtn" data-go="news">Top News</button>
+        <button class="doorBtn" data-go="shop">Shop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" style="display:none;">
+    <div id="content"></div>
+
+    <!-- Tabs row (must sit directly above rivalry banner) -->
+    <div class="tabs"></div>
+
+    <!-- Rivalry banner fixed at the VERY bottom -->
+    <div id="rivalryBanner" class="rivalryBanner"></div>
+  </div>
+
+  <!-- Firebase SDKs (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- Enter key triggers login -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const code = document.getElementById("code");
+      if (code) {
+        code.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            window.checkCode && window.checkCode();
+          }
+        });
+      }
+    });
+  </script>
+
+  <!-- Split scripts (order matters) -->
+  <script src="split/boot.js" defer></script>
+  <script src="split/shared.js" defer></script>
+  <script src="split/scores.js" defer></script>
+  <script src="split/beat.js" defer></script>
+  <script src="split/news.js" defer></script>
+  <script src="split/shop.js" defer></script>
+  <script src="split/logout.js" defer></script>
+  <script src="split/groupPicks.js" defer></script>
+  <script src="split/unitsPicks.js" defer></script>
+  <script src="split/app.js" defer></script>
+</body>
+</html>
