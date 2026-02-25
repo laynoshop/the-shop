@@ -27,7 +27,7 @@
           inputmode="numeric"
           autocomplete="one-time-code"
         />
-        <button id="loginBtn" type="button" onclick="checkCode()">Unlock</button>
+        <button id="loginBtn" type="button" onclick="window.checkCode && window.checkCode()">Unlock</button>
       </div>
 
       <div class="loginSub">Authorized members only</div>
@@ -67,16 +67,30 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 
-  <!-- Enter key triggers login -->
+  <!-- Enter key triggers login + safe fallback if scripts still loading -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const code = document.getElementById("code");
+      const btn = document.getElementById("loginBtn");
+
+      function tryLogin() {
+        if (window.checkCode) return window.checkCode();
+        // If split scripts aren't loaded yet, give a clean message instead of doing nothing
+        alert("App is still loading — try again in a second.");
+      }
+
+      if (btn) btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        tryLogin();
+      });
+
       if (code) {
         code.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            window.checkCode && window.checkCode();
+            tryLogin();
           }
         });
       }
