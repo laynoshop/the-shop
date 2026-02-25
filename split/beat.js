@@ -1,3 +1,162 @@
+// split/beat.js
+// Beat TTUN tab only (no News code in here).
+
+/* =========================
+   BEAT TTUN (TUNNEL ENTRANCE MODE)
+   ========================= */
+
+// Safety: if escapeHtml is not defined yet, provide a tiny fallback.
+if (typeof window.escapeHtml !== "function") {
+  window.escapeHtml = function (s) {
+    return String(s ?? "").replace(/[&<>"']/g, function (c) {
+      return ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      })[c];
+    });
+  };
+}
+
+// ESPN CDN logos (fast + reliable)
+const OSU_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/194.png";
+const TTUN_LOGO = "https://a.espncdn.com/i/teamlogos/ncaa/500/130.png";
+
+// All-time series (update anytime you want)
+const THE_GAME_ALL_TIME = {
+  michWins: 62,
+  osuWins: 52,
+  ties: 6
+};
+
+// Last 10 *played* matchups (excludes 2020 canceled)
+const THE_GAME_LAST_10 = [
+  { year: 2025, winner: "Ohio State", score: "27–9" },
+  { year: 2024, winner: "TTUN",       score: "13–10" },
+  { year: 2023, winner: "TTUN",       score: "30–24" },
+  { year: 2022, winner: "TTUN",       score: "45–23" },
+  { year: 2021, winner: "TTUN",       score: "42–27" },
+  { year: 2019, winner: "Ohio State", score: "56–27" },
+  { year: 2018, winner: "Ohio State", score: "62–39" },
+  { year: 2017, winner: "Ohio State", score: "31–20" },
+  { year: 2016, winner: "Ohio State", score: "30–27 (2OT)" },
+  { year: 2015, winner: "Ohio State", score: "42–13" }
+];
+
+let beatCountdownTimer = null;
+let beatRotateTimer = null;
+
+function stopBeatCountdown() {
+  if (beatCountdownTimer) clearInterval(beatCountdownTimer);
+  beatCountdownTimer = null;
+
+  if (beatRotateTimer) clearInterval(beatRotateTimer);
+  beatRotateTimer = null;
+}
+
+// “The Game” is typically the last Saturday of November.
+// Count down to **noon local** for consistency.
+function getNextTheGameDateLocalNoon() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const candidate = lastSaturdayOfNovemberAtNoon(year);
+  if (candidate.getTime() > now.getTime()) return candidate;
+  return lastSaturdayOfNovemberAtNoon(year + 1);
+}
+
+function lastSaturdayOfNovemberAtNoon(year) {
+  const d = new Date(year, 10, 30, 12, 0, 0, 0); // month 10 = November
+  while (d.getDay() !== 6) d.setDate(d.getDate() - 1); // 6 = Saturday
+  return d;
+}
+
+function countdownParts(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(total / 86400);
+  const hrs  = Math.floor((total % 86400) / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return { days, hrs, mins, secs };
+}
+
+function isGameWeek(targetDate) {
+  const now = new Date();
+  const diffMs = targetDate.getTime() - now.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  return diffDays >= 0 && diffDays <= 7;
+}
+
+// Calculate current streak from THE_GAME_LAST_10 (most recent first)
+function computeCurrentStreak() {
+  const list = Array.isArray(THE_GAME_LAST_10) ? THE_GAME_LAST_10 : [];
+  if (!list.length) return { label: "—", owner: "" };
+
+  const first = String(list[0].winner || "").trim();
+  if (!first) return { label: "—", owner: "" };
+
+  let streak = 0;
+  for (const g of list) {
+    if (String(g.winner || "").trim() === first) streak++;
+    else break;
+  }
+
+  if (first === "Ohio State") {
+    return { label: `CURRENT STREAK: ${streak}`, owner: "osu" };
+  }
+  // If they’ve been winning recently:
+  return { label: `REVENGE PENDING: ${streak}`, owner: "ttun" };
+}
+
+function renderBeatTTUN() {
+  const content = document.getElementById("content");
+  stopBeatCountdown();
+
+  const target = getNextTheGameDateLocalNoon();
+  const targetLabel = target.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+
+  const hypeLines = [
+    "SILENCE THEIR STADIUM",
+    "FINISH THE FIGHT",
+    "LEAVE NO DOUBT",
+    "NO MERCY",
+    "DOMINATE"
+  ];
+
+  const streak = computeCurrentStreak();
+  const gameWeek = isGameWeek(target);
+
+  content.innerHTML = `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Beat TTUN</h2>
+          <span class="badge">Hype</span>
+        </div>
+      </div>
+      <div class="subline">
+        <div>${gameWeek ? "IT’S GAME WEEK." : "Scarlet Mode"}</div>
+        <div>❌ichigan Week Energy</div>
+      </div>
+    </div>
+
+    <!-- TUNNEL HERO -->
+    <div class="beatHero ${gameWeek ? "gameWeek" : ""}">
+      <div class="beatHeroTop">
+        <div class="beatHeroTitle">MISSION: BEAT TTUN</div>
+        <div class="beatHeroSub">Ohio State vs The Team Up North • ${escapeHtml(targetLabel)} • Noon</div>
+      </div>
+
+      <div class="beatBig">
+        <div id="beatDays" class="beatBigDays">—</div>
+        <div class="beatBigLabel">DAYS</div>
+      </div>
+
+      <div class="beatHmsRow" aria-label="Hours minutes seconds">
+        <div class="beatHmsUnit"><span id="beatHrs">—</span><small>HRS</small></div>
+        <div class="beatHmsUnit"><span id="beatMins">—</span><small>MINS</small></div>
+        <div class="beatHmsUnit"><span id="beatSecs">—</span><small>SECS</small></div>
       </div>
 
       <div class="beatDivider"></div>
@@ -71,143 +230,5 @@
   }, 5000);
 }
 
-/* =========================
-   TOP NEWS (ESPN) — Upgrade C
-   - Instant render from cache + background refresh
-   - Buckeye Boost sort
-   - Filters (tiny + uses existing .smallBtn)
-   - Dedupe + safer text sanitization (TTUN hard enforcement)
-   ========================= */
-
-const NEWS_CACHE_KEY = "theShopNewsCache_v2";
-const NEWS_FILTER_KEY = "theShopNewsFilter_v1";
-const NEWS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
-let currentNewsFilter = (sessionStorage.getItem(NEWS_FILTER_KEY) || "all");
-
-function buildBadWordRegex() {
-  // Avoid embedding the banned word directly anywhere in source strings
-  const a = ["Mi", "chigan"].join("");
-  const b = ["Wol", "verines"].join("");
-  return {
-    a: new RegExp(a, "gi"),
-    b: new RegExp(b, "gi")
-  };
-}
-
-function sanitizeTTUNText(str) {
-  const s = String(str || "");
-  const rx = buildBadWordRegex();
-  return s.replace(rx.a, "TTUN").replace(rx.b, "TTUN");
-}
-
-function loadNewsCache() {
-  try {
-    const raw = localStorage.getItem(NEWS_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-
-    const ts = Number(parsed.ts || 0);
-    if (!Number.isFinite(ts)) return null;
-
-    const items = Array.isArray(parsed.items) ? parsed.items : null;
-    if (!items) return null;
-
-    return {
-      ts,
-      updatedLabel: String(parsed.updatedLabel || ""),
-      items
-    };
-  } catch {
-    return null;
-  }
-}
-
-function saveNewsCache(items, updatedLabel) {
-  try {
-    localStorage.setItem(
-      NEWS_CACHE_KEY,
-      JSON.stringify({ ts: Date.now(), updatedLabel: updatedLabel || "", items: items || [] })
-    );
-  } catch {}
-}
-
-function timeAgoLabel(isoOrMs) {
-  const t = typeof isoOrMs === "number" ? isoOrMs : Date.parse(String(isoOrMs || ""));
-  if (!Number.isFinite(t)) return "";
-
-  const diff = Date.now() - t;
-  const sec = Math.floor(diff / 1000);
-  const min = Math.floor(sec / 60);
-  const hr  = Math.floor(min / 60);
-  const day = Math.floor(hr / 24);
-
-  if (sec < 60) return "just now";
-  if (min < 60) return `${min}m ago`;
-  if (hr < 24)  return `${hr}h ago`;
-  if (day === 1) return "yesterday";
-  return `${day}d ago`;
-}
-
-function scoreNewsItemForBuckeyeBoost(item) {
-  const text = norm([item.headline, item.description, item.source].filter(Boolean).join(" "));
-  let score = 0;
-
-  // Boost terms (feel free to add later)
-  const boosts = [
-    { k: "ohio state", w: 80 },
-    { k: "buckeyes", w: 80 },
-    { k: "ryan day", w: 25 },
-    { k: "columbus", w: 18 },
-    { k: "big ten", w: 22 },
-    { k: "cbb", w: 6 },
-    { k: "cfb", w: 6 },
-    { k: "college football", w: 14 },
-    { k: "college basketball", w: 10 }
-  ];
-
-  for (const b of boosts) {
-    if (text.includes(b.k)) score += b.w;
-  }
-
-  // Slightly favor fresher items
-  const ts = Number(item.publishedTs || 0);
-  if (Number.isFinite(ts) && ts > 0) {
-    const ageMin = Math.max(0, (Date.now() - ts) / 60000);
-    score += Math.max(0, 20 - Math.min(20, ageMin / 30)); // up to +20 for newest
-  }
-
-  return score;
-}
-
-function dedupeNewsItems(items) {
-  const seen = new Set();
-  const out = [];
-
-  for (const it of items) {
-    const key = norm(it.link || it.headline || "");
-    if (!key) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(it);
-  }
-  return out;
-}
-
-function tagNewsItem(it) {
-  const t = norm([it.headline, it.description].join(" "));
-  const tags = new Set();
-
-  // Tiny keyword tagging (no UI redesign)
-  if (t.includes("ohio state") || t.includes("buckeyes")) tags.add("buckeyes");
-  if (t.includes("college football") || t.includes("cfb") || t.includes("ncaa football")) tags.add("cfb");
-  if (t.includes("nfl")) tags.add("nfl");
-  if (t.includes("mlb")) tags.add("mlb");
-  if (t.includes("nhl")) tags.add("nhl");
-
-  return Array.from(tags);
-}
-
-function passesNewsFilter(it, filterKey) {
-  if (!filterKey || filterKey === "all") return true;
+// Keep compatibility with shared.js router
+window.renderBeatTTUN = renderBeatTTUN;
