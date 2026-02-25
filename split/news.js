@@ -6,6 +6,7 @@
    - Caching (localStorage) w/ background refresh
    - TTUN text sanitization
    - Event delegation (no stacked handlers)
+   - ✅ Exposes BOTH renderTopNews() and renderNews() for router compatibility
    ========================= */
 
 (function () {
@@ -29,7 +30,8 @@
     if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
     return String(s ?? "")
       .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
 
@@ -40,9 +42,7 @@
 
   // TTUN sanitization (never show the M-word)
   function sanitizeTTUNText(s) {
-    const input = String(s || "");
-    // Replace case-insensitive "Michigan" with "TTUN"
-    return input.replace(/michigan/gi, "TTUN");
+    return String(s || "").replace(/michigan/gi, "TTUN");
   }
 
   function replaceMichiganTextSafe(root) {
@@ -52,7 +52,7 @@
         return;
       }
     } catch {}
-    // fallback: do nothing (we already sanitize strings we render)
+    // fallback: do nothing (we already sanitize what we render)
   }
 
   function timeAgoLabel(ts) {
@@ -73,7 +73,6 @@
   function withLangRegion(url) {
     const u = String(url || "");
     if (!u) return u;
-    // if already has lang/region, leave it
     if (/[?&]lang=/.test(u) || /[?&]region=/.test(u)) return u;
     return u.includes("?") ? `${u}&lang=en&region=us` : `${u}?lang=en&region=us`;
   }
@@ -93,41 +92,30 @@
 
   function tagNewsItem(it) {
     const t = norm(`${it?.headline || ""} ${it?.description || ""} ${it?.source || ""}`);
-
     const tags = [];
 
-    // Buckeyes/OSU terms
     if (
       t.includes("ohio state") ||
       t.includes("buckeyes") ||
-      t.includes("osu ") || t.endsWith(" osu") ||
       t.includes("ryan day") ||
-      t.includes("columbus") && t.includes("buckeyes")
+      (t.includes("columbus") && t.includes("buckeyes")) ||
+      t.includes("osu ")
     ) tags.push("buckeyes");
 
-    // College football terms
     if (
       t.includes("college football") ||
       t.includes("cfb") ||
-      t.includes("ncaa") && t.includes("football") ||
+      (t.includes("ncaa") && t.includes("football")) ||
       t.includes("transfer portal") ||
-      t.includes("bowl") ||
-      t.includes("heisman")
+      t.includes("heisman") ||
+      t.includes("bowl")
     ) tags.push("cfb");
 
-    // NFL
-    if (t.includes("nfl") || t.includes("super bowl") || t.includes("draft") && t.includes("nfl")) tags.push("nfl");
-
-    // MLB
+    if (t.includes("nfl") || t.includes("super bowl") || (t.includes("draft") && t.includes("nfl"))) tags.push("nfl");
     if (t.includes("mlb") || t.includes("baseball") || t.includes("spring training")) tags.push("mlb");
-
-    // NHL
     if (t.includes("nhl") || t.includes("hockey") || t.includes("stanley cup")) tags.push("nhl");
 
-    // Always include "all"
     tags.push("all");
-
-    // de-dupe
     return Array.from(new Set(tags));
   }
 
@@ -137,16 +125,13 @@
     return tags.includes(filterKey);
   }
 
-  // Buckeyes boost in ordering
   function scoreNewsItemForBuckeyeBoost(it) {
     const tags = Array.isArray(it?.tags) ? it.tags : [];
     let score = 0;
 
-    // Base: recency
     const ts = Number(it?.publishedTs || 0);
-    if (ts) score += Math.min(100, Math.floor((ts / 1000) % 100)); // tiny tie-breaker
+    if (ts) score += Math.min(100, Math.floor((ts / 1000) % 100));
 
-    // Boosts
     if (tags.includes("buckeyes")) score += 10000;
     if (tags.includes("cfb")) score += 2000;
     if (tags.includes("nfl")) score += 800;
@@ -159,7 +144,6 @@
   function dedupeNewsItems(items) {
     const seen = new Set();
     const out = [];
-
     for (const it of (items || [])) {
       const h = norm(it?.headline || "");
       const link = norm(it?.link || "");
@@ -207,12 +191,11 @@
   }
 
   function saveNewsCache(items, updatedLabel) {
-    const payload = {
+    safeSetLS(NEWS_CACHE_KEY, JSON.stringify({
       ts: Date.now(),
       updatedLabel: String(updatedLabel || ""),
       items: Array.isArray(items) ? items : []
-    };
-    safeSetLS(NEWS_CACHE_KEY, JSON.stringify(payload));
+    }));
   }
 
   // -----------------------------
@@ -226,9 +209,7 @@
         const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         return await resp.json();
-      } finally {
-        clearTimeout(t);
-      }
+      } finally { clearTimeout(t); }
     }
 
     async function fetchTextWithTimeout(url, ms = 9000) {
@@ -238,9 +219,7 @@
         const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         return await resp.text();
-      } finally {
-        clearTimeout(t);
-      }
+      } finally { clearTimeout(t); }
     }
 
     function ensureLinkOrSearch(it) {
@@ -251,7 +230,6 @@
 
     function pickBestImageUrlFromESPNArticle(a) {
       const candidates = [];
-
       if (Array.isArray(a?.images)) {
         for (const im of a.images) {
           if (im?.url) candidates.push(im.url);
@@ -264,9 +242,7 @@
       if (a?.promoImage) candidates.push(a.promoImage);
 
       const cleaned = candidates
-        .filter(Boolean)
-        .map(String)
-        .map(s => s.trim())
+        .filter(Boolean).map(String).map(s => s.trim())
         .filter(s => s.length > 8);
 
       return cleaned.find(u => u.startsWith("https://")) || cleaned[0] || "";
@@ -285,7 +261,6 @@
         link: a?.links?.web?.href || a?.links?.[0]?.href || a?.url || "",
         imageUrl: pickBestImageUrlFromESPNArticle(a) || ""
       };
-
       item.link = ensureLinkOrSearch(item);
       return item;
     }
@@ -294,9 +269,7 @@
       const doc = new DOMParser().parseFromString(xmlText, "text/xml");
       const items = Array.from(doc.querySelectorAll("item")).slice(0, 30);
 
-      function text(q, node) {
-        return node.querySelector(q)?.textContent || "";
-      }
+      function text(q, node) { return node.querySelector(q)?.textContent || ""; }
 
       function rssImageUrl(node) {
         const enc = node.querySelector("enclosure");
@@ -342,7 +315,6 @@
       }).filter(x => x.headline);
     }
 
-    // --- 1) Try ESPN JSON endpoints ---
     const jsonBases = [
       "https://site.api.espn.com/apis/v2/sports/news?limit=50",
       "https://site.api.espn.com/apis/site/v2/sports/news?limit=50",
@@ -370,12 +342,9 @@
           deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
           return deduped.slice(0, 12);
         }
-      } catch (e) {
-        lastErr = e;
-      }
+      } catch (e) { lastErr = e; }
     }
 
-    // --- 2) ESPN RSS ---
     const rssUrl = "https://www.espn.com/espn/rss/news";
     try {
       const xml = await fetchTextWithTimeout(rssUrl, 9000);
@@ -386,11 +355,8 @@
 
       deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
       return deduped.slice(0, 12);
-    } catch (e) {
-      lastErr = e;
-    }
+    } catch (e) { lastErr = e; }
 
-    // --- 3) RSS via AllOrigins ---
     try {
       const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
       const xml = await fetchTextWithTimeout(proxied, 9000);
@@ -401,9 +367,7 @@
 
       deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
       return deduped.slice(0, 12);
-    } catch (e) {
-      lastErr = e;
-    }
+    } catch (e) { lastErr = e; }
 
     throw (lastErr || new Error("News fetch failed"));
   }
@@ -432,51 +396,6 @@
         ? String(it.link)
         : `https://www.espn.com/search/results?q=${encodeURIComponent(safeTitle || "")}`;
 
-      // NOTE: Your screenshot shows no images; keep this off by default.
-      // If you want images back later, set SHOW_IMAGES = true.
-      const SHOW_IMAGES = false;
-      const imgUrl = (it?.imageUrl || "").trim();
-
-      const imageBlock = (SHOW_IMAGES && imgUrl) ? `
-        <a href="${href}" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;">
-          <div class="newsImgWrap" style="
-            width:100%;
-            height:156px;
-            border-radius:16px;
-            overflow:hidden;
-            margin-bottom:10px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.10);
-          ">
-            <img src="${escapeHtml(imgUrl)}"
-                 alt=""
-                 loading="lazy"
-                 referrerpolicy="no-referrer"
-                 style="width:100%;height:100%;object-fit:cover;display:block;"
-                 onerror="this.parentElement.style.display='none';"
-            />
-          </div>
-        </a>
-      ` : "";
-
-      const headlinePill = `
-        <a href="${href}" target="_blank" rel="noopener noreferrer" style="display:block;color:inherit;text-decoration:none;">
-          <div style="
-            display:block;
-            padding: 12px 12px;
-            border-radius: 14px;
-            background: rgba(0,0,0,0.20);
-            border: 1px solid rgba(255,255,255,0.10);
-            box-shadow: 0 10px 26px rgba(0,0,0,0.28);
-            font-weight: 1000;
-            font-size: 18px;
-            line-height: 1.22;
-          ">
-            ${title}
-          </div>
-        </a>
-      `;
-
       const desc = descText
         ? `<div style="opacity:0.85;font-size:14px;line-height:1.35;margin:10px 2px 8px;">
              ${escapeHtml(descText)}
@@ -491,8 +410,19 @@
 
       return `
         <div class="game">
-          ${imageBlock}
-          ${headlinePill}
+          <a href="${href}" target="_blank" rel="noopener noreferrer" style="display:block;color:inherit;text-decoration:none;">
+            <div style="
+              display:block;
+              padding: 12px 12px;
+              border-radius: 14px;
+              background: rgba(0,0,0,0.20);
+              border: 1px solid rgba(255,255,255,0.10);
+              box-shadow: 0 10px 26px rgba(0,0,0,0.28);
+              font-weight: 1000;
+              font-size: 18px;
+              line-height: 1.22;
+            ">${title}</div>
+          </a>
           ${desc}
           ${meta}
         </div>
@@ -517,9 +447,7 @@
           <div>Updated ${escapeHtml(headerUpdatedLabel || "")}</div>
         </div>
         ${buildNewsFiltersRowHTML(currentNewsFilter)}
-        <div style="margin-top:8px;font-size:12px;">
-          ${cacheLine}
-        </div>
+        <div style="margin-top:8px;font-size:12px;">${cacheLine}</div>
       </div>
 
       <div class="grid">
@@ -536,14 +464,6 @@
     if (!content) return;
 
     const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-    const cached = loadNewsCache();
-    if (cached && Array.isArray(cached.items) && cached.items.length) {
-      renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
-      const isFresh = (Date.now() - cached.ts) <= NEWS_CACHE_TTL_MS;
-      if (!isFresh) refreshTopNewsInBackground();
-      return;
-    }
 
     if (showLoading) {
       content.innerHTML = `
@@ -565,10 +485,17 @@
       `;
     }
 
+    const cached = loadNewsCache();
+    if (cached && Array.isArray(cached.items) && cached.items.length) {
+      renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
+      const isFresh = (Date.now() - cached.ts) <= NEWS_CACHE_TTL_MS;
+      if (!isFresh) refreshTopNewsInBackground();
+      return;
+    }
+
     try {
       const items = await fetchTopNewsItemsFromESPN();
       const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
       saveNewsCache(items, cacheLabel);
       renderNewsList(items, headerUpdated, cacheLabel);
     } catch (e) {
@@ -609,7 +536,6 @@
         const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
         saveNewsCache(fresh, cacheLabel);
 
-        // Only auto-rerender if you're still on the News tab
         const tab = window.__activeTab || window.currentTab || "";
         if (String(tab) === "news") {
           const headerUpdated2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -636,11 +562,8 @@
 
         const cached = loadNewsCache();
         const headerUpdated = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        if (cached && Array.isArray(cached.items)) {
-          renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
-        } else {
-          renderTopNews(true);
-        }
+        if (cached && Array.isArray(cached.items)) renderNewsList(cached.items, headerUpdated, cached.updatedLabel || "");
+        else renderTopNews(true);
         return;
       }
 
@@ -654,7 +577,16 @@
     window.__NEWS_CLICK_BOUND = true;
   }
 
-  // Expose renderer used by shared tab router
+  // ✅ Expose renderer for ANY router naming
   window.renderTopNews = renderTopNews;
+  window.renderNews = renderTopNews; // <-- key compatibility fix
+
+  // ✅ If user reloads while already on News tab, render immediately
+  try {
+    const tab = window.__activeTab || window.currentTab || "";
+    if (String(tab) === "news") {
+      setTimeout(() => renderTopNews(true), 0);
+    }
+  } catch {}
 
 })();
