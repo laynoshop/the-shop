@@ -282,3 +282,8 @@ function getTheGameDate(year) {
 }
 
 function getNextTheGameDate(now = new Date()) {
+
+// --- REQUIRED GLOBAL EXPORTS (split build) ---
+try {
+  if (typeof checkCode === "function") window.checkCode = checkCode;
+} catch (e) {}
