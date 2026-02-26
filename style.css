@@ -1894,6 +1894,48 @@ button[data-gpsave="1"]{
   color: #ffd9d9;
 }
 
+/* Group Picks: make each selected game look like a Scores-style card */
+.gpGameCard {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.gpGameTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.gpGameTitle {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.gpGameTime {
+  font-size: 14px;
+  opacity: 0.75;
+  white-space: nowrap;
+  padding-top: 4px;
+}
+
+.gpMetaRow {
+  margin-top: 10px;
+}
+
+.gpEveryone {
+  margin-top: 10px;
+}
+
+.gpButtons {
+  margin-top: 10px;
+}
+
 .gpEveryone { margin-top: 10px; }
 .gpEveryoneSummary { cursor: pointer; font-weight: 600; }
 .gpEveryoneBody { margin-top: 8px; }
