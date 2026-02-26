@@ -459,71 +459,155 @@
   }
 
   async function gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events) {
-    const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
-    const slateRef = db.collection("pickSlates").doc(slateId);
+  const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
+  const slateRef = db.collection("pickSlates").doc(slateId);
 
-    await slateRef.set({
-      leagueKey,
-      dateYYYYMMDD,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      createdBy: uid,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid
-    }, { merge: true });
+  await slateRef.set({
+    leagueKey,
+    dateYYYYMMDD,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    createdBy: uid,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy: uid
+  }, { merge: true });
 
-    // Replace games collection
-    const existingSnap = await slateRef.collection("games").get();
-    const batch = db.batch();
-    existingSnap.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
+  // Replace games collection
+  const existingSnap = await slateRef.collection("games").get();
+  const delBatch = db.batch();
+  existingSnap.forEach(doc => delBatch.delete(doc.ref));
+  await delBatch.commit();
 
-    for (const ev of (events || [])) {
-      const eventId = String(ev?.id || "");
-      if (!eventId) continue;
-      if (!selectedEventIds.has(eventId)) continue;
+  // ---- helpers (local to this function) ----
+  function safeStr(v) { return String(v ?? "").trim(); }
 
-      const { homeName, awayName } = getMatchupNamesFromEvent(ev);
-
-      const startMs = kickoffMsFromEvent(ev);
-      const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
-
-      await slateRef.collection("games").doc(eventId).set({
-        eventId,
-        homeName,
-        awayName,
-        startTime,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    }
-
-    return slateId;
+  function getVenueLine(comp) {
+    const v = comp?.venue || null;
+    const name = safeStr(v?.fullName || v?.name || "");
+    const city = safeStr(v?.address?.city || "");
+    const state = safeStr(v?.address?.state || "");
+    const loc = [city, state].filter(Boolean).join(", ");
+    return {
+      venueName: name,
+      venueLoc: loc
+    };
   }
 
-  // ✅ NEW: ONE BUTTON admin flow: Create/Replace + Publish in one pass (lock time only once)
-  async function gpAdminCreatePublishSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events, lockDate) {
-    const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
-    const slateRef = db.collection("pickSlates").doc(slateId);
-
-    if (!(lockDate instanceof Date) || isNaN(lockDate.getTime())) {
-      alert("Please set a valid Lock Time before publishing.");
-      return null;
-    }
-
-    // Create/Replace games
-    await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events);
-
-    // Publish + set lockAt (no second step)
-    await slateRef.set({
-      published: true,
-      publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      publishedBy: uid,
-      lockAt: firebase.firestore.Timestamp.fromDate(lockDate),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid
-    }, { merge: true });
-
-    return slateId;
+  function getOddsLine(comp) {
+    const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
+    const details = safeStr(o?.details || "");     // e.g., "DUKE -4.5"
+    const overUnder = safeStr(o?.overUnder || ""); // e.g., "141.5"
+    // Keep it simple: store both; UI decides how to display
+    return { oddsDetails: details, overUnder };
   }
+
+  function getRecordSummary(competitor) {
+    const recs = Array.isArray(competitor?.records) ? competitor.records : [];
+    // Prefer "overall" type if present, otherwise first summary
+    const overall = recs.find(r => safeStr(r?.type) === "overall");
+    const pick = overall || recs[0] || null;
+    return safeStr(pick?.summary || "");
+  }
+
+  function getLogo(team) {
+    // ESPN commonly has team.logos[0].href
+    const logos = Array.isArray(team?.logos) ? team.logos : [];
+    return safeStr(logos[0]?.href || team?.logo || "");
+  }
+
+  function getRank(competitor) {
+    // Ranking fields vary by sport; try a few common shapes.
+    const r1 = competitor?.curatedRank?.current;
+    const r2 = competitor?.rank;
+    const r3 = competitor?.team?.rank;
+    const n = Number(r1 ?? r2 ?? r3);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function getCompetitors(comp) {
+    const list = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const home = list.find(c => c.homeAway === "home") || null;
+    const away = list.find(c => c.homeAway === "away") || null;
+    return { home, away };
+  }
+
+  // ---- build & write docs ----
+  for (const ev of (events || [])) {
+    const eventId = safeStr(ev?.id);
+    if (!eventId) continue;
+    if (!selectedEventIds.has(eventId)) continue;
+
+    const comp = ev?.competitions?.[0] || null;
+    const { home, away } = getCompetitors(comp);
+
+    const homeTeam = home?.team || null;
+    const awayTeam = away?.team || null;
+
+    // Fallback to your existing name logic
+    const { homeName, awayName } = getMatchupNamesFromEvent(ev);
+
+    const startMs = kickoffMsFromEvent(ev);
+    const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
+
+    const { venueName, venueLoc } = getVenueLine(comp);
+    const { oddsDetails, overUnder } = getOddsLine(comp);
+
+    const gameDoc = {
+      eventId,
+      startTime,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+
+      // venue / odds (for "scorecard" header lines)
+      venueName: venueName || "",
+      venueLoc: venueLoc || "",
+      oddsDetails: oddsDetails || "",
+      overUnder: overUnder || "",
+
+      // away side (row 1)
+      awayName: awayName || safeStr(awayTeam?.displayName || awayTeam?.name || "Away"),
+      awayShort: safeStr(awayTeam?.shortDisplayName || awayTeam?.abbreviation || ""),
+      awayRecord: getRecordSummary(away) || "",
+      awayRank: getRank(away) || 0,
+      awayLogo: getLogo(awayTeam) || "",
+
+      // home side (row 2)
+      homeName: homeName || safeStr(homeTeam?.displayName || homeTeam?.name || "Home"),
+      homeShort: safeStr(homeTeam?.shortDisplayName || homeTeam?.abbreviation || ""),
+      homeRecord: getRecordSummary(home) || "",
+      homeRank: getRank(home) || 0,
+      homeLogo: getLogo(homeTeam) || ""
+    };
+
+    await slateRef.collection("games").doc(eventId).set(gameDoc, { merge: true });
+  }
+
+  return slateId;
+}
+
+// ✅ NEW: ONE BUTTON admin flow: Create/Replace + Publish in one pass (lock time only once)
+async function gpAdminCreatePublishSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events, lockDate) {
+  const slateId = slateIdFor(leagueKey, dateYYYYMMDD);
+  const slateRef = db.collection("pickSlates").doc(slateId);
+
+  if (!(lockDate instanceof Date) || isNaN(lockDate.getTime())) {
+    alert("Please set a valid Lock Time before publishing.");
+    return null;
+  }
+
+  // Create/Replace games (now writes scorecard metadata too)
+  await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selectedEventIds, events);
+
+  // Publish + set lockAt (no second step)
+  await slateRef.set({
+    published: true,
+    publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    publishedBy: uid,
+    lockAt: firebase.firestore.Timestamp.fromDate(lockDate),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy: uid
+  }, { merge: true });
+
+  return slateId;
+}
 
   // -----------------------------
   // ✅ Admin UI (no ESPN debug line, one button)
@@ -652,7 +736,7 @@ function gpUpdateSaveBtnUI() {
   }
 }
   
-  function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
+function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
   if (!published) {
     return `
       <div class="game">
@@ -673,19 +757,80 @@ function gpUpdateSaveBtnUI() {
     ? new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
 
-  // This text gets updated by your timer logic if you already wired it that way
+  // This text gets updated by your timer logic (gpSlatePill) if you already wired it
   const headerLine = lockedSlate
     ? `Slate is locked`
     : `Slate is live • Locks in ⏳ • ${lockAtLabel ? `Locks at ${lockAtLabel}` : "Locks at game start"}`;
 
-  const headerPillClass = lockedSlate ? "status-final" : "status-live"; // reuse “live/final” vibe
+  const headerPillClass = lockedSlate ? "status-final" : "status-live";
+
+  function safeStr(v) { return String(v ?? "").trim(); }
+
+  function rankPrefix(n) {
+    const x = Number(n);
+    return (Number.isFinite(x) && x > 0) ? `#${x} ` : "";
+  }
+
+  // clickable team row (scores-tab vibe)
+  function buildTeamRow({ side, name, logo, record, rankNum, active, disabled, eventId }) {
+    const r = safeStr(record);
+    const rk = rankPrefix(rankNum);
+    const nm = safeStr(name) || (side === "away" ? "Away" : "Home");
+
+    return `
+      <button
+        type="button"
+        class="gpPickRow ${active ? "gpPickRowActive" : ""}"
+        ${disabled ? "disabled" : ""}
+        data-gppick="${esc(side)}"
+        data-slate="${esc(slateId)}"
+        data-eid="${esc(eventId)}"
+        style="
+          width:100%;
+          display:flex;
+          align-items:center;
+          gap:12px;
+          padding:14px 14px;
+          border-radius:18px;
+          border:1px solid rgba(255,255,255,0.10);
+          background:rgba(0,0,0,0.22);
+          text-align:left;
+        "
+      >
+        <div style="
+          width:38px; height:38px;
+          border-radius:12px;
+          background:rgba(255,255,255,0.08);
+          border:1px solid rgba(255,255,255,0.10);
+          display:flex; align-items:center; justify-content:center;
+          overflow:hidden;
+          flex:0 0 auto;
+        ">
+          ${logo
+            ? `<img src="${esc(logo)}" alt="" style="width:28px;height:28px;object-fit:contain;display:block;" />`
+            : `<div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.10);"></div>`
+          }
+        </div>
+
+        <div style="flex:1 1 auto; min-width:0;">
+          <div style="font-weight:800; font-size:20px; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${esc(rk + nm)}
+          </div>
+          <div class="muted" style="margin-top:4px; font-weight:600;">
+            ${esc(side === "away" ? "Away" : "Home")}${r ? ` • ${esc(r)}` : ""}
+          </div>
+        </div>
+
+        <div style="flex:0 0 auto; font-weight:900; opacity:${active ? "1" : "0.6"};">
+          ${active ? "✓" : ""}
+        </div>
+      </button>
+    `;
+  }
 
   const gameCards = (games || []).map(g => {
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
-
-    const homeName = String(g?.homeName || "Home");
-    const awayName = String(g?.awayName || "Away");
 
     const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
     const kickoffLabel = startMs
@@ -695,9 +840,36 @@ function gpUpdateSaveBtnUI() {
     const lockedGame = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
     // pending overrides saved
-    const pending = gpPendingGet(eventId); // "home"/"away"/""
+    const pending = gpPendingGet(eventId);
     const saved = String(myMap?.[eventId]?.side || "");
     const my = pending || saved;
+
+    const awayName = safeStr(g?.awayName) || "Away";
+    const homeName = safeStr(g?.homeName) || "Home";
+
+    const awayLogo = safeStr(g?.awayLogo || "");
+    const homeLogo = safeStr(g?.homeLogo || "");
+
+    const awayRecord = safeStr(g?.awayRecord || "");
+    const homeRecord = safeStr(g?.homeRecord || "");
+
+    const awayRank = Number(g?.awayRank || 0);
+    const homeRank = Number(g?.homeRank || 0);
+
+    const venueName = safeStr(g?.venueName || "");
+    const venueLoc  = safeStr(g?.venueLoc || "");
+
+    const oddsDetails = safeStr(g?.oddsDetails || "");
+    const overUnder   = safeStr(g?.overUnder || "");
+
+    const venueLine = (venueName || venueLoc)
+      ? `${venueName}${venueName && venueLoc ? " - " : ""}${venueLoc}`
+      : "";
+
+    const oddsLineParts = [];
+    if (oddsDetails) oddsLineParts.push(oddsDetails);
+    if (overUnder) oddsLineParts.push(`O/U: ${overUnder}`);
+    const oddsLine = oddsLineParts.join(" • ");
 
     const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
 
@@ -713,35 +885,50 @@ function gpUpdateSaveBtnUI() {
         }).join("")
       : `<div class="muted">No picks yet.</div>`;
 
-    // ✅ Mini “scorecard-like” container per game
     return `
       <div class="game gpMiniGameCard" style="
         margin-top:14px;
         padding:14px;
-        border-radius:18px;
+        border-radius:22px;
         background:rgba(255,255,255,0.06);
         border:1px solid rgba(255,255,255,0.08);
+        position:relative;
       " data-saved="${esc(saved)}">
 
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-          <div class="gpTeams" style="font-weight:800; font-size:22px; line-height:1.1;">
-            ${esc(awayName)} @ ${esc(homeName)}
+          <div style="font-weight:900; font-size:28px; line-height:1.05;">
+            ${esc(awayName)} @<br/>${esc(homeName)}
           </div>
-          <div class="muted" style="white-space:nowrap; font-weight:700;">
+          <div class="muted" style="white-space:nowrap; font-weight:800; font-size:18px;">
             ${esc(kickoffLabel)}
           </div>
         </div>
 
-        <div class="gpButtons ${my ? "hasPick" : ""}" style="margin-top:12px;">
-          <button class="gpBtn ${my === "away" ? "gpBtnActive" : ""}" ${lockedGame ? "disabled" : ""}
-            data-gppick="away" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
-            ${esc(awayName)}
-          </button>
+        ${venueLine ? `<div class="muted" style="margin-top:10px; font-weight:700;">${esc(venueLine)}</div>` : ""}
+        ${oddsLine ? `<div class="muted" style="margin-top:6px; font-weight:800;">Favored: ${esc(oddsLine)}</div>` : ""}
 
-          <button class="gpBtn ${my === "home" ? "gpBtnActive" : ""}" ${lockedGame ? "disabled" : ""}
-            data-gppick="home" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
-            ${esc(homeName)}
-          </button>
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+          ${buildTeamRow({
+            side: "away",
+            name: awayName,
+            logo: awayLogo,
+            record: awayRecord,
+            rankNum: awayRank,
+            active: my === "away",
+            disabled: lockedGame,
+            eventId
+          })}
+
+          ${buildTeamRow({
+            side: "home",
+            name: homeName,
+            logo: homeLogo,
+            record: homeRecord,
+            rankNum: homeRank,
+            active: my === "home",
+            disabled: lockedGame,
+            eventId
+          })}
         </div>
 
         <div class="gpMetaRow" style="margin-top:10px;">
@@ -760,7 +947,6 @@ function gpUpdateSaveBtnUI() {
     `;
   }).join("");
 
-  // Save row (bottom)
   const saveRow = `
     <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
       <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
