@@ -672,10 +672,7 @@ function gpUpdateSaveBtnUI() {
     ? new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
 
-  const lockLine = lockMs
-    ? `🔒 Locks at ${lockAtLabel}`
-    : "🔒 Picks lock at game start";
-
+  // game cards
   const rows = (games || []).map(g => {
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
@@ -684,6 +681,8 @@ function gpUpdateSaveBtnUI() {
     const awayName = String(g?.awayName || "Away");
 
     const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+
+    // lock behavior: if lockAt set, use it; otherwise lock at kickoff
     const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
     // pending overrides saved
@@ -705,12 +704,11 @@ function gpUpdateSaveBtnUI() {
         }).join("")
       : `<div class="muted">No picks yet.</div>`;
 
-    // ✅ Card-style row (less congested, Scores-tab vibe)
     return `
-      <div class="gpGameCard gpGameRow" data-saved="${esc(saved)}">
-        <div class="gpGameTop">
-          <div class="gpGameTitle">${esc(awayName)} @ ${esc(homeName)}</div>
-          <div class="gpGameTime">
+      <div class="gpGameRow" data-saved="${esc(saved)}">
+        <div class="gpMatchup">
+          <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
+          <div class="muted">
             ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
             ${locked ? " • LOCKED" : ""}
           </div>
@@ -743,7 +741,7 @@ function gpUpdateSaveBtnUI() {
     `;
   }).join("");
 
-  // ✅ Save stays at bottom of GROUP PICKS card (and the header Save button should be removed elsewhere)
+  // Save row (bottom)
   const saveRow = `
     <div class="gpSaveRow" style="margin-top:12px; display:flex; align-items:center; gap:10px;">
       <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
@@ -751,19 +749,26 @@ function gpUpdateSaveBtnUI() {
     </div>
   `;
 
+  // One clean status pill (timer will update this text + color)
+  const pillClass = (lockMs && now >= lockMs) ? "status-locked" : "status-live";
+  const pillText = (lockMs && now >= lockMs)
+    ? "Slate is locked"
+    : `Slate is live • Locks in ⏳ • ${lockAtLabel ? `Locks at ${lockAtLabel}` : "Locks at game start"}`;
+
   return `
     <div class="game">
       <div class="gameHeader">
         <div class="statusPill status-other">GROUP PICKS</div>
       </div>
 
-      <div class="gameMetaTopLine">Slate is live</div>
-
-      <div class="gpLockLine">
-        <div class="gameMetaOddsPlain">${esc(lockLine)}</div>
-        <div id="gpLockCountdown" class="gpLockCountdown" data-lockms="${esc(String(lockMs || 0))}">
-          ${lockMs ? "⏳ Loading…" : "—"}
-        </div>
+      <div
+        id="gpSlatePill"
+        class="statusPill ${esc(pillClass)}"
+        data-lockms="${esc(String(lockMs || 0))}"
+        data-lockat="${esc(lockAtLabel || "")}"
+        style="margin-top:10px;"
+      >
+        ${esc(pillText)}
       </div>
 
       ${rows || `<div class="notice">No games in slate.</div>`}
@@ -911,12 +916,17 @@ function gpStartLockCountdownTimer() {
     window.__GP_LOCK_TICK = null;
   }
 
-  const el = document.getElementById("gpLockCountdown");
+  const el = document.getElementById("gpSlatePill");
   if (!el) return;
 
   const lockMs = Number(el.getAttribute("data-lockms") || "0");
+  const lockAtLabel = String(el.getAttribute("data-lockat") || "").trim();
+
+  // No lock time: keep it simple
   if (!lockMs) {
-    el.textContent = "—";
+    el.classList.remove("status-locked");
+    el.classList.add("status-live");
+    el.textContent = `Slate is live • Locks at game start`;
     return;
   }
 
@@ -925,18 +935,16 @@ function gpStartLockCountdownTimer() {
     const left = lockMs - now;
 
     if (left <= 0) {
-      el.textContent = "🔒 Locked";
-      el.classList.remove("warn", "danger");
-      el.classList.add("danger");
+      el.classList.remove("status-live");
+      el.classList.add("status-locked");
+      el.textContent = "Slate is locked";
       return;
     }
 
-    el.textContent = `🔒 Locks in ${gpFormatCountdown(left)}`;
-
-    // styling thresholds
-    el.classList.remove("warn", "danger");
-    if (left <= 5 * 60 * 1000) el.classList.add("danger");
-    else if (left <= 30 * 60 * 1000) el.classList.add("warn");
+    const countdown = gpFormatCountdown(left);
+    el.classList.remove("status-locked");
+    el.classList.add("status-live");
+    el.textContent = `Slate is live • Locks in ${countdown} • Locks at ${lockAtLabel || "—"}`;
   };
 
   tick();
