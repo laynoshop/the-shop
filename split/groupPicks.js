@@ -871,9 +871,22 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks,
 
   const headerPillClass = lockedSlate ? "status-final" : "status-live";
 
+  function toNum(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // ✅ Only show Top 25 ranks
+  function rankPrefix(rankVal) {
+    const r = toNum(rankVal);
+    if (!r) return "";
+    if (r >= 1 && r <= 25) return `#${r} `;
+    return "";
+  }
+
   function safeTeamLabel(t) {
-    const nm = String(t?.name || "");
-    const rk = t?.rank ? `#${t.rank} ` : "";
+    const nm = String(t?.name || "").trim();
+    const rk = rankPrefix(t?.rank);
     return (rk + nm).trim() || "Team";
   }
 
@@ -887,8 +900,8 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks,
   }
 
   function fmtOddsLine(g) {
-    const details = String(g?.oddsDetails || "").trim(); // e.g. "COFC -4.5"
-    const ou = String(g?.oddsOU || "").trim();
+    const details = String(g?.oddsDetails || "").trim(); // e.g. "WIS -5.5"
+    const ou = String(g?.oddsOU || "").trim();           // e.g. "152.5"
     const parts = [];
     if (details) parts.push(`Favored: ${details}`);
     if (ou) parts.push(`O/U: ${ou}`);
@@ -899,8 +912,8 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks,
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
 
-    const away = g?.awayTeam || { name: g?.awayName || "Away" };
-    const home = g?.homeTeam || { name: g?.homeName || "Home" };
+    const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
+    const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
 
     const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
     const kickoffLabel = startMs
@@ -912,7 +925,7 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks,
     // pending overrides saved
     const pending = gpPendingGet(eventId);
     const saved = String(myMap?.[eventId]?.side || "");
-    const my = pending || saved;
+    const my = pending || saved; // "away" | "home" | ""
 
     const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
     const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
@@ -927,18 +940,25 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks,
         }).join("")
       : `<div class="muted">No picks yet.</div>`;
 
-    const venueLine = String(g?.venueLine || "").trim();
+    const venueLine = String(g?.venueLine || g?.venue || g?.venueName || "").trim();
     const oddsLine = fmtOddsLine(g);
 
     const awayLogo = safeLogo(away);
     const homeLogo = safeLogo(home);
 
-    // Team “row button” (scoreboard-like)
-    const teamRowBtn = (side, t, logoUrl, extraSub) => {
-      const active = (my === side) ? "gpPickRowActive" : "";
+    // ✅ active + fade logic
+    const hasPick = !!my;
+    const awayActive = my === "away";
+    const homeActive = my === "home";
+
+    const awayFade = hasPick && !awayActive;
+    const homeFade = hasPick && !homeActive;
+
+    // Team “row button” (scores-tab vibe)
+    const teamRowBtn = (side, t, logoUrl, extraSub, isActive, isFaded) => {
       return `
         <button
-          class="gpPickRowBtn ${active}"
+          class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
           type="button"
           ${lockedGame ? "disabled" : ""}
           data-gppick="${esc(side)}"
@@ -983,7 +1003,7 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks,
     };
 
     return `
-      <div class="game gpMiniGameCard" data-saved="${esc(saved)}" style="
+      <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
         margin-top:14px;
         padding:14px;
         border-radius:22px;
@@ -1005,224 +1025,8 @@ function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks,
         }
 
         <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          ${teamRowBtn("away", away, awayLogo, "Away")}
-          ${teamRowBtn("home", home, homeLogo, "Home")}
-        </div>
-
-        <div class="gpMetaRow" style="margin-top:10px;">
-          ${my
-            ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
-            : `<div class="muted">No pick yet</div>`
-          }
-          ${lockedGame ? `<div class="muted" style="margin-top:6px;">Locked</div>` : ``}
-        </div>
-
-        <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
-          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-          <div class="gpEveryoneBody">${everyoneLines}</div>
-        </details>
-      </div>
-    `;
-  }).join("");
-
-  const saveRow = `
-    <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
-      <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
-      <div class="muted">(Saves your pending picks)</div>
-    </div>
-  `;
-
-  return `
-    <div class="game">
-      <div class="gameHeader">
-        <div class="statusPill status-other">GROUP PICKS</div>
-      </div>
-
-      <div class="statusPill ${esc(headerPillClass)}" style="margin-top:10px;" id="gpSlatePill"
-        data-lockms="${esc(String(lockMs || 0))}"
-        data-lockat="${esc(lockAtLabel || "")}">
-        ${esc(headerLine)}
-      </div>
-
-      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in slate.</div>`}
-
-      ${saveRow}
-    </div>
-  `;
-}
-
-  // This text gets updated by your timer logic (gpSlatePill) if you already wired it
-  const headerLine = lockedSlate
-    ? `Slate is locked`
-    : `Slate is live • Locks in ⏳ • ${lockAtLabel ? `Locks at ${lockAtLabel}` : "Locks at game start"}`;
-
-  const headerPillClass = lockedSlate ? "status-final" : "status-live";
-
-  function safeStr(v) { return String(v ?? "").trim(); }
-
-  function rankPrefix(n) {
-    const x = Number(n);
-    return (Number.isFinite(x) && x > 0) ? `#${x} ` : "";
-  }
-
-  // clickable team row (scores-tab vibe)
-  function buildTeamRow({ side, name, logo, record, rankNum, active, disabled, eventId }) {
-    const r = safeStr(record);
-    const rk = rankPrefix(rankNum);
-    const nm = safeStr(name) || (side === "away" ? "Away" : "Home");
-
-    return `
-      <button
-        type="button"
-        class="gpPickRow ${active ? "gpPickRowActive" : ""}"
-        ${disabled ? "disabled" : ""}
-        data-gppick="${esc(side)}"
-        data-slate="${esc(slateId)}"
-        data-eid="${esc(eventId)}"
-        style="
-          width:100%;
-          display:flex;
-          align-items:center;
-          gap:12px;
-          padding:14px 14px;
-          border-radius:18px;
-          border:1px solid rgba(255,255,255,0.10);
-          background:rgba(0,0,0,0.22);
-          text-align:left;
-        "
-      >
-        <div style="
-          width:38px; height:38px;
-          border-radius:12px;
-          background:rgba(255,255,255,0.08);
-          border:1px solid rgba(255,255,255,0.10);
-          display:flex; align-items:center; justify-content:center;
-          overflow:hidden;
-          flex:0 0 auto;
-        ">
-          ${logo
-            ? `<img src="${esc(logo)}" alt="" style="width:28px;height:28px;object-fit:contain;display:block;" />`
-            : `<div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.10);"></div>`
-          }
-        </div>
-
-        <div style="flex:1 1 auto; min-width:0;">
-          <div style="font-weight:800; font-size:20px; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${esc(rk + nm)}
-          </div>
-          <div class="muted" style="margin-top:4px; font-weight:600;">
-            ${esc(side === "away" ? "Away" : "Home")}${r ? ` • ${esc(r)}` : ""}
-          </div>
-        </div>
-
-        <div style="flex:0 0 auto; font-weight:900; opacity:${active ? "1" : "0.6"};">
-          ${active ? "✓" : ""}
-        </div>
-      </button>
-    `;
-  }
-
-  const gameCards = (games || []).map(g => {
-    const eventId = String(g?.eventId || g?.id || "");
-    if (!eventId) return "";
-
-    const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-    const kickoffLabel = startMs
-      ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      : "—";
-
-    const lockedGame = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
-
-    // pending overrides saved
-    const pending = gpPendingGet(eventId);
-    const saved = String(myMap?.[eventId]?.side || "");
-    const my = pending || saved;
-
-    const awayName = safeStr(g?.awayName) || "Away";
-    const homeName = safeStr(g?.homeName) || "Home";
-
-    const awayLogo = safeStr(g?.awayLogo || "");
-    const homeLogo = safeStr(g?.homeLogo || "");
-
-    const awayRecord = safeStr(g?.awayRecord || "");
-    const homeRecord = safeStr(g?.homeRecord || "");
-
-    const awayRank = Number(g?.awayRank || 0);
-    const homeRank = Number(g?.homeRank || 0);
-
-    const venueName = safeStr(g?.venueName || "");
-    const venueLoc  = safeStr(g?.venueLoc || "");
-
-    const oddsDetails = safeStr(g?.oddsDetails || "");
-    const overUnder   = safeStr(g?.overUnder || "");
-
-    const venueLine = (venueName || venueLoc)
-      ? `${venueName}${venueName && venueLoc ? " - " : ""}${venueLoc}`
-      : "";
-
-    const oddsLineParts = [];
-    if (oddsDetails) oddsLineParts.push(oddsDetails);
-    if (overUnder) oddsLineParts.push(`O/U: ${overUnder}`);
-    const oddsLine = oddsLineParts.join(" • ");
-
-    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
-
-    const pickedTeam = (my === "away") ? awayName : (my === "home" ? homeName : "");
-    const isPending = !!pending && pending !== saved;
-
-    const everyoneLines = everyone.length
-      ? everyone.map(p => {
-          const nm = String(p?.name || "Someone");
-          const side = String(p?.side || "");
-          const team = (side === "away") ? awayName : (side === "home" ? homeName : "—");
-          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
-        }).join("")
-      : `<div class="muted">No picks yet.</div>`;
-
-    return `
-      <div class="game gpMiniGameCard" style="
-        margin-top:14px;
-        padding:14px;
-        border-radius:22px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.08);
-        position:relative;
-      " data-saved="${esc(saved)}">
-
-        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-          <div style="font-weight:900; font-size:28px; line-height:1.05;">
-            ${esc(awayName)} @<br/>${esc(homeName)}
-          </div>
-          <div class="muted" style="white-space:nowrap; font-weight:800; font-size:18px;">
-            ${esc(kickoffLabel)}
-          </div>
-        </div>
-
-        ${venueLine ? `<div class="muted" style="margin-top:10px; font-weight:700;">${esc(venueLine)}</div>` : ""}
-        ${oddsLine ? `<div class="muted" style="margin-top:6px; font-weight:800;">Favored: ${esc(oddsLine)}</div>` : ""}
-
-        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          ${buildTeamRow({
-            side: "away",
-            name: awayName,
-            logo: awayLogo,
-            record: awayRecord,
-            rankNum: awayRank,
-            active: my === "away",
-            disabled: lockedGame,
-            eventId
-          })}
-
-          ${buildTeamRow({
-            side: "home",
-            name: homeName,
-            logo: homeLogo,
-            record: homeRecord,
-            rankNum: homeRank,
-            active: my === "home",
-            disabled: lockedGame,
-            eventId
-          })}
+          ${teamRowBtn("away", away, awayLogo, "Away", awayActive, awayFade)}
+          ${teamRowBtn("home", home, homeLogo, "Home", homeActive, homeFade)}
         </div>
 
         <div class="gpMetaRow" style="margin-top:10px;">
