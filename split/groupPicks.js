@@ -667,13 +667,20 @@ function gpUpdateSaveBtnUI() {
 
   const lockMs = lockAt?.toMillis ? lockAt.toMillis() : 0;
   const now = Date.now();
+  const lockedSlate = lockMs ? (now >= lockMs) : false;
 
   const lockAtLabel = lockMs
     ? new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
 
-  // ✅ Add separators between games so cards don’t feel “stacked together”
-  const rows = (games || []).map((g, idx) => {
+  // This text gets updated by your timer logic if you already wired it that way
+  const headerLine = lockedSlate
+    ? `Slate is locked`
+    : `Slate is live • Locks in ⏳ • ${lockAtLabel ? `Locks at ${lockAtLabel}` : "Locks at game start"}`;
+
+  const headerPillClass = lockedSlate ? "status-final" : "status-live"; // reuse “live/final” vibe
+
+  const gameCards = (games || []).map(g => {
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
 
@@ -681,9 +688,11 @@ function gpUpdateSaveBtnUI() {
     const awayName = String(g?.awayName || "Away");
 
     const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+    const kickoffLabel = startMs
+      ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "—";
 
-    // lock behavior: if lockAt set, use it; otherwise lock at kickoff
-    const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
+    const lockedGame = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
     // pending overrides saved
     const pending = gpPendingGet(eventId); // "home"/"away"/""
@@ -704,41 +713,46 @@ function gpUpdateSaveBtnUI() {
         }).join("")
       : `<div class="muted">No picks yet.</div>`;
 
-    const separator = idx === 0 ? "" : `
-      <div class="gpRowSep" style="height:1px; background:rgba(255,255,255,0.08); margin:14px 0;"></div>
-    `;
-
+    // ✅ Mini “scorecard-like” container per game
     return `
-      ${separator}
-      <div class="gpGameRow" data-saved="${esc(saved)}">
-        <div class="gpMatchup">
-          <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
-          <div class="muted">
-            ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
-            ${locked ? " • LOCKED" : ""}
+      <div class="game gpMiniGameCard" style="
+        margin-top:14px;
+        padding:14px;
+        border-radius:18px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      " data-saved="${esc(saved)}">
+
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+          <div class="gpTeams" style="font-weight:800; font-size:22px; line-height:1.1;">
+            ${esc(awayName)} @ ${esc(homeName)}
+          </div>
+          <div class="muted" style="white-space:nowrap; font-weight:700;">
+            ${esc(kickoffLabel)}
           </div>
         </div>
 
-        <div class="gpButtons ${my ? "hasPick" : ""}">
-          <button class="gpBtn ${my === "away" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
+        <div class="gpButtons ${my ? "hasPick" : ""}" style="margin-top:12px;">
+          <button class="gpBtn ${my === "away" ? "gpBtnActive" : ""}" ${lockedGame ? "disabled" : ""}
             data-gppick="away" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
             ${esc(awayName)}
           </button>
 
-          <button class="gpBtn ${my === "home" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
+          <button class="gpBtn ${my === "home" ? "gpBtnActive" : ""}" ${lockedGame ? "disabled" : ""}
             data-gppick="home" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
             ${esc(homeName)}
           </button>
         </div>
 
-        <div class="gpMetaRow">
+        <div class="gpMetaRow" style="margin-top:10px;">
           ${my
             ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
             : `<div class="muted">No pick yet</div>`
           }
+          ${lockedGame ? `<div class="muted" style="margin-top:6px;">Locked</div>` : ``}
         </div>
 
-        <details class="gpEveryone" ${locked ? "open" : ""}>
+        <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
           <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
           <div class="gpEveryoneBody">${everyoneLines}</div>
         </details>
@@ -748,17 +762,11 @@ function gpUpdateSaveBtnUI() {
 
   // Save row (bottom)
   const saveRow = `
-    <div class="gpSaveRow" style="margin-top:12px; display:flex; align-items:center; gap:10px;">
+    <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
       <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
       <div class="muted">(Saves your pending picks)</div>
     </div>
   `;
-
-  // One clean status pill (timer updates this)
-  const pillClass = (lockMs && now >= lockMs) ? "status-locked" : "status-live";
-  const pillText = (lockMs && now >= lockMs)
-    ? "Slate is locked"
-    : `Slate is live • Locks in ⏳ • ${lockAtLabel ? `Locks at ${lockAtLabel}` : "Locks at game start"}`;
 
   return `
     <div class="game">
@@ -766,17 +774,13 @@ function gpUpdateSaveBtnUI() {
         <div class="statusPill status-other">GROUP PICKS</div>
       </div>
 
-      <div
-        id="gpSlatePill"
-        class="statusPill ${esc(pillClass)}"
+      <div class="statusPill ${esc(headerPillClass)}" style="margin-top:10px;" id="gpSlatePill"
         data-lockms="${esc(String(lockMs || 0))}"
-        data-lockat="${esc(lockAtLabel || "")}"
-        style="margin-top:10px;"
-      >
-        ${esc(pillText)}
+        data-lockat="${esc(lockAtLabel || "")}">
+        ${esc(headerLine)}
       </div>
 
-      ${rows || `<div class="notice">No games in slate.</div>`}
+      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in slate.</div>`}
 
       ${saveRow}
     </div>
