@@ -708,7 +708,7 @@ function gpUpdateSaveBtnUI() {
       : `<div class="muted">No picks yet.</div>`;
 
     return `
-      <div class="gpGameRow">
+      <div class="gpGameRow" data-saved="${esc(saved)}">
         <div class="gpMatchup">
           <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
           <div class="muted">
