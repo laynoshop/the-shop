@@ -551,19 +551,26 @@
     `;
   }).join("");
 
-  // ✅ show date nicely (like the rest of the app header does)
-  const prettyDate = yyyymmddToPrettySafe(dateYYYYMMDD);
-
   return `
     <div class="game" data-gpadminwrap="1" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
       <div class="gameHeader">
         <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
       </div>
 
-      <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(prettyDate)}</div>
-      <div class="gameMetaOddsLine">Select games + set lock time, then Create + Publish.</div>
+      <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(dateYYYYMMDD)}</div>
+      <div class="gameMetaOddsLine">Select games, then set lock time and Create + Publish.</div>
 
-      <div style="margin-top:12px;">
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
+        <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
+      </div>
+
+      <div style="margin-top:10px;">
+        ${rows || `<div class="notice">No games to build a slate from.</div>`}
+      </div>
+
+      <!-- ✅ Lock Time moved DOWN near publish -->
+      <div style="margin-top:14px;">
         <label style="display:block; margin-bottom:6px;">
           Lock Time:
           <input type="datetime-local" data-gplock="1" />
@@ -571,25 +578,16 @@
         <div class="muted" style="margin-top:4px;">Local time on this device.</div>
       </div>
 
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
-        <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
-      </div>
-
-      <div style="margin-top:8px;">
-        ${rows || `<div class="notice">No games to build a slate from.</div>`}
-      </div>
-
-      <div style="margin-top:12px; display:flex; gap:8px;">
+      <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <button class="smallBtn" type="button"
           data-gpadmin="createPublish"
           data-league="${esc(leagueKey)}"
           data-date="${esc(dateYYYYMMDD)}">
           Create + Publish Slate
         </button>
-      </div>
 
-      <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
+        <div class="muted" id="gpAdminStatus"></div>
+      </div>
     </div>
   `;
 }
