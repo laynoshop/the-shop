@@ -644,102 +644,120 @@
   // User-facing Group Picks card
   // -----------------------------
   function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
-    if (!published) {
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">GROUP PICKS</div>
-          </div>
-          <div class="gameMetaTopLine">No slate published yet</div>
-          <div class="gameMetaOddsLine">Waiting on admin.</div>
-        </div>
-      `;
-    }
-
-    const lockMs = lockAt?.toMillis ? lockAt.toMillis() : 0;
-    const lockLine = lockMs
-      ? `Locks at ${new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-      : "Picks lock at game start";
-
-    const now = Date.now();
-
-    const rows = (games || []).map(g => {
-      const eventId = String(g?.eventId || g?.id || "");
-      if (!eventId) return "";
-
-      const homeName = String(g?.homeName || "Home");
-      const awayName = String(g?.awayName || "Away");
-
-      const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-      const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
-
-      // Base saved pick from firestore
-      const saved = myMap?.[eventId]?.side || "";
-
-      // Pending pick overrides display (manual save UX)
-      const pending = __GP_PENDING?.[eventId] || "";
-      const shown = pending || saved;
-
-      const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
-      const everyoneLines = everyone.length
-        ? everyone.map(p => {
-          const nm = String(p?.name || "Someone");
-          const side = String(p?.side || "");
-          const pickedTeam = (side === "away") ? awayName : (side === "home" ? homeName : "—");
-          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(pickedTeam)}</div>`;
-        }).join("")
-        : `<div class="muted">No picks yet.</div>`;
-
-      return `
-        <div class="gpGameRow" data-gprow="1" data-eid="${esc(eventId)}">
-          <div class="gpMatchup">
-            <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
-            <div class="muted">
-              ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
-              ${locked ? " • LOCKED" : ""}
-            </div>
-          </div>
-
-          <div class="gpButtons">
-            <button class="gpBtn ${shown === "away" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
-              data-gppick="away" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
-              ${esc(awayName)}
-            </button>
-
-            <button class="gpBtn ${shown === "home" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
-              data-gppick="home" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
-              ${esc(homeName)}
-            </button>
-          </div>
-
-          <details class="gpEveryone" ${locked ? "open" : ""}>
-            <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-            <div class="gpEveryoneBody">${everyoneLines}</div>
-          </details>
-        </div>
-      `;
-    }).join("");
-
-    // ✅ Manual save bar (simple, uses existing .smallBtn styling)
-    const saveBar = `
-      <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-        <div class="muted" data-gpsavecount="1">No pending picks</div>
-        <button class="smallBtn" type="button" data-gpsave="1" disabled>Saved</button>
-      </div>
-    `;
-
+  if (!published) {
     return `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">GROUP PICKS</div>
         </div>
-        <div class="gameMetaTopLine">Slate is live</div>
-        <div class="gameMetaOddsLine">${esc(lockLine)}</div>
-        ${saveBar}
-        ${rows || `<div class="notice">No games in slate.</div>`}
+        <div class="gameMetaTopLine">No slate published yet</div>
+        <div class="gameMetaOddsLine">Waiting on admin.</div>
       </div>
     `;
   }
+
+  const lockMs = lockAt?.toMillis ? lockAt.toMillis() : 0;
+  const now = Date.now();
+
+  // We will render BOTH:
+  // - a static "Locks at ..." line (safe fallback)
+  // - a live countdown pill that JS updates
+  const lockAtLabel = lockMs
+    ? new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : "";
+
+  const lockLine = lockMs
+    ? `🔒 Locks at ${lockAtLabel}`
+    : "🔒 Picks lock at game start";
+
+  const rows = (games || []).map(g => {
+    const eventId = String(g?.eventId || g?.id || "");
+    if (!eventId) return "";
+
+    const homeName = String(g?.homeName || "Home");
+    const awayName = String(g?.awayName || "Away");
+
+    const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+
+    // locked if global lockAt passed, else locked at kickoff
+    const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
+
+    const my = String(myMap?.[eventId]?.side || ""); // "home" | "away" | ""
+
+    // compute counts from allPicks[eventId]
+    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+    let awayCt = 0, homeCt = 0;
+    for (const p of everyone) {
+      const side = String(p?.side || "");
+      if (side === "away") awayCt++;
+      if (side === "home") homeCt++;
+    }
+
+    const pickedTeam = (my === "away") ? awayName : (my === "home" ? homeName : "");
+
+    const everyoneLines = everyone.length
+      ? everyone.map(p => {
+          const nm = String(p?.name || "Someone");
+          const side = String(p?.side || "");
+          const team = (side === "away") ? awayName : (side === "home" ? homeName : "—");
+          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
+        }).join("")
+      : `<div class="muted">No picks yet.</div>`;
+
+    return `
+      <div class="gpGameRow">
+        <div class="gpMatchup">
+          <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
+          <div class="muted">
+            ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
+            ${locked ? " • LOCKED" : ""}
+          </div>
+        </div>
+
+        <div class="gpButtons ${my ? "hasPick" : ""}">
+          <button class="gpBtn ${my === "away" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
+            data-gppick="away" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
+            ${esc(awayName)}
+          </button>
+
+          <button class="gpBtn ${my === "home" ? "gpBtnActive" : ""}" ${locked ? "disabled" : ""}
+            data-gppick="home" data-slate="${esc(slateId)}" data-eid="${esc(eventId)}">
+            ${esc(homeName)}
+          </button>
+        </div>
+
+        <div class="gpMetaRow">
+          <div class="gpCounts">${esc(awayName)} ${awayCt} • ${esc(homeName)} ${homeCt}</div>
+          ${my ? `<div class="gpYouPicked">✓ Your Pick: ${esc(pickedTeam)}</div>` : `<div class="muted">No pick yet</div>`}
+        </div>
+
+        <details class="gpEveryone" ${locked ? "open" : ""}>
+          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
+          <div class="gpEveryoneBody">${everyoneLines}</div>
+        </details>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">GROUP PICKS</div>
+      </div>
+
+      <div class="gameMetaTopLine">Slate is live</div>
+
+      <div class="gpLockLine">
+        <div class="gameMetaOddsPlain">${esc(lockLine)}</div>
+        <div id="gpLockCountdown" class="gpLockCountdown" data-lockms="${esc(String(lockMs || 0))}">
+          ${lockMs ? "⏳ Loading…" : "—"}
+        </div>
+      </div>
+
+      ${rows || `<div class="notice">No games in slate.</div>`}
+    </div>
+  `;
+}
 
   // -----------------------------
   // Main Picks renderer
@@ -867,18 +885,68 @@
     `;
   }
 
-  function postRender() {
-    try { setPicksNameUI(); } catch {}
-    try {
-      if (typeof window.replaceMichiganText === "function") setTimeout(() => window.replaceMichiganText(), 0);
-    } catch {}
-    try {
-      if (typeof window.updateRivalryBanner === "function") window.updateRivalryBanner();
-    } catch {}
+function gpFormatCountdown(msLeft) {
+  const s = Math.max(0, Math.floor(msLeft / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
 
-    // ✅ Update save bar after render
-    try { gpRefreshSaveUI(); } catch {}
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function gpStartLockCountdownTimer() {
+  // clear old timer
+  if (window.__GP_LOCK_TICK) {
+    clearInterval(window.__GP_LOCK_TICK);
+    window.__GP_LOCK_TICK = null;
   }
+
+  const el = document.getElementById("gpLockCountdown");
+  if (!el) return;
+
+  const lockMs = Number(el.getAttribute("data-lockms") || "0");
+  if (!lockMs) {
+    el.textContent = "—";
+    return;
+  }
+
+  const tick = () => {
+    const now = Date.now();
+    const left = lockMs - now;
+
+    if (left <= 0) {
+      el.textContent = "🔒 Locked";
+      el.classList.remove("warn", "danger");
+      el.classList.add("danger");
+      return;
+    }
+
+    el.textContent = `🔒 Locks in ${gpFormatCountdown(left)}`;
+
+    // styling thresholds
+    el.classList.remove("warn", "danger");
+    if (left <= 5 * 60 * 1000) el.classList.add("danger");
+    else if (left <= 30 * 60 * 1000) el.classList.add("warn");
+  };
+
+  tick();
+  window.__GP_LOCK_TICK = setInterval(tick, 1000);
+}
+
+  function postRender() {
+  try { setPicksNameUI(); } catch {}
+  try { gpStartLockCountdownTimer(); } catch {}
+
+  try {
+    if (typeof window.replaceMichiganText === "function") setTimeout(() => window.replaceMichiganText(), 0);
+  } catch {}
+
+  try {
+    if (typeof window.updateRivalryBanner === "function") window.updateRivalryBanner();
+  } catch {}
+}
 
   // -----------------------------
   // Click handling (delegated)
