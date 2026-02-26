@@ -529,67 +529,70 @@
   // ✅ Admin UI (no ESPN debug line, one button)
   // -----------------------------
   function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
-    const now = Date.now();
-    const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+  const now = Date.now();
+  const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
 
-    const rows = sorted.map(ev => {
-      const eventId = String(ev?.id || "");
-      if (!eventId) return "";
-      const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
+  const rows = sorted.map(ev => {
+    const eventId = String(ev?.id || "");
+    if (!eventId) return "";
+    const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
 
-      const startMs = kickoffMsFromEvent(ev);
-      const started = startMs ? (startMs <= now) : false;
-
-      return `
-        <div class="gpAdminRow">
-          <label class="gpAdminLabel">
-            <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
-            <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
-            <span class="muted gpAdminTime">${esc(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
-          </label>
-        </div>
-      `;
-    }).join("");
+    const startMs = kickoffMsFromEvent(ev);
+    const started = startMs ? (startMs <= now) : false;
 
     return `
-      <div class="game" data-gpadminwrap="1" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
-        <div class="gameHeader">
-          <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
-        </div>
-
-        <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(dateYYYYMMDD)}</div>
-        <div class="gameMetaOddsLine">Select games + set lock time, then Create + Publish.</div>
-
-        <div style="margin-top:12px;">
-          <label style="display:block; margin-bottom:6px;">
-            Lock Time:
-            <input type="datetime-local" data-gplock="1" />
-          </label>
-          <div class="muted" style="margin-top:4px;">Local time on this device.</div>
-        </div>
-
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
-          <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
-        </div>
-
-        <div style="margin-top:8px;">
-          ${rows || `<div class="notice">No games to build a slate from.</div>`}
-        </div>
-
-        <div style="margin-top:12px; display:flex; gap:8px;">
-          <button class="smallBtn" type="button"
-            data-gpadmin="createPublish"
-            data-league="${esc(leagueKey)}"
-            data-date="${esc(dateYYYYMMDD)}">
-            Create + Publish Slate
-          </button>
-        </div>
-
-        <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
+      <div class="gpAdminRow">
+        <label class="gpAdminLabel">
+          <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
+          <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
+          <span class="muted gpAdminTime">${esc(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
+        </label>
       </div>
     `;
-  }
+  }).join("");
+
+  // ✅ show date nicely (like the rest of the app header does)
+  const prettyDate = yyyymmddToPrettySafe(dateYYYYMMDD);
+
+  return `
+    <div class="game" data-gpadminwrap="1" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
+      <div class="gameHeader">
+        <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
+      </div>
+
+      <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(prettyDate)}</div>
+      <div class="gameMetaOddsLine">Select games + set lock time, then Create + Publish.</div>
+
+      <div style="margin-top:12px;">
+        <label style="display:block; margin-bottom:6px;">
+          Lock Time:
+          <input type="datetime-local" data-gplock="1" />
+        </label>
+        <div class="muted" style="margin-top:4px;">Local time on this device.</div>
+      </div>
+
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
+        <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        ${rows || `<div class="notice">No games to build a slate from.</div>`}
+      </div>
+
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button class="smallBtn" type="button"
+          data-gpadmin="createPublish"
+          data-league="${esc(leagueKey)}"
+          data-date="${esc(dateYYYYMMDD)}">
+          Create + Publish Slate
+        </button>
+      </div>
+
+      <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
+    </div>
+  `;
+}
 
   function gpApplyAdminSelection(wrapEl, mode) {
     if (!wrapEl) return;
@@ -733,7 +736,6 @@ function gpUpdateSaveBtnUI() {
         </div>
 
         <div class="gpMetaRow">
-          <div class="gpCounts">${esc(awayName)} ${awayCt} • ${esc(homeName)} ${homeCt}</div>
           ${my
             ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
             : `<div class="muted">No pick yet</div>`
