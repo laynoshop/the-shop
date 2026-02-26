@@ -599,50 +599,55 @@
   }
 
   // -----------------------------
-  // ✅ Manual-save state for user picks
-  // -----------------------------
-  let __GP_PENDING = {};         // { [eventId]: "home"|"away" }
-  let __GP_LAST = { slateId: "", uid: "", myMap: {}, lockAt: null, games: [] };
-
-  function gpPendingCount() {
-    return Object.keys(__GP_PENDING || {}).length;
-  }
-
-  function gpClearPending() {
-    __GP_PENDING = {};
-  }
-
-  function gpSetPending(eventId, side) {
-    if (!eventId) return;
-    __GP_PENDING[eventId] = side;
-  }
-
-  function gpApplyPendingToRow(rowEl, eventId) {
-    if (!rowEl || !eventId) return;
-    const pending = __GP_PENDING?.[eventId] || "";
-    if (!pending) return;
-
-    const btnAway = rowEl.querySelector('button[data-gppick="away"]');
-    const btnHome = rowEl.querySelector('button[data-gppick="home"]');
-    if (btnAway) btnAway.classList.toggle("gpBtnActive", pending === "away");
-    if (btnHome) btnHome.classList.toggle("gpBtnActive", pending === "home");
-  }
-
-  function gpRefreshSaveUI() {
-    const saveBtn = document.querySelector('button[data-gpsave="1"]');
-    const countEl = document.querySelector('[data-gpsavecount="1"]');
-    const n = gpPendingCount();
-
-    if (countEl) countEl.textContent = n ? `${n} pending` : "No pending picks";
-    if (saveBtn) {
-      saveBtn.disabled = (n === 0);
-      saveBtn.textContent = (n === 0) ? "Saved" : `Save Picks`;
-    }
-  }
-
-  // -----------------------------
   // User-facing Group Picks card
   // -----------------------------
+  // -----------------------------
+// Pending picks (manual save)
+// -----------------------------
+window.__GP_PENDING = window.__GP_PENDING || { sid: "", map: {} };
+
+function gpPendingResetIfSlateChanged(sid) {
+  if (window.__GP_PENDING.sid !== sid) {
+    window.__GP_PENDING.sid = sid;
+    window.__GP_PENDING.map = {};
+  }
+}
+
+function gpPendingCount() {
+  const m = window.__GP_PENDING?.map || {};
+  return Object.keys(m).length;
+}
+
+function gpPendingGet(eventId) {
+  return String(window.__GP_PENDING?.map?.[eventId] || "");
+}
+
+function gpPendingSet(eventId, side) {
+  if (!eventId) return;
+  if (!window.__GP_PENDING) window.__GP_PENDING = { sid: "", map: {} };
+
+  const s = String(side || "");
+  if (!s) {
+    delete window.__GP_PENDING.map[eventId];
+    return;
+  }
+  window.__GP_PENDING.map[eventId] = s; // "home" | "away"
+}
+
+function gpPendingClear() {
+  if (!window.__GP_PENDING) window.__GP_PENDING = { sid: "", map: {} };
+  window.__GP_PENDING.map = {};
+}
+
+function gpUpdateSaveBtnUI() {
+  const btn = document.querySelector('[data-gpaction="savePicks"]');
+  if (!btn) return;
+
+  const n = gpPendingCount();
+  btn.textContent = n ? `Save (${n})` : "Save";
+  btn.disabled = !n;
+}
+  
   function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
   if (!published) {
     return `
@@ -659,9 +664,6 @@
   const lockMs = lockAt?.toMillis ? lockAt.toMillis() : 0;
   const now = Date.now();
 
-  // We will render BOTH:
-  // - a static "Locks at ..." line (safe fallback)
-  // - a live countdown pill that JS updates
   const lockAtLabel = lockMs
     ? new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
@@ -678,13 +680,13 @@
     const awayName = String(g?.awayName || "Away");
 
     const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-
-    // locked if global lockAt passed, else locked at kickoff
     const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
-    const my = String(myMap?.[eventId]?.side || ""); // "home" | "away" | ""
+    // ✅ pending overrides saved
+    const pending = gpPendingGet(eventId); // "home"/"away"/""
+    const saved = String(myMap?.[eventId]?.side || "");
+    const my = pending || saved;
 
-    // compute counts from allPicks[eventId]
     const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
     let awayCt = 0, homeCt = 0;
     for (const p of everyone) {
@@ -694,6 +696,7 @@
     }
 
     const pickedTeam = (my === "away") ? awayName : (my === "home" ? homeName : "");
+    const isPending = !!pending && pending !== saved;
 
     const everyoneLines = everyone.length
       ? everyone.map(p => {
@@ -728,7 +731,10 @@
 
         <div class="gpMetaRow">
           <div class="gpCounts">${esc(awayName)} ${awayCt} • ${esc(homeName)} ${homeCt}</div>
-          ${my ? `<div class="gpYouPicked">✓ Your Pick: ${esc(pickedTeam)}</div>` : `<div class="muted">No pick yet</div>`}
+          ${my
+            ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
+            : `<div class="muted">No pick yet</div>`
+          }
         </div>
 
         <details class="gpEveryone" ${locked ? "open" : ""}>
@@ -796,6 +802,8 @@
         : "";
 
       const sid = slateIdFor(selectedKey, selectedDate);
+      gpPendingResetIfSlateChanged(sid);
+      window.__GP_PENDING.sid = sid;
       const slateRef = db.collection("pickSlates").doc(sid);
       const slateSnap = await slateRef.get();
 
@@ -825,15 +833,6 @@
       const myMap = await gpGetMyPicksMap(db, sid, uid);
       const allPicks = await gpGetAllPicksForSlate(db, sid);
 
-      // Track last render for save
-      __GP_LAST = {
-        slateId: sid,
-        uid,
-        myMap,
-        lockAt: slateData.lockAt || null,
-        games
-      };
-
       content.innerHTML = `
         ${renderPicksHeaderHTML(prettyDate, "Updated", selectedKey)}
         ${adminHTML}
@@ -859,31 +858,32 @@
   }
 
   function renderPicksHeaderHTML(prettyDate, rightLabel, selectedKey) {
-    return `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Picks</h2>
-            <span class="badge">Group</span>
-          </div>
-
-          <div class="headerActions">
-            <button class="smallBtn" data-gpaction="name">Name</button>
-            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
-          </div>
+  return `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Picks</h2>
+          <span class="badge">Group</span>
         </div>
 
-        <div class="subline">
-          <div class="sublineLeft">
-            ${buildLeagueSelectHTMLSafe(selectedKey)}
-            ${buildCalendarButtonHTMLSafe()}
-            <button class="iconBtn" data-gpaction="addQuick" title="Add pick">＋</button>
-          </div>
-          <div>${esc(prettyDate)} • ${esc(rightLabel || "")}</div>
+        <div class="headerActions">
+          <button class="smallBtn" data-gpaction="name">Name</button>
+          <button class="smallBtn" data-gpaction="savePicks">Save</button>
+          <button class="smallBtn" data-gpaction="refresh">Refresh</button>
         </div>
       </div>
-    `;
-  }
+
+      <div class="subline">
+        <div class="sublineLeft">
+          ${buildLeagueSelectHTMLSafe(selectedKey)}
+          ${buildCalendarButtonHTMLSafe()}
+          <button class="iconBtn" data-gpaction="addQuick" title="Add pick">＋</button>
+        </div>
+        <div>${esc(prettyDate)} • ${esc(rightLabel || "")}</div>
+      </div>
+    </div>
+  `;
+}
 
 function gpFormatCountdown(msLeft) {
   const s = Math.max(0, Math.floor(msLeft / 1000));
@@ -938,11 +938,11 @@ function gpStartLockCountdownTimer() {
   function postRender() {
   try { setPicksNameUI(); } catch {}
   try { gpStartLockCountdownTimer(); } catch {}
+  try { gpUpdateSaveBtnUI(); } catch {}
 
   try {
     if (typeof window.replaceMichiganText === "function") setTimeout(() => window.replaceMichiganText(), 0);
   } catch {}
-
   try {
     if (typeof window.updateRivalryBanner === "function") window.updateRivalryBanner();
   } catch {}
@@ -970,6 +970,38 @@ function gpStartLockCountdownTimer() {
         renderPicks(true);
         return;
       }
+      if (act === "savePicks") {
+  ensureFirebaseReadySafe()
+    .then(async () => {
+      const db = firebase.firestore();
+      const uid = firebase.auth().currentUser?.uid || "";
+      if (!uid) throw new Error("No uid (not signed in)");
+
+      const slateId = String(window.__GP_PENDING?.sid || "");
+      const pendingMap = window.__GP_PENDING?.map || {};
+      const keys = Object.keys(pendingMap);
+
+      if (!slateId || !keys.length) {
+        gpUpdateSaveBtnUI();
+        return;
+      }
+
+      // ✅ batch-save everything in one commit
+      await gpSaveMyPicksBatch(db, slateId, uid, pendingMap);
+
+      gpPendingClear();
+    })
+    .then(() => renderPicks(true))
+    .catch((err) => {
+      console.error("savePicks error:", err);
+      const code = err?.code ? `\n\nCode: ${err.code}` : "";
+      const msg = err?.message ? `\n${err.message}` : "";
+      alert("Couldn’t save picks." + code + msg);
+      gpUpdateSaveBtnUI();
+    });
+
+  return;
+}
       if (act === "addQuick") {
         alert("Quick-add is coming soon. Group Picks slate is the main workflow.");
         return;
@@ -983,56 +1015,38 @@ function gpStartLockCountdownTimer() {
         return;
       }
 
-      // ✅ User: Save Picks (manual save)
-      const gpSave = btn.getAttribute("data-gpsave");
-      if (gpSave) {
-        const sid = String(__GP_LAST?.slateId || "");
-        const uid = String(__GP_LAST?.uid || "");
-        const n = gpPendingCount();
-        if (!sid || !uid || !n) {
-          gpRefreshSaveUI();
-          return;
-        }
+      // ✅ User pick buttons: set pending locally (no immediate save)
+const gpPick = btn.getAttribute("data-gppick");
+if (gpPick) {
+  const eventId = btn.getAttribute("data-eid") || "";
+  if (!eventId) return;
 
-        btn.disabled = true;
-        btn.textContent = "Saving…";
+  // respect locked/disabled
+  if (btn.disabled) return;
 
-        ensureFirebaseReadySafe()
-          .then(async () => {
-            const db = firebase.firestore();
-            await gpSaveMyPicksBatch(db, sid, uid, __GP_PENDING);
-          })
-          .then(() => {
-            gpClearPending();
-          })
-          .then(() => renderPicks(true))
-          .catch((err) => {
-            console.error("gpSave batch error:", err);
-            const code = err?.code ? `\n\nCode: ${err.code}` : "";
-            const msg = err?.message ? `\n${err.message}` : "";
-            alert("Couldn’t save picks." + code + msg);
-            gpRefreshSaveUI();
-          });
+  // toggle: tap same side again clears it
+  const cur = gpPendingGet(eventId);
+  if (cur === gpPick) gpPendingSet(eventId, "");
+  else gpPendingSet(eventId, gpPick);
 
-        return;
-      }
+  // quick UI update
+gpUpdateSaveBtnUI();
 
-      // ✅ User pick buttons: now ONLY set pending + update UI, no immediate save
-      const gpPick = btn.getAttribute("data-gppick");
-      if (gpPick) {
-        const slateId = btn.getAttribute("data-slate") || "";
-        const eventId = btn.getAttribute("data-eid") || "";
-        if (!slateId || !eventId) return;
+// ✅ update active states in-place (no full re-render)
+const row = btn.closest(".gpGameRow");
+if (row) {
+  const eid = eventId;
+  const curPick = gpPendingGet(eid) || String(row.getAttribute("data-saved") || "");
+  const awayBtn = row.querySelector('button[data-gppick="away"]');
+  const homeBtn = row.querySelector('button[data-gppick="home"]');
+  if (awayBtn) awayBtn.classList.toggle("gpBtnActive", curPick === "away");
+  if (homeBtn) homeBtn.classList.toggle("gpBtnActive", curPick === "home");
+}
 
-        gpSetPending(eventId, gpPick);
+// ❌ REMOVE this line if it exists:
+// renderPicks(false);
 
-        // Update UI immediately (no rerender)
-        const row = btn.closest('[data-gprow="1"]');
-        if (row) gpApplyPendingToRow(row, eventId);
-
-        gpRefreshSaveUI();
-        return;
-      }
+return;
 
       // Admin actions
       const gpAdmin = btn.getAttribute("data-gpadmin");
