@@ -489,62 +489,78 @@
   }
 
   function gpBuildAdminSlateHTML(events, leagueKey, dateYYYYMMDD) {
-    const now = Date.now();
-    const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+  const now = Date.now();
+  const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
 
-    const rows = sorted.map(ev => {
-      const eventId = String(ev?.id || "");
-      if (!eventId) return "";
-      const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
+  const rows = sorted.map(ev => {
+    const eventId = String(ev?.id || "");
+    if (!eventId) return "";
+    const { homeName, awayName, iso } = getMatchupNamesFromEvent(ev);
 
-      const startMs = kickoffMsFromEvent(ev);
-      const started = startMs ? (startMs <= now) : false;
-
-      return `
-        <div class="gpAdminRow">
-          <label class="gpAdminLabel">
-            <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
-            <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
-            <span class="muted gpAdminTime">${esc(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
-          </label>
-        </div>
-      `;
-    }).join("");
-
-    const dbg = String(window.__GP_LAST_FETCH_DEBUG || "");
-    const dbgLine = dbg ? `<div class="muted" style="margin-top:8px;">ESPN: ${esc(dbg)}</div>` : "";
+    const startMs = kickoffMsFromEvent(ev);
+    const started = startMs ? (startMs <= now) : false;
 
     return `
-      <div class="game" data-gpadminwrap="1" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
-        <div class="gameHeader">
-          <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
-        </div>
-
-        <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(dateYYYYMMDD)}</div>
-        <div class="gameMetaOddsLine">Select games, set lock time, then Create/Replace and Publish.</div>
-        ${dbgLine}
-
-        <div style="margin-top:12px;">
-          <label style="display:block; margin-bottom:6px;">
-            Lock Time:
-            <input type="datetime-local" data-gplock="1" />
-          </label>
-          <div class="muted" style="margin-top:4px;">Local time on this device.</div>
-        </div>
-
-        <div style="margin-top:8px;">
-          ${rows || `<div class="notice">No games to build a slate from.</div>`}
-        </div>
-
-        <div style="margin-top:12px; display:flex; gap:8px;">
-          <button class="smallBtn" data-gpadmin="create" data-league="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">Create/Replace Slate</button>
-          <button class="smallBtn" data-gpadmin="publish" data-league="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">Publish Slate</button>
-        </div>
-
-        <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
+      <div class="gpAdminRow">
+        <label class="gpAdminLabel">
+          <!-- NOTE: no "checked" attribute on purpose -->
+          <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
+          <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
+          <span class="muted gpAdminTime">${esc(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
+        </label>
       </div>
     `;
-  }
+  }).join("");
+
+  const dbg = String(window.__GP_LAST_FETCH_DEBUG || "");
+  const dbgLine = dbg ? `<div class="muted" style="margin-top:8px;">ESPN: ${esc(dbg)}</div>` : "";
+
+  return `
+    <div class="game" data-gpadminwrap="1" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
+      <div class="gameHeader">
+        <div class="statusPill status-other">ADMIN: SLATE BUILDER</div>
+      </div>
+
+      <div class="gameMetaTopLine">${esc(String(leagueKey || "").toUpperCase())} • ${esc(dateYYYYMMDD)}</div>
+      <div class="gameMetaOddsLine">Select games, set lock time, then Create/Replace and Publish.</div>
+      ${dbgLine}
+
+      <div style="margin-top:12px;">
+        <label style="display:block; margin-bottom:6px;">
+          Lock Time:
+          <input type="datetime-local" data-gplock="1" />
+        </label>
+        <div class="muted" style="margin-top:4px;">Local time on this device.</div>
+      </div>
+
+      <!-- ✅ NEW: Select All / Select None -->
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
+        <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        ${rows || `<div class="notice">No games to build a slate from.</div>`}
+      </div>
+
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button class="smallBtn" data-gpadmin="create" data-league="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">Create/Replace Slate</button>
+        <button class="smallBtn" data-gpadmin="publish" data-league="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">Publish Slate</button>
+      </div>
+
+      <div class="muted" id="gpAdminStatus" style="margin-top:8px;"></div>
+    </div>
+  `;
+}
+
+function gpApplyAdminSelection(wrapEl, mode) {
+  if (!wrapEl) return;
+
+  const checks = Array.from(wrapEl.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
+  const on = (mode === "all");
+
+  for (const c of checks) c.checked = on;
+}
 
   function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
     if (!published) {
@@ -758,144 +774,156 @@
   }
 
   // -----------------------------
-  // Click handling (delegated)
-  // -----------------------------
-  if (!window.__GP_CLICK_BOUND) {
-    document.addEventListener("click", (e) => {
-      const btn = e.target && e.target.closest ? e.target.closest("button") : null;
-      if (!btn) return;
+// Click handling (delegated)
+// -----------------------------
+if (!window.__GP_CLICK_BOUND) {
+  document.addEventListener("click", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("button") : null;
+    if (!btn) return;
 
-      const act = btn.getAttribute("data-gpaction");
-      if (act === "refresh") {
-        renderPicks(true);
-        return;
-      }
-      if (act === "name") {
-        const cur = getPicksDisplayName();
-        const picked = prompt("Enter name for Picks:", cur) || "";
-        const name = String(picked).trim();
-        if (name) safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
-        renderPicks(true);
-        return;
-      }
-      if (act === "addQuick") {
-        alert("Quick-add is coming soon. Group Picks slate is the main workflow.");
-        return;
-      }
+    // Header actions
+    const act = btn.getAttribute("data-gpaction");
+    if (act === "refresh") {
+      renderPicks(true);
+      return;
+    }
+    if (act === "name") {
+      const cur = getPicksDisplayName();
+      const picked = prompt("Enter name for Picks:", cur) || "";
+      const name = String(picked).trim();
+      if (name) safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
+      renderPicks(true);
+      return;
+    }
+    if (act === "addQuick") {
+      alert("Quick-add is coming soon. Group Picks slate is the main workflow.");
+      return;
+    }
 
-      const gpPick = btn.getAttribute("data-gppick");
-      if (gpPick) {
-        const slateId = btn.getAttribute("data-slate") || "";
-        const eventId = btn.getAttribute("data-eid") || "";
+    // ✅ Admin: Select All / Select None
+    const gpSelect = btn.getAttribute("data-gpselect");
+    if (gpSelect) {
+      const wrap = btn.closest('[data-gpadminwrap="1"]');
+      gpApplyAdminSelection(wrap, gpSelect); // "all" or "none"
+      return;
+    }
 
-        ensureFirebaseReadySafe()
-          .then(async () => {
-            const db = firebase.firestore();
-            const uid = firebase.auth().currentUser?.uid || "";
-            if (!uid) throw new Error("No uid (not signed in)");
-            await gpSaveMyPick(db, slateId, uid, eventId, gpPick);
-          })
-          .then(() => renderPicks(true))
-          .catch((err) => {
-            console.error("gpSaveMyPick error:", err);
-            const code = err?.code ? `\n\nCode: ${err.code}` : "";
-            const msg = err?.message ? `\n${err.message}` : "";
-            alert("Couldn’t save pick." + code + msg);
-          });
+    // User pick buttons
+    const gpPick = btn.getAttribute("data-gppick");
+    if (gpPick) {
+      const slateId = btn.getAttribute("data-slate") || "";
+      const eventId = btn.getAttribute("data-eid") || "";
 
-        return;
-      }
+      ensureFirebaseReadySafe()
+        .then(async () => {
+          const db = firebase.firestore();
+          const uid = firebase.auth().currentUser?.uid || "";
+          if (!uid) throw new Error("No uid (not signed in)");
+          await gpSaveMyPick(db, slateId, uid, eventId, gpPick);
+        })
+        .then(() => renderPicks(true))
+        .catch((err) => {
+          console.error("gpSaveMyPick error:", err);
+          const code = err?.code ? `\n\nCode: ${err.code}` : "";
+          const msg = err?.message ? `\n${err.message}` : "";
+          alert("Couldn’t save pick." + code + msg);
+        });
 
-      const gpAdmin = btn.getAttribute("data-gpadmin");
-      if (gpAdmin) {
-        const leagueKey = btn.getAttribute("data-league") || "";
-        const dateYYYYMMDD = btn.getAttribute("data-date") || "";
+      return;
+    }
 
-        ensureFirebaseReadySafe()
-          .then(async () => {
-            const role = getRole();
-            if (role !== "admin") {
-              alert("Admin only.");
+    // Admin actions
+    const gpAdmin = btn.getAttribute("data-gpadmin");
+    if (gpAdmin) {
+      const leagueKey = btn.getAttribute("data-league") || "";
+      const dateYYYYMMDD = btn.getAttribute("data-date") || "";
+
+      ensureFirebaseReadySafe()
+        .then(async () => {
+          const role = getRole();
+          if (role !== "admin") {
+            alert("Admin only.");
+            return;
+          }
+
+          const db = firebase.firestore();
+          const uid = firebase.auth().currentUser?.uid || "";
+          if (!uid) throw new Error("No uid (not signed in)");
+
+          const statusEl = document.getElementById("gpAdminStatus");
+          if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
+
+          const wrap = btn.closest('[data-gpadminwrap="1"]');
+          const lockVal = (wrap?.querySelector('input[data-gplock="1"]')?.value || "").trim();
+          const lockDate = lockVal ? new Date(lockVal) : null;
+
+          // ✅ Read checked games (scoped to this admin wrap)
+          const checks = Array.from(wrap?.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]') || []);
+          const selected = new Set(
+            checks
+              .filter(c => c.checked)
+              .map(c => String(c.getAttribute("data-eid") || ""))
+              .filter(Boolean)
+          );
+
+          const sid = slateIdFor(leagueKey, dateYYYYMMDD);
+          const slateRef = db.collection("pickSlates").doc(sid);
+
+          if (gpAdmin === "create") {
+            if (selected.size === 0) {
+              if (statusEl) statusEl.textContent = "Select at least 1 game first.";
+              alert("Select at least 1 game first.");
               return;
             }
 
-            const db = firebase.firestore();
-            const uid = firebase.auth().currentUser?.uid || "";
-            if (!uid) throw new Error("No uid (not signed in)");
+            const events = await fetchEventsFor(leagueKey, dateYYYYMMDD);
+            await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
 
-            const statusEl = document.getElementById("gpAdminStatus");
-            if (statusEl) statusEl.textContent = (gpAdmin === "publish") ? "Publishing…" : "Saving slate…";
+            const gamesSnap = await slateRef.collection("games").get();
+            const gameCount = gamesSnap.size || 0;
 
-            const wrap = btn.closest('[data-gpadminwrap="1"]');
-            const lockVal = (wrap?.querySelector('input[data-gplock="1"]')?.value || "").trim();
-            const lockDate = lockVal ? new Date(lockVal) : null;
+            if (statusEl) statusEl.textContent = `Slate saved ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
+            return;
+          }
 
-            const checks = Array.from(document.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
-            const selected = new Set(
-              checks
-                .filter(c => c.checked)
-                .map(c => String(c.getAttribute("data-eid") || ""))
-                .filter(Boolean)
-            );
-
-            const sid = slateIdFor(leagueKey, dateYYYYMMDD);
-            const slateRef = db.collection("pickSlates").doc(sid);
-
-            if (gpAdmin === "create") {
-              if (selected.size === 0) {
-                if (statusEl) statusEl.textContent = "Select at least 1 game first.";
-                alert("Select at least 1 game first.");
-                return;
-              }
-
-              const events = await fetchEventsFor(leagueKey, dateYYYYMMDD);
-              await gpAdminCreateOrReplaceSlate(db, leagueKey, dateYYYYMMDD, uid, selected, events);
-
-              const gamesSnap = await slateRef.collection("games").get();
-              const gameCount = gamesSnap.size || 0;
-
-              if (statusEl) statusEl.textContent = `Slate saved ✅ (${gameCount} game${gameCount === 1 ? "" : "s"})`;
+          if (gpAdmin === "publish") {
+            const slateSnap = await slateRef.get();
+            if (!slateSnap.exists) {
+              if (statusEl) statusEl.textContent = "Create the slate first.";
+              alert("No slate exists yet. Tap Create/Replace Slate first.");
               return;
             }
 
-            if (gpAdmin === "publish") {
-              const slateSnap = await slateRef.get();
-              if (!slateSnap.exists) {
-                if (statusEl) statusEl.textContent = "Create the slate first.";
-                alert("No slate exists yet. Tap Create/Replace Slate first.");
-                return;
-              }
-
-              if (!lockDate || isNaN(lockDate.getTime())) {
-                if (statusEl) statusEl.textContent = "Set a valid lock time first.";
-                alert("Set a valid lock time first (use the Lock Time field).");
-                return;
-              }
-
-              await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockDate);
-
-              if (statusEl) statusEl.textContent =
-                `Slate published ✅ (locks at ${lockDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
-
+            if (!lockDate || isNaN(lockDate.getTime())) {
+              if (statusEl) statusEl.textContent = "Set a valid lock time first.";
+              alert("Set a valid lock time first (use the Lock Time field).");
               return;
             }
-          })
-          .then(() => renderPicks(true))
-          .catch((err) => {
-            console.error("gpAdmin error:", err);
-            const code = err?.code ? `\n\nCode: ${err.code}` : "";
-            const msg = err?.message ? `\n${err.message}` : "";
-            alert("Admin action failed." + code + msg);
-          });
 
-        return;
-      }
-    });
+            await gpAdminPublishSlate(db, leagueKey, dateYYYYMMDD, uid, lockDate);
 
-    window.__GP_CLICK_BOUND = true;
-  }
+            if (statusEl) statusEl.textContent =
+              `Slate published ✅ (locks at ${lockDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
 
-  // Expose renderer used by shared tab router
-  window.renderPicks = renderPicks;
+            return;
+          }
+        })
+        .then(() => renderPicks(true))
+        .catch((err) => {
+          console.error("gpAdmin error:", err);
+          const code = err?.code ? `\n\nCode: ${err.code}` : "";
+          const msg = err?.message ? `\n${err.message}` : "";
+          alert("Admin action failed." + code + msg);
+        });
+
+      return;
+    }
+  });
+
+  window.__GP_CLICK_BOUND = true;
+}
+
+// Expose renderer used by shared tab router
+window.renderPicks = renderPicks;
 
 })();
