@@ -1936,6 +1936,8 @@ button[data-gpsave="1"]{
   margin-top: 10px;
 }
 
+.gpFaded { opacity: 0.45; }
+
 .gpEveryone { margin-top: 10px; }
 .gpEveryoneSummary { cursor: pointer; font-weight: 600; }
 .gpEveryoneBody { margin-top: 8px; }
