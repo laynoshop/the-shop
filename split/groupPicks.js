@@ -688,18 +688,12 @@ function gpUpdateSaveBtnUI() {
     const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
     const locked = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
-    // ✅ pending overrides saved
+    // pending overrides saved
     const pending = gpPendingGet(eventId); // "home"/"away"/""
     const saved = String(myMap?.[eventId]?.side || "");
     const my = pending || saved;
 
     const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
-    let awayCt = 0, homeCt = 0;
-    for (const p of everyone) {
-      const side = String(p?.side || "");
-      if (side === "away") awayCt++;
-      if (side === "home") homeCt++;
-    }
 
     const pickedTeam = (my === "away") ? awayName : (my === "home" ? homeName : "");
     const isPending = !!pending && pending !== saved;
@@ -750,6 +744,14 @@ function gpUpdateSaveBtnUI() {
     `;
   }).join("");
 
+  // ✅ Save moved to bottom of the card
+  const saveRow = `
+    <div class="gpSaveRow" style="margin-top:12px; display:flex; align-items:center; gap:10px;">
+      <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
+      <div class="muted">(Saves your pending picks)</div>
+    </div>
+  `;
+
   return `
     <div class="game">
       <div class="gameHeader">
@@ -757,10 +759,6 @@ function gpUpdateSaveBtnUI() {
       </div>
 
       <div class="gameMetaTopLine">Slate is live</div>
-            <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
-        <button class="smallBtn" type="button" data-gpaction="savePicks">Save</button>
-        <div class="muted" style="font-size:12px;">(Saves your pending picks)</div>
-      </div>
 
       <div class="gpLockLine">
         <div class="gameMetaOddsPlain">${esc(lockLine)}</div>
@@ -770,6 +768,8 @@ function gpUpdateSaveBtnUI() {
       </div>
 
       ${rows || `<div class="notice">No games in slate.</div>`}
+
+      ${saveRow}
     </div>
   `;
 }
