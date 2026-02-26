@@ -640,12 +640,15 @@ function gpPendingClear() {
 }
 
 function gpUpdateSaveBtnUI() {
-  const btn = document.querySelector('[data-gpaction="savePicks"]');
-  if (!btn) return;
+  // Update ALL save buttons (header + in-card)
+  const btns = Array.from(document.querySelectorAll('[data-gpaction="savePicks"]'));
+  if (!btns.length) return;
 
   const n = gpPendingCount();
-  btn.textContent = n ? `Save (${n})` : "Save";
-  btn.disabled = !n;
+  for (const btn of btns) {
+    btn.textContent = n ? `Save (${n})` : "Save";
+    btn.disabled = !n;
+  }
 }
   
   function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt }) {
@@ -752,6 +755,10 @@ function gpUpdateSaveBtnUI() {
       </div>
 
       <div class="gameMetaTopLine">Slate is live</div>
+            <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+        <button class="smallBtn" type="button" data-gpaction="savePicks">Save</button>
+        <div class="muted" style="font-size:12px;">(Saves your pending picks)</div>
+      </div>
 
       <div class="gpLockLine">
         <div class="gameMetaOddsPlain">${esc(lockLine)}</div>
