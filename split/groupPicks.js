@@ -1047,6 +1047,7 @@ if (row) {
 // renderPicks(false);
 
 return;
+} // ✅ CLOSE gpPick block
 
       // Admin actions
       const gpAdmin = btn.getAttribute("data-gpadmin");
