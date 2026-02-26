@@ -1763,6 +1763,137 @@ button[data-gpsave="1"]{
   box-shadow: 0 14px 30px rgba(0,0,0,0.40);
 }
 
+/* =========================
+   PICKS — Sportsbook polish
+   ========================= */
+
+.gpGameRow{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.gpGameRow:first-child{
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.gpMatchup .gpTeams{
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  font-size: 16px;
+}
+
+.gpButtons{
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* sportsbook buttons */
+.gpBtn{
+  width: 100%;
+  border-radius: 16px;
+  padding: 12px 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+  box-shadow: 0 14px 28px rgba(0,0,0,0.28);
+  transition: transform .12s ease, filter .12s ease, border-color .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+
+.gpBtn:active{
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(1.08);
+}
+
+.gpBtn[disabled]{
+  opacity: 0.55;
+  filter: grayscale(0.25);
+  box-shadow: none;
+}
+
+/* selected = scarlet book slip */
+.gpBtnActive{
+  border-color: rgba(187,0,0,0.65);
+  background: rgba(187,0,0,0.22);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.35),
+    0 0 0 3px rgba(187,0,0,0.16);
+}
+
+/* when one is active, dim the other */
+.gpButtons.hasPick .gpBtn:not(.gpBtnActive){
+  opacity: 0.70;
+}
+
+/* micro labels under buttons */
+.gpMetaRow{
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.72);
+}
+
+.gpCounts{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.gpYouPicked{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(187,0,0,0.16);
+  border: 1px solid rgba(187,0,0,0.30);
+  color: rgba(255,255,255,0.90);
+}
+
+.gpLockLine{
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gpLockCountdown{
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.gpLockCountdown.warn{
+  background: rgba(245,158,11,0.14);
+  border-color: rgba(245,158,11,0.26);
+  color: #fde68a;
+}
+
+.gpLockCountdown.danger{
+  background: rgba(187,0,0,0.16);
+  border-color: rgba(187,0,0,0.32);
+  color: #ffd9d9;
+}
+
 .gpEveryone { margin-top: 10px; }
 .gpEveryoneSummary { cursor: pointer; font-weight: 600; }
 .gpEveryoneBody { margin-top: 8px; }
