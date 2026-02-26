@@ -707,11 +707,12 @@ function gpUpdateSaveBtnUI() {
         }).join("")
       : `<div class="muted">No picks yet.</div>`;
 
+    // ✅ Card-style row (less congested, Scores-tab vibe)
     return `
-      <div class="gpGameRow" data-saved="${esc(saved)}">
-        <div class="gpMatchup">
-          <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
-          <div class="muted">
+      <div class="gpGameCard gpGameRow" data-saved="${esc(saved)}">
+        <div class="gpGameTop">
+          <div class="gpGameTitle">${esc(awayName)} @ ${esc(homeName)}</div>
+          <div class="gpGameTime">
             ${startMs ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—"}
             ${locked ? " • LOCKED" : ""}
           </div>
@@ -744,7 +745,7 @@ function gpUpdateSaveBtnUI() {
     `;
   }).join("");
 
-  // ✅ Save moved to bottom of the card
+  // ✅ Save stays at bottom of GROUP PICKS card (and the header Save button should be removed elsewhere)
   const saveRow = `
     <div class="gpSaveRow" style="margin-top:12px; display:flex; align-items:center; gap:10px;">
       <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
@@ -773,7 +774,7 @@ function gpUpdateSaveBtnUI() {
     </div>
   `;
 }
-
+  
   // -----------------------------
   // Main Picks renderer
   // -----------------------------
