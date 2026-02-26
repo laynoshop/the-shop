@@ -1601,6 +1601,168 @@ button {
   font-size:13px;
 }
 
+/* =========================
+   GROUP PICKS — Sportsbook Sexy (OSU)
+   Paste at END of style.css
+   ========================= */
+
+/* Container row */
+.gpGameRow{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.gpGameRow:first-of-type{
+  margin-top: 10px;
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* Matchup header */
+.gpMatchup{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 10px;
+}
+.gpTeams{
+  font-size: 16px;
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+}
+.gpMatchup .muted{
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+/* Button row becomes “market tiles” */
+.gpButtons{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+  margin-bottom: 8px;
+}
+
+/* Base tile */
+.gpBtn{
+  width: 100%;
+  border-radius: 16px;
+  padding: 14px 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.92);
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  line-height: 1.1;
+  box-shadow:
+    0 14px 34px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: transform .14s ease, border-color .14s ease, filter .14s ease, box-shadow .14s ease;
+}
+
+/* Press */
+.gpBtn:active{
+  transform: translateY(1px) scale(0.995);
+  filter: brightness(1.07);
+}
+
+/* Active selection = scarlet edge + glow */
+.gpBtn.gpBtnActive{
+  border-color: rgba(187,0,0,0.65);
+  background:
+    radial-gradient(520px 160px at 50% -40px, rgba(187,0,0,0.28), transparent 60%),
+    rgba(255,255,255,0.05);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.45),
+    0 0 0 2px rgba(187,0,0,0.22) inset,
+    0 0 18px rgba(187,0,0,0.18);
+}
+
+/* Locked state feels like a book */
+.gpBtn:disabled{
+  opacity: 0.55;
+  filter: grayscale(0.2);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Details / everyone picks */
+.gpEveryone{
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.18);
+}
+.gpEveryoneSummary{
+  cursor: pointer;
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  font-size: 13px;
+  opacity: 0.92;
+}
+.gpEveryoneBody{
+  margin-top: 10px;
+}
+.gpPickLine{
+  padding: 8px 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 13px;
+  line-height: 1.25;
+}
+.gpPickLine:first-child{ border-top: none; }
+
+/* Save bar -> “Bet slip” */
+[data-gpsavecount="1"]{
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  opacity: 0.75;
+}
+button[data-gpsave="1"]{
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-weight: 1000;
+}
+
+/* Make save bar feel like a sticky slip inside the card */
+.game .gpSlipBar{
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+
+  margin: 10px 0 12px 0;
+  padding: 10px 12px;
+  border-radius: 16px;
+
+  border: 1px solid rgba(255,255,255,0.10);
+  background:
+    radial-gradient(700px 180px at 50% -60px, rgba(187,0,0,0.18), transparent 60%),
+    rgba(0,0,0,0.22);
+
+  box-shadow:
+    0 16px 38px rgba(0,0,0,0.45),
+    0 0 18px rgba(187,0,0,0.10);
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* When no pending picks, visually “settled” */
+.game .gpSlipBar.isClean{
+  background: rgba(0,0,0,0.18);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.40);
+}
+
 .gpEveryone { margin-top: 10px; }
 .gpEveryoneSummary { cursor: pointer; font-weight: 600; }
 .gpEveryoneBody { margin-top: 8px; }
