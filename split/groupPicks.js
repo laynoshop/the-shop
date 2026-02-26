@@ -672,8 +672,8 @@ function gpUpdateSaveBtnUI() {
     ? new Date(lockMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
 
-  // game cards
-  const rows = (games || []).map(g => {
+  // ✅ Add separators between games so cards don’t feel “stacked together”
+  const rows = (games || []).map((g, idx) => {
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
 
@@ -704,7 +704,12 @@ function gpUpdateSaveBtnUI() {
         }).join("")
       : `<div class="muted">No picks yet.</div>`;
 
+    const separator = idx === 0 ? "" : `
+      <div class="gpRowSep" style="height:1px; background:rgba(255,255,255,0.08); margin:14px 0;"></div>
+    `;
+
     return `
+      ${separator}
       <div class="gpGameRow" data-saved="${esc(saved)}">
         <div class="gpMatchup">
           <div class="gpTeams">${esc(awayName)} @ ${esc(homeName)}</div>
@@ -749,7 +754,7 @@ function gpUpdateSaveBtnUI() {
     </div>
   `;
 
-  // One clean status pill (timer will update this text + color)
+  // One clean status pill (timer updates this)
   const pillClass = (lockMs && now >= lockMs) ? "status-locked" : "status-live";
   const pillText = (lockMs && now >= lockMs)
     ? "Slate is locked"
