@@ -503,7 +503,7 @@
       return `
         <div class="gpAdminRow">
           <label class="gpAdminLabel">
-            <input type="checkbox" checked data-gpcheck="1" data-eid="${esc(eventId)}" />
+            <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
             <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
             <span class="muted gpAdminTime">${esc(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
           </label>
