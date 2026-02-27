@@ -383,13 +383,20 @@
 
   return `
     <select
-      class="weekSelect"
-      aria-label="Choose week"
       data-gpweeksel="1"
       style="
-        max-width: 140px;
-        width: 140px;
-        flex: 0 0 140px;
+        -webkit-appearance:none;
+        appearance:none;
+        background:rgba(255,255,255,0.06);
+        color:inherit;
+        border:1px solid rgba(255,255,255,0.12);
+        padding:12px 16px;
+        border-radius:18px;
+        font-weight:800;
+        font-size:16px;
+        line-height:1;
+        min-width:110px;
+        flex:0 0 auto;
       "
     >
       ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
