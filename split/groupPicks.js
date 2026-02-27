@@ -165,6 +165,90 @@
     }
   }
 
+// -----------------------------
+// Live status / score hydration (ESPN)
+// -----------------------------
+function gpGetEventLiveInfoFromScoreboardEvent(ev) {
+  try {
+    const comp = ev?.competitions?.[0] || {};
+    const st = comp?.status?.type || {};
+    const state = String(st?.state || "").toLowerCase(); // "pre" | "in" | "post"
+    const detail = String(st?.shortDetail || st?.detail || "").trim(); // e.g. "2nd 12:34" or "Final"
+    const clock = String(comp?.status?.displayClock || "").trim(); // "12:34"
+    const period = Number(comp?.status?.period || 0);
+
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const homeC = competitors.find(c => c?.homeAway === "home") || {};
+    const awayC = competitors.find(c => c?.homeAway === "away") || {};
+
+    const homeScore = (homeC?.score != null) ? String(homeC.score) : "";
+    const awayScore = (awayC?.score != null) ? String(awayC.score) : "";
+
+    return {
+      state,          // pre/in/post
+      detail,         // "3rd 8:12", "Final", etc
+      clock,          // "8:12"
+      period,         // 3
+      homeScore,
+      awayScore
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function gpHydrateLiveStateForGames(games) {
+  const list = Array.isArray(games) ? games : [];
+  if (!list.length) return;
+
+  // Only bother if we have leagueKey + date on the game docs
+  const groups = new Map(); // key => { leagueKey, date, ids:Set }
+  for (const g of list) {
+    const leagueKey = String(g?.leagueKey || "").trim();
+    const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
+    const eventId = String(g?.eventId || g?.id || "").trim();
+    if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
+
+    const k = `${leagueKey}__${dateYYYYMMDD}`;
+    if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
+    groups.get(k).ids.add(eventId);
+  }
+
+  if (!groups.size) return;
+
+  // Fetch each scoreboard once, map eventId -> liveInfo
+  const liveMap = new Map();
+
+  for (const grp of groups.values()) {
+    const league = getLeagueByKeySafe(grp.leagueKey);
+    const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
+    if (!url) continue;
+
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) continue;
+
+      const j = await r.json().catch(() => ({}));
+      const events = Array.isArray(j?.events) ? j.events : [];
+      for (const ev of events) {
+        const eid = String(ev?.id || "");
+        if (!eid || !grp.ids.has(eid)) continue;
+
+        const info = gpGetEventLiveInfoFromScoreboardEvent(ev);
+        if (info) liveMap.set(eid, info);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Attach to each game object (non-breaking, render-time only)
+  for (const g of list) {
+    const eid = String(g?.eventId || g?.id || "").trim();
+    g.__live = liveMap.get(eid) || null;
+  }
+}
+
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
     if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
@@ -679,186 +763,226 @@
   }
 
   function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks }) {
-    if (!weekId) {
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">GROUP PICKS</div>
-          </div>
-          <div class="gameMetaTopLine">No active week yet</div>
-          <div class="gameMetaOddsLine">Waiting on admin to create Week 1.</div>
-        </div>
-      `;
-    }
-
-    if (!published) {
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">GROUP PICKS</div>
-          </div>
-          <div class="gameMetaTopLine">${esc(weekLabel || weekId)} not published yet</div>
-          <div class="gameMetaOddsLine">Waiting on admin.</div>
-        </div>
-      `;
-    }
-
-    const now = Date.now();
-
-    function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId }) {
-      return `
-        <button
-          class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
-          type="button"
-          ${lockedGame ? "disabled" : ""}
-          data-gppick="${esc(side)}"
-          data-slate="${esc(weekId)}"
-          data-eid="${esc(eventId)}"
-          style="
-            width:100%;
-            display:flex;
-            align-items:center;
-            gap:12px;
-            padding:12px;
-            border-radius:16px;
-            background:rgba(255,255,255,0.06);
-            border:1px solid rgba(255,255,255,0.10);
-            text-align:left;
-          "
-        >
-          <div style="
-            width:44px; height:44px; border-radius:12px;
-            background:rgba(255,255,255,0.06);
-            border:1px solid rgba(255,255,255,0.08);
-            display:flex; align-items:center; justify-content:center;
-            overflow:hidden;
-            flex:0 0 44px;
-          ">
-            ${logoUrl
-              ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
-              : ``
-            }
-          </div>
-
-          <div style="flex:1; min-width:0;">
-            <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              ${esc(safeTeamLabel(t))}
-            </div>
-            <div class="muted" style="margin-top:4px;">
-              ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
-            </div>
-          </div>
-        </button>
-      `;
-    }
-
-    const gameCards = (games || []).map(g => {
-      const eventId = String(g?.eventId || g?.id || "");
-      if (!eventId) return "";
-
-      const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
-      const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
-
-      const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-      const kickoffLabel = fmtKickoffFromMs(startMs);
-      const lockedGame = startMs ? now >= startMs : false;
-
-      const pending = gpPendingGet(eventId);
-      const saved = String(myMap?.[eventId]?.side || "");
-      const my = pending || saved;
-
-      const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
-      const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
-      const isPending = !!pending && pending !== saved;
-
-      const everyoneLines = everyone.length
-        ? everyone.map(p => {
-            const nm = String(p?.name || "Someone");
-            const side = String(p?.side || "");
-            const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
-            return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
-          }).join("")
-        : `<div class="muted">No picks yet.</div>`;
-
-      const venueLine = String(g?.venueLine || "").trim();
-      const oddsLine = fmtOddsLine(g);
-
-      const awayLogo = safeLogo(away);
-      const homeLogo = safeLogo(home);
-
-      const hasPick = !!my;
-      const awayActive = my === "away";
-      const homeActive = my === "home";
-      const awayFade = hasPick && !awayActive;
-      const homeFade = hasPick && !homeActive;
-
-      return `
-        <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
-          margin-top:14px;
-          padding:14px;
-          border-radius:22px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.08);
-        ">
-
-          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-            <div class="muted" style="font-weight:800;">
-              ${venueLine ? esc(venueLine) : ""}
-            </div>
-            <div class="muted" style="white-space:nowrap; font-weight:900;">
-              ${esc(kickoffLabel)}
-            </div>
-          </div>
-
-          ${oddsLine
-            ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
-            : `<div class="muted" style="margin-top:8px; font-weight:800;">Odds unavailable</div>`
-          }
-
-          <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-            ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId })}
-            ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId })}
-          </div>
-
-          <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
-            ${my
-              ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
-              : `<div class="muted">No pick yet</div>`
-            }
-            ${lockedGame ? `<div class="muted">Locked</div>` : ``}
-          </div>
-
-          <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
-            <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-            <div class="gpEveryoneBody">${everyoneLines}</div>
-          </details>
-        </div>
-      `;
-    }).join("");
-
-    const saveRow = `
-      <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
-        <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
-        <div class="muted">(Saves your pending picks)</div>
-      </div>
-    `;
-
+  if (!weekId) {
     return `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">GROUP PICKS</div>
         </div>
-
-        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-          ${esc(weekLabel || weekId)}
-        </div>
-
-        ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
-
-        ${saveRow}
+        <div class="gameMetaTopLine">No active week yet</div>
+        <div class="gameMetaOddsLine">Waiting on admin to create Week 1.</div>
       </div>
     `;
   }
+
+  if (!published) {
+    return `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">GROUP PICKS</div>
+        </div>
+        <div class="gameMetaTopLine">${esc(weekLabel || weekId)} not published yet</div>
+        <div class="gameMetaOddsLine">Waiting on admin.</div>
+      </div>
+    `;
+  }
+
+  const now = Date.now();
+
+  function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId }) {
+    return `
+      <button
+        class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
+        type="button"
+        ${lockedGame ? "disabled" : ""}
+        data-gppick="${esc(side)}"
+        data-slate="${esc(weekId)}"
+        data-eid="${esc(eventId)}"
+        style="
+          width:100%;
+          display:flex;
+          align-items:center;
+          gap:12px;
+          padding:12px;
+          border-radius:16px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.10);
+          text-align:left;
+        "
+      >
+        <div style="
+          width:44px; height:44px; border-radius:12px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+          display:flex; align-items:center; justify-content:center;
+          overflow:hidden;
+          flex:0 0 44px;
+        ">
+          ${logoUrl
+            ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
+            : ``
+          }
+        </div>
+
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${esc(safeTeamLabel(t))}
+          </div>
+          <div class="muted" style="margin-top:4px;">
+            ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
+          </div>
+        </div>
+      </button>
+    `;
+  }
+
+  const gameCards = (games || []).map(g => {
+    const eventId = String(g?.eventId || g?.id || "");
+    if (!eventId) return "";
+
+    const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
+    const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
+
+    const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+    const kickoffLabel = fmtKickoffFromMs(startMs);
+    const lockedGame = startMs ? now >= startMs : false;
+
+    // ✅ LIVE / FINAL pill + score (render-time only; uses g.__live from hydration)
+    const live = g.__live || null;
+    let livePillHTML = "";
+    let scoreHTML = "";
+
+    if (live && (live.state === "in" || live.state === "post")) {
+      const isLive = live.state === "in";
+      const pillText = isLive
+        ? `LIVE • ${String(live.detail || "").trim()}`
+        : "FINAL";
+
+      livePillHTML = `
+        <div class="statusPill" style="
+          background:${isLive ? "rgba(0,200,120,0.18)" : "rgba(255,255,255,0.10)"};
+          border:1px solid ${isLive ? "rgba(0,200,120,0.35)" : "rgba(255,255,255,0.16)"};
+          color:${isLive ? "rgba(180,255,220,0.95)" : "rgba(255,255,255,0.85)"};
+          font-weight:900;
+        ">
+          ${esc(pillText)}
+        </div>
+      `;
+
+      const awayS = String(live.awayScore || "");
+      const homeS = String(live.homeScore || "");
+      if (awayS !== "" && homeS !== "") {
+        scoreHTML = `
+          <div style="white-space:nowrap; font-weight:950; letter-spacing:0.2px;">
+            ${esc(awayS)} - ${esc(homeS)}
+          </div>
+        `;
+      }
+    }
+
+    const pending = gpPendingGet(eventId);
+    const saved = String(myMap?.[eventId]?.side || "");
+    const my = pending || saved;
+
+    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+    const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
+    const isPending = !!pending && pending !== saved;
+
+    const everyoneLines = everyone.length
+      ? everyone.map(p => {
+          const nm = String(p?.name || "Someone");
+          const side = String(p?.side || "");
+          const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
+          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
+        }).join("")
+      : `<div class="muted">No picks yet.</div>`;
+
+    const venueLine = String(g?.venueLine || "").trim();
+    const oddsLine = fmtOddsLine(g);
+
+    const awayLogo = safeLogo(away);
+    const homeLogo = safeLogo(home);
+
+    const hasPick = !!my;
+    const awayActive = my === "away";
+    const homeActive = my === "home";
+    const awayFade = hasPick && !awayActive;
+    const homeFade = hasPick && !homeActive;
+
+    return `
+      <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
+        margin-top:14px;
+        padding:14px;
+        border-radius:22px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      ">
+
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+          <div class="muted" style="font-weight:800;">
+            ${venueLine ? esc(venueLine) : ""}
+          </div>
+          <div class="muted" style="white-space:nowrap; font-weight:900;">
+            ${esc(kickoffLabel)}
+          </div>
+        </div>
+
+        ${(livePillHTML || scoreHTML) ? `
+          <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <div style="flex:1; min-width:0;">${livePillHTML}</div>
+            ${scoreHTML ? `<div class="muted" style="font-size:18px;">${scoreHTML}</div>` : `<div></div>`}
+          </div>
+        ` : ``}
+
+        ${oddsLine
+          ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
+          : `<div class="muted" style="margin-top:8px; font-weight:800;">Odds unavailable</div>`
+        }
+
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+          ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId })}
+          ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId })}
+        </div>
+
+        <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
+          ${my
+            ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
+            : `<div class="muted">No pick yet</div>`
+          }
+          ${lockedGame ? `<div class="muted">Locked</div>` : ``}
+        </div>
+
+        <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
+          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
+          <div class="gpEveryoneBody">${everyoneLines}</div>
+        </details>
+      </div>
+    `;
+  }).join("");
+
+  const saveRow = `
+    <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
+      <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
+      <div class="muted">(Saves your pending picks)</div>
+    </div>
+  `;
+
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">GROUP PICKS</div>
+      </div>
+
+      <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+        ${esc(weekLabel || weekId)}
+      </div>
+
+      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+
+      ${saveRow}
+    </div>
+  `;
+}
 
   // -----------------------------
   // Admin builder UI (multi-league add)
@@ -1034,9 +1158,13 @@ async function renderPicks(showLoading) {
     }
 
     // Normal pick load
-    const games = await gpGetSlateGames(db, showWeekId);
-    const myMap = await gpGetMyPicksMap(db, showWeekId, uid);
-    const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
+const games = await gpGetSlateGames(db, showWeekId);
+
+// ✅ hydrate live score/clock from ESPN without changing stored docs
+await gpHydrateLiveStateForGames(games);
+
+const myMap = await gpGetMyPicksMap(db, showWeekId, uid);
+const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
 
     gpPendingResetIfSlateChanged(showWeekId);
     window.__GP_PENDING.sid = showWeekId;
