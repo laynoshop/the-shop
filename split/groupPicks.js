@@ -1019,7 +1019,9 @@ const lockedGame = startMs ? now >= startMs : false;
         ${esc(weekLabel || weekId)}
       </div>
 
-      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+      <div id="gpGamesWrap">
+  ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+</div>
 
       ${saveRow}
     </div>
@@ -1521,6 +1523,95 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
   }
 
   // Expose renderer used by shared tab router
-  window.renderPicks = renderPicks;
+window.renderPicks = renderPicks;
+
+// -----------------------------
+// Live score auto-refresh (SAFE version)
+// - Updates ONLY the scorecards area (#gpGamesWrap)
+// - Does NOT re-render header/admin builder
+// - Does NOT reset checkboxes/scroll while admin is building
+// -----------------------------
+if (!window.__GP_REFRESH_BOUND) {
+  window.__GP_REFRESH_BOUND = true;
+
+  let gpInterval = null;
+
+  function stopGpAutoRefresh() {
+    if (gpInterval) {
+      clearInterval(gpInterval);
+      gpInterval = null;
+    }
+  }
+
+  function startGpAutoRefresh() {
+    stopGpAutoRefresh();
+
+    gpInterval = setInterval(async () => {
+      try {
+        // Only update if the game-cards wrapper exists (i.e., Picks is rendered)
+        const gamesWrap = document.getElementById("gpGamesWrap");
+        if (!gamesWrap) return;
+
+        // Don't interrupt admin while using the week builder (checkboxes etc.)
+        const role = (typeof window.getRole === "function") ? window.getRole() : (localStorage.getItem("theShopRole_v1") || "guest");
+        if (String(role) === "admin") return;
+
+        // Ensure firebase ready
+        if (typeof window.ensureFirebaseChatReady === "function") {
+          await window.ensureFirebaseChatReady();
+        }
+
+        const db = firebase.firestore();
+
+        // Use currently selected week (what your UI is showing)
+        const weekId = (localStorage.getItem("theShopPicksWeek_v1") || "").trim();
+        if (!weekId) return;
+
+        // Only refresh if published (guest should only ever see published)
+        const slateSnap = await db.collection("pickSlates").doc(weekId).get();
+        const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
+        if (!slateData.published) return;
+
+        // Pull fresh games + hydrate live state from ESPN
+        const games = await gpGetSlateGames(db, weekId);
+        await gpHydrateLiveStateForGames(games);
+
+        // Keep picks + everyone's picks in sync too (lightweight enough)
+        const uid = firebase.auth().currentUser?.uid || "";
+        const myMap = await gpGetMyPicksMap(db, weekId, uid);
+        const allPicks = await gpGetAllPicksForSlate(db, weekId);
+
+        // Rebuild ONLY the cards section
+        const html = gpBuildGroupPicksCardHTML({
+          weekId,
+          weekLabel: String(slateData.label || weekId),
+          games,
+          myMap,
+          allPicks,
+          published: true
+        });
+
+        const temp = document.createElement("div");
+        temp.innerHTML = html;
+        const newWrap = temp.querySelector("#gpGamesWrap");
+
+        if (newWrap) {
+          gamesWrap.innerHTML = newWrap.innerHTML;
+        }
+      } catch (err) {
+        console.error("GP auto-refresh error:", err);
+      }
+    }, 30000); // 30 seconds
+  }
+
+  // Start immediately (only affects Picks tab because #gpGamesWrap must exist)
+  startGpAutoRefresh();
+
+  // Pause when app/tab not visible, resume when back
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopGpAutoRefresh();
+    else startGpAutoRefresh();
+  });
+}
 
 })();
