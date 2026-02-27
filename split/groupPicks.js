@@ -321,11 +321,12 @@
   // -----------------------------
   // WEEK MODEL (Firestore)
   // -----------------------------
-  const GPW = {
+    const GPW = {
     metaDoc: "meta",
     currentDoc: "current",
     weekPrefix: "week_",
-    coll: "pickWeeks"
+    // IMPORTANT: use existing collection to match current Firestore rules
+    coll: "pickSlates"
   };
 
   function isWeekId(id) {
