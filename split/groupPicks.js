@@ -1028,34 +1028,53 @@
     }
   }
 
-  function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
-    const isAdmin = role === "admin";
-    return `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Picks</h2>
-            <span class="badge">Group</span>
-          </div>
+  function renderPicksHeaderHTML(prettyDate, rightLabel, selectedKey) {
+  const role = getRole();
+  const isAdmin = role === "admin";
 
-          <div class="headerActions">
-            ${isAdmin ? `<button class="smallBtn" data-gpadmin="newWeek">New Week</button>` : ``}
-            ${isAdmin ? `<button class="smallBtn" data-gpadmin="setActive">Set Active</button>` : ``}
-            <button class="smallBtn" data-gpaction="name">Name</button>
-            <button class="smallBtn" data-gpaction="savePicks">Save</button>
-            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
-          </div>
+  return `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Picks</h2>
+          <span class="badge">Group</span>
         </div>
 
-        <div class="subline">
-          <div class="sublineLeft">
-            ${weekSelectHTML || ""}
-          </div>
-          <div>${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}</div>
+        <div class="headerActions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+          <button class="smallBtn" data-gpaction="name">Name</button>
+          <button class="smallBtn" data-gpaction="savePicks">Save</button>
+          <button class="smallBtn" data-gpaction="refresh">Refresh</button>
         </div>
       </div>
-    `;
-  }
+
+      <div class="subline">
+        <div class="sublineLeft" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <!-- Week selector (already in your build) -->
+          ${typeof window.buildWeekSelectHTMLSafe === "function"
+            ? window.buildWeekSelectHTMLSafe()
+            : ""
+          }
+
+          <!-- ✅ Admin-only week buttons live NEXT to week dropdown -->
+          ${isAdmin ? `
+            <button class="smallBtn" data-gpaction="newWeek" type="button">New Week</button>
+            <button class="smallBtn" data-gpaction="setActive" type="button">Set Active</button>
+          ` : ""}
+
+          <!-- If you still want league/date controls visible to admin only, keep them here too -->
+          ${isAdmin ? `
+            ${buildLeagueSelectHTMLSafe(selectedKey)}
+            ${buildCalendarButtonHTMLSafe()}
+          ` : ""}
+
+          <button class="iconBtn" data-gpaction="addQuick" title="Add pick">＋</button>
+        </div>
+
+        <div>${esc(prettyDate)} • ${esc(rightLabel || "")}</div>
+      </div>
+    </div>
+  `;
+}
 
   function postRender() {
     try { setPicksNameUI(); } catch {}
