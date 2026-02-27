@@ -1080,17 +1080,25 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
       </div>
 
       <div class="subline">
-        <div class="sublineLeft" style="display:flex; flex-direction:column; gap:10px;">
+        <div
+          class="sublineLeft"
+          style="
+            display:flex;
+            gap:10px;
+            align-items:center;
+            flex-wrap:nowrap;
+            overflow-x:auto;
+            -webkit-overflow-scrolling:touch;
+            padding-bottom:2px;
+            max-width:100%;
+          "
+        >
+          ${weekSelectHTML || ""}
 
-          <!-- Row 1: Week selector + week buttons -->
-          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            ${String(weekSelectHTML || "")}
-
-            ${isAdmin ? `
-              <button class="smallBtn" data-gpaction="newWeek" type="button">New Week</button>
-              <button class="smallBtn" data-gpaction="setActive" type="button">Set Active</button>
-            ` : ""}
-          </div>
+          ${isAdmin ? `
+            <button class="smallBtn" data-gpaction="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
+            <button class="smallBtn" data-gpaction="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
+          ` : ""}
 
         </div>
 
