@@ -1079,7 +1079,8 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
         </div>
       </div>
 
-      <div class="subline">
+      <!-- Row 1: controls (scrollable, never wraps) -->
+      <div class="subline" style="display:block;">
         <div
           class="sublineLeft"
           style="
@@ -1089,24 +1090,38 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
             flex-wrap:nowrap;
             overflow-x:auto;
             -webkit-overflow-scrolling:touch;
-            padding-bottom:2px;
             max-width:100%;
+            padding-bottom:6px;
           "
         >
-          ${weekSelectHTML || ""}
+          <!-- Week select + iOS dark styling override -->
+          <span style="flex:0 0 auto; display:inline-flex; align-items:center;">
+            ${weekSelectHTML || ""}
+          </span>
 
           ${isAdmin ? `
             <button class="smallBtn" data-gpaction="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
             <button class="smallBtn" data-gpaction="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
           ` : ""}
-
         </div>
 
-        <div style="white-space:nowrap;">
+        <!-- Row 2: the blurb (always below, never overlaps) -->
+        <div style="margin-top:4px; text-align:right; white-space:nowrap;">
           ${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}
         </div>
       </div>
     </div>
+
+    <!-- iOS select fix: keep it dark/clear instead of white -->
+    <style>
+      select[data-gpweeksel="1"]{
+        -webkit-appearance:none;
+        appearance:none;
+        background:rgba(255,255,255,0.06) !important;
+        color:inherit !important;
+        border:1px solid rgba(255,255,255,0.12) !important;
+      }
+    </style>
   `;
 }
 
