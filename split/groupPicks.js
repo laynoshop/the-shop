@@ -789,7 +789,7 @@ async function gpHydrateLiveStateForGames(games) {
 
   const now = Date.now();
 
-  function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId }) {
+  function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
     return `
       <button
         class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
@@ -832,6 +832,21 @@ async function gpHydrateLiveStateForGames(games) {
             ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
           </div>
         </div>
+
+        ${scoreText !== "" ? `
+          <div style="
+            flex:0 0 auto;
+            min-width:44px;
+            text-align:right;
+            font-weight:950;
+            font-size:34px;
+            line-height:1;
+            letter-spacing:0.2px;
+            color:rgba(255,255,255,0.92);
+          ">
+            ${esc(scoreText)}
+          </div>
+        ` : ``}
       </button>
     `;
   }
@@ -847,37 +862,44 @@ async function gpHydrateLiveStateForGames(games) {
     const kickoffLabel = fmtKickoffFromMs(startMs);
     const lockedGame = startMs ? now >= startMs : false;
 
-    // ✅ LIVE / FINAL pill + score (render-time only; uses g.__live from hydration)
+    // Live/Final info (from hydration)
     const live = g.__live || null;
-    let livePillHTML = "";
-    let scoreHTML = "";
+    const state = String(live?.state || "").toLowerCase(); // pre | in | post
+    const isLive = state === "in";
+    const isFinal = state === "post";
 
-    if (live && (live.state === "in" || live.state === "post")) {
-      const isLive = live.state === "in";
+    const awayScore = (live && live.awayScore != null) ? String(live.awayScore) : "";
+    const homeScore = (live && live.homeScore != null) ? String(live.homeScore) : "";
+
+    // LIVE / FINAL pill (Scores-tab style)
+    let pillHTML = "";
+    if (isLive || isFinal) {
       const pillText = isLive
-        ? `LIVE • ${String(live.detail || "").trim()}`
+        ? `LIVE • ${String(live?.detail || "").trim()}`   // e.g. "3:41 - 2nd Half"
         : "FINAL";
 
-      livePillHTML = `
+      pillHTML = `
         <div class="statusPill" style="
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          padding:10px 14px;
+          border-radius:999px;
+          width:100%;
+          max-width:100%;
+          box-sizing:border-box;
           background:${isLive ? "rgba(0,200,120,0.18)" : "rgba(255,255,255,0.10)"};
           border:1px solid ${isLive ? "rgba(0,200,120,0.35)" : "rgba(255,255,255,0.16)"};
-          color:${isLive ? "rgba(180,255,220,0.95)" : "rgba(255,255,255,0.85)"};
-          font-weight:900;
+          color:${isLive ? "rgba(180,255,220,0.95)" : "rgba(255,255,255,0.88)"};
+          font-weight:950;
+          letter-spacing:0.3px;
+          white-space:nowrap;
+          overflow:hidden;
+          text-overflow:ellipsis;
         ">
           ${esc(pillText)}
         </div>
       `;
-
-      const awayS = String(live.awayScore || "");
-      const homeS = String(live.homeScore || "");
-      if (awayS !== "" && homeS !== "") {
-        scoreHTML = `
-          <div style="white-space:nowrap; font-weight:950; letter-spacing:0.2px;">
-            ${esc(awayS)} - ${esc(homeS)}
-          </div>
-        `;
-      }
     }
 
     const pending = gpPendingGet(eventId);
@@ -909,6 +931,11 @@ async function gpHydrateLiveStateForGames(games) {
     const awayFade = hasPick && !awayActive;
     const homeFade = hasPick && !homeActive;
 
+    // Scores-tab feel: show per-team big score on the right ONLY when live/final and scores exist
+    const showScores = (isLive || isFinal) && awayScore !== "" && homeScore !== "";
+    const awayScoreText = showScores ? awayScore : "";
+    const homeScoreText = showScores ? homeScore : "";
+
     return `
       <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
         margin-top:14px;
@@ -917,6 +944,12 @@ async function gpHydrateLiveStateForGames(games) {
         background:rgba(255,255,255,0.06);
         border:1px solid rgba(255,255,255,0.08);
       ">
+
+        ${pillHTML ? `
+          <div style="margin-bottom:10px;">
+            ${pillHTML}
+          </div>
+        ` : ``}
 
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
           <div class="muted" style="font-weight:800;">
@@ -927,21 +960,14 @@ async function gpHydrateLiveStateForGames(games) {
           </div>
         </div>
 
-        ${(livePillHTML || scoreHTML) ? `
-          <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <div style="flex:1; min-width:0;">${livePillHTML}</div>
-            ${scoreHTML ? `<div class="muted" style="font-size:18px;">${scoreHTML}</div>` : `<div></div>`}
-          </div>
-        ` : ``}
-
         ${oddsLine
           ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
           : `<div class="muted" style="margin-top:8px; font-weight:800;">Odds unavailable</div>`
         }
 
         <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId })}
-          ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId })}
+          ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId, scoreText: awayScoreText })}
+          ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId, scoreText: homeScoreText })}
         </div>
 
         <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
