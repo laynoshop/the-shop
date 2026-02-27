@@ -1052,7 +1052,7 @@ async function renderPicks(showLoading) {
  * Header renderer
  * Accepts an object (because that's how you're calling it everywhere).
  */
-function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel, selectedKey }) {
+function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
   const isAdmin = role === "admin";
 
   return `
@@ -1073,7 +1073,7 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel, se
       <div class="subline">
         <div class="sublineLeft" style="display:flex; flex-direction:column; gap:10px;">
 
-          <!-- Row 1: Week selector + admin week buttons (keeps them together) -->
+          <!-- Row 1: Week selector + week buttons -->
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             ${String(weekSelectHTML || "")}
 
@@ -1083,14 +1083,6 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel, se
             ` : ""}
           </div>
 
-          <!-- Row 2: Admin-only league/date controls (so top row doesn't overflow) -->
-          ${isAdmin ? `
-            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-              ${buildLeagueSelectHTMLSafe(selectedKey)}
-              ${buildCalendarButtonHTMLSafe()}
-              <button class="smallBtn" data-gpaction="adminLoad" type="button">Load</button>
-            </div>
-          ` : ""}
         </div>
 
         <div style="white-space:nowrap;">
