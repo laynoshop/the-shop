@@ -1258,16 +1258,28 @@
 
       postRender();
     } catch (err) {
-      console.error("renderPicks error:", err);
-      const selectedDate2 = getSavedDateYYYYMMDDSafe();
-      const selectedKey2 = getSavedLeagueKeySafe();
-      const prettyDate2 = yyyymmddToPrettySafe(selectedDate2);
-      content.innerHTML = `
-        ${renderPicksHeaderHTML({ weekLabel: "Week", rightLabel: "Error", role: getRole(), selectedKey: selectedKey2, prettyDate: prettyDate2 })}
-        <div class="notice">Couldn’t load Picks right now.</div>
-      `;
-      postRender();
-    }
+  console.error("renderPicks error:", err);
+
+  const code = String(err?.code || "");
+  const msg = String(err?.message || err || "");
+
+  content.innerHTML = `
+    ${renderPicksHeaderHTML(
+      yyyymmddToPrettySafe(getSavedDateYYYYMMDDSafe()),
+      "Error",
+      getSavedLeagueKeySafe()
+    )}
+    <div class="notice">Couldn’t load Picks right now.</div>
+
+    <div class="notice" style="margin-top:10px; opacity:0.9;">
+      <div style="font-weight:900; margin-bottom:6px;">Debug</div>
+      ${code ? `<div><b>Code:</b> ${esc(code)}</div>` : ``}
+      ${msg ? `<div style="margin-top:6px;"><b>Message:</b> ${esc(msg)}</div>` : ``}
+    </div>
+  `;
+
+  postRender();
+}
   }
 
   function postRender() {
