@@ -309,6 +309,17 @@ async function gpHydrateLiveStateForGames(games) {
     const t = Date.parse(iso);
     return Number.isFinite(t) ? t : 0;
   }
+  
+  function gpPrettyDateFromStartMs(ms) {
+  if (!ms) return "";
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
+
+  // "Saturday Feb 28"
+  const weekday = d.toLocaleDateString([], { weekday: "long" });
+  const monthDay = d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return `${weekday} ${monthDay}`;
+}
 
   function fmtKickoffFromMs(ms) {
     if (!ms) return "—";
@@ -859,8 +870,11 @@ async function gpHydrateLiveStateForGames(games) {
     const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
 
     const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-    const kickoffLabel = fmtKickoffFromMs(startMs);
-    const lockedGame = startMs ? now >= startMs : false;
+
+const kickoffLabel = fmtKickoffFromMs(startMs);
+const kickoffDateLabel = gpPrettyDateFromStartMs(startMs);
+
+const lockedGame = startMs ? now >= startMs : false;
 
     // Live/Final info (from hydration)
     const live = g.__live || null;
