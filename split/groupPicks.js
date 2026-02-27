@@ -797,125 +797,157 @@
     }
 
     // ✅ LIVE / FINAL pill like Scores tab
-function buildLiveFinalPillHTML(eventObj) {
-  const ev = eventObj || null;
-  const comp = ev?.competitions?.[0] || null;
-  const st = comp?.status || ev?.status || null;
-  const type = st?.type || null;
+    function buildLiveFinalPillHTML(eventObj) {
+      const ev = eventObj || null;
+      const comp = ev?.competitions?.[0] || null;
+      const st = comp?.status || ev?.status || null;
+      const type = st?.type || null;
 
-  const state = String(type?.state || "").trim(); // "pre" | "in" | "post"
-  const shortDetail = String(type?.shortDetail || type?.detail || "").trim(); // e.g. "19:06 - 2nd Half", "Halftime", "Final"
-  if (!state) return "";
+      const state = String(type?.state || "").trim(); // "pre" | "in" | "post"
+      const shortDetail = String(type?.shortDetail || type?.detail || "").trim();
+      if (!state) return "";
 
-  if (state === "in") {
-    const txt = shortDetail ? `LIVE • ${shortDetail}` : "LIVE";
-    return `<div class="statusPill status-live" style="margin-bottom:10px;">${esc(txt)}</div>`;
-  }
+      if (state === "in") {
+        const txt = shortDetail ? `LIVE • ${shortDetail}` : "LIVE";
+        return `<div class="statusPill status-live" style="margin-bottom:10px;">${esc(txt)}</div>`;
+      }
 
-  if (state === "post") {
-    const txt = shortDetail ? `FINAL • ${shortDetail}` : "FINAL";
-    return `<div class="statusPill status-final" style="margin-bottom:10px;">${esc(txt)}</div>`;
-  }
+      if (state === "post") {
+        const txt = shortDetail ? `FINAL • ${shortDetail}` : "FINAL";
+        return `<div class="statusPill status-final" style="margin-bottom:10px;">${esc(txt)}</div>`;
+      }
 
-  return "";
-}
+      return "";
+    }
 
-// ✅ Scores (use ESPN event live data; only show when LIVE or FINAL)
-function gpGetSideScore(eventObj, homeAway /* "home"|"away" */) {
-  const ev = eventObj || null;
-  const comp = ev?.competitions?.[0] || null;
-  const st = comp?.status || ev?.status || null;
-  const state = String(st?.type?.state || "").trim(); // pre/in/post
+    // ✅ Scores (use ESPN event live data; only show when LIVE or FINAL)
+    function gpGetSideScore(eventObj, homeAway /* "home"|"away" */) {
+      const ev = eventObj || null;
+      const comp = ev?.competitions?.[0] || null;
+      const st = comp?.status || ev?.status || null;
+      const state = String(st?.type?.state || "").trim(); // pre/in/post
 
-  if (!(state === "in" || state === "post")) return ""; // don't show during pregame
+      if (!(state === "in" || state === "post")) return "";
 
-  const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-  const c = competitors.find(x => String(x?.homeAway || "") === String(homeAway || ""));
-  const score = (c?.score != null) ? String(c.score) : "";
-  return score.trim();
-}
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const c = competitors.find(x => String(x?.homeAway || "") === String(homeAway || ""));
+      const score = (c?.score != null) ? String(c.score) : "";
+      return score.trim();
+    }
 
-// Team “row button” (scores-tab vibe) + ✅ score on right
-const teamRowBtn = (side, t, logoUrl, extraSub, isActive, isFaded, scoreText) => {
-  const score = String(scoreText || "").trim();
-  return `
-    <button
-      class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
-      type="button"
-      ${lockedGame ? "disabled" : ""}
-      data-gppick="${esc(side)}"
-      data-slate="${esc(slateId)}"
-      data-eid="${esc(eventId)}"
-      style="
-        width:100%;
-        display:flex;
-        align-items:center;
-        gap:12px;
-        padding:12px;
-        border-radius:16px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.10);
-        text-align:left;
-      "
-    >
-      <div style="
-        width:44px; height:44px; border-radius:12px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.08);
-        display:flex; align-items:center; justify-content:center;
-        overflow:hidden;
-        flex:0 0 44px;
-      ">
-        ${logoUrl
-          ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
-          : ``
-        }
-      </div>
+    // Team row button (no outer-scope deps)
+    function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, scoreText, lockedGame, eventId }) {
+      const score = String(scoreText || "").trim();
+      return `
+        <button
+          class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
+          type="button"
+          ${lockedGame ? "disabled" : ""}
+          data-gppick="${esc(side)}"
+          data-slate="${esc(slateId)}"
+          data-eid="${esc(eventId)}"
+          style="
+            width:100%;
+            display:flex;
+            align-items:center;
+            gap:12px;
+            padding:12px;
+            border-radius:16px;
+            background:rgba(255,255,255,0.06);
+            border:1px solid rgba(255,255,255,0.10);
+            text-align:left;
+          "
+        >
+          <div style="
+            width:44px; height:44px; border-radius:12px;
+            background:rgba(255,255,255,0.06);
+            border:1px solid rgba(255,255,255,0.08);
+            display:flex; align-items:center; justify-content:center;
+            overflow:hidden;
+            flex:0 0 44px;
+          ">
+            ${logoUrl
+              ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
+              : ``
+            }
+          </div>
 
-      <div style="flex:1; min-width:0;">
-        <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-          ${esc(safeTeamLabel(t))}
-        </div>
-        <div class="muted" style="margin-top:4px;">
-          ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
-        </div>
-      </div>
-
-      ${score ? `
-        <div style="
-          flex:0 0 auto;
-          font-weight:900;
-          font-size:38px;
-          line-height:1;
-          letter-spacing:0.5px;
-          margin-left:8px;
-          opacity:0.95;
-        ">${esc(score)}</div>
-      ` : ``}
-    </button>
-  `;
-};
-
-            <div style="flex:1; min-width:0;">
-              <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                ${esc(safeTeamLabel(t))}
-              </div>
-              <div class="muted" style="margin-top:4px;">
-                ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
-              </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${esc(safeTeamLabel(t))}
             </div>
-
-            <div style="flex:0 0 auto; font-weight:900; opacity:${isActive ? "1" : "0.0"};">
-              ${isActive ? "✓" : ""}
+            <div class="muted" style="margin-top:4px;">
+              ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
             </div>
-          </button>
-        `;
-      };
+          </div>
 
+          ${score ? `
+            <div style="
+              flex:0 0 auto;
+              font-weight:900;
+              font-size:38px;
+              line-height:1;
+              letter-spacing:0.5px;
+              margin-left:8px;
+              opacity:0.95;
+            ">${esc(score)}</div>
+          ` : ``}
+        </button>
+      `;
+    }
+
+    const gameCards = (games || []).map(g => {
+      const eventId = String(g?.eventId || g?.id || "");
+      if (!eventId) return "";
+
+      const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
+      const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
+
+      const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+      const kickoffLabel = startMs
+        ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        : "—";
+
+      const lockedGame = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
+
+      // pending overrides saved
+      const pending = gpPendingGet(eventId);
+      const saved = String(myMap?.[eventId]?.side || "");
+      const my = pending || saved;
+
+      const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+      const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
+      const isPending = !!pending && pending !== saved;
+
+      const everyoneLines = everyone.length
+        ? everyone.map(p => {
+            const nm = String(p?.name || "Someone");
+            const side = String(p?.side || "");
+            const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
+            return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
+          }).join("")
+        : `<div class="muted">No picks yet.</div>`;
+
+      const venueLine = String(g?.venueLine || g?.venue || g?.venueName || "").trim();
+      const oddsLine = fmtOddsLine(g);
+
+      const awayLogo = safeLogo(away);
+      const homeLogo = safeLogo(home);
+
+      // ✅ active + fade logic
+      const hasPick = !!my;
+      const awayActive = my === "away";
+      const homeActive = my === "home";
+
+      const awayFade = hasPick && !awayActive;
+      const homeFade = hasPick && !homeActive;
+
+      // LIVE/FINAL from ESPN event
       const ev = (eventsById && eventsById[eventId]) ? eventsById[eventId] : null;
       const liveFinalPill = buildLiveFinalPillHTML(ev);
+
       const awayScore = gpGetSideScore(ev, "away");
-const homeScore = gpGetSideScore(ev, "home");
+      const homeScore = gpGetSideScore(ev, "home");
 
       return `
         <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
@@ -942,8 +974,28 @@ const homeScore = gpGetSideScore(ev, "home");
           }
 
           <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-            ${teamRowBtn("away", away, awayLogo, "Away", awayActive, awayFade, awayScore)}
-${teamRowBtn("home", home, homeLogo, "Home", homeActive, homeFade, homeScore)}
+            ${teamRowBtn({
+              side: "away",
+              t: away,
+              logoUrl: awayLogo,
+              extraSub: "Away",
+              isActive: awayActive,
+              isFaded: awayFade,
+              scoreText: awayScore,
+              lockedGame,
+              eventId
+            })}
+            ${teamRowBtn({
+              side: "home",
+              t: home,
+              logoUrl: homeLogo,
+              extraSub: "Home",
+              isActive: homeActive,
+              isFaded: homeFade,
+              scoreText: homeScore,
+              lockedGame,
+              eventId
+            })}
           </div>
 
           <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
