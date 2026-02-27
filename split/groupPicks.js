@@ -372,21 +372,30 @@
   // Week selector UI
   // -----------------------------
   function buildWeekSelectHTML(weeks, selectedWeekId) {
-    const list = Array.isArray(weeks) ? weeks : [];
-    const options = list.map(w => {
-      const id = String(w?.id || "");
-      const label = String(w?.label || id);
-      const disabled = (w?.published === false) ? " disabled" : "";
-      const sel = (id === selectedWeekId) ? " selected" : "";
-      return `<option value="${esc(id)}"${sel}${disabled}>${esc(label)}</option>`;
-    }).join("");
+  const list = Array.isArray(weeks) ? weeks : [];
+  const options = list.map(w => {
+    const id = String(w?.id || "");
+    const label = String(w?.label || id);
+    const disabled = (w?.published === false) ? " disabled" : "";
+    const sel = (id === selectedWeekId) ? " selected" : "";
+    return `<option value="${esc(id)}"${sel}${disabled}>${esc(label)}</option>`;
+  }).join("");
 
-    return `
-      <select class="leagueSelect" aria-label="Choose week" data-gpweeksel="1">
-        ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
-      </select>
-    `;
-  }
+  return `
+    <select
+      class="weekSelect"
+      aria-label="Choose week"
+      data-gpweeksel="1"
+      style="
+        max-width: 140px;
+        width: 140px;
+        flex: 0 0 140px;
+      "
+    >
+      ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
+    </select>
+  `;
+}
 
   function getSelectedWeekFromLS() {
     return safeGetLS(PICKS_WEEK_KEY).trim();
