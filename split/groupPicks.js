@@ -966,13 +966,15 @@ const lockedGame = startMs ? now >= startMs : false;
         ` : ``}
 
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-          <div class="muted" style="font-weight:800;">
-            ${venueLine ? esc(venueLine) : ""}
-          </div>
-          <div class="muted" style="white-space:nowrap; font-weight:900;">
-            ${esc(kickoffLabel)}
-          </div>
-        </div>
+  <div class="muted" style="font-weight:800;">
+    ${venueLine ? esc(venueLine) : ""}
+  </div>
+
+  <div class="muted" style="white-space:nowrap; font-weight:900; text-align:right;">
+    ${kickoffDateLabel ? `<div style="font-weight:800; line-height:1.05;">${esc(kickoffDateLabel)}</div>` : ``}
+    <div style="line-height:1.05;">${esc(kickoffLabel)}</div>
+  </div>
+</div>
 
         ${oddsLine
           ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
