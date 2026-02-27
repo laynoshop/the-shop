@@ -568,7 +568,7 @@
         awayName,
         startTime,
 
-        // rich data for sportsbook-style cards
+        // rich card data
         venueLine: String(venueLine || ""),
         oddsDetails: String(odds.details || ""),
         oddsOU: String(odds.overUnder || ""),
@@ -730,36 +730,9 @@
   }
 
   // -----------------------------
-  // ✅ LIVE/FINAL score snapshot from ESPN event
-  // -----------------------------
-  function gpEventSnapshot(ev) {
-    const comp = ev?.competitions?.[0] || {};
-    const st = comp?.status?.type || {};
-    const state = String(st?.state || "pre"); // pre | in | post
-    const completed = !!st?.completed;
-
-    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-    const homeC = competitors.find(c => c?.homeAway === "home") || {};
-    const awayC = competitors.find(c => c?.homeAway === "away") || {};
-
-    const homeScore = Number(homeC?.score);
-    const awayScore = Number(awayC?.score);
-
-    const showScores = (state === "in" || state === "post" || completed);
-
-    return {
-      state,
-      completed,
-      showScores,
-      homeScore: Number.isFinite(homeScore) ? String(homeScore) : "",
-      awayScore: Number.isFinite(awayScore) ? String(awayScore) : "",
-    };
-  }
-
-  // -----------------------------
   // User-facing Group Picks card
   // -----------------------------
-  function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt, eventMap }) {
+  function gpBuildGroupPicksCardHTML({ slateId, games, myMap, published, allPicks, lockAt, eventsById }) {
     if (!published) {
       return `
         <div class="game">
@@ -815,20 +788,54 @@
     }
 
     function fmtOddsLine(g) {
-      const details = String(g?.oddsDetails || "").trim(); // e.g. "WIS -5.5"
-      const ou = String(g?.oddsOU || "").trim();           // e.g. "152.5"
+      const details = String(g?.oddsDetails || "").trim();
+      const ou = String(g?.oddsOU || "").trim();
       const parts = [];
       if (details) parts.push(`Favored: ${details}`);
       if (ou) parts.push(`O/U: ${ou}`);
       return parts.join(" • ");
     }
 
+    // ✅ LIVE / FINAL pill like Scores tab
+    function buildLiveFinalPillHTML(eventObj) {
+      const ev = eventObj || null;
+      const comp = ev?.competitions?.[0] || null;
+      const st = comp?.status || ev?.status || null;
+      const type = st?.type || null;
+
+      const state = String(type?.state || "").trim(); // "pre" | "in" | "post"
+      const shortDetail = String(type?.shortDetail || type?.detail || "").trim(); // e.g. "19:06 - 2nd Half", "Halftime", "Final"
+      if (!state) return "";
+
+      if (state === "in") {
+        const txt = shortDetail ? `LIVE • ${shortDetail}` : "LIVE";
+        return `<div class="statusPill status-live" style="margin-bottom:10px;">${esc(txt)}</div>`;
+      }
+
+      if (state === "post") {
+        const txt = shortDetail ? `FINAL • ${shortDetail}` : "FINAL";
+        return `<div class="statusPill status-final" style="margin-bottom:10px;">${esc(txt)}</div>`;
+      }
+
+      return "";
+    }
+
     const gameCards = (games || []).map(g => {
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) return "";
 
-      const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
-      const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
+      const away = g?.awayTeam || {
+        name: g?.awayName || "Away",
+        rank: g?.awayRank,
+        record: g?.awayRecord,
+        logo: g?.awayLogo
+      };
+      const home = g?.homeTeam || {
+        name: g?.homeName || "Home",
+        rank: g?.homeRank,
+        record: g?.homeRecord,
+        logo: g?.homeLogo
+      };
 
       const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
       const kickoffLabel = startMs
@@ -837,14 +844,9 @@
 
       const lockedGame = lockMs ? (now >= lockMs) : (startMs ? now >= startMs : false);
 
-      // pending overrides saved
       const pending = gpPendingGet(eventId);
       const saved = String(myMap?.[eventId]?.side || "");
-      const my = pending || saved; // "away" | "home" | ""
-
-      // ESPN snapshot for live/final scores
-      const ev = eventMap && eventMap[eventId] ? eventMap[eventId] : null;
-      const snap = gpEventSnapshot(ev);
+      const my = pending || saved;
 
       const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
       const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
@@ -865,28 +867,20 @@
       const awayLogo = safeLogo(away);
       const homeLogo = safeLogo(home);
 
-      // ✅ active + fade logic
+      // active + fade logic
       const hasPick = !!my;
       const awayActive = my === "away";
       const homeActive = my === "home";
-
       const awayFade = hasPick && !awayActive;
       const homeFade = hasPick && !homeActive;
 
-      // Team “row button” (scores-tab vibe) + LIVE/FINAL scores
       const teamRowBtn = (side, t, logoUrl, extraSub, isActive, isFaded) => {
-        const scoreTxt = snap.showScores
-          ? (side === "away" ? snap.awayScore : snap.homeScore)
-          : "";
-
         return `
           <button
             class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
             type="button"
             ${lockedGame ? "disabled" : ""}
             data-gppick="${esc(side)}"
-            data-side="${esc(side)}"
-            data-gpscorebtn="1"
             data-slate="${esc(slateId)}"
             data-eid="${esc(eventId)}"
             style="
@@ -924,20 +918,15 @@
               </div>
             </div>
 
-            <div data-gpscore="1" style="
-              flex:0 0 auto;
-              font-weight:900;
-              font-size:26px;
-              line-height:1;
-              opacity:${isFaded ? "0.35" : "0.95"};
-              min-width:30px;
-              text-align:right;
-            ">
-              ${esc(scoreTxt)}
+            <div style="flex:0 0 auto; font-weight:900; opacity:${isActive ? "1" : "0.0"};">
+              ${isActive ? "✓" : ""}
             </div>
           </button>
         `;
       };
+
+      const ev = (eventsById && eventsById[eventId]) ? eventsById[eventId] : null;
+      const liveFinalPill = buildLiveFinalPillHTML(ev);
 
       return `
         <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
@@ -947,6 +936,8 @@
           background:rgba(255,255,255,0.06);
           border:1px solid rgba(255,255,255,0.08);
         ">
+          ${liveFinalPill || ""}
+
           <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
             <div class="muted" style="font-weight:800;">
               ${venueLine ? esc(venueLine) : ""}
@@ -966,12 +957,12 @@
             ${teamRowBtn("home", home, homeLogo, "Home", homeActive, homeFade)}
           </div>
 
-          <div class="gpMetaRow" style="margin-top:10px;">
+          <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
             ${my
               ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
               : `<div class="muted">No pick yet</div>`
             }
-            ${lockedGame ? `<div class="muted" style="margin-top:6px;">Locked</div>` : ``}
+            ${lockedGame ? `<div class="muted">Locked</div>` : ``}
           </div>
 
           <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
@@ -1040,14 +1031,12 @@
       const role = getRole();
       const events = await fetchEventsFor(selectedKey, selectedDate);
 
-      // ✅ build eventMap for LIVE/FINAL scores
-      const eventMap = {};
+      // ✅ build event lookup for LIVE clock/period/FINAL
+      const eventsById = {};
       for (const ev of (events || [])) {
         const id = String(ev?.id || "");
-        if (id) eventMap[id] = ev;
+        if (id) eventsById[id] = ev;
       }
-      // ✅ context for ticker
-      window.__GP_CTX = { leagueKey: selectedKey, dateYYYYMMDD: selectedDate };
 
       const adminHTML = (role === "admin")
         ? gpBuildAdminSlateHTML(events, selectedKey, selectedDate)
@@ -1064,7 +1053,9 @@
         content.innerHTML = `
           ${renderPicksHeaderHTML(prettyDate, "Updated", selectedKey)}
           ${adminHTML}
-          ${gpBuildGroupPicksCardHTML({ slateId: sid, games: [], myMap: {}, allPicks: {}, published: false, eventMap })}
+          ${gpBuildGroupPicksCardHTML({
+            slateId: sid, games: [], myMap: {}, allPicks: {}, published: false, lockAt: null, eventsById
+          })}
         `;
         postRender();
         return;
@@ -1076,7 +1067,9 @@
       if (!published && role !== "admin") {
         content.innerHTML = `
           ${renderPicksHeaderHTML(prettyDate, "Updated", selectedKey)}
-          ${gpBuildGroupPicksCardHTML({ slateId: sid, games: [], myMap: {}, allPicks: {}, published: false, eventMap })}
+          ${gpBuildGroupPicksCardHTML({
+            slateId: sid, games: [], myMap: {}, allPicks: {}, published: false, lockAt: null, eventsById
+          })}
         `;
         postRender();
         return;
@@ -1096,7 +1089,7 @@
           allPicks,
           published,
           lockAt: slateData.lockAt || null,
-          eventMap
+          eventsById
         })}
       `;
 
@@ -1190,86 +1183,10 @@
     window.__GP_LOCK_TICK = setInterval(tick, 1000);
   }
 
-  // -----------------------------
-  // ✅ Scores ticker (updates while live, keeps final)
-  // -----------------------------
-  function gpStartScoresTicker() {
-    if (window.__GP_SCORE_TICK) {
-      clearInterval(window.__GP_SCORE_TICK);
-      window.__GP_SCORE_TICK = null;
-    }
-
-    const ctx = window.__GP_CTX || {};
-    const leagueKey = String(ctx.leagueKey || "");
-    const dateYYYYMMDD = String(ctx.dateYYYYMMDD || "");
-    if (!leagueKey || !dateYYYYMMDD) return;
-
-    const applyEventsToUI = (events) => {
-      const map = {};
-      for (const ev of (events || [])) {
-        const id = String(ev?.id || "");
-        if (id) map[id] = ev;
-      }
-
-      // update all score fields in-place
-      const btns = Array.from(document.querySelectorAll('button[data-gpscorebtn="1"][data-eid][data-side]'));
-      for (const btn of btns) {
-        const eid = String(btn.getAttribute("data-eid") || "");
-        const side = String(btn.getAttribute("data-side") || "");
-        if (!eid || !side) continue;
-
-        const ev = map[eid];
-        const snap = gpEventSnapshot(ev);
-        const scoreEl = btn.querySelector('[data-gpscore="1"]');
-        if (!scoreEl) continue;
-
-        if (!snap.showScores) {
-          scoreEl.textContent = "";
-          continue;
-        }
-
-        scoreEl.textContent = (side === "away") ? (snap.awayScore || "") : (snap.homeScore || "");
-      }
-    };
-
-    const tick = async () => {
-      try {
-        const events = await fetchEventsFor(leagueKey, dateYYYYMMDD);
-        applyEventsToUI(events);
-      } catch {}
-    };
-
-    tick();
-    window.__GP_SCORE_TICK = setInterval(tick, 30000); // every 30s
-  }
-
-  // -----------------------------
-  // UI helpers for pick highlighting (active + fade)
-  // -----------------------------
-  function gpApplyRowPickUI(rowEl, pickSide) {
-    if (!rowEl) return;
-    const awayBtn = rowEl.querySelector('button[data-gppick="away"]');
-    const homeBtn = rowEl.querySelector('button[data-gppick="home"]');
-
-    const hasPick = !!pickSide;
-    const awayActive = pickSide === "away";
-    const homeActive = pickSide === "home";
-
-    if (awayBtn) {
-      awayBtn.classList.toggle("gpPickRowActive", awayActive);
-      awayBtn.classList.toggle("gpFaded", hasPick && !awayActive);
-    }
-    if (homeBtn) {
-      homeBtn.classList.toggle("gpPickRowActive", homeActive);
-      homeBtn.classList.toggle("gpFaded", hasPick && !homeActive);
-    }
-  }
-
   function postRender() {
     try { setPicksNameUI(); } catch {}
     try { gpStartLockCountdownTimer(); } catch {}
     try { gpUpdateSaveBtnUI(); } catch {}
-    try { gpStartScoresTicker(); } catch {}
 
     try {
       if (typeof window.replaceMichiganText === "function") setTimeout(() => window.replaceMichiganText(), 0);
@@ -1287,7 +1204,6 @@
       const btn = e.target && e.target.closest ? e.target.closest("button") : null;
       if (!btn) return;
 
-      // Header actions
       const act = btn.getAttribute("data-gpaction");
       if (act === "refresh") {
         renderPicks(true);
@@ -1318,7 +1234,6 @@
             }
 
             await gpSaveMyPicksBatch(db, slateId, uid, pendingMap);
-
             gpPendingClear();
           })
           .then(() => renderPicks(true))
@@ -1332,12 +1247,12 @@
 
         return;
       }
+
       if (act === "addQuick") {
         alert("Quick-add is coming soon. Group Picks slate is the main workflow.");
         return;
       }
 
-      // Admin: Select All / Select None
       const gpSelect = btn.getAttribute("data-gpselect");
       if (gpSelect) {
         const wrap = btn.closest('[data-gpadminwrap="1"]');
@@ -1353,18 +1268,32 @@
 
         if (btn.disabled) return;
 
-        // toggle: tap same side again clears it
         const cur = gpPendingGet(eventId);
         if (cur === gpPick) gpPendingSet(eventId, "");
         else gpPendingSet(eventId, gpPick);
 
         gpUpdateSaveBtnUI();
 
-        // ✅ update active/fade states in-place (no full re-render)
+        // ✅ update active + fade states in-place (no full re-render)
         const row = btn.closest(".gpGameRow");
         if (row) {
           const curPick = gpPendingGet(eventId) || String(row.getAttribute("data-saved") || "");
-          gpApplyRowPickUI(row, curPick);
+
+          const awayBtn = row.querySelector('button[data-gppick="away"]');
+          const homeBtn = row.querySelector('button[data-gppick="home"]');
+
+          const hasPick = !!curPick;
+          const awayActive = curPick === "away";
+          const homeActive = curPick === "home";
+
+          if (awayBtn) {
+            awayBtn.classList.toggle("gpPickRowActive", awayActive);
+            awayBtn.classList.toggle("gpFaded", hasPick && !awayActive);
+          }
+          if (homeBtn) {
+            homeBtn.classList.toggle("gpPickRowActive", homeActive);
+            homeBtn.classList.toggle("gpFaded", hasPick && !homeActive);
+          }
         }
 
         return;
