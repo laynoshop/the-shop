@@ -1,13 +1,10 @@
 /* split/groupPicks.js
    =========================
-   GROUP PICKS (Pick'em Week) — SINGLE SOURCE for Picks tab
-   - Weekly slate: Week 1, Week 2, ...
-   - Mixed leagues in ONE week slate (NBA/NHL/NCAAM/etc)
-   - Admin-only: league/date selectors + add games + week controls
-   - Users: pick home/away (multi-pick), then Save once (manual save)
-   - Users: see everyone’s picks
-   - Per-game lock (default = game start; optional lockAt per game doc)
-   - LIVE / FINAL pill + scores (from ESPN) while games are live/final
+   GROUP PICKS (Weekly Multi-League Slate) — SINGLE SOURCE for Picks tab
+   - Admin: create weeks (auto increment), set active week, add games from ANY league/day into that week, publish
+   - Users: see active week by default, can select prior published weeks
+   - Picks: home/away (multi-pick), then Save once (manual save)
+   - Per-game lock (locks at game start)
    - NO UID UI
    ========================= */
 
@@ -18,6 +15,9 @@
   // Safe helpers / fallbacks
   // -----------------------------
   const PICKS_NAME_KEY = "theShopPicksName_v1";
+  const PICKS_WEEK_KEY = "theShopPicksWeek_v1"; // last selected week id
+  const META_PUBLIC_DOC = "public";
+  const META_ADMIN_DOC = "admin";
 
   function safeGetLS(key) {
     try { return String(localStorage.getItem(key) || ""); } catch { return ""; }
@@ -43,12 +43,11 @@
 
   function getSavedLeagueKeySafe() {
     if (typeof window.getSavedLeagueKey === "function") return window.getSavedLeagueKey();
-    return safeGetLS("theShopLeague_v1").trim() || "nfl";
+    return safeGetLS("theShopLeague_v1").trim() || "ncaam";
   }
 
   function getSavedDateYYYYMMDDSafe() {
     if (typeof window.getSavedDateYYYYMMDD === "function") return window.getSavedDateYYYYMMDD();
-
     const DATE_KEY = "theShopDate_v1"; // stores YYYYMMDD
     let saved = "";
     try { saved = String(localStorage.getItem(DATE_KEY) || "").trim(); } catch { saved = ""; }
@@ -70,72 +69,37 @@
     return dt.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 
-  function fmtKickoff(iso) {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "—";
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  function currentYear() {
+    return new Date().getFullYear();
+  }
+
+  function weekIdFor(year, weekNum) {
+    return `${year}_W${weekNum}`;
+  }
+
+  function parseWeekId(weekId) {
+    const m = String(weekId || "").match(/^(\d{4})_W(\d{1,2})$/);
+    if (!m) return { year: currentYear(), weekNum: 1 };
+    return { year: Number(m[1]), weekNum: Number(m[2]) };
   }
 
   // -----------------------------
-  // ✅ LEAGUE SELECT + ESPN EVENTS
+  // Leagues (admin add-games tool)
   // -----------------------------
   const __LEAGUES_FALLBACK_FULL = [
-    {
-      key: "ncaam",
-      name: "Men’s College Basketball",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`
-    },
-    {
-      key: "cfb",
-      name: "College Football",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`
-    },
-    {
-      key: "nba",
-      name: "NBA",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`
-    },
-    {
-      key: "nhl",
-      name: "NHL",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`
-    },
-    {
-      key: "nfl",
-      name: "NFL",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`
-    },
-    {
-      key: "mlb",
-      name: "MLB",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`
-    },
-    {
-      key: "pga",
-      name: "Golf (PGA)",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`
-    }
+    { key: "ncaam", name: "Men’s College Basketball", endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200` },
+    { key: "nba",   name: "NBA",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}` },
+    { key: "nhl",   name: "NHL",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}` },
+    { key: "nfl",   name: "NFL",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}` },
+    { key: "cfb",   name: "College Football",       endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}` },
+    { key: "mlb",   name: "MLB",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}` },
+    { key: "pga",   name: "Golf (PGA)",             endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}` }
   ];
 
   function __getLeaguesFullList() {
     const g = Array.isArray(window.LEAGUES) ? window.LEAGUES : null;
     if (g && g.length && typeof g[0]?.endpoint === "function") return g;
     return __LEAGUES_FALLBACK_FULL;
-  }
-
-  function __coerceValidLeagueKey(k) {
-    const list = __getLeaguesFullList();
-    const wanted = String(k || "").trim();
-    if (wanted && list.some(l => String(l.key) === wanted)) return wanted;
-    return list[0] ? String(list[0].key) : "nfl";
   }
 
   function getLeagueByKeySafe(key) {
@@ -149,36 +113,8 @@
   }
 
   function buildLeagueSelectHTMLSafe(selectedKey) {
-    if (typeof window.buildLeagueSelectHTML === "function") {
-      return window.buildLeagueSelectHTML(selectedKey);
-    }
-
-    const LEAGUE_KEY = "theShopLeague_v1";
-    function saveLeagueKeyLocal(k) {
-      try { localStorage.setItem(LEAGUE_KEY, String(k)); } catch {}
-    }
-
-    if (typeof window.handleLeagueChangeFromEl !== "function") {
-      window.handleLeagueChangeFromEl = function (el) {
-        const v = String(el?.value || "").trim();
-        if (!v) return;
-
-        if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(v);
-        else saveLeagueKeyLocal(v);
-
-        if (typeof window.showTab === "function") window.showTab("picks");
-        else if (typeof window.renderPicks === "function") window.renderPicks(true);
-      };
-    }
-
     const leagues = __getLeaguesFullList();
-    const sel = __coerceValidLeagueKey(selectedKey);
-
-    if (String(selectedKey || "") !== sel) {
-      if (typeof window.saveLeagueKey === "function") window.saveLeagueKey(sel);
-      else saveLeagueKeyLocal(sel);
-    }
-
+    const sel = leagues.some(l => l.key === selectedKey) ? selectedKey : (leagues[0]?.key || "ncaam");
     const options = leagues.map(l => {
       const k = String(l.key || "");
       const nm = String(l.name || k);
@@ -186,48 +122,18 @@
     }).join("");
 
     return `
-      <select class="leagueSelect" aria-label="Choose league" onchange="handleLeagueChangeFromEl(this)">
+      <select class="leagueSelect" aria-label="Choose league" data-gpadminleague="1">
         ${options}
       </select>
     `;
   }
 
   function buildCalendarButtonHTMLSafe() {
-    if (typeof window.buildCalendarButtonHTML === "function") return window.buildCalendarButtonHTML();
-
-    const DATE_KEY = "theShopDate_v1";
-
-    function yyyymmddToInputValue(yyyymmdd) {
-      const s = String(yyyymmdd || "");
+    const current = (() => {
+      const s = String(getSavedDateYYYYMMDDSafe() || "");
       if (!/^\d{8}$/.test(s)) return "";
       return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-    }
-
-    function inputValueToYYYYMMDD(v) {
-      const s = String(v || "").trim();
-      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (!m) return "";
-      return `${m[1]}${m[2]}${m[3]}`;
-    }
-
-    if (typeof window.handleNativeDateChangeFromEl !== "function") {
-      window.handleNativeDateChangeFromEl = function (el) {
-        const v = el?.value || "";
-        const yyyymmdd = inputValueToYYYYMMDD(v);
-        if (!yyyymmdd) return;
-
-        if (typeof window.saveDateYYYYMMDD === "function") {
-          window.saveDateYYYYMMDD(yyyymmdd);
-        } else {
-          try { localStorage.setItem(DATE_KEY, yyyymmdd); } catch {}
-        }
-
-        if (typeof window.showTab === "function") window.showTab("picks");
-        else if (typeof window.renderPicks === "function") window.renderPicks(true);
-      };
-    }
-
-    const current = yyyymmddToInputValue(getSavedDateYYYYMMDDSafe());
+    })();
 
     return `
       <span class="datePickerWrap" aria-label="Choose date">
@@ -238,60 +144,27 @@
           type="date"
           value="${esc(current)}"
           aria-label="Choose date"
-          onchange="handleNativeDateChangeFromEl(this)"
-          oninput="handleNativeDateChangeFromEl(this)"
+          data-gpadmindate="1"
         />
       </span>
     `;
   }
 
-  // Debug bucket (kept for console)
-  window.__GP_LAST_FETCH_DEBUG = "";
-
   async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
     const league = getLeagueByKeySafe(leagueKey);
-    if (!league) {
-      window.__GP_LAST_FETCH_DEBUG = `No league found for key: ${leagueKey}`;
-      return [];
-    }
-
-    if (typeof window.fetchScoreboardWithFallbacks === "function") {
-      try {
-        const sb = await window.fetchScoreboardWithFallbacks(league, dateYYYYMMDD);
-        const events = Array.isArray(sb?.events) ? sb.events : [];
-        window.__GP_LAST_FETCH_DEBUG = `fetchScoreboardWithFallbacks ok • events=${events.length}`;
-        return events;
-      } catch (e) {
-        window.__GP_LAST_FETCH_DEBUG = `fetchScoreboardWithFallbacks failed: ${String(e?.message || e)}`;
-      }
-    }
-
+    if (!league) return [];
     const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
-    if (!url) {
-      window.__GP_LAST_FETCH_DEBUG = `League endpoint missing for ${leagueKey}`;
-      return [];
-    }
-
+    if (!url) return [];
     try {
       const r = await fetch(url, { cache: "no-store" });
-      const status = `${r.status} ${r.statusText || ""}`.trim();
-      if (!r.ok) {
-        window.__GP_LAST_FETCH_DEBUG = `Direct ESPN fetch not ok • ${status} • ${url}`;
-        return [];
-      }
+      if (!r.ok) return [];
       const j = await r.json().catch(() => ({}));
-      const events = Array.isArray(j?.events) ? j.events : [];
-      window.__GP_LAST_FETCH_DEBUG = `Direct ESPN fetch ok • ${status} • events=${events.length}`;
-      return events;
-    } catch (e) {
-      window.__GP_LAST_FETCH_DEBUG = `Direct ESPN fetch threw: ${String(e?.message || e)}`;
+      return Array.isArray(j?.events) ? j.events : [];
+    } catch {
       return [];
     }
   }
 
-  // -----------------------------
-  // Firebase safe init
-  // -----------------------------
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
     if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
@@ -319,99 +192,32 @@
   }
 
   // -----------------------------
-  // WEEK MODEL (Firestore)
+  // Firestore helpers (meta + week)
   // -----------------------------
-    const GPW = {
-    metaDoc: "meta",
-    currentDoc: "current",
-    weekPrefix: "week_",
-    // IMPORTANT: use existing collection to match current Firestore rules
-    coll: "pickSlates"
-  };
-
-  function isWeekId(id) {
-    const s = String(id || "");
-    return /^week_\d+$/.test(s);
+  function metaRef(db, docId) {
+    return db.collection("pickSlatesMeta").doc(String(docId));
   }
 
-  async function gpEnsureWeekInfra(db) {
-    const metaRef = db.collection(GPW.coll).doc(GPW.metaDoc);
-    const curRef = db.collection(GPW.coll).doc(GPW.currentDoc);
-
-    const [metaSnap, curSnap] = await Promise.all([metaRef.get(), curRef.get()]);
-
-    if (!metaSnap.exists) {
-      await metaRef.set({
-        nextWeekNumber: 1,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    }
-
-    if (!curSnap.exists) {
-      await curRef.set({
-        activeWeekId: "",
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    }
+  async function gpGetMetaPublic(db) {
+    const snap = await metaRef(db, META_PUBLIC_DOC).get();
+    return snap.exists ? (snap.data() || {}) : {};
   }
 
-  async function gpGetActiveWeekId(db) {
-    const curRef = db.collection(GPW.coll).doc(GPW.currentDoc);
-    const snap = await curRef.get();
-    const v = snap.exists ? String(snap.data()?.activeWeekId || "") : "";
-    return isWeekId(v) ? v : "";
+  async function gpGetMetaAdmin(db) {
+    const snap = await metaRef(db, META_ADMIN_DOC).get();
+    return snap.exists ? (snap.data() || {}) : {};
   }
 
-  async function gpCreateNewWeekAndSetCurrent(db, uid) {
-    const metaRef = db.collection(GPW.coll).doc(GPW.metaDoc);
-    const curRef = db.collection(GPW.coll).doc(GPW.currentDoc);
+  async function gpEnsureMetaInitialized(db) {
+    const y = currentYear();
+    const pub = await gpGetMetaPublic(db);
+    if (pub?.year === y && pub?.activeWeekId) return;
 
-    const metaSnap = await metaRef.get();
-    const nextNum = Number(metaSnap.data()?.nextWeekNumber || 1);
-    const weekNum = (Number.isFinite(nextNum) && nextNum > 0) ? nextNum : 1;
-    const weekId = `${GPW.weekPrefix}${weekNum}`;
-
-    const weekRef = db.collection(GPW.coll).doc(weekId);
-
-    await weekRef.set({
-      weekNumber: weekNum,
-      label: `Week ${weekNum}`,
-      published: false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      createdBy: uid || "",
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid || ""
-    }, { merge: true });
-
-    await curRef.set({
-      activeWeekId: weekId,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid || ""
-    }, { merge: true });
-
-    await metaRef.set({
-      nextWeekNumber: weekNum + 1,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid || ""
-    }, { merge: true });
-
-    return weekId;
-  }
-
-  async function gpSetWeekPublished(db, weekId, uid, publishBool) {
-    const weekRef = db.collection(GPW.coll).doc(weekId);
-    await weekRef.set({
-      published: !!publishBool,
-      publishedAt: publishBool ? firebase.firestore.FieldValue.serverTimestamp() : null,
-      publishedBy: publishBool ? (uid || "") : null,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid || ""
-    }, { merge: true });
+    // Admin-only init happens via admin action; users just fall back.
   }
 
   // -----------------------------
-  // Game helpers
+  // Picks storage model (week is the slateId now)
   // -----------------------------
   function kickoffMsFromEvent(ev) {
     const comp = ev?.competitions?.[0];
@@ -420,87 +226,15 @@
     return Number.isFinite(t) ? t : 0;
   }
 
-  function getMatchupTeamsFromEvent(ev) {
-    const comp = ev?.competitions?.[0] || {};
-    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-    const homeC = competitors.find(c => c?.homeAway === "home") || {};
-    const awayC = competitors.find(c => c?.homeAway === "away") || {};
-    return { comp, homeC, awayC };
+  function fmtKickoffFromMs(ms) {
+    if (!ms) return "—";
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
-  function pickLogo(teamObj) {
-    const l1 = teamObj?.logo;
-    const l2 = Array.isArray(teamObj?.logos) ? teamObj.logos[0]?.href : "";
-    return String(l1 || l2 || "");
-  }
-
-  function pickRecord(competitor) {
-    const recs = Array.isArray(competitor?.records) ? competitor.records : [];
-    const total = recs.find(r => r?.type === "total") || recs[0];
-    return String(total?.summary || "");
-  }
-
-  function pickRank(competitor, teamObj) {
-    const r =
-      competitor?.curatedRank?.current ??
-      competitor?.rank ??
-      teamObj?.rank ??
-      "";
-    const n = Number(r);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }
-
-  function buildTeam(competitor) {
-    const team = competitor?.team || {};
-    return {
-      id: String(team?.id || ""),
-      name: String(team?.displayName || team?.name || ""),
-      abbr: String(team?.abbreviation || ""),
-      logo: pickLogo(team),
-      record: pickRecord(competitor),
-      rank: pickRank(competitor, team),
-      homeAway: String(competitor?.homeAway || "")
-    };
-  }
-
-  function buildVenueLine(comp) {
-    const v = comp?.venue || {};
-    const full = String(v?.fullName || "");
-    const city = String(v?.address?.city || "");
-    const state = String(v?.address?.state || "");
-    const loc = [city, state].filter(Boolean).join(", ");
-    if (full && loc) return `${full} - ${loc}`;
-    return full || loc || "";
-  }
-
-  function buildOdds(comp, homeTeam, awayTeam) {
-    const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
-    if (!o) return { details: "", overUnder: "", favoredTeam: "" };
-
-    const details = String(o?.details || "");
-    const overUnder = (o?.overUnder != null) ? String(o.overUnder) : "";
-
-    const homeFav = !!o?.homeTeamOdds?.favorite;
-    const awayFav = !!o?.awayTeamOdds?.favorite;
-    const favoredTeam =
-      homeFav ? (homeTeam?.abbr || homeTeam?.name || "") :
-      awayFav ? (awayTeam?.abbr || awayTeam?.name || "") :
-      "";
-
-    return { details, overUnder, favoredTeam };
-  }
-
-  // -----------------------------
-  // Week storage reads/writes
-  // -----------------------------
-  async function gpGetWeekDoc(db, weekId) {
-    const ref = db.collection(GPW.coll).doc(weekId);
-    const snap = await ref.get();
-    return snap.exists ? (snap.data() || {}) : null;
-  }
-
-  async function gpGetWeekGames(db, weekId) {
-    const snap = await db.collection(GPW.coll).doc(weekId).collection("games").get();
+  async function gpGetSlateGames(db, slateId) {
+    const snap = await db.collection("pickSlates").doc(slateId).collection("games").get();
     const list = [];
     snap.forEach(d => list.push({ id: d.id, ...d.data() }));
 
@@ -513,9 +247,9 @@
     return list;
   }
 
-  async function gpGetMyPicksMap(db, weekId, uid) {
+  async function gpGetMyPicksMap(db, slateId, uid) {
     if (!uid) return {};
-    const snap = await db.collection(GPW.coll).doc(weekId)
+    const snap = await db.collection("pickSlates").doc(slateId)
       .collection("picks").doc(uid)
       .collection("games").get();
 
@@ -524,15 +258,15 @@
     return map;
   }
 
-  async function gpGetAllPicksForWeek(db, weekId) {
+  async function gpGetAllPicksForSlate(db, slateId) {
     const out = {};
-    const usersSnap = await db.collection(GPW.coll).doc(weekId).collection("picks").get();
+    const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
     const userDocs = usersSnap.docs || [];
 
     for (const u of userDocs) {
       const uid = u.id;
 
-      const gamesSnap = await db.collection(GPW.coll).doc(weekId)
+      const gamesSnap = await db.collection("pickSlates").doc(slateId)
         .collection("picks").doc(uid)
         .collection("games").get();
 
@@ -554,11 +288,11 @@
     return out;
   }
 
-  async function gpSaveMyPicksBatch(db, weekId, uid, pendingMap) {
+  async function gpSaveMyPicksBatch(db, slateId, uid, pendingMap) {
     const keys = Object.keys(pendingMap || {});
     if (!keys.length) return;
 
-    const picksUserRef = db.collection(GPW.coll).doc(weekId)
+    const picksUserRef = db.collection("pickSlates").doc(slateId)
       .collection("picks").doc(uid);
 
     const name = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
@@ -583,75 +317,6 @@
     }
 
     await batch.commit();
-  }
-
-  async function gpAdminAddSelectedGamesToWeek(db, weekId, uid, leagueKey, dateYYYYMMDD, selectedEventIds, events) {
-    const weekRef = db.collection(GPW.coll).doc(weekId);
-    await weekRef.set({
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid || ""
-    }, { merge: true });
-
-    for (const ev of (events || [])) {
-      const eventId = String(ev?.id || "");
-      if (!eventId) continue;
-      if (!selectedEventIds.has(eventId)) continue;
-
-      const { comp, homeC, awayC } = getMatchupTeamsFromEvent(ev);
-      const homeTeam = buildTeam(homeC);
-      const awayTeam = buildTeam(awayC);
-
-      const homeName = homeTeam.name || "Home";
-      const awayName = awayTeam.name || "Away";
-
-      const startMs = kickoffMsFromEvent(ev);
-      const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
-
-      const venueLine = buildVenueLine(comp);
-      const odds = buildOdds(comp, homeTeam, awayTeam);
-
-      // ✅ per-game lock default = startTime (no lockAt written unless you add it later)
-      await weekRef.collection("games").doc(eventId).set({
-        eventId,
-        leagueKey: String(leagueKey || ""),
-        dateYYYYMMDD: String(dateYYYYMMDD || ""),
-
-        homeName,
-        awayName,
-        startTime,
-
-        venueLine: String(venueLine || ""),
-        oddsDetails: String(odds.details || ""),
-        oddsOU: String(odds.overUnder || ""),
-        oddsFavored: String(odds.favoredTeam || ""),
-        homeTeam,
-        awayTeam,
-
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    }
-  }
-
-  async function gpAdminRemoveGameFromWeek(db, weekId, uid, eventId) {
-    const weekRef = db.collection(GPW.coll).doc(weekId);
-    await weekRef.collection("games").doc(String(eventId)).delete().catch(() => {});
-    await weekRef.set({
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid || ""
-    }, { merge: true });
-  }
-
-  async function gpAdminClearWeek(db, weekId, uid) {
-    const weekRef = db.collection(GPW.coll).doc(weekId);
-    const snap = await weekRef.collection("games").get();
-    const batch = db.batch();
-    snap.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
-
-    await weekRef.set({
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid || ""
-    }, { merge: true });
   }
 
   // -----------------------------
@@ -704,125 +369,300 @@
   }
 
   // -----------------------------
-  // LIVE/FINAL + scores helpers (ESPN event)
+  // Week selector UI
   // -----------------------------
-  function buildLiveFinalPillHTML(eventObj) {
-    const ev = eventObj || null;
-    const comp = ev?.competitions?.[0] || null;
-    const st = comp?.status || ev?.status || null;
-    const type = st?.type || null;
-
-    const state = String(type?.state || "").trim(); // "pre" | "in" | "post"
-    const shortDetail = String(type?.shortDetail || type?.detail || "").trim();
-    if (!state) return "";
-
-    if (state === "in") {
-      const txt = shortDetail ? `LIVE • ${shortDetail}` : "LIVE";
-      return `<div class="statusPill status-live" style="margin-bottom:10px;">${esc(txt)}</div>`;
-    }
-
-    if (state === "post") {
-      const txt = shortDetail ? `FINAL • ${shortDetail}` : "FINAL";
-      return `<div class="statusPill status-final" style="margin-bottom:10px;">${esc(txt)}</div>`;
-    }
-
-    return "";
-  }
-
-  function gpGetSideScore(eventObj, homeAway /* "home"|"away" */) {
-    const ev = eventObj || null;
-    const comp = ev?.competitions?.[0] || null;
-    const st = comp?.status || ev?.status || null;
-    const state = String(st?.type?.state || "").trim(); // pre/in/post
-
-    if (!(state === "in" || state === "post")) return "";
-
-    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-    const c = competitors.find(x => String(x?.homeAway || "") === String(homeAway || ""));
-    const score = (c?.score != null) ? String(c.score) : "";
-    return score.trim();
-  }
-
-  // -----------------------------
-  // Admin UI (Week Builder + Add Games)
-  // -----------------------------
-  function gpBuildAdminPanelHTML({ weekId, weekLabel, published, leagueKey, dateYYYYMMDD, events }) {
-    const now = Date.now();
-    const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
-
-    const rows = sorted.map(ev => {
-      const eventId = String(ev?.id || "");
-      if (!eventId) return "";
-
-      const { comp, homeC, awayC } = getMatchupTeamsFromEvent(ev);
-      const homeName = (homeC?.team?.displayName || homeC?.team?.name || "Home");
-      const awayName = (awayC?.team?.displayName || awayC?.team?.name || "Away");
-
-      const startMs = kickoffMsFromEvent(ev);
-      const started = startMs ? (startMs <= now) : false;
-      const iso = ev?.date || comp?.date || "";
-
-      return `
-        <div class="gpAdminRow">
-          <label class="gpAdminLabel">
-            <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
-            <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
-            <span class="muted gpAdminTime">${esc(fmtKickoff(iso))}${started ? " • Started" : ""}</span>
-          </label>
-        </div>
-      `;
+  function buildWeekSelectHTML(weeks, selectedWeekId) {
+    const list = Array.isArray(weeks) ? weeks : [];
+    const options = list.map(w => {
+      const id = String(w?.id || "");
+      const label = String(w?.label || id);
+      const disabled = (w?.published === false) ? " disabled" : "";
+      const sel = (id === selectedWeekId) ? " selected" : "";
+      return `<option value="${esc(id)}"${sel}${disabled}>${esc(label)}</option>`;
     }).join("");
 
     return `
-      <div class="game" data-gpadminwrap="1" data-weekid="${esc(weekId)}" data-leaguekey="${esc(leagueKey)}" data-date="${esc(dateYYYYMMDD)}">
-        <div class="gameHeader">
-          <div class="statusPill status-other">ADMIN: WEEK BUILDER</div>
-        </div>
-
-        <div class="gameMetaTopLine">${esc(weekLabel)} • ${published ? "Published" : "Draft"}</div>
-        <div class="gameMetaOddsLine">Create weeks, publish/unpublish, and add games across leagues.</div>
-
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="smallBtn" type="button" data-gpadmin="newWeek">Create New Week</button>
-          <button class="smallBtn" type="button" data-gpadmin="${published ? "unpublishWeek" : "publishWeek"}">${published ? "Unpublish" : "Publish"}</button>
-          <button class="smallBtn" type="button" data-gpadmin="clearWeek">Clear Week Games</button>
-        </div>
-
-        <div style="margin-top:14px;">
-          <div class="muted" style="margin-bottom:6px;">Add games to ${esc(weekLabel)}:</div>
-          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            ${buildLeagueSelectHTMLSafe(leagueKey)}
-            ${buildCalendarButtonHTMLSafe()}
-            <button class="smallBtn" type="button" data-gpaction="refresh">Load Games</button>
-          </div>
-        </div>
-
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
-          <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
-          <button class="smallBtn" type="button" data-gpadmin="addSelected">Add Selected to Week</button>
-        </div>
-
-        <div style="margin-top:10px;">
-          ${rows || `<div class="notice">No games found for this league/date.</div>`}
-        </div>
-
-        <div class="muted" id="gpAdminStatus" style="margin-top:10px;"></div>
-      </div>
+      <select class="leagueSelect" aria-label="Choose week" data-gpweeksel="1">
+        ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
+      </select>
     `;
   }
 
-  function gpApplyAdminSelection(wrapEl, mode) {
-    if (!wrapEl) return;
-    const checks = Array.from(wrapEl.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
-    const on = (mode === "all");
-    for (const c of checks) c.checked = on;
+  function getSelectedWeekFromLS() {
+    return safeGetLS(PICKS_WEEK_KEY).trim();
+  }
+
+  function setSelectedWeekToLS(weekId) {
+    safeSetLS(PICKS_WEEK_KEY, String(weekId || ""));
   }
 
   // -----------------------------
-  // User-facing Week Picks card
+  // Admin: create week + set active + add games + publish
   // -----------------------------
-  function gpBuildWeekPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks, eventsById, role }) {
+  async function gpAdminCreateNewWeek(db, uid) {
+    const y = currentYear();
+    const adminRef = metaRef(db, META_ADMIN_DOC);
+    const publicRef = metaRef(db, META_PUBLIC_DOC);
+
+    await db.runTransaction(async (tx) => {
+      const aSnap = await tx.get(adminRef);
+      const pSnap = await tx.get(publicRef);
+
+      const a = aSnap.exists ? (aSnap.data() || {}) : {};
+      const p = pSnap.exists ? (pSnap.data() || {}) : {};
+
+      const year = (Number(a.year) === y || Number(p.year) === y) ? y : y;
+      const cur = Number(a.currentWeek || 0);
+      const nextWeek = Math.max(1, cur + 1);
+
+      const newId = weekIdFor(year, nextWeek);
+      const label = `Week ${nextWeek}`;
+
+      const weeks = Array.isArray(p.weeks) ? [...p.weeks] : [];
+      if (!weeks.some(w => String(w.id) === newId)) {
+        weeks.push({ id: newId, label, published: false });
+      }
+
+      tx.set(adminRef, {
+        year,
+        currentWeek: nextWeek,
+        activeWeekId: newId,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+
+      tx.set(publicRef, {
+        year,
+        activeWeekId: newId,
+        weeks,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+
+      // create the week slate doc (unpublished initially)
+      tx.set(db.collection("pickSlates").doc(newId), {
+        type: "week",
+        year,
+        weekNum: nextWeek,
+        label,
+        active: true,
+        published: false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdBy: uid,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+    });
+
+    return true;
+  }
+
+  async function gpAdminSetActiveWeek(db, uid, weekId) {
+    const publicRef = metaRef(db, META_PUBLIC_DOC);
+    const adminRef = metaRef(db, META_ADMIN_DOC);
+    const y = currentYear();
+
+    await db.runTransaction(async (tx) => {
+      const pSnap = await tx.get(publicRef);
+      const p = pSnap.exists ? (pSnap.data() || {}) : {};
+      const weeks = Array.isArray(p.weeks) ? [...p.weeks] : [];
+
+      if (!weeks.some(w => String(w.id) === String(weekId))) {
+        weeks.push({ id: String(weekId), label: String(weekId), published: false });
+      }
+
+      tx.set(publicRef, {
+        year: (Number(p.year) === y ? y : y),
+        activeWeekId: String(weekId),
+        weeks,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+
+      tx.set(adminRef, {
+        year: (Number(p.year) === y ? y : y),
+        activeWeekId: String(weekId),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+
+      tx.set(db.collection("pickSlates").doc(String(weekId)), {
+        active: true,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+    });
+
+    return true;
+  }
+
+  function pickLogo(teamObj) {
+    const l1 = teamObj?.logo;
+    const l2 = Array.isArray(teamObj?.logos) ? teamObj.logos[0]?.href : "";
+    return String(l1 || l2 || "");
+  }
+  function pickRecord(competitor) {
+    const recs = Array.isArray(competitor?.records) ? competitor.records : [];
+    const total = recs.find(r => r?.type === "total") || recs[0];
+    return String(total?.summary || "");
+  }
+  function pickRank(competitor, teamObj) {
+    const r = competitor?.curatedRank?.current ?? competitor?.rank ?? teamObj?.rank ?? "";
+    const n = Number(r);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  function buildTeam(competitor) {
+    const team = competitor?.team || {};
+    return {
+      id: String(team?.id || ""),
+      name: String(team?.displayName || team?.name || ""),
+      abbr: String(team?.abbreviation || ""),
+      logo: pickLogo(team),
+      record: pickRecord(competitor),
+      rank: pickRank(competitor, team),
+      homeAway: String(competitor?.homeAway || "")
+    };
+  }
+  function buildVenueLine(comp) {
+    const v = comp?.venue || {};
+    const full = String(v?.fullName || "");
+    const city = String(v?.address?.city || "");
+    const state = String(v?.address?.state || "");
+    const loc = [city, state].filter(Boolean).join(", ");
+    if (full && loc) return `${full} - ${loc}`;
+    return full || loc || "";
+  }
+  function buildOdds(comp, homeTeam, awayTeam) {
+    const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
+    if (!o) return { details: "", overUnder: "", favoredTeam: "" };
+
+    const details = String(o?.details || "");
+    const overUnder = (o?.overUnder != null) ? String(o.overUnder) : "";
+
+    const homeFav = !!o?.homeTeamOdds?.favorite;
+    const awayFav = !!o?.awayTeamOdds?.favorite;
+    const favoredTeam =
+      homeFav ? (homeTeam?.abbr || homeTeam?.name || "") :
+      awayFav ? (awayTeam?.abbr || awayTeam?.name || "") :
+      "";
+
+    return { details, overUnder, favoredTeam };
+  }
+
+  async function gpAdminAddSelectedGamesToWeek(db, uid, weekId, leagueKey, dateYYYYMMDD, selectedEventIds, events) {
+    const slateRef = db.collection("pickSlates").doc(String(weekId));
+
+    // ensure slate exists
+    await slateRef.set({
+      type: "week",
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid
+    }, { merge: true });
+
+    for (const ev of (events || [])) {
+      const eventId = String(ev?.id || "");
+      if (!eventId) continue;
+      if (!selectedEventIds.has(eventId)) continue;
+
+      const comp = ev?.competitions?.[0] || {};
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const homeC = competitors.find(c => c?.homeAway === "home") || {};
+      const awayC = competitors.find(c => c?.homeAway === "away") || {};
+
+      const homeTeam = buildTeam(homeC);
+      const awayTeam = buildTeam(awayC);
+
+      const startMs = kickoffMsFromEvent(ev);
+      const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
+
+      const venueLine = buildVenueLine(comp);
+      const odds = buildOdds(comp, homeTeam, awayTeam);
+
+      await slateRef.collection("games").doc(eventId).set({
+        eventId,
+        weekId: String(weekId),
+        leagueKey: String(leagueKey || ""),
+        dateYYYYMMDD: String(dateYYYYMMDD || ""),
+
+        homeName: homeTeam.name || "Home",
+        awayName: awayTeam.name || "Away",
+        startTime,
+
+        venueLine: String(venueLine || ""),
+        oddsDetails: String(odds.details || ""),
+        oddsOU: String(odds.overUnder || ""),
+        oddsFavored: String(odds.favoredTeam || ""),
+        homeTeam,
+        awayTeam,
+
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+  }
+
+  async function gpAdminPublishWeek(db, uid, weekId) {
+    const slateRef = db.collection("pickSlates").doc(String(weekId));
+    await slateRef.set({
+      published: true,
+      publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      publishedBy: uid,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid
+    }, { merge: true });
+
+    // also mark published in meta public list (so users can select it)
+    const publicRef = metaRef(db, META_PUBLIC_DOC);
+    await db.runTransaction(async (tx) => {
+      const pSnap = await tx.get(publicRef);
+      const p = pSnap.exists ? (pSnap.data() || {}) : {};
+      const weeks = Array.isArray(p.weeks) ? [...p.weeks] : [];
+      const next = weeks.map(w => {
+        if (String(w.id) === String(weekId)) return { ...w, published: true };
+        return w;
+      });
+      tx.set(publicRef, {
+        weeks: next,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+    });
+  }
+
+  // -----------------------------
+  // Rendering (cards)
+  // -----------------------------
+  function toNum(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function rankPrefix(rankVal) {
+    const r = toNum(rankVal);
+    if (!r) return "";
+    if (r >= 1 && r <= 25) return `#${r} `;
+    return "";
+  }
+  function safeTeamLabel(t) {
+    const nm = String(t?.name || "").trim();
+    const rk = rankPrefix(t?.rank);
+    return (rk + nm).trim() || "Team";
+  }
+  function safeRecord(t) {
+    const r = String(t?.record || "").trim();
+    return r ? r : "";
+  }
+  function safeLogo(t) {
+    return String(t?.logo || "").trim();
+  }
+  function fmtOddsLine(g) {
+    const details = String(g?.oddsDetails || "").trim();
+    const ou = String(g?.oddsOU || "").trim();
+    const parts = [];
+    if (details) parts.push(`Favored: ${details}`);
+    if (ou) parts.push(`O/U: ${ou}`);
+    return parts.join(" • ");
+  }
+
+  function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks }) {
     if (!weekId) {
       return `
         <div class="game">
@@ -841,55 +681,15 @@
           <div class="gameHeader">
             <div class="statusPill status-other">GROUP PICKS</div>
           </div>
-          <div class="gameMetaTopLine">${esc(weekLabel)} is not published yet</div>
+          <div class="gameMetaTopLine">${esc(weekLabel || weekId)} not published yet</div>
           <div class="gameMetaOddsLine">Waiting on admin.</div>
         </div>
       `;
     }
 
-    function toNum(v) {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
-    }
+    const now = Date.now();
 
-    function rankPrefix(rankVal) {
-      const r = toNum(rankVal);
-      if (!r) return "";
-      if (r >= 1 && r <= 25) return `#${r} `;
-      return "";
-    }
-
-    function safeTeamLabel(t) {
-      const nm = String(t?.name || "").trim();
-      const rk = rankPrefix(t?.rank);
-      return (rk + nm).trim() || "Team";
-    }
-
-    function safeRecord(t) {
-      const r = String(t?.record || "").trim();
-      return r ? r : "";
-    }
-
-    function safeLogo(t) {
-      return String(t?.logo || "").trim();
-    }
-
-    function fmtOddsLine(g) {
-      const details = String(g?.oddsDetails || "").trim();
-      const ou = String(g?.oddsOU || "").trim();
-      const parts = [];
-      if (details) parts.push(`Favored: ${details}`);
-      if (ou) parts.push(`O/U: ${ou}`);
-      return parts.join(" • ");
-    }
-
-    function shortLeagueTag(k) {
-      const kk = String(k || "").trim().toUpperCase();
-      return kk ? kk : "";
-    }
-
-    function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, scoreText, lockedGame, eventId }) {
-      const score = String(scoreText || "").trim();
+    function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId }) {
       return `
         <button
           class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
@@ -932,23 +732,9 @@
               ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
             </div>
           </div>
-
-          ${score ? `
-            <div style="
-              flex:0 0 auto;
-              font-weight:900;
-              font-size:38px;
-              line-height:1;
-              letter-spacing:0.5px;
-              margin-left:8px;
-              opacity:0.95;
-            ">${esc(score)}</div>
-          ` : ``}
         </button>
       `;
     }
-
-    const now = Date.now();
 
     const gameCards = (games || []).map(g => {
       const eventId = String(g?.eventId || g?.id || "");
@@ -958,14 +744,8 @@
       const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
 
       const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-      const kickoffLabel = startMs
-        ? new Date(startMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-        : "—";
-
-      // ✅ per-game lock: lockAt OR startTime
-      const lockMs = g?.lockAt?.toMillis ? g.lockAt.toMillis() : 0;
-      const effectiveLock = lockMs || startMs || 0;
-      const lockedGame = effectiveLock ? (now >= effectiveLock) : false;
+      const kickoffLabel = fmtKickoffFromMs(startMs);
+      const lockedGame = startMs ? now >= startMs : false;
 
       const pending = gpPendingGet(eventId);
       const saved = String(myMap?.[eventId]?.side || "");
@@ -984,7 +764,7 @@
           }).join("")
         : `<div class="muted">No picks yet.</div>`;
 
-      const venueLine = String(g?.venueLine || g?.venue || g?.venueName || "").trim();
+      const venueLine = String(g?.venueLine || "").trim();
       const oddsLine = fmtOddsLine(g);
 
       const awayLogo = safeLogo(away);
@@ -993,16 +773,8 @@
       const hasPick = !!my;
       const awayActive = my === "away";
       const homeActive = my === "home";
-
       const awayFade = hasPick && !awayActive;
       const homeFade = hasPick && !homeActive;
-
-      const ev = (eventsById && eventsById[eventId]) ? eventsById[eventId] : null;
-      const liveFinalPill = buildLiveFinalPillHTML(ev);
-      const awayScore = gpGetSideScore(ev, "away");
-      const homeScore = gpGetSideScore(ev, "home");
-
-      const leagueTag = shortLeagueTag(g?.leagueKey);
 
       return `
         <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
@@ -1012,11 +784,9 @@
           background:rgba(255,255,255,0.06);
           border:1px solid rgba(255,255,255,0.08);
         ">
-          ${liveFinalPill || ""}
 
           <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
             <div class="muted" style="font-weight:800;">
-              ${leagueTag ? `<span class="statusPill status-other" style="display:inline-block; margin-right:8px;">${esc(leagueTag)}</span>` : ""}
               ${venueLine ? esc(venueLine) : ""}
             </div>
             <div class="muted" style="white-space:nowrap; font-weight:900;">
@@ -1030,28 +800,8 @@
           }
 
           <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-            ${teamRowBtn({
-              side: "away",
-              t: away,
-              logoUrl: awayLogo,
-              extraSub: "Away",
-              isActive: awayActive,
-              isFaded: awayFade,
-              scoreText: awayScore,
-              lockedGame,
-              eventId
-            })}
-            ${teamRowBtn({
-              side: "home",
-              t: home,
-              logoUrl: homeLogo,
-              extraSub: "Home",
-              isActive: homeActive,
-              isFaded: homeFade,
-              scoreText: homeScore,
-              lockedGame,
-              eventId
-            })}
+            ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId })}
+            ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId })}
           </div>
 
           <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
@@ -1059,10 +809,7 @@
               ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
               : `<div class="muted">No pick yet</div>`
             }
-            <div style="display:flex; gap:10px; align-items:center;">
-              ${lockedGame ? `<div class="muted">Locked</div>` : ``}
-              ${role === "admin" ? `<button class="smallBtn" type="button" data-gpadmin="removeGame" data-eid="${esc(eventId)}">Remove</button>` : ``}
-            </div>
+            ${lockedGame ? `<div class="muted">Locked</div>` : ``}
           </div>
 
           <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
@@ -1086,11 +833,11 @@
           <div class="statusPill status-other">GROUP PICKS</div>
         </div>
 
-        <div class="statusPill status-live" style="margin-top:10px;">
-          ${esc(weekLabel)} • ${esc((games || []).length)} game${(games || []).length === 1 ? "" : "s"}
+        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+          ${esc(weekLabel || weekId)}
         </div>
 
-        ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week yet.</div>`}
+        ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
 
         ${saveRow}
       </div>
@@ -1098,62 +845,93 @@
   }
 
   // -----------------------------
-  // Header
+  // Admin builder UI (multi-league add)
   // -----------------------------
-  function renderPicksHeaderHTML({ weekLabel, rightLabel, role, selectedKey, prettyDate }) {
-    const adminSelectors = (role === "admin")
-      ? `
-        ${buildLeagueSelectHTMLSafe(selectedKey)}
-        ${buildCalendarButtonHTMLSafe()}
-      `
-      : ``;
+  function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, events }) {
+    const now = Date.now();
+    const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+
+    const rows = sorted.map(ev => {
+      const eventId = String(ev?.id || "");
+      if (!eventId) return "";
+      const comp = ev?.competitions?.[0];
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const home = competitors.find(c => c.homeAway === "home");
+      const away = competitors.find(c => c.homeAway === "away");
+      const homeName = home?.team?.displayName || home?.team?.name || "Home";
+      const awayName = away?.team?.displayName || away?.team?.name || "Away";
+
+      const startMs = kickoffMsFromEvent(ev);
+      const started = startMs ? (startMs <= now) : false;
+
+      return `
+        <div class="gpAdminRow">
+          <label class="gpAdminLabel">
+            <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
+            <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
+            <span class="muted gpAdminTime">${esc(fmtKickoffFromMs(startMs))}${started ? " • Started" : ""}</span>
+          </label>
+        </div>
+      `;
+    }).join("");
 
     return `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Picks</h2>
-            <span class="badge">Group</span>
-          </div>
-
-          <div class="headerActions">
-            <button class="smallBtn" data-gpaction="name">Name</button>
-            <button class="smallBtn" data-gpaction="savePicks">Save</button>
-            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
-          </div>
+      <div class="game" data-gpadminwrap="1" data-weekid="${esc(weekId || "")}">
+        <div class="gameHeader">
+          <div class="statusPill status-other">ADMIN: WEEK BUILDER</div>
         </div>
 
-        <div class="subline">
-          <div class="sublineLeft">
-            ${adminSelectors}
-          </div>
-          <div>${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}${role === "admin" ? ` • ${esc(prettyDate || "")}` : ""}</div>
+        <div class="gameMetaTopLine">${esc(weekLabel || weekId || "Week")}</div>
+        <div class="gameMetaOddsLine">Pick games from any league/day and add them into this week.</div>
+
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          ${buildLeagueSelectHTMLSafe(leagueKey)}
+          ${buildCalendarButtonHTMLSafe()}
+          <button class="smallBtn" type="button" data-gpadmin="loadEvents">Load</button>
         </div>
+
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
+          <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
+          <button class="smallBtn" type="button" data-gpadmin="addSelected">Add Selected</button>
+          <button class="smallBtn" type="button" data-gpadmin="publishWeek">Publish Week</button>
+        </div>
+
+        <div style="margin-top:10px;">
+          ${rows || `<div class="notice">No games loaded yet (tap Load).</div>`}
+        </div>
+
+        <div class="muted" id="gpAdminStatus" style="margin-top:10px;"></div>
       </div>
     `;
   }
 
+  function gpApplyAdminSelection(wrapEl, mode) {
+    if (!wrapEl) return;
+    const checks = Array.from(wrapEl.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]'));
+    const on = (mode === "all");
+    for (const c of checks) c.checked = on;
+  }
+
   // -----------------------------
-  // Main Picks renderer
+  // Main renderer
   // -----------------------------
   async function renderPicks(showLoading) {
     const content = document.getElementById("content");
     if (!content) return;
 
     const role = getRole();
-    const selectedDate = getSavedDateYYYYMMDDSafe();
-    const selectedKey = getSavedLeagueKeySafe();
-    const prettyDate = yyyymmddToPrettySafe(selectedDate);
+    const dbReady = ensureFirebaseReadySafe();
 
     if (showLoading) {
       content.innerHTML = `
-        ${renderPicksHeaderHTML({ weekLabel: "Week", rightLabel: "Loading…", role, selectedKey, prettyDate })}
+        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Loading…" })}
         <div class="notice">Loading picks…</div>
       `;
     }
 
     try {
-      await ensureFirebaseReadySafe();
+      await dbReady;
 
       const user = firebase?.auth?.().currentUser;
       if (!user) {
@@ -1163,123 +941,120 @@
       const db = firebase.firestore();
       const uid = firebase.auth().currentUser?.uid || "";
 
-      await gpEnsureWeekInfra(db);
+      // Read meta (public) to know active week + list
+      const metaPub = await gpGetMetaPublic(db);
+      const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
+      const activeWeekId = String(metaPub.activeWeekId || "").trim();
 
-      // Active week (create Week 1 automatically if admin and none exists)
-      let weekId = await gpGetActiveWeekId(db);
+      // Determine which week to show
+      const requested = getSelectedWeekFromLS();
+      const requestedOk = requested && weeks.some(w => String(w.id) === requested && (w.published === true || role === "admin"));
+      const showWeekId = requestedOk ? requested : activeWeekId;
 
-      if (!weekId && role === "admin") {
-        weekId = await gpCreateNewWeekAndSetCurrent(db, uid);
-      }
+      // Persist current selection so week selector stays stable
+      if (showWeekId) setSelectedWeekToLS(showWeekId);
 
-      const weekData = weekId ? await gpGetWeekDoc(db, weekId) : null;
-      const weekLabel = String(weekData?.label || (weekId ? "Week" : "Week")) || "Week";
-      const published = weekData?.published === true;
+      const wLabel = (weeks.find(w => String(w.id) === String(showWeekId))?.label) || showWeekId || "Week";
 
-      // Admin builder needs events for selected league/date
-      let eventsForPicker = [];
+      // Admin builder state
+      let adminHTML = "";
+      let adminEvents = [];
+      const selectedLeagueKey = getSavedLeagueKeySafe();
+      const selectedDate = getSavedDateYYYYMMDDSafe();
+
       if (role === "admin") {
-        eventsForPicker = await fetchEventsFor(selectedKey, selectedDate);
+        // load events only when admin taps Load (stored on window)
+        adminEvents = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
+        adminHTML = gpBuildAdminBuilderHTML({
+          weekId: showWeekId,
+          weekLabel: wLabel,
+          leagueKey: selectedLeagueKey,
+          dateYYYYMMDD: selectedDate,
+          events: adminEvents
+        });
       }
 
-      const adminHTML = (role === "admin" && weekId)
-        ? gpBuildAdminPanelHTML({
-            weekId,
-            weekLabel,
-            published,
-            leagueKey: selectedKey,
-            dateYYYYMMDD: selectedDate,
-            events: eventsForPicker
-          })
-        : "";
-
-      if (!weekId) {
+      if (!showWeekId) {
         content.innerHTML = `
-          ${renderPicksHeaderHTML({ weekLabel: "Week", rightLabel: "Updated", role, selectedKey, prettyDate })}
+          ${renderPicksHeaderHTML({ role, weekSelectHTML: buildWeekSelectHTML(weeks.filter(w => w.published === true), ""), weekLabel: "Week", rightLabel: "Updated" })}
           ${adminHTML}
-          ${gpBuildWeekPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, published: false, allPicks: {}, eventsById: {}, role })}
+          ${gpBuildGroupPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, allPicks: {}, published: false })}
         `;
         postRender();
         return;
       }
 
-      // Users can’t see unpublished week
+      const slateRef = db.collection("pickSlates").doc(showWeekId);
+      const slateSnap = await slateRef.get();
+      const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
+      const published = slateData.published === true;
+
+      // Non-admin cannot view unpublished week
       if (!published && role !== "admin") {
         content.innerHTML = `
-          ${renderPicksHeaderHTML({ weekLabel, rightLabel: "Updated", role, selectedKey, prettyDate })}
-          ${gpBuildWeekPicksCardHTML({ weekId, weekLabel, games: [], myMap: {}, published: false, allPicks: {}, eventsById: {}, role })}
+          ${renderPicksHeaderHTML({ role, weekSelectHTML: buildWeekSelectHTML(weeks.filter(w => w.published === true), activeWeekId), weekLabel: wLabel, rightLabel: "Updated" })}
+          ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games: [], myMap: {}, allPicks: {}, published: false })}
         `;
         postRender();
         return;
       }
 
-      const games = await gpGetWeekGames(db, weekId);
+      // Normal pick load
+      const games = await gpGetSlateGames(db, showWeekId);
+      const myMap = await gpGetMyPicksMap(db, showWeekId, uid);
+      const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
 
-      // ✅ Build eventsById across ALL league/date pairs in the week
-      const pairs = {};
-      for (const g of (games || [])) {
-        const lk = String(g?.leagueKey || "").trim();
-        const dt = String(g?.dateYYYYMMDD || "").trim();
-        if (!lk || !dt) continue;
-        pairs[`${lk}__${dt}`] = { leagueKey: lk, dateYYYYMMDD: dt };
-      }
+      gpPendingResetIfSlateChanged(showWeekId);
+      window.__GP_PENDING.sid = showWeekId;
 
-      const eventsById = {};
-      const pairKeys = Object.keys(pairs);
-      for (const k of pairKeys) {
-        const p = pairs[k];
-        const evs = await fetchEventsFor(p.leagueKey, p.dateYYYYMMDD);
-        for (const ev of (evs || [])) {
-          const id = String(ev?.id || "");
-          if (id) eventsById[id] = ev;
-        }
-      }
-
-      const myMap = await gpGetMyPicksMap(db, weekId, uid);
-      const allPicks = await gpGetAllPicksForWeek(db, weekId);
-
-      gpPendingResetIfSlateChanged(weekId);
-      window.__GP_PENDING.sid = weekId;
+      // Week selector options:
+      const weekOptions = (role === "admin") ? weeks : weeks.filter(w => w.published === true);
+      const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId);
 
       content.innerHTML = `
-        ${renderPicksHeaderHTML({ weekLabel, rightLabel: "Updated", role, selectedKey, prettyDate })}
+        ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: wLabel, rightLabel: published ? "Updated" : "Draft" })}
         ${adminHTML}
-        ${gpBuildWeekPicksCardHTML({
-          weekId,
-          weekLabel,
-          games,
-          myMap,
-          allPicks,
-          published: true,
-          eventsById,
-          role
-        })}
+        ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games, myMap, allPicks, published })}
       `;
 
       postRender();
     } catch (err) {
-  console.error("renderPicks error:", err);
+      console.error("renderPicks error:", err);
+      content.innerHTML = `
+        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error" })}
+        <div class="notice">Couldn’t load Picks right now.</div>
+      `;
+      postRender();
+    }
+  }
 
-  const code = String(err?.code || "");
-  const msg = String(err?.message || err || "");
+  function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
+    const isAdmin = role === "admin";
+    return `
+      <div class="header">
+        <div class="headerTop">
+          <div class="brand">
+            <h2 style="margin:0;">Picks</h2>
+            <span class="badge">Group</span>
+          </div>
 
-  content.innerHTML = `
-    ${renderPicksHeaderHTML(
-      yyyymmddToPrettySafe(getSavedDateYYYYMMDDSafe()),
-      "Error",
-      getSavedLeagueKeySafe()
-    )}
-    <div class="notice">Couldn’t load Picks right now.</div>
+          <div class="headerActions">
+            ${isAdmin ? `<button class="smallBtn" data-gpadmin="newWeek">New Week</button>` : ``}
+            ${isAdmin ? `<button class="smallBtn" data-gpadmin="setActive">Set Active</button>` : ``}
+            <button class="smallBtn" data-gpaction="name">Name</button>
+            <button class="smallBtn" data-gpaction="savePicks">Save</button>
+            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
+          </div>
+        </div>
 
-    <div class="notice" style="margin-top:10px; opacity:0.9;">
-      <div style="font-weight:900; margin-bottom:6px;">Debug</div>
-      ${code ? `<div><b>Code:</b> ${esc(code)}</div>` : ``}
-      ${msg ? `<div style="margin-top:6px;"><b>Message:</b> ${esc(msg)}</div>` : ``}
-    </div>
-  `;
-
-  postRender();
-}
+        <div class="subline">
+          <div class="sublineLeft">
+            ${weekSelectHTML || ""}
+          </div>
+          <div>${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}</div>
+        </div>
+      </div>
+    `;
   }
 
   function postRender() {
@@ -1303,10 +1078,8 @@
       if (!btn) return;
 
       const act = btn.getAttribute("data-gpaction");
-      if (act === "refresh") {
-        renderPicks(true);
-        return;
-      }
+      if (act === "refresh") { renderPicks(true); return; }
+
       if (act === "name") {
         const cur = getPicksDisplayName();
         const picked = prompt("Enter name for Picks:", cur) || "";
@@ -1315,6 +1088,7 @@
         renderPicks(true);
         return;
       }
+
       if (act === "savePicks") {
         ensureFirebaseReadySafe()
           .then(async () => {
@@ -1322,16 +1096,16 @@
             const uid = firebase.auth().currentUser?.uid || "";
             if (!uid) throw new Error("No uid (not signed in)");
 
-            const weekId = String(window.__GP_PENDING?.sid || "");
+            const slateId = String(window.__GP_PENDING?.sid || "");
             const pendingMap = window.__GP_PENDING?.map || {};
             const keys = Object.keys(pendingMap);
 
-            if (!weekId || !keys.length) {
+            if (!slateId || !keys.length) {
               gpUpdateSaveBtnUI();
               return;
             }
 
-            await gpSaveMyPicksBatch(db, weekId, uid, pendingMap);
+            await gpSaveMyPicksBatch(db, slateId, uid, pendingMap);
             gpPendingClear();
           })
           .then(() => renderPicks(true))
@@ -1342,7 +1116,6 @@
             alert("Couldn’t save picks." + code + msg);
             gpUpdateSaveBtnUI();
           });
-
         return;
       }
 
@@ -1353,12 +1126,11 @@
         return;
       }
 
-      // ✅ User pick buttons (pending only)
+      // User pick buttons
       const gpPick = btn.getAttribute("data-gppick");
       if (gpPick) {
         const eventId = btn.getAttribute("data-eid") || "";
         if (!eventId) return;
-
         if (btn.disabled) return;
 
         const cur = gpPendingGet(eventId);
@@ -1367,11 +1139,9 @@
 
         gpUpdateSaveBtnUI();
 
-        // ✅ update active + fade states in-place
         const row = btn.closest(".gpGameRow");
         if (row) {
           const curPick = gpPendingGet(eventId) || String(row.getAttribute("data-saved") || "");
-
           const awayBtn = row.querySelector('button[data-gppick="away"]');
           const homeBtn = row.querySelector('button[data-gppick="home"]');
 
@@ -1388,7 +1158,6 @@
             homeBtn.classList.toggle("gpFaded", hasPick && !homeActive);
           }
         }
-
         return;
       }
 
@@ -1398,85 +1167,84 @@
         ensureFirebaseReadySafe()
           .then(async () => {
             const role = getRole();
-            if (role !== "admin") {
-              alert("Admin only.");
-              return;
-            }
+            if (role !== "admin") { alert("Admin only."); return; }
 
             const db = firebase.firestore();
             const uid = firebase.auth().currentUser?.uid || "";
             if (!uid) throw new Error("No uid (not signed in)");
 
-            const wrap = btn.closest('[data-gpadminwrap="1"]');
-            const weekId = String(wrap?.getAttribute("data-weekid") || "");
-            const leagueKey = String(wrap?.getAttribute("data-leaguekey") || getSavedLeagueKeySafe());
-            const dateYYYYMMDD = String(wrap?.getAttribute("data-date") || getSavedDateYYYYMMDDSafe());
+            const weekId = safeGetLS(PICKS_WEEK_KEY).trim();
 
             const statusEl = document.getElementById("gpAdminStatus");
-            const setStatus = (t) => { if (statusEl) statusEl.textContent = String(t || ""); };
+            const wrap = btn.closest('[data-gpadminwrap="1"]');
 
             if (gpAdmin === "newWeek") {
-              setStatus("Creating new week…");
-              await gpCreateNewWeekAndSetCurrent(db, uid);
-              setStatus("New week created ✅");
+              if (statusEl) statusEl.textContent = "Creating new week…";
+              await gpAdminCreateNewWeek(db, uid);
+              if (statusEl) statusEl.textContent = "New week created ✅";
               return;
             }
 
-            if (!weekId) {
-              alert("No active week yet.");
+            if (gpAdmin === "setActive") {
+              if (!weekId) { alert("No week selected."); return; }
+              if (statusEl) statusEl.textContent = "Setting active week…";
+              await gpAdminSetActiveWeek(db, uid, weekId);
+              if (statusEl) statusEl.textContent = "Active week set ✅";
               return;
             }
 
-            if (gpAdmin === "publishWeek") {
-              setStatus("Publishing…");
-              await gpSetWeekPublished(db, weekId, uid, true);
-              setStatus("Published ✅");
-              return;
-            }
+            if (gpAdmin === "loadEvents") {
+              const leagueEl = wrap?.querySelector('[data-gpadminleague="1"]');
+              const dateEl = wrap?.querySelector('[data-gpadmindate="1"]');
+              const leagueKey = String(leagueEl?.value || getSavedLeagueKeySafe()).trim();
+              const dateVal = String(dateEl?.value || "").trim(); // YYYY-MM-DD
+              const m = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+              const dateYYYYMMDD = m ? `${m[1]}${m[2]}${m[3]}` : getSavedDateYYYYMMDDSafe();
 
-            if (gpAdmin === "unpublishWeek") {
-              setStatus("Unpublishing…");
-              await gpSetWeekPublished(db, weekId, uid, false);
-              setStatus("Unpublished ✅");
-              return;
-            }
+              // persist to LS so it stays sticky
+              try { localStorage.setItem("theShopLeague_v1", leagueKey); } catch {}
+              try { localStorage.setItem("theShopDate_v1", dateYYYYMMDD); } catch {}
 
-            if (gpAdmin === "clearWeek") {
-              if (!confirm("Clear all games from this week?")) return;
-              setStatus("Clearing week games…");
-              await gpAdminClearWeek(db, weekId, uid);
-              setStatus("Week cleared ✅");
+              if (statusEl) statusEl.textContent = "Loading events…";
+              const events = await fetchEventsFor(leagueKey, dateYYYYMMDD);
+              window.__GP_ADMIN_EVENTS = events;
+              if (statusEl) statusEl.textContent = `Loaded ${events.length} events ✅`;
               return;
             }
 
             if (gpAdmin === "addSelected") {
+              if (!weekId) { alert("No week selected."); return; }
+
+              const leagueEl = wrap?.querySelector('[data-gpadminleague="1"]');
+              const dateEl = wrap?.querySelector('[data-gpadmindate="1"]');
+              const leagueKey = String(leagueEl?.value || getSavedLeagueKeySafe()).trim();
+              const dateVal = String(dateEl?.value || "").trim();
+              const m = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+              const dateYYYYMMDD = m ? `${m[1]}${m[2]}${m[3]}` : getSavedDateYYYYMMDDSafe();
+
               const checks = Array.from(wrap?.querySelectorAll('input[type="checkbox"][data-gpcheck="1"]') || []);
               const selected = new Set(
                 checks.filter(c => c.checked)
                   .map(c => String(c.getAttribute("data-eid") || ""))
                   .filter(Boolean)
               );
-              if (selected.size === 0) {
-                setStatus("Select at least 1 game first.");
-                alert("Select at least 1 game first.");
-                return;
-              }
 
-              setStatus("Loading ESPN games…");
-              const events = await fetchEventsFor(leagueKey, dateYYYYMMDD);
+              if (!selected.size) { alert("Select at least 1 game first."); return; }
 
-              setStatus("Adding selected games…");
-              await gpAdminAddSelectedGamesToWeek(db, weekId, uid, leagueKey, dateYYYYMMDD, selected, events);
+              const events = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
+              if (statusEl) statusEl.textContent = `Adding ${selected.size} game(s)…`;
 
-              setStatus(`Added ✅ (${selected.size} game${selected.size === 1 ? "" : "s"})`);
+              await gpAdminAddSelectedGamesToWeek(db, uid, weekId, leagueKey, dateYYYYMMDD, selected, events);
+
+              if (statusEl) statusEl.textContent = "Games added ✅";
               return;
             }
 
-            if (gpAdmin === "removeGame") {
-              const eid = String(btn.getAttribute("data-eid") || "");
-              if (!eid) return;
-              if (!confirm("Remove this game from the week?")) return;
-              await gpAdminRemoveGameFromWeek(db, weekId, uid, eid);
+            if (gpAdmin === "publishWeek") {
+              if (!weekId) { alert("No week selected."); return; }
+              if (statusEl) statusEl.textContent = "Publishing week…";
+              await gpAdminPublishWeek(db, uid, weekId);
+              if (statusEl) statusEl.textContent = "Week published ✅";
               return;
             }
           })
@@ -1490,6 +1258,18 @@
 
         return;
       }
+    });
+
+    // Week selector change (not a button, so separate handler)
+    document.addEventListener("change", (e) => {
+      const sel = e.target;
+      if (!sel || !sel.getAttribute) return;
+      if (sel.getAttribute("data-gpweeksel") !== "1") return;
+
+      const v = String(sel.value || "").trim();
+      if (!v) return;
+      setSelectedWeekToLS(v);
+      renderPicks(true);
     });
 
     window.__GP_CLICK_BOUND = true;
