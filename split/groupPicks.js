@@ -928,12 +928,13 @@
       if (!u) return `<div style="flex:1;"></div>`;
       return `
         <div style="
-          flex:1;
-          padding:12px;
-          border-radius:18px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.08);
-        ">
+  flex:1 1 220px;
+  min-width:0;
+  padding:12px;
+  border-radius:18px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.08);
+">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
             <div style="display:flex; align-items:center; gap:10px; min-width:0;">
               <div style="
@@ -1035,7 +1036,7 @@
           <div class="muted" style="font-weight:900;">Finals: ${esc(String(finalsCount))}</div>
         </div>
 
-        <div style="margin-top:12px; display:flex; gap:10px;">
+        <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
           ${podiumItem(1, top[0])}
           ${podiumItem(2, top[1])}
           ${podiumItem(3, top[2])}
