@@ -165,182 +165,164 @@
     }
   }
 
-// -----------------------------
-// Live status / score hydration (ESPN)
-// -----------------------------
-function gpGetEventLiveInfoFromScoreboardEvent(ev) {
-  try {
-    const comp = ev?.competitions?.[0] || {};
-    const st = comp?.status?.type || {};
-    const state = String(st?.state || "").toLowerCase(); // "pre" | "in" | "post"
-    const detail = String(st?.shortDetail || st?.detail || "").trim(); // e.g. "2nd 12:34" or "Final"
-    const clock = String(comp?.status?.displayClock || "").trim(); // "12:34"
-    const period = Number(comp?.status?.period || 0);
-
-    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-    const homeC = competitors.find(c => c?.homeAway === "home") || {};
-    const awayC = competitors.find(c => c?.homeAway === "away") || {};
-
-    const homeScore = (homeC?.score != null) ? String(homeC.score) : "";
-    const awayScore = (awayC?.score != null) ? String(awayC.score) : "";
-
-    return {
-      state,          // pre/in/post
-      detail,         // "3rd 8:12", "Final", etc
-      clock,          // "8:12"
-      period,         // 3
-      homeScore,
-      awayScore
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function gpHydrateLiveStateForGames(games) {
-  const list = Array.isArray(games) ? games : [];
-  if (!list.length) return;
-
-  // Only bother if we have leagueKey + date on the game docs
-  const groups = new Map(); // key => { leagueKey, date, ids:Set }
-  for (const g of list) {
-    const leagueKey = String(g?.leagueKey || "").trim();
-    const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
-    const eventId = String(g?.eventId || g?.id || "").trim();
-    if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
-
-    const k = `${leagueKey}__${dateYYYYMMDD}`;
-    if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
-    groups.get(k).ids.add(eventId);
-  }
-
-  if (!groups.size) return;
-
-  // Fetch each scoreboard once, map eventId -> liveInfo
-  const liveMap = new Map();
-
-  for (const grp of groups.values()) {
-    const league = getLeagueByKeySafe(grp.leagueKey);
-    const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
-    if (!url) continue;
-
+  // -----------------------------
+  // Live status / score hydration (ESPN)
+  // -----------------------------
+  function gpGetEventLiveInfoFromScoreboardEvent(ev) {
     try {
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) continue;
+      const comp = ev?.competitions?.[0] || {};
+      const st = comp?.status?.type || {};
+      const state = String(st?.state || "").toLowerCase(); // pre | in | post
+      const detail = String(st?.shortDetail || st?.detail || "").trim();
+      const clock = String(comp?.status?.displayClock || "").trim();
+      const period = Number(comp?.status?.period || 0);
 
-      const j = await r.json().catch(() => ({}));
-      const events = Array.isArray(j?.events) ? j.events : [];
-      for (const ev of events) {
-        const eid = String(ev?.id || "");
-        if (!eid || !grp.ids.has(eid)) continue;
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const homeC = competitors.find(c => c?.homeAway === "home") || {};
+      const awayC = competitors.find(c => c?.homeAway === "away") || {};
 
-        const info = gpGetEventLiveInfoFromScoreboardEvent(ev);
-        if (info) liveMap.set(eid, info);
-      }
+      const homeScore = (homeC?.score != null) ? String(homeC.score) : "";
+      const awayScore = (awayC?.score != null) ? String(awayC.score) : "";
+
+      return { state, detail, clock, period, homeScore, awayScore };
     } catch {
-      // ignore
+      return null;
     }
   }
 
-  // Attach to each game object (non-breaking, render-time only)
-  for (const g of list) {
-    const eid = String(g?.eventId || g?.id || "").trim();
-    g.__live = liveMap.get(eid) || null;
-  }
-}
+  async function gpHydrateLiveStateForGames(games) {
+    const list = Array.isArray(games) ? games : [];
+    if (!list.length) return;
 
-function gpGetEventOddsFromScoreboardEvent(ev) {
-  try {
-    const comp = ev?.competitions?.[0] || {};
-    const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
-    if (!o) return null;
+    const groups = new Map(); // key => { leagueKey, dateYYYYMMDD, ids:Set }
+    for (const g of list) {
+      const leagueKey = String(g?.leagueKey || "").trim();
+      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
+      const eventId = String(g?.eventId || g?.id || "").trim();
+      if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
 
-    const details = String(o?.details || "").trim();
-    const overUnder = (o?.overUnder != null) ? String(o.overUnder).trim() : "";
+      const k = `${leagueKey}__${dateYYYYMMDD}`;
+      if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
+      groups.get(k).ids.add(eventId);
+    }
 
-    // favorite team abbreviation/name if available
-    const homeFav = !!o?.homeTeamOdds?.favorite;
-    const awayFav = !!o?.awayTeamOdds?.favorite;
+    if (!groups.size) return;
 
-    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-    const homeC = competitors.find(c => c?.homeAway === "home") || {};
-    const awayC = competitors.find(c => c?.homeAway === "away") || {};
+    const liveMap = new Map();
 
-    const homeAbbr = String(homeC?.team?.abbreviation || homeC?.team?.shortDisplayName || "").trim();
-    const awayAbbr = String(awayC?.team?.abbreviation || awayC?.team?.shortDisplayName || "").trim();
+    for (const grp of groups.values()) {
+      const league = getLeagueByKeySafe(grp.leagueKey);
+      const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
+      if (!url) continue;
 
-    const favoredTeam =
-      homeFav ? (homeAbbr || "Home") :
-      awayFav ? (awayAbbr || "Away") :
-      "";
+      try {
+        const r = await fetch(url, { cache: "no-store" });
+        if (!r.ok) continue;
 
-    if (!details && !overUnder) return null;
+        const j = await r.json().catch(() => ({}));
+        const events = Array.isArray(j?.events) ? j.events : [];
+        for (const ev of events) {
+          const eid = String(ev?.id || "");
+          if (!eid || !grp.ids.has(eid)) continue;
 
-    return { details, overUnder, favoredTeam };
-  } catch {
-    return null;
-  }
-}
+          const info = gpGetEventLiveInfoFromScoreboardEvent(ev);
+          if (info) liveMap.set(eid, info);
+        }
+      } catch {}
+    }
 
-async function gpHydrateOddsForGames(games) {
-  const list = Array.isArray(games) ? games : [];
-  if (!list.length) return;
-
-  // Only hydrate odds when the stored odds are blank
-  // (keeps Firestore snapshot as “baseline” and prevents flicker)
-  const needs = list.filter(g => {
-    const d = String(g?.oddsDetails || "").trim();
-    const ou = String(g?.oddsOU || "").trim();
-    return (!d && !ou);
-  });
-
-  if (!needs.length) return;
-
-  const groups = new Map(); // key => { leagueKey, dateYYYYMMDD, ids:Set }
-  for (const g of needs) {
-    const leagueKey = String(g?.leagueKey || "").trim();
-    const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
-    const eventId = String(g?.eventId || g?.id || "").trim();
-    if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
-
-    const k = `${leagueKey}__${dateYYYYMMDD}`;
-    if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
-    groups.get(k).ids.add(eventId);
-  }
-
-  if (!groups.size) return;
-
-  const oddsMap = new Map(); // eventId -> odds
-
-  for (const grp of groups.values()) {
-    const league = getLeagueByKeySafe(grp.leagueKey);
-    const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
-    if (!url) continue;
-
-    try {
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) continue;
-
-      const j = await r.json().catch(() => ({}));
-      const events = Array.isArray(j?.events) ? j.events : [];
-      for (const ev of events) {
-        const eid = String(ev?.id || "");
-        if (!eid || !grp.ids.has(eid)) continue;
-
-        const odds = gpGetEventOddsFromScoreboardEvent(ev);
-        if (odds) oddsMap.set(eid, odds);
-      }
-    } catch {
-      // ignore
+    for (const g of list) {
+      const eid = String(g?.eventId || g?.id || "").trim();
+      g.__live = liveMap.get(eid) || null;
     }
   }
 
-  // Attach render-time odds
-  for (const g of list) {
-    const eid = String(g?.eventId || g?.id || "").trim();
-    g.__odds = oddsMap.get(eid) || null;
+  function gpGetEventOddsFromScoreboardEvent(ev) {
+    try {
+      const comp = ev?.competitions?.[0] || {};
+      const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
+      if (!o) return null;
+
+      const details = String(o?.details || "").trim();
+      const overUnder = (o?.overUnder != null) ? String(o.overUnder).trim() : "";
+
+      const homeFav = !!o?.homeTeamOdds?.favorite;
+      const awayFav = !!o?.awayTeamOdds?.favorite;
+
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const homeC = competitors.find(c => c?.homeAway === "home") || {};
+      const awayC = competitors.find(c => c?.homeAway === "away") || {};
+
+      const homeAbbr = String(homeC?.team?.abbreviation || homeC?.team?.shortDisplayName || "").trim();
+      const awayAbbr = String(awayC?.team?.abbreviation || awayC?.team?.shortDisplayName || "").trim();
+
+      const favoredTeam =
+        homeFav ? (homeAbbr || "Home") :
+        awayFav ? (awayAbbr || "Away") :
+        "";
+
+      if (!details && !overUnder) return null;
+
+      return { details, overUnder, favoredTeam };
+    } catch {
+      return null;
+    }
   }
-}
+
+  async function gpHydrateOddsForGames(games) {
+    const list = Array.isArray(games) ? games : [];
+    if (!list.length) return;
+
+    const needs = list.filter(g => {
+      const d = String(g?.oddsDetails || "").trim();
+      const ou = String(g?.oddsOU || "").trim();
+      return (!d && !ou);
+    });
+
+    if (!needs.length) return;
+
+    const groups = new Map();
+    for (const g of needs) {
+      const leagueKey = String(g?.leagueKey || "").trim();
+      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
+      const eventId = String(g?.eventId || g?.id || "").trim();
+      if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
+
+      const k = `${leagueKey}__${dateYYYYMMDD}`;
+      if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
+      groups.get(k).ids.add(eventId);
+    }
+
+    if (!groups.size) return;
+
+    const oddsMap = new Map();
+
+    for (const grp of groups.values()) {
+      const league = getLeagueByKeySafe(grp.leagueKey);
+      const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
+      if (!url) continue;
+
+      try {
+        const r = await fetch(url, { cache: "no-store" });
+        if (!r.ok) continue;
+
+        const j = await r.json().catch(() => ({}));
+        const events = Array.isArray(j?.events) ? j.events : [];
+        for (const ev of events) {
+          const eid = String(ev?.id || "");
+          if (!eid || !grp.ids.has(eid)) continue;
+
+          const odds = gpGetEventOddsFromScoreboardEvent(ev);
+          if (odds) oddsMap.set(eid, odds);
+        }
+      } catch {}
+    }
+
+    for (const g of list) {
+      const eid = String(g?.eventId || g?.id || "").trim();
+      g.__odds = oddsMap.get(eid) || null;
+    }
+  }
 
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
@@ -389,7 +371,6 @@ async function gpHydrateOddsForGames(games) {
     const y = currentYear();
     const pub = await gpGetMetaPublic(db);
     if (pub?.year === y && pub?.activeWeekId) return;
-
     // Admin-only init happens via admin action; users just fall back.
   }
 
@@ -402,17 +383,15 @@ async function gpHydrateOddsForGames(games) {
     const t = Date.parse(iso);
     return Number.isFinite(t) ? t : 0;
   }
-  
-  function gpPrettyDateFromStartMs(ms) {
-  if (!ms) return "";
-  const d = new Date(ms);
-  if (isNaN(d.getTime())) return "";
 
-  // "Saturday Feb 28"
-  const weekday = d.toLocaleDateString([], { weekday: "long" });
-  const monthDay = d.toLocaleDateString([], { month: "short", day: "numeric" });
-  return `${weekday} ${monthDay}`;
-}
+  function gpPrettyDateFromStartMs(ms) {
+    if (!ms) return "";
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return "";
+    const weekday = d.toLocaleDateString([], { weekday: "long" });
+    const monthDay = d.toLocaleDateString([], { month: "short", day: "numeric" });
+    return `${weekday} ${monthDay}`;
+  }
 
   function fmtKickoffFromMs(ms) {
     if (!ms) return "—";
@@ -537,7 +516,7 @@ async function gpHydrateOddsForGames(games) {
       delete window.__GP_PENDING.map[eventId];
       return;
     }
-    window.__GP_PENDING.map[eventId] = s; // "home" | "away"
+    window.__GP_PENDING.map[eventId] = s; // home | away
   }
 
   function gpPendingClear() {
@@ -560,37 +539,37 @@ async function gpHydrateOddsForGames(games) {
   // Week selector UI
   // -----------------------------
   function buildWeekSelectHTML(weeks, selectedWeekId) {
-  const list = Array.isArray(weeks) ? weeks : [];
-  const options = list.map(w => {
-    const id = String(w?.id || "");
-    const label = String(w?.label || id);
-    const disabled = (w?.published === false) ? " disabled" : "";
-    const sel = (id === selectedWeekId) ? " selected" : "";
-    return `<option value="${esc(id)}"${sel}${disabled}>${esc(label)}</option>`;
-  }).join("");
+    const list = Array.isArray(weeks) ? weeks : [];
+    const options = list.map(w => {
+      const id = String(w?.id || "");
+      const label = String(w?.label || id);
+      const disabled = (w?.published === false) ? " disabled" : "";
+      const sel = (id === selectedWeekId) ? " selected" : "";
+      return `<option value="${esc(id)}"${sel}${disabled}>${esc(label)}</option>`;
+    }).join("");
 
-  return `
-    <select
-      data-gpweeksel="1"
-      style="
-        -webkit-appearance:none;
-        appearance:none;
-        background:rgba(255,255,255,0.06);
-        color:inherit;
-        border:1px solid rgba(255,255,255,0.12);
-        padding:12px 16px;
-        border-radius:18px;
-        font-weight:800;
-        font-size:16px;
-        line-height:1;
-        min-width:110px;
-        flex:0 0 auto;
-      "
-    >
-      ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
-    </select>
-  `;
-}
+    return `
+      <select
+        data-gpweeksel="1"
+        style="
+          -webkit-appearance:none;
+          appearance:none;
+          background:rgba(255,255,255,0.06);
+          color:inherit;
+          border:1px solid rgba(255,255,255,0.12);
+          padding:12px 16px;
+          border-radius:18px;
+          font-weight:800;
+          font-size:16px;
+          line-height:1;
+          min-width:110px;
+          flex:0 0 auto;
+        "
+      >
+        ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
+      </select>
+    `;
+  }
 
   function getSelectedWeekFromLS() {
     return safeGetLS(PICKS_WEEK_KEY).trim();
@@ -643,7 +622,6 @@ async function gpHydrateOddsForGames(games) {
         updatedBy: uid
       }, { merge: true });
 
-      // create the week slate doc (unpublished initially)
       tx.set(db.collection("pickSlates").doc(newId), {
         type: "week",
         year,
@@ -756,7 +734,6 @@ async function gpHydrateOddsForGames(games) {
   async function gpAdminAddSelectedGamesToWeek(db, uid, weekId, leagueKey, dateYYYYMMDD, selectedEventIds, events) {
     const slateRef = db.collection("pickSlates").doc(String(weekId));
 
-    // ensure slate exists
     await slateRef.set({
       type: "week",
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -814,7 +791,6 @@ async function gpHydrateOddsForGames(games) {
       updatedBy: uid
     }, { merge: true });
 
-    // also mark published in meta public list (so users can select it)
     const publicRef = metaRef(db, META_PUBLIC_DOC);
     await db.runTransaction(async (tx) => {
       const pSnap = await tx.get(publicRef);
@@ -835,100 +811,209 @@ async function gpHydrateOddsForGames(games) {
   // -----------------------------
   // Rendering (cards)
   // -----------------------------
-function gpIsFinalGame(g) {
-  const live = g?.__live || null;
-  return !!live && String(live.state || "").toLowerCase() === "post";
-}
+  function gpIsFinalGame(g) {
+    const live = g?.__live || null;
+    return !!live && String(live.state || "").toLowerCase() === "post";
+  }
 
-function gpWinnerSideFromLive(g) {
-  const live = g?.__live || null;
-  if (!live) return ""; // unknown
+  function gpWinnerSideFromLive(g) {
+    const live = g?.__live || null;
+    if (!live) return "";
+    const a = Number(live.awayScore);
+    const h = Number(live.homeScore);
+    if (!Number.isFinite(a) || !Number.isFinite(h)) return "";
+    if (a === h) return "";
+    return (a > h) ? "away" : "home";
+  }
 
-  const a = Number(live.awayScore);
-  const h = Number(live.homeScore);
-  if (!Number.isFinite(a) || !Number.isFinite(h)) return "";
+  function gpComputeWeeklyLeaderboard(games, allPicks) {
+    const list = Array.isArray(games) ? games : [];
+    const picksByEvent = allPicks && typeof allPicks === "object" ? allPicks : {};
 
-  if (a === h) return "";        // tie -> no winner (no points)
-  return (a > h) ? "away" : "home";
-}
+    let finalsCount = 0;
+    const users = new Map(); // uid -> stats
 
-function gpComputeWeeklyLeaderboard(games, allPicks) {
-  const list = Array.isArray(games) ? games : [];
-  const picksByEvent = allPicks && typeof allPicks === "object" ? allPicks : {};
+    for (const g of list) {
+      const eventId = String(g?.eventId || g?.id || "").trim();
+      if (!eventId) continue;
 
-  let finalsCount = 0;
+      if (!gpIsFinalGame(g)) continue;
+      finalsCount++;
 
-  // uid -> { uid, name, wins, picksMade, correct, wrong }
-  const users = new Map();
+      const winner = gpWinnerSideFromLive(g);
+      if (!winner) continue;
 
-  for (const g of list) {
-    const eventId = String(g?.eventId || g?.id || "").trim();
-    if (!eventId) continue;
+      const arr = Array.isArray(picksByEvent[eventId]) ? picksByEvent[eventId] : [];
+      for (const p of arr) {
+        const uid = String(p?.uid || "").trim();
+        const name = String(p?.name || "Someone").trim();
+        const side = String(p?.side || "").trim();
+        if (!uid) continue;
 
-    if (!gpIsFinalGame(g)) continue;
-    finalsCount++;
+        if (!users.has(uid)) {
+          users.set(uid, { uid, name, wins: 0, picksMade: 0, correct: 0, wrong: 0 });
+        }
 
-    const winner = gpWinnerSideFromLive(g);
-    if (!winner) continue; // tie/unknown -> skip scoring
+        const u = users.get(uid);
+        if (name) u.name = name;
 
-    const arr = Array.isArray(picksByEvent[eventId]) ? picksByEvent[eventId] : [];
-    for (const p of arr) {
-      const uid = String(p?.uid || "").trim();
-      const name = String(p?.name || "Someone").trim();
-      const side = String(p?.side || "").trim();
-
-      if (!uid) continue;
-
-      if (!users.has(uid)) {
-        users.set(uid, { uid, name, wins: 0, picksMade: 0, correct: 0, wrong: 0 });
-      }
-
-      const u = users.get(uid);
-      // keep latest name seen
-      if (name) u.name = name;
-
-      if (side === "home" || side === "away") {
-        u.picksMade += 1;
-        if (side === winner) {
-          u.wins += 1;
-          u.correct += 1;
-        } else {
-          u.wrong += 1;
+        if (side === "home" || side === "away") {
+          u.picksMade += 1;
+          if (side === winner) {
+            u.wins += 1;
+            u.correct += 1;
+          } else {
+            u.wrong += 1;
+          }
         }
       }
     }
+
+    const rows = Array.from(users.values());
+
+    rows.sort((a, b) => {
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      if (b.correct !== a.correct) return b.correct - a.correct;
+      if (b.picksMade !== a.picksMade) return b.picksMade - a.picksMade;
+      return String(a.name).localeCompare(String(b.name));
+    });
+
+    return { rows, finalsCount };
   }
 
-  const rows = Array.from(users.values());
+  function gpInitials(name) {
+    const s = String(name || "").trim();
+    if (!s) return "??";
+    const parts = s.split(/\s+/).filter(Boolean);
+    const a = parts[0]?.[0] || "";
+    const b = (parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]) || "";
+    return (a + b).toUpperCase() || "??";
+  }
 
-  rows.sort((a, b) => {
-    // wins desc
-    if (b.wins !== a.wins) return b.wins - a.wins;
-    // correct desc
-    if (b.correct !== a.correct) return b.correct - a.correct;
-    // picksMade desc
-    if (b.picksMade !== a.picksMade) return b.picksMade - a.picksMade;
-    // name asc
-    return String(a.name).localeCompare(String(b.name));
-  });
+  function gpBuildLeaderboardHTML({ weekLabel, finalsCount, rows }) {
+    const list = Array.isArray(rows) ? rows : [];
 
-  return { rows, finalsCount };
-}
+    if (!finalsCount) {
+      return `
+        <div class="gpLeaderCard" style="
+          margin-top:12px;
+          padding:14px;
+          border-radius:22px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+        ">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+            <div style="font-weight:950;">Leaderboard</div>
+            <div class="muted" style="font-weight:900;">${esc(weekLabel || "")}</div>
+          </div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">
+            No finals yet — leaderboard will appear once games go final.
+          </div>
+        </div>
+      `;
+    }
 
-function gpInitials(name) {
-  const s = String(name || "").trim();
-  if (!s) return "??";
-  const parts = s.split(/\s+/).filter(Boolean);
-  const a = parts[0]?.[0] || "";
-  const b = (parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]) || "";
-  return (a + b).toUpperCase() || "??";
-}
+    const top = list.slice(0, 3);
+    const rest = list.slice(3);
 
-function gpBuildLeaderboardHTML({ weekLabel, finalsCount, rows }) {
-  const list = Array.isArray(rows) ? rows : [];
+    function podiumItem(rank, u) {
+      if (!u) return `<div style="flex:1;"></div>`;
+      return `
+        <div style="
+          flex:1;
+          padding:12px;
+          border-radius:18px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+        ">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <div style="
+                width:34px; height:34px;
+                border-radius:999px;
+                background:rgba(255,255,255,0.10);
+                border:1px solid rgba(255,255,255,0.12);
+                display:flex; align-items:center; justify-content:center;
+                font-weight:950;
+                flex:0 0 34px;
+              ">${esc(gpInitials(u.name))}</div>
+              <div style="min-width:0;">
+                <div style="font-weight:950; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${esc(u.name)}
+                </div>
+                <div class="muted" style="font-weight:800; margin-top:2px;">
+                  Picks: ${esc(String(u.picksMade))} • Correct: ${esc(String(u.correct))}
+                </div>
+              </div>
+            </div>
 
-  // Nothing final yet: don’t show an empty “lame” board
-  if (!finalsCount) {
+            <div class="statusPill" style="
+              background:rgba(0,200,120,0.18);
+              border:1px solid rgba(0,200,120,0.35);
+              color:rgba(180,255,220,0.95);
+              font-weight:950;
+              white-space:nowrap;
+            ">
+              ${esc(String(u.wins))} W
+            </div>
+          </div>
+
+          <div class="muted" style="margin-top:10px; font-weight:950;">
+            #${esc(String(rank))}
+          </div>
+        </div>
+      `;
+    }
+
+    const restLines = rest.length
+      ? rest.map((u, i) => {
+          const rank = i + 4;
+          return `
+            <div style="
+              display:flex;
+              justify-content:space-between;
+              align-items:center;
+              gap:10px;
+              padding:10px 12px;
+              border-radius:16px;
+              background:rgba(255,255,255,0.04);
+              border:1px solid rgba(255,255,255,0.06);
+            ">
+              <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                <div class="muted" style="font-weight:950; width:26px; text-align:right;">${esc(String(rank))}</div>
+                <div style="
+                  width:30px; height:30px;
+                  border-radius:999px;
+                  background:rgba(255,255,255,0.10);
+                  border:1px solid rgba(255,255,255,0.12);
+                  display:flex; align-items:center; justify-content:center;
+                  font-weight:950;
+                  flex:0 0 30px;
+                ">${esc(gpInitials(u.name))}</div>
+                <div style="min-width:0;">
+                  <div style="font-weight:950; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    ${esc(u.name)}
+                  </div>
+                  <div class="muted" style="font-weight:800; margin-top:2px;">
+                    Correct: ${esc(String(u.correct))} • Wrong: ${esc(String(u.wrong))}
+                  </div>
+                </div>
+              </div>
+
+              <div class="statusPill" style="
+                background:rgba(255,255,255,0.10);
+                border:1px solid rgba(255,255,255,0.16);
+                color:rgba(255,255,255,0.90);
+                font-weight:950;
+                white-space:nowrap;
+              ">
+                ${esc(String(u.wins))} W
+              </div>
+            </div>
+          `;
+        }).join("")
+      : `<div class="muted" style="margin-top:10px; font-weight:800;">Only a few players so far.</div>`;
+
     return `
       <div class="gpLeaderCard" style="
         margin-top:12px;
@@ -939,142 +1024,21 @@ function gpBuildLeaderboardHTML({ weekLabel, finalsCount, rows }) {
       ">
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
           <div style="font-weight:950;">Leaderboard</div>
-          <div class="muted" style="font-weight:900;">${esc(weekLabel || "")}</div>
-        </div>
-        <div class="muted" style="margin-top:8px; font-weight:800;">
-          No finals yet — leaderboard will appear once games go final.
-        </div>
-      </div>
-    `;
-  }
-
-  // Podium: top 3
-  const top = list.slice(0, 3);
-  const rest = list.slice(3);
-
-  function podiumItem(rank, u) {
-    if (!u) return `<div style="flex:1;"></div>`;
-    return `
-      <div style="
-        flex:1;
-        padding:12px;
-        border-radius:18px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.08);
-      ">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-            <div style="
-              width:34px; height:34px;
-              border-radius:999px;
-              background:rgba(255,255,255,0.10);
-              border:1px solid rgba(255,255,255,0.12);
-              display:flex; align-items:center; justify-content:center;
-              font-weight:950;
-              flex:0 0 34px;
-            ">${esc(gpInitials(u.name))}</div>
-            <div style="min-width:0;">
-              <div style="font-weight:950; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                ${esc(u.name)}
-              </div>
-              <div class="muted" style="font-weight:800; margin-top:2px;">
-                Picks: ${esc(String(u.picksMade))} • Correct: ${esc(String(u.correct))}
-              </div>
-            </div>
-          </div>
-
-          <div class="statusPill" style="
-            background:rgba(0,200,120,0.18);
-            border:1px solid rgba(0,200,120,0.35);
-            color:rgba(180,255,220,0.95);
-            font-weight:950;
-            white-space:nowrap;
-          ">
-            ${esc(String(u.wins))} W
-          </div>
+          <div class="muted" style="font-weight:900;">Finals: ${esc(String(finalsCount))}</div>
         </div>
 
-        <div class="muted" style="margin-top:10px; font-weight:950;">
-          #${esc(String(rank))}
+        <div style="margin-top:12px; display:flex; gap:10px;">
+          ${podiumItem(1, top[0])}
+          ${podiumItem(2, top[1])}
+          ${podiumItem(3, top[2])}
+        </div>
+
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+          ${restLines}
         </div>
       </div>
     `;
   }
-
-  const restLines = rest.length
-    ? rest.map((u, i) => {
-        const rank = i + 4;
-        return `
-          <div style="
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:10px;
-            padding:10px 12px;
-            border-radius:16px;
-            background:rgba(255,255,255,0.04);
-            border:1px solid rgba(255,255,255,0.06);
-          ">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-              <div class="muted" style="font-weight:950; width:26px; text-align:right;">${esc(String(rank))}</div>
-              <div style="
-                width:30px; height:30px;
-                border-radius:999px;
-                background:rgba(255,255,255,0.10);
-                border:1px solid rgba(255,255,255,0.12);
-                display:flex; align-items:center; justify-content:center;
-                font-weight:950;
-                flex:0 0 30px;
-              ">${esc(gpInitials(u.name))}</div>
-              <div style="min-width:0;">
-                <div style="font-weight:950; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                  ${esc(u.name)}
-                </div>
-                <div class="muted" style="font-weight:800; margin-top:2px;">
-                  Correct: ${esc(String(u.correct))} • Wrong: ${esc(String(u.wrong))}
-                </div>
-              </div>
-            </div>
-
-            <div class="statusPill" style="
-              background:rgba(255,255,255,0.10);
-              border:1px solid rgba(255,255,255,0.16);
-              color:rgba(255,255,255,0.90);
-              font-weight:950;
-              white-space:nowrap;
-            ">
-              ${esc(String(u.wins))} W
-            </div>
-          </div>
-        `;
-      }).join("")
-    : `<div class="muted" style="margin-top:10px; font-weight:800;">Only a few players so far.</div>`;
-
-  return `
-    <div class="gpLeaderCard" style="
-      margin-top:12px;
-      padding:14px;
-      border-radius:22px;
-      background:rgba(255,255,255,0.06);
-      border:1px solid rgba(255,255,255,0.08);
-    ">
-      <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-        <div style="font-weight:950;">Leaderboard</div>
-        <div class="muted" style="font-weight:900;">Finals: ${esc(String(finalsCount))}</div>
-      </div>
-
-      <div style="margin-top:12px; display:flex; gap:10px;">
-        ${podiumItem(1, top[0])}
-        ${podiumItem(2, top[1])}
-        ${podiumItem(3, top[2])}
-      </div>
-
-      <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
-        ${restLines}
-      </div>
-    </div>
-  `;
-}
 
   function toNum(v) {
     const n = Number(v);
@@ -1098,292 +1062,285 @@ function gpBuildLeaderboardHTML({ weekLabel, finalsCount, rows }) {
   function safeLogo(t) {
     return String(t?.logo || "").trim();
   }
+
   function fmtOddsLine(g) {
-  const storedDetails = String(g?.oddsDetails || "").trim();
-  const storedOU = String(g?.oddsOU || "").trim();
+    const storedDetails = String(g?.oddsDetails || "").trim();
+    const storedOU = String(g?.oddsOU || "").trim();
 
-  // Prefer stored snapshot, but allow hydrated odds to fill gaps
-  const hyd = g?.__odds || null;
+    const hyd = g?.__odds || null;
+    const details = storedDetails || String(hyd?.details || "").trim();
+    const ou = storedOU || String(hyd?.overUnder || "").trim();
 
-  const details = storedDetails || String(hyd?.details || "").trim();
-  const ou = storedOU || String(hyd?.overUnder || "").trim();
-
-  const parts = [];
-  if (details) parts.push(`Favored: ${details}`);
-  if (ou) parts.push(`O/U: ${ou}`);
-
-  return parts.join(" • ");
-}
+    const parts = [];
+    if (details) parts.push(`Favored: ${details}`);
+    if (ou) parts.push(`O/U: ${ou}`);
+    return parts.join(" • ");
+  }
 
   function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks }) {
-  if (!weekId) {
+    if (!weekId) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GROUP PICKS</div>
+          </div>
+          <div class="gameMetaTopLine">No active week yet</div>
+          <div class="gameMetaOddsLine">Waiting on admin to create Week 1.</div>
+        </div>
+      `;
+    }
+
+    // ✅ FIXED: this block got corrupted in your paste (it was referencing gameCards/saveRow before defined)
+    if (!published) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GROUP PICKS</div>
+          </div>
+          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+            ${esc(weekLabel || weekId)} not published yet
+          </div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">
+            Waiting on admin.
+          </div>
+        </div>
+      `;
+    }
+
+    const now = Date.now();
+
+    // ✅ Leaderboard (computed from FINAL games only)
+    const lb = gpComputeWeeklyLeaderboard(games, allPicks);
+    const leaderboardHTML = gpBuildLeaderboardHTML({
+      weekLabel: weekLabel || weekId,
+      finalsCount: lb.finalsCount,
+      rows: lb.rows
+    });
+
+    function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
+      return `
+        <button
+          class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
+          type="button"
+          ${lockedGame ? "disabled" : ""}
+          data-gppick="${esc(side)}"
+          data-slate="${esc(weekId)}"
+          data-eid="${esc(eventId)}"
+          style="
+            width:100%;
+            display:flex;
+            align-items:center;
+            gap:12px;
+            padding:12px;
+            border-radius:16px;
+            background:rgba(255,255,255,0.06);
+            border:1px solid rgba(255,255,255,0.10);
+            text-align:left;
+          "
+        >
+          <div style="
+            width:44px; height:44px; border-radius:12px;
+            background:rgba(255,255,255,0.06);
+            border:1px solid rgba(255,255,255,0.08);
+            display:flex; align-items:center; justify-content:center;
+            overflow:hidden;
+            flex:0 0 44px;
+          ">
+            ${logoUrl
+              ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
+              : ``
+            }
+          </div>
+
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              ${esc(safeTeamLabel(t))}
+            </div>
+            <div class="muted" style="margin-top:4px;">
+              ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
+            </div>
+          </div>
+
+          ${scoreText !== "" ? `
+            <div style="
+              flex:0 0 auto;
+              min-width:44px;
+              text-align:right;
+              font-weight:950;
+              font-size:34px;
+              line-height:1;
+              letter-spacing:0.2px;
+              color:rgba(255,255,255,0.92);
+            ">
+              ${esc(scoreText)}
+            </div>
+          ` : ``}
+        </button>
+      `;
+    }
+
+    const gameCards = (games || []).map(g => {
+      const eventId = String(g?.eventId || g?.id || "");
+      if (!eventId) return "";
+
+      const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
+      const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
+
+      const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+
+      const kickoffLabel = fmtKickoffFromMs(startMs);
+      const kickoffDateLabel = gpPrettyDateFromStartMs(startMs);
+
+      const lockedGame = startMs ? now >= startMs : false;
+
+      const live = g.__live || null;
+      const state = String(live?.state || "").toLowerCase();
+      const isLive = state === "in";
+      const isFinal = state === "post";
+
+      const awayScore = (live && live.awayScore != null) ? String(live.awayScore) : "";
+      const homeScore = (live && live.homeScore != null) ? String(live.homeScore) : "";
+
+      let pillHTML = "";
+      if (isLive || isFinal) {
+        const pillText = isLive ? `LIVE • ${String(live?.detail || "").trim()}` : "FINAL";
+        pillHTML = `
+          <div class="statusPill" style="
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            padding:10px 14px;
+            border-radius:999px;
+            width:100%;
+            max-width:100%;
+            box-sizing:border-box;
+            background:${isLive ? "rgba(0,200,120,0.18)" : "rgba(255,255,255,0.10)"};
+            border:1px solid ${isLive ? "rgba(0,200,120,0.35)" : "rgba(255,255,255,0.16)"};
+            color:${isLive ? "rgba(180,255,220,0.95)" : "rgba(255,255,255,0.88)"};
+            font-weight:950;
+            letter-spacing:0.3px;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+          ">
+            ${esc(pillText)}
+          </div>
+        `;
+      }
+
+      const pending = gpPendingGet(eventId);
+      const saved = String(myMap?.[eventId]?.side || "");
+      const my = pending || saved;
+
+      const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+      const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
+      const isPending = !!pending && pending !== saved;
+
+      const everyoneLines = everyone.length
+        ? everyone.map(p => {
+            const nm = String(p?.name || "Someone");
+            const side = String(p?.side || "");
+            const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
+            return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
+          }).join("")
+        : `<div class="muted">No picks yet.</div>`;
+
+      const venueLine = String(g?.venueLine || "").trim();
+      const oddsLine = fmtOddsLine(g);
+
+      const awayLogo = safeLogo(away);
+      const homeLogo = safeLogo(home);
+
+      const hasPick = !!my;
+      const awayActive = my === "away";
+      const homeActive = my === "home";
+      const awayFade = hasPick && !awayActive;
+      const homeFade = hasPick && !homeActive;
+
+      const showScores = (isLive || isFinal) && awayScore !== "" && homeScore !== "";
+      const awayScoreText = showScores ? awayScore : "";
+      const homeScoreText = showScores ? homeScore : "";
+
+      return `
+        <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
+          margin-top:14px;
+          padding:14px;
+          border-radius:22px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+        ">
+
+          ${pillHTML ? `
+            <div style="margin-bottom:10px;">
+              ${pillHTML}
+            </div>
+          ` : ``}
+
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+            <div class="muted" style="font-weight:800;">
+              ${venueLine ? esc(venueLine) : ""}
+            </div>
+
+            <div class="muted" style="white-space:nowrap; font-weight:900; text-align:right;">
+              ${kickoffDateLabel ? `<div style="font-weight:800; line-height:1.05;">${esc(kickoffDateLabel)}</div>` : ``}
+              <div style="line-height:1.05;">${esc(kickoffLabel)}</div>
+            </div>
+          </div>
+
+          ${oddsLine
+            ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
+            : `<div class="muted" style="margin-top:8px; font-weight:800;">Odds unavailable</div>`
+          }
+
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+            ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId, scoreText: awayScoreText })}
+            ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId, scoreText: homeScoreText })}
+          </div>
+
+          <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
+            ${my
+              ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
+              : `<div class="muted">No pick yet</div>`
+            }
+            ${lockedGame ? `<div class="muted">Locked</div>` : ``}
+          </div>
+
+          <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
+            <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
+            <div class="gpEveryoneBody">${everyoneLines}</div>
+          </details>
+        </div>
+      `;
+    }).join("");
+
+    const saveRow = `
+      <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
+        <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
+        <div class="muted">(Saves your pending picks)</div>
+      </div>
+    `;
+
+    // ✅ Leaderboard rendered right under the week title
     return `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">GROUP PICKS</div>
         </div>
-        <div class="gameMetaTopLine">No active week yet</div>
-        <div class="gameMetaOddsLine">Waiting on admin to create Week 1.</div>
+
+        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+          ${esc(weekLabel || weekId)}
+        </div>
+
+        ${leaderboardHTML}
+
+        <div id="gpGamesWrap">
+          ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+        </div>
+
+        ${saveRow}
       </div>
     `;
   }
-
-  if (!published) {
-    return `
-  <div class="game">
-    <div class="gameHeader">
-      <div class="statusPill status-other">GROUP PICKS</div>
-    </div>
-
-    <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-      ${esc(weekLabel || weekId)}
-    </div>
-
-    <div id="gpGamesWrap">
-      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
-    </div>
-
-    ${saveRow}
-  </div>
-`;
-
-  const now = Date.now();
-  
-  // ✅ Leaderboard (computed from FINAL games only)
-const lb = gpComputeWeeklyLeaderboard(games, allPicks);
-const leaderboardHTML = gpBuildLeaderboardHTML({
-  weekLabel: weekLabel || weekId,
-  finalsCount: lb.finalsCount,
-  rows: lb.rows
-});
-
-  function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
-    return `
-      <button
-        class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
-        type="button"
-        ${lockedGame ? "disabled" : ""}
-        data-gppick="${esc(side)}"
-        data-slate="${esc(weekId)}"
-        data-eid="${esc(eventId)}"
-        style="
-          width:100%;
-          display:flex;
-          align-items:center;
-          gap:12px;
-          padding:12px;
-          border-radius:16px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.10);
-          text-align:left;
-        "
-      >
-        <div style="
-          width:44px; height:44px; border-radius:12px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.08);
-          display:flex; align-items:center; justify-content:center;
-          overflow:hidden;
-          flex:0 0 44px;
-        ">
-          ${logoUrl
-            ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
-            : ``
-          }
-        </div>
-
-        <div style="flex:1; min-width:0;">
-          <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${esc(safeTeamLabel(t))}
-          </div>
-          <div class="muted" style="margin-top:4px;">
-            ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
-          </div>
-        </div>
-
-        ${scoreText !== "" ? `
-          <div style="
-            flex:0 0 auto;
-            min-width:44px;
-            text-align:right;
-            font-weight:950;
-            font-size:34px;
-            line-height:1;
-            letter-spacing:0.2px;
-            color:rgba(255,255,255,0.92);
-          ">
-            ${esc(scoreText)}
-          </div>
-        ` : ``}
-      </button>
-    `;
-  }
-
-  const gameCards = (games || []).map(g => {
-    const eventId = String(g?.eventId || g?.id || "");
-    if (!eventId) return "";
-
-    const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
-    const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
-
-    const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-
-const kickoffLabel = fmtKickoffFromMs(startMs);
-const kickoffDateLabel = gpPrettyDateFromStartMs(startMs);
-
-const lockedGame = startMs ? now >= startMs : false;
-
-    // Live/Final info (from hydration)
-    const live = g.__live || null;
-    const state = String(live?.state || "").toLowerCase(); // pre | in | post
-    const isLive = state === "in";
-    const isFinal = state === "post";
-
-    const awayScore = (live && live.awayScore != null) ? String(live.awayScore) : "";
-    const homeScore = (live && live.homeScore != null) ? String(live.homeScore) : "";
-
-    // LIVE / FINAL pill (Scores-tab style)
-    let pillHTML = "";
-    if (isLive || isFinal) {
-      const pillText = isLive
-        ? `LIVE • ${String(live?.detail || "").trim()}`   // e.g. "3:41 - 2nd Half"
-        : "FINAL";
-
-      pillHTML = `
-        <div class="statusPill" style="
-          display:inline-flex;
-          align-items:center;
-          gap:8px;
-          padding:10px 14px;
-          border-radius:999px;
-          width:100%;
-          max-width:100%;
-          box-sizing:border-box;
-          background:${isLive ? "rgba(0,200,120,0.18)" : "rgba(255,255,255,0.10)"};
-          border:1px solid ${isLive ? "rgba(0,200,120,0.35)" : "rgba(255,255,255,0.16)"};
-          color:${isLive ? "rgba(180,255,220,0.95)" : "rgba(255,255,255,0.88)"};
-          font-weight:950;
-          letter-spacing:0.3px;
-          white-space:nowrap;
-          overflow:hidden;
-          text-overflow:ellipsis;
-        ">
-          ${esc(pillText)}
-        </div>
-      `;
-    }
-
-    const pending = gpPendingGet(eventId);
-    const saved = String(myMap?.[eventId]?.side || "");
-    const my = pending || saved;
-
-    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
-    const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
-    const isPending = !!pending && pending !== saved;
-
-    const everyoneLines = everyone.length
-      ? everyone.map(p => {
-          const nm = String(p?.name || "Someone");
-          const side = String(p?.side || "");
-          const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
-          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
-        }).join("")
-      : `<div class="muted">No picks yet.</div>`;
-
-    const venueLine = String(g?.venueLine || "").trim();
-    const oddsLine = fmtOddsLine(g);
-
-    const awayLogo = safeLogo(away);
-    const homeLogo = safeLogo(home);
-
-    const hasPick = !!my;
-    const awayActive = my === "away";
-    const homeActive = my === "home";
-    const awayFade = hasPick && !awayActive;
-    const homeFade = hasPick && !homeActive;
-
-    // Scores-tab feel: show per-team big score on the right ONLY when live/final and scores exist
-    const showScores = (isLive || isFinal) && awayScore !== "" && homeScore !== "";
-    const awayScoreText = showScores ? awayScore : "";
-    const homeScoreText = showScores ? homeScore : "";
-
-    return `
-      <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
-        margin-top:14px;
-        padding:14px;
-        border-radius:22px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.08);
-      ">
-
-        ${pillHTML ? `
-          <div style="margin-bottom:10px;">
-            ${pillHTML}
-          </div>
-        ` : ``}
-
-        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-  <div class="muted" style="font-weight:800;">
-    ${venueLine ? esc(venueLine) : ""}
-  </div>
-
-  <div class="muted" style="white-space:nowrap; font-weight:900; text-align:right;">
-    ${kickoffDateLabel ? `<div style="font-weight:800; line-height:1.05;">${esc(kickoffDateLabel)}</div>` : ``}
-    <div style="line-height:1.05;">${esc(kickoffLabel)}</div>
-  </div>
-</div>
-
-        ${oddsLine
-          ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
-          : `<div class="muted" style="margin-top:8px; font-weight:800;">Odds unavailable</div>`
-        }
-
-        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId, scoreText: awayScoreText })}
-          ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId, scoreText: homeScoreText })}
-        </div>
-
-        <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
-          ${my
-            ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
-            : `<div class="muted">No pick yet</div>`
-          }
-          ${lockedGame ? `<div class="muted">Locked</div>` : ``}
-        </div>
-
-        <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
-          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-          <div class="gpEveryoneBody">${everyoneLines}</div>
-        </details>
-      </div>
-    `;
-  }).join("");
-
-  const saveRow = `
-    <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
-      <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
-      <div class="muted">(Saves your pending picks)</div>
-    </div>
-  `;
-
-  return `
-    <div class="game">
-      <div class="gameHeader">
-        <div class="statusPill status-other">GROUP PICKS</div>
-      </div>
-
-      <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-        ${esc(weekLabel || weekId)}
-      </div>
-
-      <div id="gpGamesWrap">
-  ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
-</div>
-
-      ${saveRow}
-    </div>
-  `;
-}
 
   // -----------------------------
   // Admin builder UI (multi-league add)
@@ -1455,218 +1412,193 @@ const lockedGame = startMs ? now >= startMs : false;
   }
 
   // -----------------------------
-// Main renderer
-// -----------------------------
-async function renderPicks(showLoading) {
-  const content = document.getElementById("content");
-  if (!content) return;
+  // Main renderer
+  // -----------------------------
+  async function renderPicks(showLoading) {
+    const content = document.getElementById("content");
+    if (!content) return;
 
-  const role = getRole();
-  const dbReady = ensureFirebaseReadySafe();
+    const role = getRole();
+    const dbReady = ensureFirebaseReadySafe();
 
-  if (showLoading) {
-    content.innerHTML = `
-      ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Loading…", weekSelectHTML: "" })}
-      <div class="notice">Loading picks…</div>
-    `;
-  }
-
-  try {
-    await dbReady;
-
-    const user = firebase?.auth?.().currentUser;
-    if (!user) {
-      try { await firebase.auth().signInAnonymously(); } catch {}
-    }
-
-    const db = firebase.firestore();
-    const uid = firebase.auth().currentUser?.uid || "";
-
-    // Read meta (public) to know active week + list
-    const metaPub = await gpGetMetaPublic(db);
-    const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
-    const activeWeekId = String(metaPub.activeWeekId || "").trim();
-
-    // Determine which week to show
-    const requested = getSelectedWeekFromLS();
-    const requestedOk =
-      requested &&
-      weeks.some(w =>
-        String(w.id) === requested && (w.published === true || role === "admin")
-      );
-
-    const showWeekId = requestedOk ? requested : activeWeekId;
-
-    // Persist current selection so week selector stays stable
-    if (showWeekId) setSelectedWeekToLS(showWeekId);
-
-    const wLabel =
-      (weeks.find(w => String(w.id) === String(showWeekId))?.label) ||
-      showWeekId ||
-      "Week";
-
-    // Admin builder state
-    let adminHTML = "";
-    let adminEvents = [];
-    const selectedLeagueKey = getSavedLeagueKeySafe();
-    const selectedDate = getSavedDateYYYYMMDDSafe();
-
-    if (role === "admin") {
-      // load events only when admin taps Load (stored on window)
-      adminEvents = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
-      adminHTML = gpBuildAdminBuilderHTML({
-        weekId: showWeekId,
-        weekLabel: wLabel,
-        leagueKey: selectedLeagueKey,
-        dateYYYYMMDD: selectedDate,
-        events: adminEvents
-      });
-    }
-
-    // Week selector options:
-    const weekOptions = (role === "admin") ? weeks : weeks.filter(w => w.published === true);
-    const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId || "");
-
-    if (!showWeekId) {
+    if (showLoading) {
       content.innerHTML = `
-        ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: "Week", rightLabel: "Updated", selectedKey: selectedLeagueKey, prettyDate: wLabel })}
-        ${adminHTML}
-        ${gpBuildGroupPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, allPicks: {}, published: false })}
+        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Loading…", weekSelectHTML: "" })}
+        <div class="notice">Loading picks…</div>
       `;
-      postRender();
-      return;
     }
 
-    const slateRef = db.collection("pickSlates").doc(showWeekId);
-    const slateSnap = await slateRef.get();
-    const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
-    const published = slateData.published === true;
+    try {
+      await dbReady;
 
-    // Non-admin cannot view unpublished week
-    if (!published && role !== "admin") {
+      const user = firebase?.auth?.().currentUser;
+      if (!user) {
+        try { await firebase.auth().signInAnonymously(); } catch {}
+      }
+
+      const db = firebase.firestore();
+      const uid = firebase.auth().currentUser?.uid || "";
+
+      const metaPub = await gpGetMetaPublic(db);
+      const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
+      const activeWeekId = String(metaPub.activeWeekId || "").trim();
+
+      const requested = getSelectedWeekFromLS();
+      const requestedOk =
+        requested &&
+        weeks.some(w => String(w.id) === requested && (w.published === true || role === "admin"));
+
+      const showWeekId = requestedOk ? requested : activeWeekId;
+      if (showWeekId) setSelectedWeekToLS(showWeekId);
+
+      const wLabel =
+        (weeks.find(w => String(w.id) === String(showWeekId))?.label) ||
+        showWeekId ||
+        "Week";
+
+      let adminHTML = "";
+      let adminEvents = [];
+      const selectedLeagueKey = getSavedLeagueKeySafe();
+      const selectedDate = getSavedDateYYYYMMDDSafe();
+
+      if (role === "admin") {
+        adminEvents = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
+        adminHTML = gpBuildAdminBuilderHTML({
+          weekId: showWeekId,
+          weekLabel: wLabel,
+          leagueKey: selectedLeagueKey,
+          dateYYYYMMDD: selectedDate,
+          events: adminEvents
+        });
+      }
+
+      const weekOptions = (role === "admin") ? weeks : weeks.filter(w => w.published === true);
+      const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId || "");
+
+      if (!showWeekId) {
+        content.innerHTML = `
+          ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: "Week", rightLabel: "Updated" })}
+          ${adminHTML}
+          ${gpBuildGroupPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, allPicks: {}, published: false })}
+        `;
+        postRender();
+        return;
+      }
+
+      const slateRef = db.collection("pickSlates").doc(showWeekId);
+      const slateSnap = await slateRef.get();
+      const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
+      const published = slateData.published === true;
+
+      if (!published && role !== "admin") {
+        content.innerHTML = `
+          ${renderPicksHeaderHTML({
+            role,
+            weekSelectHTML: buildWeekSelectHTML(weeks.filter(w => w.published === true), activeWeekId),
+            weekLabel: wLabel,
+            rightLabel: "Updated"
+          })}
+          ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games: [], myMap: {}, allPicks: {}, published: false })}
+        `;
+        postRender();
+        return;
+      }
+
+      const games = await gpGetSlateGames(db, showWeekId);
+      await gpHydrateLiveStateForGames(games);
+      await gpHydrateOddsForGames(games);
+
+      const myMap = await gpGetMyPicksMap(db, showWeekId, uid);
+      const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
+
+      gpPendingResetIfSlateChanged(showWeekId);
+      window.__GP_PENDING.sid = showWeekId;
+
       content.innerHTML = `
         ${renderPicksHeaderHTML({
           role,
-          weekSelectHTML: buildWeekSelectHTML(weeks.filter(w => w.published === true), activeWeekId),
+          weekSelectHTML,
           weekLabel: wLabel,
-          rightLabel: "Updated",
-          selectedKey: selectedLeagueKey
+          rightLabel: published ? "Updated" : "Draft"
         })}
-        ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games: [], myMap: {}, allPicks: {}, published: false })}
+        ${adminHTML}
+        ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games, myMap, allPicks, published })}
+      `;
+
+      postRender();
+    } catch (err) {
+      console.error("renderPicks error:", err);
+      content.innerHTML = `
+        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error", weekSelectHTML: "" })}
+        <div class="notice">Couldn’t load Picks right now.</div>
       `;
       postRender();
-      return;
     }
-
-    // Normal pick load
-const games = await gpGetSlateGames(db, showWeekId);
-
-// ✅ hydrate live score/clock from ESPN without changing stored docs
-await gpHydrateLiveStateForGames(games);
-// ✅ hydrate odds if they were missing at publish time
-await gpHydrateOddsForGames(games);
-
-const myMap = await gpGetMyPicksMap(db, showWeekId, uid);
-const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
-
-    gpPendingResetIfSlateChanged(showWeekId);
-    window.__GP_PENDING.sid = showWeekId;
-
-    content.innerHTML = `
-      ${renderPicksHeaderHTML({
-        role,
-        weekSelectHTML,
-        weekLabel: wLabel,
-        rightLabel: published ? "Updated" : "Draft",
-        selectedKey: selectedLeagueKey
-      })}
-      ${adminHTML}
-      ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games, myMap, allPicks, published })}
-    `;
-
-    postRender();
-  } catch (err) {
-    console.error("renderPicks error:", err);
-    content.innerHTML = `
-      ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error", weekSelectHTML: "" })}
-      <div class="notice">Couldn’t load Picks right now.</div>
-    `;
-    postRender();
   }
-}
 
-/**
- * Header renderer
- * Accepts an object (because that's how you're calling it everywhere).
- */
-function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
-  const isAdmin = role === "admin";
+  function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
+    const isAdmin = role === "admin";
 
-  return `
-    <div class="header">
-      <div class="headerTop">
-        <div class="brand">
-          <h2 style="margin:0;">Picks</h2>
-          <span class="badge">Group</span>
+    return `
+      <div class="header">
+        <div class="headerTop">
+          <div class="brand">
+            <h2 style="margin:0;">Picks</h2>
+            <span class="badge">Group</span>
+          </div>
+
+          <div class="headerActions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+            <button class="smallBtn" data-gpaction="name">Name</button>
+            <button class="smallBtn" data-gpaction="savePicks">Save</button>
+            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
+          </div>
         </div>
 
-        <div class="headerActions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-          <button class="smallBtn" data-gpaction="name">Name</button>
-          <button class="smallBtn" data-gpaction="savePicks">Save</button>
-          <button class="smallBtn" data-gpaction="refresh">Refresh</button>
-        </div>
-      </div>
+        <div class="subline" style="display:block;">
+          <div
+            class="sublineLeft"
+            style="
+              display:flex;
+              gap:10px;
+              align-items:center;
+              flex-wrap:nowrap;
+              overflow-x:auto;
+              -webkit-overflow-scrolling:touch;
+              max-width:100%;
+              padding-bottom:6px;
+            "
+          >
+            <span style="flex:0 0 auto; display:inline-flex; align-items:center;">
+              ${weekSelectHTML || ""}
+            </span>
 
-      <!-- Row 1: controls (scrollable, never wraps) -->
-      <div class="subline" style="display:block;">
-        <div
-          class="sublineLeft"
-          style="
-            display:flex;
-            gap:10px;
-            align-items:center;
-            flex-wrap:nowrap;
-            overflow-x:auto;
-            -webkit-overflow-scrolling:touch;
-            max-width:100%;
-            padding-bottom:6px;
-          "
-        >
-          <!-- Week select + iOS dark styling override -->
-          <span style="flex:0 0 auto; display:inline-flex; align-items:center;">
-            ${weekSelectHTML || ""}
-          </span>
+            ${isAdmin ? `
+              <button class="smallBtn" data-gpaction="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
+              <button class="smallBtn" data-gpaction="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
+            ` : ""}
+          </div>
 
-          ${isAdmin ? `
-            <button class="smallBtn" data-gpaction="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
-            <button class="smallBtn" data-gpaction="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
-          ` : ""}
-        </div>
-
-        <!-- Row 2: the blurb (always below, never overlaps) -->
-        <div style="margin-top:4px; text-align:right; white-space:nowrap;">
-          ${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}
+          <div style="margin-top:4px; text-align:right; white-space:nowrap;">
+            ${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- iOS select fix: keep it dark/clear instead of white -->
-    <style>
-      select[data-gpweeksel="1"]{
-        -webkit-appearance:none;
-        appearance:none;
-        background:rgba(255,255,255,0.06) !important;
-        color:inherit !important;
-        border:1px solid rgba(255,255,255,0.12) !important;
-      }
-    </style>
-  `;
-}
+      <style>
+        select[data-gpweeksel="1"]{
+          -webkit-appearance:none;
+          appearance:none;
+          background:rgba(255,255,255,0.06) !important;
+          color:inherit !important;
+          border:1px solid rgba(255,255,255,0.12) !important;
+        }
+      </style>
+    `;
+  }
 
   function postRender() {
     try { setPicksNameUI(); } catch {}
     try { gpUpdateSaveBtnUI(); } catch {}
-
     try {
       if (typeof window.replaceMichiganText === "function") setTimeout(() => window.replaceMichiganText(), 0);
     } catch {}
@@ -1732,7 +1664,6 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
         return;
       }
 
-      // User pick buttons
       const gpPick = btn.getAttribute("data-gppick");
       if (gpPick) {
         const eventId = btn.getAttribute("data-eid") || "";
@@ -1767,7 +1698,6 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
         return;
       }
 
-      // Admin actions
       const gpAdmin = btn.getAttribute("data-gpadmin");
       if (gpAdmin) {
         ensureFirebaseReadySafe()
@@ -1780,7 +1710,6 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
             if (!uid) throw new Error("No uid (not signed in)");
 
             const weekId = safeGetLS(PICKS_WEEK_KEY).trim();
-
             const statusEl = document.getElementById("gpAdminStatus");
             const wrap = btn.closest('[data-gpadminwrap="1"]');
 
@@ -1807,7 +1736,6 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
               const m = dateVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
               const dateYYYYMMDD = m ? `${m[1]}${m[2]}${m[3]}` : getSavedDateYYYYMMDDSafe();
 
-              // persist to LS so it stays sticky
               try { localStorage.setItem("theShopLeague_v1", leagueKey); } catch {}
               try { localStorage.setItem("theShopDate_v1", dateYYYYMMDD); } catch {}
 
@@ -1866,7 +1794,6 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
       }
     });
 
-    // Week selector change (not a button, so separate handler)
     document.addEventListener("change", (e) => {
       const sel = e.target;
       if (!sel || !sel.getAttribute) return;
@@ -1882,95 +1809,88 @@ function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) 
   }
 
   // Expose renderer used by shared tab router
-window.renderPicks = renderPicks;
+  window.renderPicks = renderPicks;
 
-// -----------------------------
-// Live score auto-refresh (SAFE version)
-// - Updates ONLY the scorecards area (#gpGamesWrap)
-// - Does NOT re-render header/admin builder
-// - Does NOT reset checkboxes/scroll while admin is building
-// -----------------------------
-if (!window.__GP_REFRESH_BOUND) {
-  window.__GP_REFRESH_BOUND = true;
+  // -----------------------------
+  // Live score auto-refresh (SAFE version)
+  // - Updates ONLY the scorecards area (#gpGamesWrap)
+  // - Does NOT re-render header/admin builder
+  // - Does NOT reset checkboxes/scroll while admin is building
+  // -----------------------------
+  if (!window.__GP_REFRESH_BOUND) {
+    window.__GP_REFRESH_BOUND = true;
 
-  let gpInterval = null;
+    let gpInterval = null;
 
-  function stopGpAutoRefresh() {
-    if (gpInterval) {
-      clearInterval(gpInterval);
-      gpInterval = null;
-    }
-  }
-
-  function startGpAutoRefresh() {
-    stopGpAutoRefresh();
-
-    gpInterval = setInterval(async () => {
-      try {
-        // Only update if the game-cards wrapper exists (i.e., Picks is rendered)
-        const gamesWrap = document.getElementById("gpGamesWrap");
-        if (!gamesWrap) return;
-
-        // Don't interrupt admin while using the week builder (checkboxes etc.)
-        const role = (typeof window.getRole === "function") ? window.getRole() : (localStorage.getItem("theShopRole_v1") || "guest");
-        if (String(role) === "admin") return;
-
-        // Ensure firebase ready
-        if (typeof window.ensureFirebaseChatReady === "function") {
-          await window.ensureFirebaseChatReady();
-        }
-
-        const db = firebase.firestore();
-
-        // Use currently selected week (what your UI is showing)
-        const weekId = (localStorage.getItem("theShopPicksWeek_v1") || "").trim();
-        if (!weekId) return;
-
-        // Only refresh if published (guest should only ever see published)
-        const slateSnap = await db.collection("pickSlates").doc(weekId).get();
-        const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
-        if (!slateData.published) return;
-
-        // Pull fresh games + hydrate live state from ESPN
-        const games = await gpGetSlateGames(db, weekId);
-        await gpHydrateLiveStateForGames(games);
-
-        // Keep picks + everyone's picks in sync too (lightweight enough)
-        const uid = firebase.auth().currentUser?.uid || "";
-        const myMap = await gpGetMyPicksMap(db, weekId, uid);
-        const allPicks = await gpGetAllPicksForSlate(db, weekId);
-
-        // Rebuild ONLY the cards section
-        const html = gpBuildGroupPicksCardHTML({
-          weekId,
-          weekLabel: String(slateData.label || weekId),
-          games,
-          myMap,
-          allPicks,
-          published: true
-        });
-
-        const temp = document.createElement("div");
-        temp.innerHTML = html;
-        const newWrap = temp.querySelector("#gpGamesWrap");
-
-        if (newWrap) {
-          gamesWrap.innerHTML = newWrap.innerHTML;
-        }
-      } catch (err) {
-        console.error("GP auto-refresh error:", err);
+    function stopGpAutoRefresh() {
+      if (gpInterval) {
+        clearInterval(gpInterval);
+        gpInterval = null;
       }
-    }, 30000); // 30 seconds
+    }
+
+    function startGpAutoRefresh() {
+      stopGpAutoRefresh();
+
+      gpInterval = setInterval(async () => {
+        try {
+          const gamesWrap = document.getElementById("gpGamesWrap");
+          if (!gamesWrap) return;
+
+          const role = (typeof window.getRole === "function")
+            ? window.getRole()
+            : (localStorage.getItem("theShopRole_v1") || "guest");
+          if (String(role) === "admin") return;
+
+          if (typeof window.ensureFirebaseChatReady === "function") {
+            await window.ensureFirebaseChatReady();
+          }
+
+          const db = firebase.firestore();
+
+          const weekId = (localStorage.getItem("theShopPicksWeek_v1") || "").trim();
+          if (!weekId) return;
+
+          const slateSnap = await db.collection("pickSlates").doc(weekId).get();
+          const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
+          if (!slateData.published) return;
+
+          const games = await gpGetSlateGames(db, weekId);
+          await gpHydrateLiveStateForGames(games);
+          await gpHydrateOddsForGames(games);
+
+          const uid = firebase.auth().currentUser?.uid || "";
+          const myMap = await gpGetMyPicksMap(db, weekId, uid);
+          const allPicks = await gpGetAllPicksForSlate(db, weekId);
+
+          const html = gpBuildGroupPicksCardHTML({
+            weekId,
+            weekLabel: String(slateData.label || weekId),
+            games,
+            myMap,
+            allPicks,
+            published: true
+          });
+
+          const temp = document.createElement("div");
+          temp.innerHTML = html;
+          const newWrap = temp.querySelector("#gpGamesWrap");
+
+          if (newWrap) {
+            gamesWrap.innerHTML = newWrap.innerHTML;
+          }
+        } catch (err) {
+          console.error("GP auto-refresh error:", err);
+        }
+      }, 30000);
+    }
+
+    startGpAutoRefresh();
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopGpAutoRefresh();
+      else startGpAutoRefresh();
+    });
   }
-
-  // Start immediately (only affects Picks tab because #gpGamesWrap must exist)
-  startGpAutoRefresh();
-
-  // Pause when app/tab not visible, resume when back
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) stopGpAutoRefresh();
-    else startGpAutoRefresh();
-  });
-}
 
 })();
