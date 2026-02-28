@@ -5,6 +5,21 @@
 (function () {
   "use strict";
 
+// ------------------------------------------------------------
+// iOS/PWA safety: CSS.escape polyfill (some WebViews lack it)
+// ------------------------------------------------------------
+(function ensureCssEscape(){
+  if (!window.CSS) window.CSS = {};
+  if (typeof window.CSS.escape === "function") return;
+  window.CSS.escape = function (value) {
+    const str = String(value);
+    return str.replace(/[^a-zA-Z0-9_\u00A0-\uFFFF-]/g, function(ch) {
+      const hex = ch.codePointAt(0).toString(16).toUpperCase();
+      return "\\" + hex + " ";
+    });
+  };
+})();
+
   // ------------------------------------------------------------
   // Tiny safe storage helpers (private browsing can throw)
   // ------------------------------------------------------------
