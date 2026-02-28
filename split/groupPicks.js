@@ -835,6 +835,247 @@ async function gpHydrateOddsForGames(games) {
   // -----------------------------
   // Rendering (cards)
   // -----------------------------
+function gpIsFinalGame(g) {
+  const live = g?.__live || null;
+  return !!live && String(live.state || "").toLowerCase() === "post";
+}
+
+function gpWinnerSideFromLive(g) {
+  const live = g?.__live || null;
+  if (!live) return ""; // unknown
+
+  const a = Number(live.awayScore);
+  const h = Number(live.homeScore);
+  if (!Number.isFinite(a) || !Number.isFinite(h)) return "";
+
+  if (a === h) return "";        // tie -> no winner (no points)
+  return (a > h) ? "away" : "home";
+}
+
+function gpComputeWeeklyLeaderboard(games, allPicks) {
+  const list = Array.isArray(games) ? games : [];
+  const picksByEvent = allPicks && typeof allPicks === "object" ? allPicks : {};
+
+  let finalsCount = 0;
+
+  // uid -> { uid, name, wins, picksMade, correct, wrong }
+  const users = new Map();
+
+  for (const g of list) {
+    const eventId = String(g?.eventId || g?.id || "").trim();
+    if (!eventId) continue;
+
+    if (!gpIsFinalGame(g)) continue;
+    finalsCount++;
+
+    const winner = gpWinnerSideFromLive(g);
+    if (!winner) continue; // tie/unknown -> skip scoring
+
+    const arr = Array.isArray(picksByEvent[eventId]) ? picksByEvent[eventId] : [];
+    for (const p of arr) {
+      const uid = String(p?.uid || "").trim();
+      const name = String(p?.name || "Someone").trim();
+      const side = String(p?.side || "").trim();
+
+      if (!uid) continue;
+
+      if (!users.has(uid)) {
+        users.set(uid, { uid, name, wins: 0, picksMade: 0, correct: 0, wrong: 0 });
+      }
+
+      const u = users.get(uid);
+      // keep latest name seen
+      if (name) u.name = name;
+
+      if (side === "home" || side === "away") {
+        u.picksMade += 1;
+        if (side === winner) {
+          u.wins += 1;
+          u.correct += 1;
+        } else {
+          u.wrong += 1;
+        }
+      }
+    }
+  }
+
+  const rows = Array.from(users.values());
+
+  rows.sort((a, b) => {
+    // wins desc
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    // correct desc
+    if (b.correct !== a.correct) return b.correct - a.correct;
+    // picksMade desc
+    if (b.picksMade !== a.picksMade) return b.picksMade - a.picksMade;
+    // name asc
+    return String(a.name).localeCompare(String(b.name));
+  });
+
+  return { rows, finalsCount };
+}
+
+function gpInitials(name) {
+  const s = String(name || "").trim();
+  if (!s) return "??";
+  const parts = s.split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] || "";
+  const b = (parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]) || "";
+  return (a + b).toUpperCase() || "??";
+}
+
+function gpBuildLeaderboardHTML({ weekLabel, finalsCount, rows }) {
+  const list = Array.isArray(rows) ? rows : [];
+
+  // Nothing final yet: don’t show an empty “lame” board
+  if (!finalsCount) {
+    return `
+      <div class="gpLeaderCard" style="
+        margin-top:12px;
+        padding:14px;
+        border-radius:22px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      ">
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+          <div style="font-weight:950;">Leaderboard</div>
+          <div class="muted" style="font-weight:900;">${esc(weekLabel || "")}</div>
+        </div>
+        <div class="muted" style="margin-top:8px; font-weight:800;">
+          No finals yet — leaderboard will appear once games go final.
+        </div>
+      </div>
+    `;
+  }
+
+  // Podium: top 3
+  const top = list.slice(0, 3);
+  const rest = list.slice(3);
+
+  function podiumItem(rank, u) {
+    if (!u) return `<div style="flex:1;"></div>`;
+    return `
+      <div style="
+        flex:1;
+        padding:12px;
+        border-radius:18px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      ">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <div style="
+              width:34px; height:34px;
+              border-radius:999px;
+              background:rgba(255,255,255,0.10);
+              border:1px solid rgba(255,255,255,0.12);
+              display:flex; align-items:center; justify-content:center;
+              font-weight:950;
+              flex:0 0 34px;
+            ">${esc(gpInitials(u.name))}</div>
+            <div style="min-width:0;">
+              <div style="font-weight:950; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${esc(u.name)}
+              </div>
+              <div class="muted" style="font-weight:800; margin-top:2px;">
+                Picks: ${esc(String(u.picksMade))} • Correct: ${esc(String(u.correct))}
+              </div>
+            </div>
+          </div>
+
+          <div class="statusPill" style="
+            background:rgba(0,200,120,0.18);
+            border:1px solid rgba(0,200,120,0.35);
+            color:rgba(180,255,220,0.95);
+            font-weight:950;
+            white-space:nowrap;
+          ">
+            ${esc(String(u.wins))} W
+          </div>
+        </div>
+
+        <div class="muted" style="margin-top:10px; font-weight:950;">
+          #${esc(String(rank))}
+        </div>
+      </div>
+    `;
+  }
+
+  const restLines = rest.length
+    ? rest.map((u, i) => {
+        const rank = i + 4;
+        return `
+          <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:10px;
+            padding:10px 12px;
+            border-radius:16px;
+            background:rgba(255,255,255,0.04);
+            border:1px solid rgba(255,255,255,0.06);
+          ">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <div class="muted" style="font-weight:950; width:26px; text-align:right;">${esc(String(rank))}</div>
+              <div style="
+                width:30px; height:30px;
+                border-radius:999px;
+                background:rgba(255,255,255,0.10);
+                border:1px solid rgba(255,255,255,0.12);
+                display:flex; align-items:center; justify-content:center;
+                font-weight:950;
+                flex:0 0 30px;
+              ">${esc(gpInitials(u.name))}</div>
+              <div style="min-width:0;">
+                <div style="font-weight:950; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${esc(u.name)}
+                </div>
+                <div class="muted" style="font-weight:800; margin-top:2px;">
+                  Correct: ${esc(String(u.correct))} • Wrong: ${esc(String(u.wrong))}
+                </div>
+              </div>
+            </div>
+
+            <div class="statusPill" style="
+              background:rgba(255,255,255,0.10);
+              border:1px solid rgba(255,255,255,0.16);
+              color:rgba(255,255,255,0.90);
+              font-weight:950;
+              white-space:nowrap;
+            ">
+              ${esc(String(u.wins))} W
+            </div>
+          </div>
+        `;
+      }).join("")
+    : `<div class="muted" style="margin-top:10px; font-weight:800;">Only a few players so far.</div>`;
+
+  return `
+    <div class="gpLeaderCard" style="
+      margin-top:12px;
+      padding:14px;
+      border-radius:22px;
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.08);
+    ">
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+        <div style="font-weight:950;">Leaderboard</div>
+        <div class="muted" style="font-weight:900;">Finals: ${esc(String(finalsCount))}</div>
+      </div>
+
+      <div style="margin-top:12px; display:flex; gap:10px;">
+        ${podiumItem(1, top[0])}
+        ${podiumItem(2, top[1])}
+        ${podiumItem(3, top[2])}
+      </div>
+
+      <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+        ${restLines}
+      </div>
+    </div>
+  `;
+}
+
   function toNum(v) {
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
@@ -889,17 +1130,32 @@ async function gpHydrateOddsForGames(games) {
 
   if (!published) {
     return `
-      <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill status-other">GROUP PICKS</div>
-        </div>
-        <div class="gameMetaTopLine">${esc(weekLabel || weekId)} not published yet</div>
-        <div class="gameMetaOddsLine">Waiting on admin.</div>
-      </div>
-    `;
-  }
+  <div class="game">
+    <div class="gameHeader">
+      <div class="statusPill status-other">GROUP PICKS</div>
+    </div>
+
+    <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+      ${esc(weekLabel || weekId)}
+    </div>
+
+    <div id="gpGamesWrap">
+      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+    </div>
+
+    ${saveRow}
+  </div>
+`;
 
   const now = Date.now();
+  
+  // ✅ Leaderboard (computed from FINAL games only)
+const lb = gpComputeWeeklyLeaderboard(games, allPicks);
+const leaderboardHTML = gpBuildLeaderboardHTML({
+  weekLabel: weekLabel || weekId,
+  finalsCount: lb.finalsCount,
+  rows: lb.rows
+});
 
   function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
     return `
