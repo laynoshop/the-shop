@@ -35,20 +35,29 @@
   // TTUN text replacer (global)
   // ------------------------------------------------------------
   function replaceMichiganText(root = document.body) {
-    const a = ["Mi", "chigan"].join("");
-    const b = ["Wol", "verines"].join("");
-
-    const rxA = new RegExp(a, "gi");
-    const rxB = new RegExp(b, "gi");
+  try {
+    const rxFull = /Michigan\s+Wolverines/gi;
+    const rxWolv = /\bWolverines\b/gi;
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
     let node;
     while ((node = walker.nextNode())) {
-      if (!node.nodeValue) continue;
-      node.nodeValue = node.nodeValue.replace(rxA, "TTUN").replace(rxB, "TTUN");
+      const t = node.nodeValue;
+      if (!t) continue;
+
+      let next = t.replace(rxFull, "TTUN");
+
+      // Only replace lone "Wolverines" if the same text node ALSO contains "Michigan"
+      // (keeps other random Wolverines from getting changed)
+      if (/Michigan/i.test(t)) {
+        next = next.replace(rxWolv, "TTUN");
+      }
+
+      if (next !== t) node.nodeValue = next;
     }
-  }
-  window.replaceMichiganText = replaceMichiganText;
+  } catch {}
+}
+window.replaceMichiganText = replaceMichiganText;
 
   // ------------------------------------------------------------
   // Rivalry banner (bottom fixed)
