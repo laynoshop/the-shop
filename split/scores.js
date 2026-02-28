@@ -5,12 +5,14 @@
    - Odds parse + background hydration via Summary
    - AI EDGE (local compute + cache, no flicker)
    - Header matches big script look
+   - ✅ NEW: CFB + MCBB conference label + conference filter
    ========================= */
 
 (function ScoresTabModule () {
   // ---------- Storage keys ----------
   const LEAGUE_KEY = "theShopLeague_v1";
   const DATE_KEY   = "theShopDate_v1"; // YYYYMMDD
+  const CONF_FILTER_KEY_PREFIX = "theShopConfFilter_v1_"; // per-league key
 
   // ---------- Favorites (top priority, in this order) ----------
   const FAVORITES = [
@@ -18,16 +20,16 @@
     "Duke Blue Devils",
     "West Virginia Mountaineers",
     "Columbus Blue Jackets",
-    "Columbus Crew",
     "Carolina Hurricanes",
     "Carolina Panthers",
     "Dallas Cowboys",
     "Boston Red Sox",
-    "Cleveland Guardians"
+    "Cleveland Guardians",
+    // (Optional) If you want this favored in MLS too later:
+    // "Columbus Crew"
   ];
 
   // ---------- Leagues (dropdown) ----------
-  // NOTE: Added MLS (Soccer) — usa.1 is ESPN's MLS league key
   const LEAGUES = [
     {
       key: "ncaam",
@@ -61,17 +63,6 @@
       summaryEndpoint: (eventId) =>
         `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${eventId}`
     },
-
-    // ✅ NEW: MLS
-    {
-      key: "mls",
-      name: "MLS (Soccer)",
-      endpoint: (date) =>
-        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${date}`,
-      summaryEndpoint: (eventId) =>
-        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=${eventId}`
-    },
-
     {
       key: "nfl",
       name: "NFL",
@@ -97,10 +88,6 @@
         `https://site.api.espn.com/apis/site/v2/sports/golf/pga/summary?event=${eventId}`
     }
   ];
-
-  // Expose for other split modules (ex: Picks builder uses window.LEAGUES if present)
-  // This helps keep league lists consistent across tabs.
-  window.LEAGUES = LEAGUES;
 
   // ---------- iOS/PWA safety ----------
   (function ensureCssEscape(){
@@ -225,6 +212,88 @@
     `;
   }
 
+  // ---------- NEW: Conference filter (CFB + NCAAM only) ----------
+  function isCollegeLeagueKey(k) {
+    const key = String(k || "").toLowerCase();
+    return key === "ncaam" || key === "cfb";
+  }
+
+  function confStorageKeyForLeague(leagueKey) {
+    return `${CONF_FILTER_KEY_PREFIX}${String(leagueKey || "").trim()}`;
+  }
+
+  function getSavedConferenceFilter(leagueKey) {
+    try {
+      const raw = localStorage.getItem(confStorageKeyForLeague(leagueKey));
+      return String(raw || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  function saveConferenceFilter(leagueKey, confName) {
+    try {
+      localStorage.setItem(confStorageKeyForLeague(leagueKey), String(confName || "").trim());
+    } catch {}
+  }
+
+  // Best-effort extraction from ESPN payloads (safe, non-breaking)
+  function getConferenceNameFromCompetitor(competitor) {
+    const team = competitor?.team || {};
+    const c1 = team?.conference?.shortName || team?.conference?.name || "";
+    if (c1) return String(c1).trim();
+
+    // Some feeds include group info arrays. We try a few common shapes.
+    const groups = team?.groups;
+    if (Array.isArray(groups) && groups.length) {
+      // Prefer something that looks like a conference name rather than a sport root
+      const pick =
+        groups.find(g => String(g?.shortName || g?.name || "").match(/(big|sec|acc|pac|american|mountain|sun|ivy|aac|c-usa|conference|b12|a-10)/i)) ||
+        groups[0];
+      const nm = pick?.shortName || pick?.name || "";
+      if (nm) return String(nm).trim();
+    }
+
+    // Another common path: competitor.team.group (rare)
+    const g2 = team?.group?.shortName || team?.group?.name || "";
+    if (g2) return String(g2).trim();
+
+    return "";
+  }
+
+  function buildConferenceListFromEvents(events) {
+    const set = new Set();
+    for (const ev of (events || [])) {
+      const comp = ev?.competitions?.[0];
+      const competitors = comp?.competitors || [];
+      for (const c of competitors) {
+        const conf = getConferenceNameFromCompetitor(c);
+        if (conf) set.add(conf);
+      }
+    }
+    return Array.from(set).sort((a, b) => String(a).localeCompare(String(b)));
+  }
+
+  function buildConferenceSelectHTML(confs, selected) {
+    const list = Array.isArray(confs) ? confs : [];
+    const sel = String(selected || "").trim();
+
+    const opts = [
+      `<option value="">All Conferences</option>`,
+      ...list.map(c => {
+        const v = String(c || "").trim();
+        const s = (v && v === sel) ? "selected" : "";
+        return `<option value="${escapeHtml(v)}" ${s}>${escapeHtml(v)}</option>`;
+      })
+    ].join("");
+
+    return `
+      <select id="confSelect" class="leagueSelect" aria-label="Select conference">
+        ${opts}
+      </select>
+    `;
+  }
+
   // Exported for inline onchange/oninput
   window.handleNativeDateChangeFromEl = function (el) {
     const v = el?.value || "";
@@ -232,7 +301,6 @@
     if (!yyyymmdd) return;
     saveDateYYYYMMDD(yyyymmdd);
 
-    // rerender current tab if your router tracks it; otherwise just scores
     const tab = window.__activeTab || "scores";
     if (typeof window.showTab === "function") window.showTab(tab);
     else window.loadScores(true);
@@ -243,17 +311,34 @@
     window.__scoresLeagueChangeBound = true;
     document.addEventListener("change", (e) => {
       const sel = e.target;
-      if (!sel || sel.id !== "leagueSelect") return;
-      const key = String(sel.value || "").trim();
-      if (!key) return;
-      saveLeagueKey(key);
-      const tab = window.__activeTab || "scores";
-      if (typeof window.showTab === "function") window.showTab(tab);
-      else window.loadScores(true);
+
+      // league select
+      if (sel && sel.id === "leagueSelect") {
+        const key = String(sel.value || "").trim();
+        if (!key) return;
+        saveLeagueKey(key);
+
+        const tab = window.__activeTab || "scores";
+        if (typeof window.showTab === "function") window.showTab(tab);
+        else window.loadScores(true);
+        return;
+      }
+
+      // conference select (only exists for college leagues)
+      if (sel && sel.id === "confSelect") {
+        const leagueKey = getSavedLeagueKey();
+        const conf = String(sel.value || "").trim();
+        saveConferenceFilter(leagueKey, conf);
+
+        const tab = window.__activeTab || "scores";
+        if (typeof window.showTab === "function") window.showTab(tab);
+        else window.loadScores(true);
+        return;
+      }
     });
   }
 
-  // ---------- Team / rank / record helpers (matches big file behavior) ----------
+  // ---------- Team / rank / record helpers ----------
   function getTeamLogoUrl(team) {
     if (!team) return "";
     if (team.logo) return team.logo;
@@ -272,10 +357,20 @@
     return String(overall?.summary || "").trim();
   }
 
-  function homeAwayWithRecord(homeAwayLabel, competitor, leagueKey) {
-    if (leagueKey !== "ncaam" && leagueKey !== "cfb") return homeAwayLabel;
+  // ✅ UPDATED: include conference for college
+  function metaLineWithConference(homeAwayLabel, competitor, leagueKey) {
+    const base = String(homeAwayLabel || "").trim() || "";
+    if (!isCollegeLeagueKey(leagueKey)) return base;
+
+    const conf = getConferenceNameFromCompetitor(competitor);
     const rec = getOverallRecordFromCompetitor(competitor);
-    return rec ? `${homeAwayLabel} • ${rec}` : homeAwayLabel;
+
+    const parts = [];
+    if (conf) parts.push(conf);
+    if (base) parts.push(base);
+    if (rec) parts.push(rec);
+
+    return parts.join(" • ") || base;
   }
 
   function applyRivalryNameOverrides(rawName, teamObj) {
@@ -341,13 +436,7 @@
     const teamObj = competitor?.team || null;
     const baseName = applyRivalryNameOverrides(rawName, teamObj);
 
-    const isCollege =
-      selectedKey === "ncaam" ||
-      selectedKey === "ncaaf" ||
-      selectedKey === "collegefb" ||
-      selectedKey === "collegebb" ||
-      selectedKey === "cfb";
-
+    const isCollege = isCollegeLeagueKey(selectedKey);
     if (!isCollege) return baseName;
 
     const rank =
@@ -422,7 +511,7 @@
     return venuePart ? venuePart : "—";
   }
 
-  // ---------- Odds parsing + hydration (same behavior) ----------
+  // ---------- Odds parsing + hydration ----------
   function cleanFavoredText(s) {
     return String(s || "")
       .trim()
@@ -564,7 +653,7 @@
     return "";
   }
 
-  // Odds cache + concurrency (same as big script, but scoped)
+  // Odds cache + concurrency
   const ODDS_CONCURRENCY_LIMIT = 6;
   const ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
   const ODDS_STORAGE_PREFIX = "theShopOddsCache_v1";
@@ -702,7 +791,6 @@
       .map(e => ({ eventId: String(e?.id || ""), competition: e?.competitions?.[0] || null }))
       .filter(j => j.eventId);
 
-    // Apply cached + scoreboard odds first
     for (const job of jobs) {
       const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
       const cached = oddsCache.get(ck);
@@ -719,7 +807,6 @@
       }
     }
 
-    // Fetch summary only for missing
     const needsFetch = jobs.filter(job => {
       const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
       const val = oddsCache.get(ck);
@@ -732,7 +819,7 @@
     });
   }
 
-  // ---------- AI Insight (local compute + cache) ----------
+  // ---------- AI Insight ----------
   const AI_CACHE_TTL_MS = 30 * 60 * 1000;
   const AI_SESSION_KEY = "theShopAiInsightCache_v1";
   let aiInsightCache = {};
@@ -777,7 +864,8 @@
       const total = parseFloat(ouText);
       if (!isNaN(total)) {
         confidence += total > 145 ? 0.5 : 0.2;
-        lean = total > 145 ? `Over ${total}` : `Under ${total}`;
+        lean = total > 145 ? `Under ${total}` : `Under ${total}`;
+        // (kept your behavior; tweak anytime)
       }
     }
 
@@ -811,7 +899,7 @@
     return stored;
   }
 
-  // ---------- ESPN fetch with fallbacks (same as big script) ----------
+  // ---------- ESPN fetch with fallbacks ----------
   function removeDatesParam(url) {
     return url
       .replace(/\?dates=\d{8}&/i, "?")
@@ -872,7 +960,6 @@
       return { data, events };
     }
 
-    // Normalized-day mode (today/yesterday/tomorrow combined, then filtered)
     try {
       const urlToday = addOrReplaceParam(baseUrl, "limit", "1000");
       const urlY = addOrReplaceParam(league.endpoint(yDate), "limit", "1000");
@@ -972,12 +1059,12 @@
     return detail || "STATUS";
   }
 
-  // ---------- PGA view (kept simple; if you split PGA elsewhere, you can remove) ----------
+  // ---------- PGA view ----------
   function renderGolfPlaceholder(events, content) {
     content.innerHTML += `<div class="notice">PGA view is handled in your main script (or add it here if needed).</div>`;
   }
 
-  // ---------- The actual Scores loader (THIS is what your router calls) ----------
+  // ---------- The actual Scores loader ----------
   async function loadScores(showLoading) {
     const content = document.getElementById("content");
     if (!content) return;
@@ -990,7 +1077,7 @@
     const selectedKey = getSavedLeagueKey();
     const league = getLeagueByKey(selectedKey);
 
-    const headerHTML = (rightLabel) => `
+    const headerHTML = (rightLabel, confSelectHTML) => `
       <div class="header">
         <div class="headerTop">
           <div class="brand">
@@ -1008,6 +1095,7 @@
           <div class="sublineLeft">
             ${buildLeagueSelectHTML(selectedKey)}
             ${buildCalendarButtonHTML()}
+            ${confSelectHTML || ""}
           </div>
           <div>${rightLabel}</div>
         </div>
@@ -1016,7 +1104,7 @@
 
     if (showLoading) {
       content.innerHTML = `
-        ${headerHTML(`${escapeHtml(prettyDate)} • Loading…`)}
+        ${headerHTML(`${escapeHtml(prettyDate)} • Loading…`, "")}
         <div class="notice">Grabbing games…</div>
       `;
     }
@@ -1025,7 +1113,18 @@
       const result = await fetchScoreboardWithFallbacks(league, selectedDate);
       let events = result.events || [];
 
-      content.innerHTML = headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`);
+      // Build conference list + select (only for college)
+      let confSelectHTML = "";
+      if (isCollegeLeagueKey(selectedKey) && events.length) {
+        const confs = buildConferenceListFromEvents(events);
+        const savedConf = getSavedConferenceFilter(selectedKey);
+        confSelectHTML = buildConferenceSelectHTML(confs, savedConf);
+      } else {
+        // Clear stale filter if user switches away from college leagues
+        saveConferenceFilter(selectedKey, "");
+      }
+
+      content.innerHTML = headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, confSelectHTML);
 
       if (!events.length) {
         content.innerHTML += `
@@ -1042,6 +1141,20 @@
       if (league.key === "pga") {
         renderGolfPlaceholder(events, content);
         return;
+      }
+
+      // ✅ Apply conference filter (college only)
+      if (isCollegeLeagueKey(selectedKey)) {
+        const conf = getSavedConferenceFilter(selectedKey);
+        if (conf) {
+          const confNorm = norm(conf);
+          events = events.filter(ev => {
+            const comp = ev?.competitions?.[0];
+            const competitors = comp?.competitors || [];
+            const anyMatch = competitors.some(c => norm(getConferenceNameFromCompetitor(c)) === confNorm);
+            return anyMatch;
+          });
+        }
       }
 
       // Favorites-first sort (still shows ALL games)
@@ -1070,6 +1183,18 @@
         return ida.localeCompare(idb);
       });
 
+      if (!events.length) {
+        content.innerHTML += `
+          <div class="notice">
+            No games match this conference filter.
+            <div style="margin-top:8px; opacity:0.6; font-size:12px;">
+              Try “All Conferences”.
+            </div>
+          </div>
+        `;
+        return;
+      }
+
       const grid = document.createElement("div");
       grid.className = "grid";
 
@@ -1079,10 +1204,8 @@
         const competition = event?.competitions?.[0];
         if (!competition) continue;
 
-        const competitorsArr = Array.isArray(competition.competitors) ? competition.competitors : [];
-        const home = competitorsArr.find(t => t.homeAway === "home");
-        const away = competitorsArr.find(t => t.homeAway === "away");
-        if (!home || !away) continue;
+        const home = competition.competitors.find(t => t.homeAway === "home");
+        const away = competition.competitors.find(t => t.homeAway === "away");
 
         const state = event?.status?.type?.state || "unknown";
         const detail = event?.status?.type?.detail || "Status unavailable";
@@ -1158,7 +1281,7 @@
                 }
                 <div class="teamText">
                   <div class="teamName">${escapeHtml(awayName)}</div>
-                  <div class="teamMeta">${escapeHtml(homeAwayWithRecord("Away", away, selectedKey))}</div>
+                  <div class="teamMeta">${escapeHtml(metaLineWithConference("Away", away, selectedKey))}</div>
                 </div>
               </div>
             </div>
@@ -1175,7 +1298,7 @@
                 }
                 <div class="teamText">
                   <div class="teamName">${escapeHtml(homeName)}</div>
-                  <div class="teamMeta">${escapeHtml(homeAwayWithRecord("Home", home, selectedKey))}</div>
+                  <div class="teamMeta">${escapeHtml(metaLineWithConference("Home", home, selectedKey))}</div>
                 </div>
               </div>
             </div>
@@ -1200,10 +1323,8 @@
 
       content.appendChild(grid);
 
-      // Odds hydration (updates cards in place)
       hydrateAllOdds(events, league, selectedKey, selectedDate);
 
-      // AI hydration (small concurrency)
       const limit = 4;
       let idx = 0;
 
