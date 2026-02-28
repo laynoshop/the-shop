@@ -214,186 +214,203 @@
   }
 
   // ---------- NEW: Conference filter (CFB + NCAAM only) ----------
-// ---------- NEW: Conference filter (CFB + NCAAM only) ----------
-function isCollegeLeagueKey(k) {
-  const key = String(k || "").toLowerCase();
-  return key === "ncaam" || key === "cfb";
-}
-
-const CONF_FILTER_KEY_PREFIX = "theShopConfFilter_v1_"; // per-league key
-const CONF_CACHE_PREFIX = "theShopConfCache_v1_";       // per-league+date cache
-const CONF_CACHE_TTL_MS = 12 * 60 * 60 * 1000;          // 12 hours
-
-function confStorageKeyForLeague(leagueKey) {
-  return `${CONF_FILTER_KEY_PREFIX}${String(leagueKey || "").trim()}`;
-}
-function getSavedConferenceFilter(leagueKey) {
-  try {
-    return String(localStorage.getItem(confStorageKeyForLeague(leagueKey)) || "").trim();
-  } catch {
-    return "";
+  function isCollegeLeagueKey(k) {
+    const key = String(k || "").toLowerCase();
+    return key === "ncaam" || key === "cfb";
   }
-}
-function saveConferenceFilter(leagueKey, confName) {
-  try {
-    localStorage.setItem(confStorageKeyForLeague(leagueKey), String(confName || "").trim());
-  } catch {}
-}
 
-// ----- Conference extraction (scoreboard OR summary) -----
-function getConferenceNameFromTeam(team) {
-  if (!team) return "";
-  const conf =
-    team?.conference?.shortName ||
-    team?.conference?.name ||
-    team?.conference?.abbreviation ||
-    "";
-  return String(conf || "").trim();
-}
+  const CONF_CACHE_PREFIX = "theShopConfCache_v1_";       // per-league+date cache
+  const CONF_CACHE_TTL_MS = 12 * 60 * 60 * 1000;          // 12 hours
 
-function getConferenceNameFromCompetitor(competitor) {
-  const team = competitor?.team || null;
-  return getConferenceNameFromTeam(team);
-}
-
-// ----- Cache helpers -----
-function confCacheKey(leagueKey, dateYYYYMMDD) {
-  return `${CONF_CACHE_PREFIX}${String(leagueKey || "")}_${String(dateYYYYMMDD || "")}`;
-}
-
-function loadConfCache(leagueKey, dateYYYYMMDD) {
-  try {
-    const raw = sessionStorage.getItem(confCacheKey(leagueKey, dateYYYYMMDD));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-
-    const ts = Number(parsed.ts || 0);
-    if (!Number.isFinite(ts) || (Date.now() - ts) > CONF_CACHE_TTL_MS) return null;
-
-    // expected: { ts, teamIdToConf: { [teamId]: "Big Ten" } }
-    return parsed;
-  } catch {
-    return null;
+  function confStorageKeyForLeague(leagueKey) {
+    return `${CONF_FILTER_KEY_PREFIX}${String(leagueKey || "").trim()}`;
   }
-}
-
-function saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf) {
-  try {
-    sessionStorage.setItem(
-      confCacheKey(leagueKey, dateYYYYMMDD),
-      JSON.stringify({ ts: Date.now(), teamIdToConf: teamIdToConf || {} })
-    );
-  } catch {}
-}
-
-// ----- Build conf list from teamId map -----
-function buildConferenceListFromMap(teamIdToConf) {
-  const set = new Set();
-  for (const conf of Object.values(teamIdToConf || {})) {
-    const c = String(conf || "").trim();
-    if (c) set.add(c);
-  }
-  return Array.from(set).sort((a, b) => String(a).localeCompare(String(b)));
-}
-
-// ----- Dropdown HTML (supports loading state) -----
-function buildConferenceSelectHTML(confs, selected, isLoading) {
-  const list = Array.isArray(confs) ? confs : [];
-  const sel = String(selected || "").trim();
-
-  const loadingOpt = isLoading
-    ? `<option value="" disabled>Loading conferences…</option>`
-    : "";
-
-  const opts = [
-    `<option value="">All Conferences</option>`,
-    loadingOpt,
-    ...list.map(c => {
-      const v = String(c || "").trim();
-      const s = (v && v === sel) ? "selected" : "";
-      return `<option value="${escapeHtml(v)}" ${s}>${escapeHtml(v)}</option>`;
-    })
-  ].join("");
-
-  return `
-    <select id="confSelect" class="leagueSelect" aria-label="Select conference">
-      ${opts}
-    </select>
-  `;
-}
-
-// ----- Summary hydration (source of truth for conferences) -----
-async function fetchConferenceMapFromSummary(league, eventId) {
-  if (!league?.summaryEndpoint || !eventId) return {};
-
-  const base = league.summaryEndpoint(eventId);
-  const urls = [
-    withLangRegion(base),
-    withLangRegion(base.replace("?event=", "?eventId=")),
-    withLangRegion(base.replace("summary?event=", "summary?eventId=")),
-    base
-  ];
-
-  for (const url of urls) {
+  function getSavedConferenceFilter(leagueKey) {
     try {
-      const data = await fetchJsonNoStore(url);
-      const comp = data?.header?.competitions?.[0];
-      const competitors = comp?.competitors || [];
-      const map = {};
-
-      for (const c of competitors) {
-        const team = c?.team;
-        const teamId = String(team?.id || "");
-        if (!teamId) continue;
-        const conf = getConferenceNameFromTeam(team);
-        if (conf) map[teamId] = conf;
-      }
-
-      // If we got anything, return it
-      if (Object.keys(map).length) return map;
+      return String(localStorage.getItem(confStorageKeyForLeague(leagueKey)) || "").trim();
+    } catch {
+      return "";
+    }
+  }
+  function saveConferenceFilter(leagueKey, confName) {
+    try {
+      localStorage.setItem(confStorageKeyForLeague(leagueKey), String(confName || "").trim());
     } catch {}
   }
 
-  return {};
-}
+  // ----- Conference extraction (scoreboard OR summary) -----
+  function getConferenceNameFromTeam(team) {
+    if (!team) return "";
+    const conf =
+      team?.conference?.shortName ||
+      team?.conference?.name ||
+      team?.conference?.abbreviation ||
+      "";
+    return String(conf || "").trim();
+  }
 
-// Updates the dropdown options in-place (no full rerender)
-function updateConferenceSelectOptions(confs, selectedKey) {
-  const selEl = document.getElementById("confSelect");
-  if (!selEl) return;
+  function getConferenceNameFromCompetitor(competitor) {
+    const team = competitor?.team || null;
+    return getConferenceNameFromTeam(team);
+  }
 
-  const saved = getSavedConferenceFilter(selectedKey);
-  const current = String(saved || "").trim();
+  // ----- Cache helpers -----
+  function confCacheKey(leagueKey, dateYYYYMMDD) {
+    return `${CONF_CACHE_PREFIX}${String(leagueKey || "")}_${String(dateYYYYMMDD || "")}`;
+  }
 
-  // rebuild options safely
-  const opts = [
-    { value: "", label: "All Conferences" },
-    ...confs.map(c => ({ value: c, label: c }))
-  ];
+  function loadConfCache(leagueKey, dateYYYYMMDD) {
+    try {
+      const raw = sessionStorage.getItem(confCacheKey(leagueKey, dateYYYYMMDD));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
 
-  selEl.innerHTML = opts.map(o => {
-    const s = (o.value && o.value === current) ? "selected" : "";
-    return `<option value="${escapeHtml(o.value)}" ${s}>${escapeHtml(o.label)}</option>`;
-  }).join("");
-}
+      const ts = Number(parsed.ts || 0);
+      if (!Number.isFinite(ts) || (Date.now() - ts) > CONF_CACHE_TTL_MS) return null;
 
-// Apply conf into the team meta line under a specific team row
-function applyConferenceMetaToDom(eventId, side /* "home"|"away" */, confText, recordText) {
-  const el = document.querySelector(`[data-teammeta="${CSS.escape(String(eventId))}_${CSS.escape(String(side))}"]`);
-  if (!el) return;
+      // expected: { ts, teamIdToConf: { [teamId]: "Big Ten" } }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
 
-  const base = side === "home" ? "Home" : "Away";
-  const parts = [];
-  const c = String(confText || "").trim();
-  const r = String(recordText || "").trim();
-  if (c) parts.push(c);
-  parts.push(base);
-  if (r) parts.push(r);
+  function saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf) {
+    try {
+      sessionStorage.setItem(
+        confCacheKey(leagueKey, dateYYYYMMDD),
+        JSON.stringify({ ts: Date.now(), teamIdToConf: teamIdToConf || {} })
+      );
+    } catch {}
+  }
 
-  const next = parts.join(" • ");
-  if (el.textContent !== next) el.textContent = next;
-}
+  function buildConferenceListFromMap(teamIdToConf) {
+    const set = new Set();
+    for (const conf of Object.values(teamIdToConf || {})) {
+      const c = String(conf || "").trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort((a, b) => String(a).localeCompare(String(b)));
+  }
+
+  // Best-effort from scoreboard response (often empty for NCAA)
+  function buildConferenceListFromEvents(events) {
+    const set = new Set();
+    for (const ev of (events || [])) {
+      const comp = ev?.competitions?.[0];
+      const competitors = comp?.competitors || [];
+      for (const c of competitors) {
+        const conf = getConferenceNameFromCompetitor(c);
+        if (conf) set.add(conf);
+      }
+    }
+    return Array.from(set).sort((a, b) => String(a).localeCompare(String(b)));
+  }
+
+  function buildConferenceSelectHTML(confs, selected, isLoading) {
+    const list = Array.isArray(confs) ? confs : [];
+    const sel = String(selected || "").trim();
+
+    const opts = [
+      `<option value="">All Conferences</option>`,
+      ...(isLoading ? [`<option value="" disabled>Loading conferences…</option>`] : []),
+      ...list.map(c => {
+        const v = String(c || "").trim();
+        const s = (v && v === sel) ? "selected" : "";
+        return `<option value="${escapeHtml(v)}" ${s}>${escapeHtml(v)}</option>`;
+      })
+    ].join("");
+
+    return `
+      <select id="confSelect" class="leagueSelect" aria-label="Select conference">
+        ${opts}
+      </select>
+    `;
+  }
+
+  async function fetchConferenceMapFromSummary(league, eventId) {
+    if (!league?.summaryEndpoint || !eventId) return {};
+
+    const base = league.summaryEndpoint(eventId);
+    const urls = [
+      withLangRegion(base),
+      withLangRegion(base.replace("?event=", "?eventId=")),
+      withLangRegion(base.replace("summary?event=", "summary?eventId=")),
+      base
+    ];
+
+    for (const url of urls) {
+      try {
+        const data = await fetchJsonNoStore(url);
+        const comp = data?.header?.competitions?.[0];
+        const competitors = comp?.competitors || [];
+        const map = {};
+
+        for (const c of competitors) {
+          const team = c?.team;
+          const teamId = String(team?.id || "");
+          if (!teamId) continue;
+          const conf = getConferenceNameFromTeam(team);
+          if (conf) map[teamId] = conf;
+        }
+
+        if (Object.keys(map).length) return map;
+      } catch {}
+    }
+
+    return {};
+  }
+
+  function updateConferenceSelectOptions(confs, selectedKey) {
+    const selEl = document.getElementById("confSelect");
+    if (!selEl) return;
+
+    const saved = getSavedConferenceFilter(selectedKey);
+    const current = String(saved || "").trim();
+
+    const opts = [
+      { value: "", label: "All Conferences" },
+      ...confs.map(c => ({ value: c, label: c }))
+    ];
+
+    selEl.innerHTML = opts.map(o => {
+      const s = (o.value && o.value === current) ? "selected" : "";
+      return `<option value="${escapeHtml(o.value)}" ${s}>${escapeHtml(o.label)}</option>`;
+    }).join("");
+  }
+
+  function applyConferenceMetaToDom(eventId, side /* "home"|"away" */, confText, recordText) {
+    const el = document.querySelector(
+      `[data-teammeta="${CSS.escape(String(eventId))}_${CSS.escape(String(side))}"]`
+    );
+    if (!el) return;
+
+    const base = side === "home" ? "Home" : "Away";
+    const parts = [];
+    const c = String(confText || "").trim();
+    const r = String(recordText || "").trim();
+    if (c) parts.push(c);
+    parts.push(base);
+    if (r) parts.push(r);
+
+    const next = parts.join(" • ");
+    if (el.textContent !== next) el.textContent = next;
+  }
+
+  function filterEventsByConferenceUsingMap(events, confNorm, teamIdToConf) {
+    if (!confNorm) return events;
+    const map = teamIdToConf || {};
+    return (events || []).filter(ev => {
+      const comp = ev?.competitions?.[0];
+      const competitors = comp?.competitors || [];
+      return competitors.some(c => {
+        const teamId = String(c?.team?.id || "");
+        const conf = teamId ? (map[teamId] || "") : "";
+        return conf && norm(conf) === confNorm;
+      });
+    });
+  }
 
   // Exported for inline onchange/oninput
   window.handleNativeDateChangeFromEl = function (el) {
@@ -458,10 +475,12 @@ function applyConferenceMetaToDom(eventId, side /* "home"|"away" */, confText, r
     return String(overall?.summary || "").trim();
   }
 
-  // ✅ UPDATED: include conference for college
   function metaLineWithConference(homeAwayLabel, competitor, leagueKey) {
     const base = String(homeAwayLabel || "").trim() || "";
-    if (!isCollegeLeagueKey(leagueKey)) return base;
+    if (!isCollegeLeagueKey(leagueKey)) {
+      const rec = getOverallRecordFromCompetitor(competitor);
+      return rec ? `${base} • ${rec}` : base;
+    }
 
     const conf = getConferenceNameFromCompetitor(competitor);
     const rec = getOverallRecordFromCompetitor(competitor);
@@ -656,7 +675,7 @@ function applyConferenceMetaToDom(eventId, side /* "home"|"away" */, confText, r
     if (details) return { favored: details, ou };
 
     const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
-    if (!Number.isFinite(spreadNum)) return { favored: "", ou };
+    if (!Number.isFinite(spreadNum)) return { favored: "", ou: "" };
 
     const homeFav = !!pc.homeTeamOdds?.favorite;
     const awayFav = !!pc.awayTeamOdds?.favorite;
@@ -966,7 +985,6 @@ function applyConferenceMetaToDom(eventId, side /* "home"|"away" */, confText, r
       if (!isNaN(total)) {
         confidence += total > 145 ? 0.5 : 0.2;
         lean = total > 145 ? `Under ${total}` : `Under ${total}`;
-        // (kept your behavior; tweak anytime)
       }
     }
 
@@ -1167,412 +1185,352 @@ function applyConferenceMetaToDom(eventId, side /* "home"|"away" */, confText, r
 
   // ---------- The actual Scores loader ----------
   async function loadScores(showLoading) {
-  const content = document.getElementById("content");
-  if (!content) return;
+    const content = document.getElementById("content");
+    if (!content) return;
 
-  const selectedDate = getSavedDateYYYYMMDD();
-  const prettyDate = yyyymmddToPretty(selectedDate);
+    const selectedDate = getSavedDateYYYYMMDD();
+    const prettyDate = yyyymmddToPretty(selectedDate);
+    const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-  const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const selectedKey = getSavedLeagueKey();
+    const league = getLeagueByKey(selectedKey);
 
-  const selectedKey = getSavedLeagueKey();
-  const league = getLeagueByKey(selectedKey);
-
-  // ✅ Header: Row 1 = league + calendar, Row 2 = conference filter (only for college)
-  const headerHTML = (rightLabel, confSelectHTML) => `
-    <div class="header">
-      <div class="headerTop">
-        <div class="brand">
-          <h2 style="margin:0;">Scores</h2>
-          <span class="badge">The Shop</span>
-        </div>
-
-        <div class="headerActions">
-          <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
-          <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
-        </div>
-      </div>
-
-      <div class="subline">
-        <div class="sublineLeft">
-          ${buildLeagueSelectHTML(selectedKey)}
-          ${buildCalendarButtonHTML()}
-        </div>
-        <div>${rightLabel}</div>
-      </div>
-
-      ${confSelectHTML ? `
-        <div class="subline" style="margin-top:8px;">
-          <div class="sublineLeft">
-            ${confSelectHTML}
-          </div>
-          <div></div>
-        </div>
-      ` : ``}
-    </div>
-  `;
-
-  if (showLoading) {
-    content.innerHTML = `
-      ${headerHTML(`${escapeHtml(prettyDate)} • Loading…`, "")}
-      <div class="notice">Grabbing games…</div>
-    `;
-  }
-
-  try {
-    const result = await fetchScoreboardWithFallbacks(league, selectedDate);
-    let events = result.events || [];
-
-    // ✅ Build conference list + select (only for college)
-    // NOTE: buildConferenceListFromEvents() must look at BOTH teams (home+away) and pull group names.
-    let confSelectHTML = "";
-    const isCollege = isCollegeLeagueKey(selectedKey);
-
-    if (isCollege) {
-      // If no events yet, still show the dropdown as "All Conferences" only (safe).
-      const confs = events.length ? buildConferenceListFromEvents(events) : [];
-      const savedConf = getSavedConferenceFilter(selectedKey);
-      confSelectHTML = buildConferenceSelectHTML(confs, savedConf);
-    } else {
-      // Clear stale filter when switching away from college leagues
-      saveConferenceFilter(selectedKey, "");
-    }
-
-    content.innerHTML = headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, confSelectHTML);
-
-    if (!events.length) {
-      content.innerHTML += `
-        <div class="notice">
-          No games found for this league/date (likely offseason).
-          <div style="margin-top:8px; opacity:0.6; font-size:12px;">
-            (Tried ESPN fallbacks: ${escapeHtml(result.used)})
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    if (league.key === "pga") {
-      renderGolfPlaceholder(events, content);
-      return;
-    }
-
-    // ✅ Apply conference filter (college only)
-    if (isCollege) {
-      const conf = getSavedConferenceFilter(selectedKey);
-      if (conf) {
-        const confNorm = norm(conf);
-        events = events.filter(ev => {
-          const comp = ev?.competitions?.[0];
-          const competitors = comp?.competitors || [];
-          // Match if EITHER team is in that conference
-          return competitors.some(c => norm(getConferenceNameFromCompetitor(c)) === confNorm);
-        });
-      }
-    }
-
-    // Favorites-first sort (still shows ALL games)
-    events = [...events].sort((a, b) => {
-      const ca = a?.competitions?.[0];
-      const cb = b?.competitions?.[0];
-
-      const ra = favoriteRankForEvent(ca);
-      const rb = favoriteRankForEvent(cb);
-
-      const aFav = Number.isFinite(ra) ? ra : Infinity;
-      const bFav = Number.isFinite(rb) ? rb : Infinity;
-      if (aFav !== bFav) return aFav - bFav;
-
-      const sa = a?.status?.type?.state || "unknown";
-      const sb = b?.status?.type?.state || "unknown";
-      const sr = stateRank(sa) - stateRank(sb);
-      if (sr !== 0) return sr;
-
-      const ta = getStartTimeMs(a, ca);
-      const tb = getStartTimeMs(b, cb);
-      if (ta !== tb) return ta - tb;
-
-      const ida = String(a?.id || a?.uid || a?.name || "");
-      const idb = String(b?.id || b?.uid || b?.name || "");
-      return ida.localeCompare(idb);
-    });
-
-    if (!events.length) {
-      content.innerHTML += `
-        <div class="notice">
-          No games match this conference filter.
-          <div style="margin-top:8px; opacity:0.6; font-size:12px;">
-            Try “All Conferences”.
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    const grid = document.createElement("div");
-    grid.className = "grid";
-
-    const aiJobs = [];
-
-    for (const event of events) {
-      const competition = event?.competitions?.[0];
-      if (!competition) continue;
-
-      const home = competition.competitors.find(t => t.homeAway === "home");
-      const away = competition.competitors.find(t => t.homeAway === "away");
-
-      const state = event?.status?.type?.state || "unknown";
-      const detail = event?.status?.type?.detail || "Status unavailable";
-      const pillClass = statusClassFromState(state);
-      const pillText = statusLabelFromState(state, detail);
-
-      const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
-      const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
-
-      const homeTeam = home?.team || null;
-      const awayTeam = away?.team || null;
-
-      const homeBaseName = getTeamDisplayNameUI(homeTeam);
-      const awayBaseName = getTeamDisplayNameUI(awayTeam);
-
-      const homeName = teamDisplayNameWithRank(homeBaseName, home, selectedKey);
-      const awayName = teamDisplayNameWithRank(awayBaseName, away, selectedKey);
-
-      const homeLogo = getTeamLogoUrl(homeTeam);
-      const awayLogo = getTeamLogoUrl(awayTeam);
-
-      const homeAbbrev = escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
-      const awayAbbrev = escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
-
-      const venueLine = buildVenueLine(competition);
-
-      const initialOdds = parseOddsFromScoreboardCompetition(competition);
-      const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
-
-      const eventId = String(event?.id || "");
-
-      const card = document.createElement("div");
-      card.className = "game";
-
-      if (state === "in") card.classList.add("statusLive");
-      else if (state === "pre") card.classList.add("statusPre");
-      else if (state === "post") card.classList.add("statusFinal");
-      if (!initialOdds?.favored && !initialOdds?.ou) card.classList.add("edgeNone");
-
-      if (eventId) card.setAttribute("data-eventid", eventId);
-
-      const shouldShowAI = (state === "pre") && !!initialOddsText && !!eventId;
-
-      card.innerHTML = `
-        <div class="gameHeader">
-          <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
-        </div>
-
-        <div class="gameMetaTopPlain" aria-label="Venue">
-          ${escapeHtml(venueLine)}
-        </div>
-
-        ${initialOddsText ? `
-          <div class="gameMetaOddsPlain" aria-label="Betting line">
-            ${escapeHtml(initialOddsText)}
-          </div>
-        ` : ""}
-
-        ${shouldShowAI ? `
-          <div class="gameMetaAIPlain" aria-label="AI insight">
-            <div class="aiRow" data-ai-line1="${escapeHtml(eventId)}">AI EDGE: — • Lean: —</div>
-            <div class="aiConfidenceRow" data-ai-line2="${escapeHtml(eventId)}">Confidence: —/10</div>
-          </div>
-        ` : ""}
-
-        <div class="teamRow">
-          <div class="teamLeft">
-            <div class="teamLine">
-              ${
-                awayLogo
-                  ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
-                  : `<div class="teamLogoFallback">${awayAbbrev || "—"}</div>`
-              }
-              <div class="teamText">
-                <div class="teamName">${escapeHtml(awayName)}</div>
-                <!-- ✅ Conference • Away/Home • Record (college only) -->
-                <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">
-  ${escapeHtml(`Away${getOverallRecordFromCompetitor(away) ? " • " + getOverallRecordFromCompetitor(away) : ""}`)}
-</div>
-              </div>
-            </div>
-          </div>
-          <div class="score">${awayScore}</div>
-        </div>
-
-        <div class="teamRow">
-          <div class="teamLeft">
-            <div class="teamLine">
-              ${
-                homeLogo
-                  ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
-                  : `<div class="teamLogoFallback">${homeAbbrev || "—"}</div>`
-              }
-              <div class="teamText">
-                <div class="teamName">${escapeHtml(homeName)}</div>
-                <!-- ✅ Conference • Away/Home • Record (college only) -->
-                <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">
-  ${escapeHtml(`Home${getOverallRecordFromCompetitor(home) ? " • " + getOverallRecordFromCompetitor(home) : ""}`)}
-</div>
-              </div>
-            </div>
-          </div>
-          <div class="score">${homeScore}</div>
-        </div>
-      `;
-
-      grid.appendChild(card);
-
-      if (shouldShowAI) {
-        aiJobs.push({
-          eventId,
-          leagueKey: selectedKey,
-          dateYYYYMMDD: selectedDate,
-          home: homeBaseName,
-          away: awayBaseName,
-          spread: initialOdds.favored || "",
-          total: initialOdds.ou || ""
-        });
-      }
-    }
-
-    content.appendChild(grid);
-    
-    // ----- Conference hydration (college only) -----
-if (isCollegeLeagueKey(selectedKey)) {
-  // If cache is empty, hydrate a subset first then fill in as results come back
-  const teamIdToConf = { ...(confTeamIdToConf || {}) };
-
-  const jobs = (events || [])
-    .map(ev => String(ev?.id || ""))
-    .filter(Boolean);
-
-  // Light concurrency
-  const LIMIT = 5;
-  let j = 0;
-
-  async function worker() {
-    while (j < jobs.length) {
-      const eventId = jobs[j++];
-
-      // Fetch summary, extract team->conf mappings
-      const map = await fetchConferenceMapFromSummary(league, eventId);
-
-      // Merge into main map
-      for (const [teamId, conf] of Object.entries(map || {})) {
-        if (teamId && conf && !teamIdToConf[teamId]) teamIdToConf[teamId] = conf;
-      }
-
-      // Apply to DOM for this event (home/away)
-      const ev = (events || []).find(e => String(e?.id || "") === eventId);
-      const comp = ev?.competitions?.[0];
-      const competitors = comp?.competitors || [];
-      const home = competitors.find(t => t.homeAway === "home");
-      const away = competitors.find(t => t.homeAway === "away");
-
-      const homeId = String(home?.team?.id || "");
-      const awayId = String(away?.team?.id || "");
-
-      const homeConf = homeId ? (teamIdToConf[homeId] || "") : "";
-      const awayConf = awayId ? (teamIdToConf[awayId] || "") : "";
-
-      const homeRec = getOverallRecordFromCompetitor(home);
-      const awayRec = getOverallRecordFromCompetitor(away);
-
-      applyConferenceMetaToDom(eventId, "home", homeConf, homeRec);
-      applyConferenceMetaToDom(eventId, "away", awayConf, awayRec);
-
-      // Update dropdown options as the map grows
-      const confs = buildConferenceListFromMap(teamIdToConf);
-      if (confs.length) updateConferenceSelectOptions(confs, selectedKey);
-    }
-  }
-
-  await Promise.all(new Array(Math.min(LIMIT, jobs.length)).fill(0).map(worker));
-
-  // Save cache at end
-  saveConfCache(selectedKey, selectedDate, teamIdToConf);
-
-  // Apply conference filter AFTER we have conferences
-  const selectedConf = getSavedConferenceFilter(selectedKey);
-  if (selectedConf) {
-    // simplest: rerender now that we have confs
-    // (keeps behavior consistent and avoids partial filtered UI)
-    if (typeof window.showTab === "function") window.showTab(window.__activeTab || "scores");
-    else window.loadScores(true);
-    return;
-  }
-}
-
-    hydrateAllOdds(events, league, selectedKey, selectedDate);
-
-    const limit = 4;
-    let idx = 0;
-
-    async function runNext() {
-      while (idx < aiJobs.length) {
-        const job = aiJobs[idx++];
-
-        const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(String(job.eventId))}"]`);
-        const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(String(job.eventId))}"]`);
-
-        if (line1) line1.textContent = job.spread ? "AI EDGE: Analyzing…" : "AI EDGE: Waiting for line…";
-        if (line2) line2.textContent = "Confidence: —/10";
-
-        const data = await fetchAIInsight({
-          eventId: job.eventId,
-          league: job.leagueKey,
-          date: job.dateYYYYMMDD,
-          home: job.home,
-          away: job.away,
-          spread: job.spread || "",
-          total: job.total || ""
-        });
-
-        if (!data) continue;
-
-        const edge = (data.edge || "—");
-        const lean = (data.lean || "");
-        const conf = (data.confidence ?? "—");
-
-        const leanPart = lean ? ` • Lean: ${lean}` : "";
-        if (line1) line1.textContent = `AI EDGE: ${edge}${leanPart}`;
-        if (line2) line2.textContent = `Confidence: ${conf}/10`;
-      }
-    }
-
-    await Promise.all(new Array(Math.min(limit, aiJobs.length)).fill(0).map(runNext));
-
-  } catch (error) {
-    content.innerHTML = `
+    const headerHTML = (rightLabel, confSelectHTML) => `
       <div class="header">
         <div class="headerTop">
           <div class="brand">
             <h2 style="margin:0;">Scores</h2>
             <span class="badge">The Shop</span>
           </div>
+
           <div class="headerActions">
-            <button class="smallBtn" onclick="loadScores(true)">Retry</button>
+            <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
             <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
           </div>
         </div>
+
         <div class="subline">
           <div class="sublineLeft">
-            ${buildLeagueSelectHTML(getSavedLeagueKey())}
+            ${buildLeagueSelectHTML(selectedKey)}
             ${buildCalendarButtonHTML()}
           </div>
-          <div>Error</div>
+          <div>${rightLabel}</div>
         </div>
+
+        ${confSelectHTML ? `
+          <div class="subline" style="margin-top:8px;">
+            <div class="sublineLeft">
+              ${confSelectHTML}
+            </div>
+            <div></div>
+          </div>
+        ` : ``}
       </div>
-      <div class="notice">Couldn’t load scores right now.</div>
     `;
-  }
-}
+
+    if (showLoading) {
+      content.innerHTML = `
+        ${headerHTML(`${escapeHtml(prettyDate)} • Loading…`, "")}
+        <div class="notice">Grabbing games…</div>
+      `;
+    }
+
+    try {
+      const result = await fetchScoreboardWithFallbacks(league, selectedDate);
+      let events = result.events || [];
+
+      const isCollege = isCollegeLeagueKey(selectedKey);
+
+      // Build conference dropdown (college only)
+      let confSelectHTML = "";
+      if (isCollege) {
+        const cached = loadConfCache(selectedKey, selectedDate);
+        const cachedMap = cached?.teamIdToConf || {};
+        const confsFromCache = buildConferenceListFromMap(cachedMap);
+
+        const confsFromScoreboard = events.length ? buildConferenceListFromEvents(events) : [];
+        const confs = confsFromCache.length ? confsFromCache : confsFromScoreboard;
+
+        const savedConf = getSavedConferenceFilter(selectedKey);
+        const loading = !confs.length; // show "Loading conferences…" until summaries fill in
+        confSelectHTML = buildConferenceSelectHTML(confs, savedConf, loading);
+      } else {
+        saveConferenceFilter(selectedKey, "");
+      }
+
+      content.innerHTML = headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, confSelectHTML);
+
+      if (!events.length) {
+        content.innerHTML += `
+          <div class="notice">
+            No games found for this league/date (likely offseason).
+            <div style="margin-top:8px; opacity:0.6; font-size:12px;">
+              (Tried ESPN fallbacks: ${escapeHtml(result.used)})
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      if (league.key === "pga") {
+        renderGolfPlaceholder(events, content);
+        return;
+      }
+
+      // Apply conference filter:
+      // - If we have cached confs, filter immediately using the cached map (accurate)
+      // - If not, defer filtering until hydration fills confs (we’ll re-render once)
+      const savedConf = isCollege ? getSavedConferenceFilter(selectedKey) : "";
+      const savedConfNorm = savedConf ? norm(savedConf) : "";
+      const cached = isCollege ? loadConfCache(selectedKey, selectedDate) : null;
+      const cachedMap = cached?.teamIdToConf || null;
+
+      let deferredConfFilter = false;
+      if (isCollege && savedConfNorm) {
+        if (cachedMap && Object.keys(cachedMap).length) {
+          events = filterEventsByConferenceUsingMap(events, savedConfNorm, cachedMap);
+        } else {
+          deferredConfFilter = true;
+        }
+      }
+
+      // Favorites-first sort (still shows ALL games)
+      events = [...events].sort((a, b) => {
+        const ca = a?.competitions?.[0];
+        const cb = b?.competitions?.[0];
+
+        const ra = favoriteRankForEvent(ca);
+        const rb = favoriteRankForEvent(cb);
+
+        const aFav = Number.isFinite(ra) ? ra : Infinity;
+        const bFav = Number.isFinite(rb) ? rb : Infinity;
+        if (aFav !== bFav) return aFav - bFav;
+
+        const sa = a?.status?.type?.state || "unknown";
+        const sb = b?.status?.type?.state || "unknown";
+        const sr = stateRank(sa) - stateRank(sb);
+        if (sr !== 0) return sr;
+
+        const ta = getStartTimeMs(a, ca);
+        const tb = getStartTimeMs(b, cb);
+        if (ta !== tb) return ta - tb;
+
+        const ida = String(a?.id || a?.uid || a?.name || "");
+        const idb = String(b?.id || b?.uid || b?.name || "");
+        return ida.localeCompare(idb);
+      });
+
+      if (!events.length && !deferredConfFilter) {
+        content.innerHTML += `
+          <div class="notice">
+            No games match this conference filter.
+            <div style="margin-top:8px; opacity:0.6; font-size:12px;">
+              Try “All Conferences”.
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "grid";
+
+      const aiJobs = [];
+
+      for (const event of events) {
+        const competition = event?.competitions?.[0];
+        if (!competition) continue;
+
+        const home = competition.competitors.find(t => t.homeAway === "home");
+        const away = competition.competitors.find(t => t.homeAway === "away");
+
+        const state = event?.status?.type?.state || "unknown";
+        const detail = event?.status?.type?.detail || "Status unavailable";
+        const pillClass = statusClassFromState(state);
+        const pillText = statusLabelFromState(state, detail);
+
+        const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
+        const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
+
+        const homeTeam = home?.team || null;
+        const awayTeam = away?.team || null;
+
+        const homeBaseName = getTeamDisplayNameUI(homeTeam);
+        const awayBaseName = getTeamDisplayNameUI(awayTeam);
+
+        const homeName = teamDisplayNameWithRank(homeBaseName, home, selectedKey);
+        const awayName = teamDisplayNameWithRank(awayBaseName, away, selectedKey);
+
+        const homeLogo = getTeamLogoUrl(homeTeam);
+        const awayLogo = getTeamLogoUrl(awayTeam);
+
+        const homeAbbrev = escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
+        const awayAbbrev = escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
+
+        const venueLine = buildVenueLine(competition);
+
+        const initialOdds = parseOddsFromScoreboardCompetition(competition);
+        const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
+
+        const eventId = String(event?.id || "");
+
+        const card = document.createElement("div");
+        card.className = "game";
+
+        if (state === "in") card.classList.add("statusLive");
+        else if (state === "pre") card.classList.add("statusPre");
+        else if (state === "post") card.classList.add("statusFinal");
+        if (!initialOdds?.favored && !initialOdds?.ou) card.classList.add("edgeNone");
+
+        if (eventId) card.setAttribute("data-eventid", eventId);
+
+        const shouldShowAI = (state === "pre") && !!initialOddsText && !!eventId;
+
+        card.innerHTML = `
+          <div class="gameHeader">
+            <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
+          </div>
+
+          <div class="gameMetaTopPlain" aria-label="Venue">
+            ${escapeHtml(venueLine)}
+          </div>
+
+          ${initialOddsText ? `
+            <div class="gameMetaOddsPlain" aria-label="Betting line">
+              ${escapeHtml(initialOddsText)}
+            </div>
+          ` : ""}
+
+          ${shouldShowAI ? `
+            <div class="gameMetaAIPlain" aria-label="AI insight">
+              <div class="aiRow" data-ai-line1="${escapeHtml(eventId)}">AI EDGE: — • Lean: —</div>
+              <div class="aiConfidenceRow" data-ai-line2="${escapeHtml(eventId)}">Confidence: —/10</div>
+            </div>
+          ` : ""}
+
+          <div class="teamRow">
+            <div class="teamLeft">
+              <div class="teamLine">
+                ${
+                  awayLogo
+                    ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
+                    : `<div class="teamLogoFallback">${awayAbbrev || "—"}</div>`
+                }
+                <div class="teamText">
+                  <div class="teamName">${escapeHtml(awayName)}</div>
+                  <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${escapeHtml(metaLineWithConference("Away", away, selectedKey))}</div>
+                </div>
+              </div>
+            </div>
+            <div class="score">${awayScore}</div>
+          </div>
+
+          <div class="teamRow">
+            <div class="teamLeft">
+              <div class="teamLine">
+                ${
+                  homeLogo
+                    ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
+                    : `<div class="teamLogoFallback">${homeAbbrev || "—"}</div>`
+                }
+                <div class="teamText">
+                  <div class="teamName">${escapeHtml(homeName)}</div>
+                  <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${escapeHtml(metaLineWithConference("Home", home, selectedKey))}</div>
+                </div>
+              </div>
+            </div>
+            <div class="score">${homeScore}</div>
+          </div>
+        `;
+
+        grid.appendChild(card);
+
+        if (shouldShowAI) {
+          aiJobs.push({
+            eventId,
+            leagueKey: selectedKey,
+            dateYYYYMMDD: selectedDate,
+            home: homeBaseName,
+            away: awayBaseName,
+            spread: initialOdds.favored || "",
+            total: initialOdds.ou || ""
+          });
+        }
+      }
+
+      content.appendChild(grid);
+
+      // ----- Conference hydration (college only) -----
+      if (isCollege) {
+        const cached2 = loadConfCache(selectedKey, selectedDate);
+        const teamIdToConf = { ...(cached2?.teamIdToConf || {}) };
+
+        const jobs = (result.events || [])
+          .map(ev => String(ev?.id || ""))
+          .filter(Boolean);
+
+        const LIMIT = 5;
+        let j = 0;
+
+        async function worker() {
+          while (j < jobs.length) {
+            const eventId = jobs[j++];
+
+            const map = await fetchConferenceMapFromSummary(league, eventId);
+
+            let changed = false;
+            for (const [teamId, conf] of Object.entries(map || {})) {
+              if (teamId && conf && teamIdToConf[teamId] !== conf) {
+                teamIdToConf[teamId] = conf;
+                changed = true;
+              }
+            }
+
+            // Apply to DOM for this event (home/away)
+            const ev = (result.events || []).find(e => String(e?.id || "") === eventId);
+            const comp = ev?.competitions?.[0];
+            const competitors = comp?.competitors || [];
+            const home = competitors.find(t => t.homeAway === "home");
+            const away = competitors.find(t => t.homeAway === "away");
+
+            const homeId = String(home?.team?.id || "");
+            const awayId = String(away?.team?.id || "");
+
+            const homeConf = homeId ? (teamIdToConf[homeId] || "") : "";
+            const awayConf = awayId ? (teamIdToConf[awayId] || "") : "";
+
+            const homeRec = getOverallRecordFromCompetitor(home);
+            const awayRec = getOverallRecordFromCompetitor(away);
+
+            applyConferenceMetaToDom(eventId, "home", homeConf, homeRec);
+            applyConferenceMetaToDom(eventId, "away", awayConf, awayRec);
+
+            if (changed) {
+              const confs = buildConferenceListFromMap(teamIdToConf);
+              if (confs.length) updateConferenceSelectOptions(confs, selectedKey);
+            }
+          }
+        }
+
+        await Promise.all(new Array(Math.min(LIMIT, jobs.length)).fill(0).map(worker));
+        saveConfCache(selectedKey, selectedDate, teamIdToConf);
+
+        // If a conference is selected and we had no cache earlier, re-render ONCE to apply filter accurately.
+        if (deferredConfFilter && savedConfNorm) {
+          const guardKey = `__confRerender_${selectedKey}_${selectedDate}_${savedConfNorm}`;
+          if (!window[guardKey]) {
+            window[guardKey] = true;
+            if (typeof window.showTab === "function") window.showTab(window.__activeTab || "scores");
+            else window.loadScores(true);
+            return;
+          }
+        }
+      }
+
+      hydrateAllOdds(events, league, selectedKey, selectedDate);
+
+      const limit = 4;
+      let idx = 0;
 
       async function runNext() {
         while (idx < aiJobs.length) {
