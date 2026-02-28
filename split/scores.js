@@ -26,6 +26,7 @@
   ];
 
   // ---------- Leagues (dropdown) ----------
+  // NOTE: Added MLS (Soccer) — usa.1 is ESPN's MLS league key
   const LEAGUES = [
     {
       key: "ncaam",
@@ -59,6 +60,17 @@
       summaryEndpoint: (eventId) =>
         `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${eventId}`
     },
+
+    // ✅ NEW: MLS
+    {
+      key: "mls",
+      name: "MLS (Soccer)",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=${eventId}`
+    },
+
     {
       key: "nfl",
       name: "NFL",
@@ -84,6 +96,10 @@
         `https://site.api.espn.com/apis/site/v2/sports/golf/pga/summary?event=${eventId}`
     }
   ];
+
+  // Expose for other split modules (ex: Picks builder uses window.LEAGUES if present)
+  // This helps keep league lists consistent across tabs.
+  window.LEAGUES = LEAGUES;
 
   // ---------- iOS/PWA safety ----------
   (function ensureCssEscape(){
@@ -1062,8 +1078,10 @@
         const competition = event?.competitions?.[0];
         if (!competition) continue;
 
-        const home = competition.competitors.find(t => t.homeAway === "home");
-        const away = competition.competitors.find(t => t.homeAway === "away");
+        const competitorsArr = Array.isArray(competition.competitors) ? competition.competitors : [];
+        const home = competitorsArr.find(t => t.homeAway === "home");
+        const away = competitorsArr.find(t => t.homeAway === "away");
+        if (!home || !away) continue;
 
         const state = event?.status?.type?.state || "unknown";
         const detail = event?.status?.type?.detail || "Status unavailable";
