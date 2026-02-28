@@ -334,25 +334,23 @@
   }
 
   function getPicksDisplayName() {
-    const existingChat = (safeGetLS("shopChatName") || "").trim();
-    if (existingChat) return existingChat.slice(0, 20);
+  // Reuse the Shop chat name if it exists (your actual key)
+  const existingChat = (safeGetLS("theShopChatName_v1") || "").trim();
+  if (existingChat) return existingChat.slice(0, 20);
 
-    let name = (safeGetLS(PICKS_NAME_KEY) || "").trim();
-    if (!name) {
-      const picked = prompt("Name for Picks (example: Victor):", "") || "";
-      name = String(picked).trim() || "Anon";
-      safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
-    }
-    return name.slice(0, 20);
+  let name = (safeGetLS(PICKS_NAME_KEY) || "").trim();
+  if (!name) {
+    const picked = prompt("Name for Picks (example: Victor):", "") || "";
+    name = String(picked).trim() || "Anon";
+    safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
   }
+  return name.slice(0, 20);
+}
   
   function ensurePicksNameOnOpen() {
-  // If already saved, don’t prompt
   const existing = (safeGetLS(PICKS_NAME_KEY) || "").trim();
   if (existing) return existing.slice(0, 20);
-
-  // This will prompt and persist
-  return getPicksDisplayName();
+  return getPicksDisplayName(); // will prompt + persist
 }
 
   function setPicksNameUI() {
@@ -1849,6 +1847,8 @@ ensurePicksNameOnOpen();
         try {
           const gamesWrap = document.getElementById("gpGamesWrap");
           if (!gamesWrap) return;
+          // If user has unsaved pending picks, don't refresh the cards (avoid UI flicker/desync)
+if (window.__GP_PENDING && Object.keys(window.__GP_PENDING.map || {}).length) return;
 
           const role = (typeof window.getRole === "function")
             ? window.getRole()
