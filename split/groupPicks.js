@@ -344,6 +344,15 @@
     }
     return name.slice(0, 20);
   }
+  
+  function ensurePicksNameOnOpen() {
+  // If already saved, don’t prompt
+  const existing = (safeGetLS(PICKS_NAME_KEY) || "").trim();
+  if (existing) return existing.slice(0, 20);
+
+  // This will prompt and persist
+  return getPicksDisplayName();
+}
 
   function setPicksNameUI() {
     const btn = document.querySelector('[data-gpaction="name"]');
@@ -1438,6 +1447,8 @@
 
       const db = firebase.firestore();
       const uid = firebase.auth().currentUser?.uid || "";
+      // ✅ First-time Picks visit: force name prompt if missing
+ensurePicksNameOnOpen();
 
       const metaPub = await gpGetMetaPublic(db);
       const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
