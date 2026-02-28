@@ -1549,64 +1549,65 @@ ensurePicksNameOnOpen();
   }
 
   function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
-    const isAdmin = role === "admin";
+  const isAdmin = role === "admin";
 
-    return `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Picks</h2>
-            <span class="badge">Group</span>
-          </div>
-
-          <div class="headerActions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-            <button class="smallBtn" data-gpaction="name">Name</button>
-            <button class="smallBtn" data-gpaction="savePicks">Save</button>
-            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
-          </div>
+  return `
+    <div class="header">
+      <div class="headerTop">
+        <div class="brand">
+          <h2 style="margin:0;">Picks</h2>
+          <span class="badge">Group</span>
         </div>
 
-        <div class="subline" style="display:block;">
-          <div
-            class="sublineLeft"
-            style="
-              display:flex;
-              gap:10px;
-              align-items:center;
-              flex-wrap:nowrap;
-              overflow-x:auto;
-              -webkit-overflow-scrolling:touch;
-              max-width:100%;
-              padding-bottom:6px;
-            "
-          >
-            <span style="flex:0 0 auto; display:inline-flex; align-items:center;">
-              ${weekSelectHTML || ""}
-            </span>
-
-            ${isAdmin ? `
-              <button class="smallBtn" data-gpaction="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
-              <button class="smallBtn" data-gpaction="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
-            ` : ""}
-          </div>
-
-          <div style="margin-top:4px; text-align:right; white-space:nowrap;">
-            ${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}
-          </div>
+        <div class="headerActions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+          <button class="smallBtn" data-gpaction="name">Name</button>
+          <button class="smallBtn" data-gpaction="savePicks">Save</button>
+          <button class="smallBtn" data-gpaction="refresh">Refresh</button>
         </div>
       </div>
 
-      <style>
-        select[data-gpweeksel="1"]{
-          -webkit-appearance:none;
-          appearance:none;
-          background:rgba(255,255,255,0.06) !important;
-          color:inherit !important;
-          border:1px solid rgba(255,255,255,0.12) !important;
-        }
-      </style>
-    `;
-  }
+      <div class="subline" style="display:block;">
+        <div
+          class="sublineLeft"
+          style="
+            display:flex;
+            gap:10px;
+            align-items:center;
+            flex-wrap:nowrap;
+            overflow-x:auto;
+            -webkit-overflow-scrolling:touch;
+            max-width:100%;
+            padding-bottom:6px;
+          "
+        >
+          <span style="flex:0 0 auto; display:inline-flex; align-items:center;">
+            ${weekSelectHTML || ""}
+          </span>
+
+          ${isAdmin ? `
+            <!-- Admin actions MUST use data-gpadmin (your click handler routes admin via data-gpadmin) -->
+            <button class="smallBtn" data-gpadmin="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
+            <button class="smallBtn" data-gpadmin="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
+          ` : ""}
+        </div>
+
+        <div style="margin-top:4px; text-align:right; white-space:nowrap;">
+          ${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}
+        </div>
+      </div>
+    </div>
+
+    <style>
+      select[data-gpweeksel="1"]{
+        -webkit-appearance:none;
+        appearance:none;
+        background:rgba(255,255,255,0.06) !important;
+        color:inherit !important;
+        border:1px solid rgba(255,255,255,0.12) !important;
+      }
+    </style>
+  `;
+}
 
   function postRender() {
     try { setPicksNameUI(); } catch {}
