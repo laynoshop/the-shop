@@ -249,6 +249,99 @@ async function gpHydrateLiveStateForGames(games) {
   }
 }
 
+function gpGetEventOddsFromScoreboardEvent(ev) {
+  try {
+    const comp = ev?.competitions?.[0] || {};
+    const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
+    if (!o) return null;
+
+    const details = String(o?.details || "").trim();
+    const overUnder = (o?.overUnder != null) ? String(o.overUnder).trim() : "";
+
+    // favorite team abbreviation/name if available
+    const homeFav = !!o?.homeTeamOdds?.favorite;
+    const awayFav = !!o?.awayTeamOdds?.favorite;
+
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const homeC = competitors.find(c => c?.homeAway === "home") || {};
+    const awayC = competitors.find(c => c?.homeAway === "away") || {};
+
+    const homeAbbr = String(homeC?.team?.abbreviation || homeC?.team?.shortDisplayName || "").trim();
+    const awayAbbr = String(awayC?.team?.abbreviation || awayC?.team?.shortDisplayName || "").trim();
+
+    const favoredTeam =
+      homeFav ? (homeAbbr || "Home") :
+      awayFav ? (awayAbbr || "Away") :
+      "";
+
+    if (!details && !overUnder) return null;
+
+    return { details, overUnder, favoredTeam };
+  } catch {
+    return null;
+  }
+}
+
+async function gpHydrateOddsForGames(games) {
+  const list = Array.isArray(games) ? games : [];
+  if (!list.length) return;
+
+  // Only hydrate odds when the stored odds are blank
+  // (keeps Firestore snapshot as “baseline” and prevents flicker)
+  const needs = list.filter(g => {
+    const d = String(g?.oddsDetails || "").trim();
+    const ou = String(g?.oddsOU || "").trim();
+    return (!d && !ou);
+  });
+
+  if (!needs.length) return;
+
+  const groups = new Map(); // key => { leagueKey, dateYYYYMMDD, ids:Set }
+  for (const g of needs) {
+    const leagueKey = String(g?.leagueKey || "").trim();
+    const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
+    const eventId = String(g?.eventId || g?.id || "").trim();
+    if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
+
+    const k = `${leagueKey}__${dateYYYYMMDD}`;
+    if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
+    groups.get(k).ids.add(eventId);
+  }
+
+  if (!groups.size) return;
+
+  const oddsMap = new Map(); // eventId -> odds
+
+  for (const grp of groups.values()) {
+    const league = getLeagueByKeySafe(grp.leagueKey);
+    const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
+    if (!url) continue;
+
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) continue;
+
+      const j = await r.json().catch(() => ({}));
+      const events = Array.isArray(j?.events) ? j.events : [];
+      for (const ev of events) {
+        const eid = String(ev?.id || "");
+        if (!eid || !grp.ids.has(eid)) continue;
+
+        const odds = gpGetEventOddsFromScoreboardEvent(ev);
+        if (odds) oddsMap.set(eid, odds);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Attach render-time odds
+  for (const g of list) {
+    const eid = String(g?.eventId || g?.id || "").trim();
+    g.__odds = oddsMap.get(eid) || null;
+  }
+}
+
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
     if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
@@ -765,13 +858,21 @@ async function gpHydrateLiveStateForGames(games) {
     return String(t?.logo || "").trim();
   }
   function fmtOddsLine(g) {
-    const details = String(g?.oddsDetails || "").trim();
-    const ou = String(g?.oddsOU || "").trim();
-    const parts = [];
-    if (details) parts.push(`Favored: ${details}`);
-    if (ou) parts.push(`O/U: ${ou}`);
-    return parts.join(" • ");
-  }
+  const storedDetails = String(g?.oddsDetails || "").trim();
+  const storedOU = String(g?.oddsOU || "").trim();
+
+  // Prefer stored snapshot, but allow hydrated odds to fill gaps
+  const hyd = g?.__odds || null;
+
+  const details = storedDetails || String(hyd?.details || "").trim();
+  const ou = storedOU || String(hyd?.overUnder || "").trim();
+
+  const parts = [];
+  if (details) parts.push(`Favored: ${details}`);
+  if (ou) parts.push(`O/U: ${ou}`);
+
+  return parts.join(" • ");
+}
 
   function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks }) {
   if (!weekId) {
@@ -1206,6 +1307,8 @@ const games = await gpGetSlateGames(db, showWeekId);
 
 // ✅ hydrate live score/clock from ESPN without changing stored docs
 await gpHydrateLiveStateForGames(games);
+// ✅ hydrate odds if they were missing at publish time
+await gpHydrateOddsForGames(games);
 
 const myMap = await gpGetMyPicksMap(db, showWeekId, uid);
 const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
