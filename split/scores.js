@@ -18,6 +18,7 @@
     "Duke Blue Devils",
     "West Virginia Mountaineers",
     "Columbus Blue Jackets",
+    "Columbus Crew",
     "Carolina Hurricanes",
     "Carolina Panthers",
     "Dallas Cowboys",
