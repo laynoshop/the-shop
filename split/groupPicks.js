@@ -1750,28 +1750,29 @@ function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, e
     const publishedWeeks = weeks.filter(w => w && w.published === true);
     const latestPublishedWeekId = String(publishedWeeks[publishedWeeks.length - 1]?.id || "").trim();
 
-    const requested = getSelectedWeekFromLS();
-    const requestedIsAllowed =
-      !!requested &&
-      weeks.some(w => String(w.id) === requested && (w.published === true || isAdmin));
-
-    const activeIsAllowedForThisRole =
-      !!activeWeekId &&
-      (isAdmin || weeks.some(w => String(w.id) === activeWeekId && w.published === true));
-
     let showWeekId = "";
 
-    if (requestedIsAllowed) {
-      showWeekId = requested;
-    } else if (activeIsAllowedForThisRole) {
-      showWeekId = activeWeekId;
-    } else if (!isAdmin && latestPublishedWeekId) {
-      // guest fallback when active is unpublished
-      showWeekId = latestPublishedWeekId;
-    } else {
-      // admin fallback (or no published weeks exist yet)
-      showWeekId = activeWeekId || requested || "";
-    }
+if (!isAdmin) {
+  // ✅ Guests ALWAYS default to active week (if published)
+  const activeIsPublished =
+    !!activeWeekId &&
+    weeks.some(w => String(w.id) === activeWeekId && w.published === true);
+
+  showWeekId = activeIsPublished
+    ? activeWeekId
+    : latestPublishedWeekId || "";
+
+} else {
+  // ✅ Admin keeps smart behavior (can view drafts, local selection, etc.)
+  const requested = getSelectedWeekFromLS();
+  const requestedIsAllowed =
+    !!requested &&
+    weeks.some(w => String(w.id) === requested && (w.published === true || isAdmin));
+
+  showWeekId = requestedIsAllowed
+    ? requested
+    : activeWeekId || requested || "";
+}
 
     if (showWeekId) setSelectedWeekToLS(showWeekId);
 
