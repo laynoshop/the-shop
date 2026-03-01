@@ -1336,7 +1336,7 @@
     return parts.join(" • ");
   }
 
-  function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks }) {
+  function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks, isAdmin }) {
     if (!weekId) {
       return `
         <div class="game">
@@ -1349,21 +1349,24 @@
       `;
     }
 
-    if (!published) {
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">GROUP PICKS</div>
-          </div>
-          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-            ${esc(weekLabel || weekId)} not published yet
-          </div>
-          <div class="muted" style="margin-top:8px; font-weight:800;">
-            Waiting on admin.
-          </div>
-        </div>
-      `;
-    }
+    if (!published && !isAdmin) {
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">GROUP PICKS</div>
+      </div>
+      <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+        ${esc(weekLabel || weekId)} not published yet
+      </div>
+      <div class="muted" style="margin-top:8px; font-weight:800;">
+        Waiting on admin.
+      </div>
+    </div>
+  `;
+}
+
+// ✅ Admin draft view (shows games but clearly marked as draft)
+const isDraft = (!published && !!isAdmin);
 
     const now = Date.now();
 
@@ -1578,24 +1581,38 @@
     `;
 
     return `
-      <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill status-other">GROUP PICKS</div>
-        </div>
+  <div class="game">
+    <div class="gameHeader">
+      <div class="statusPill status-other">GROUP PICKS</div>
+      ${isDraft ? `
+        <div class="statusPill" style="
+          margin-left:10px;
+          background:rgba(255,200,0,0.14);
+          border:1px solid rgba(255,200,0,0.30);
+          color:rgba(255,230,170,0.95);
+          font-weight:950;
+          white-space:nowrap;
+        ">DRAFT</div>
+      ` : ``}
+    </div>
 
-        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-          ${esc(weekLabel || weekId)}
-        </div>
+    <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+      ${esc(weekLabel || weekId)}
+    </div>
 
-        ${leaderboardHTML}
-
-        <div id="gpGamesWrap">
-          ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
-        </div>
-
-        ${saveRow}
+    ${isDraft ? `
+      <div class="muted" style="margin-top:8px; font-weight:850;">
+        Draft mode — only admins can see this until you Publish Week.
       </div>
-    `;
+    ` : leaderboardHTML}
+
+    <div id="gpGamesWrap">
+      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+    </div>
+
+    ${saveRow}
+  </div>
+`;
   }
 
   // -----------------------------
@@ -1688,138 +1705,164 @@ function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, e
   // Main renderer
   // -----------------------------
   async function renderPicks(showLoading) {
-    const content = document.getElementById("content");
-    if (!content) return;
+  const content = document.getElementById("content");
+  if (!content) return;
 
-    const role = getRole();
-    const dbReady = ensureFirebaseReadySafe();
+  const role = getRole();
+  const isAdmin = (role === "admin");
+  const dbReady = ensureFirebaseReadySafe();
 
-    if (showLoading) {
-      content.innerHTML = `
-        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Loading…", weekSelectHTML: "" })}
-        <div class="notice">Loading picks…</div>
-      `;
+  if (showLoading) {
+    content.innerHTML = `
+      ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Loading…", weekSelectHTML: "" })}
+      <div class="notice">Loading picks…</div>
+    `;
+  }
+
+  try {
+    await dbReady;
+
+    const user = firebase?.auth?.().currentUser;
+    if (!user) {
+      try { await firebase.auth().signInAnonymously(); } catch {}
     }
 
-    try {
-      await dbReady;
+    const db = firebase.firestore();
 
-      const user = firebase?.auth?.().currentUser;
-      if (!user) {
-        try { await firebase.auth().signInAnonymously(); } catch {}
-      }
+    // ✅ Mandatory identity gate (Option A) — ONLY for Picks page
+    const ident = gpGetIdentityFromStorageOrMem();
+    if (!gpIsIdentityValid(ident) || !String(ident.playerId || "").trim()) {
+      content.innerHTML = `
+        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Player", weekSelectHTML: "" })}
+        ${gpBuildIdentityGateHTML({ prefillName: ident.name, rememberChecked: ident.remember })}
+      `;
+      postRender();
+      return;
+    }
 
-      const db = firebase.firestore();
+    const playerId = String(ident.playerId || "").trim();
 
-      // ✅ Mandatory identity gate (Option A) — ONLY for Picks page
-      const ident = gpGetIdentityFromStorageOrMem();
-      if (!gpIsIdentityValid(ident) || !String(ident.playerId || "").trim()) {
-        content.innerHTML = `
-          ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Player", weekSelectHTML: "" })}
-          ${gpBuildIdentityGateHTML({ prefillName: ident.name, rememberChecked: ident.remember })}
-        `;
-        postRender();
-        return;
-      }
+    const metaPub = await gpGetMetaPublic(db);
+    const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
+    const activeWeekId = String(metaPub.activeWeekId || "").trim();
 
-      const playerId = String(ident.playerId || "").trim();
+    const requested = getSelectedWeekFromLS();
+    const requestedOk =
+      requested &&
+      weeks.some(w => String(w.id) === requested && (w.published === true || isAdmin));
 
-      const metaPub = await gpGetMetaPublic(db);
-      const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
-      const activeWeekId = String(metaPub.activeWeekId || "").trim();
+    const showWeekId = requestedOk ? requested : activeWeekId;
+    if (showWeekId) setSelectedWeekToLS(showWeekId);
 
-      const requested = getSelectedWeekFromLS();
-      const requestedOk =
-        requested &&
-        weeks.some(w => String(w.id) === requested && (w.published === true || role === "admin"));
+    const wLabel =
+      (weeks.find(w => String(w.id) === String(showWeekId))?.label) ||
+      showWeekId ||
+      "Week";
 
-      const showWeekId = requestedOk ? requested : activeWeekId;
-      if (showWeekId) setSelectedWeekToLS(showWeekId);
+    let adminHTML = "";
+    let adminEvents = [];
+    const selectedLeagueKey = getSavedLeagueKeySafe();
+    const selectedDate = getSavedDateYYYYMMDDSafe();
 
-      const wLabel =
-        (weeks.find(w => String(w.id) === String(showWeekId))?.label) ||
-        showWeekId ||
-        "Week";
+    if (isAdmin) {
+      adminEvents = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
+      adminHTML = gpBuildAdminBuilderHTML({
+        weekId: showWeekId,
+        weekLabel: wLabel,
+        leagueKey: selectedLeagueKey,
+        dateYYYYMMDD: selectedDate,
+        events: adminEvents
+      });
+    }
 
-      let adminHTML = "";
-      let adminEvents = [];
-      const selectedLeagueKey = getSavedLeagueKeySafe();
-      const selectedDate = getSavedDateYYYYMMDDSafe();
+    const weekOptions = isAdmin ? weeks : weeks.filter(w => w.published === true);
+    const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId || "");
 
-      if (role === "admin") {
-        adminEvents = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
-        adminHTML = gpBuildAdminBuilderHTML({
-          weekId: showWeekId,
-          weekLabel: wLabel,
-          leagueKey: selectedLeagueKey,
-          dateYYYYMMDD: selectedDate,
-          events: adminEvents
-        });
-      }
+    if (!showWeekId) {
+      content.innerHTML = `
+        ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: "Week", rightLabel: "Updated" })}
+        ${adminHTML}
+        ${gpBuildGroupPicksCardHTML({
+          weekId: "",
+          weekLabel: "",
+          games: [],
+          myMap: {},
+          allPicks: {},
+          published: false,
+          isAdmin
+        })}
+      `;
+      postRender();
+      return;
+    }
 
-      const weekOptions = (role === "admin") ? weeks : weeks.filter(w => w.published === true);
-      const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId || "");
+    const slateRef = db.collection("pickSlates").doc(showWeekId);
+    const slateSnap = await slateRef.get();
+    const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
+    const published = (slateData.published === true);
 
-      if (!showWeekId) {
-        content.innerHTML = `
-          ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: "Week", rightLabel: "Updated" })}
-          ${adminHTML}
-          ${gpBuildGroupPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, allPicks: {}, published: false })}
-        `;
-        postRender();
-        return;
-      }
-
-      const slateRef = db.collection("pickSlates").doc(showWeekId);
-      const slateSnap = await slateRef.get();
-      const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
-      const published = slateData.published === true;
-
-      if (!published && role !== "admin") {
-        content.innerHTML = `
-          ${renderPicksHeaderHTML({
-            role,
-            weekSelectHTML: buildWeekSelectHTML(weeks.filter(w => w.published === true), activeWeekId),
-            weekLabel: wLabel,
-            rightLabel: "Updated"
-          })}
-          ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games: [], myMap: {}, allPicks: {}, published: false })}
-        `;
-        postRender();
-        return;
-      }
-
-      const games = await gpGetSlateGames(db, showWeekId);
-      await gpHydrateLiveStateForGames(games);
-      await gpHydrateOddsForGames(games);
-
-      const myMap = await gpGetMyPicksMap(db, showWeekId, playerId);
-      const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
-
-      gpPendingResetIfSlateChanged(showWeekId);
-      window.__GP_PENDING.sid = showWeekId;
-
+    // ✅ Guests still cannot view unpublished weeks
+    if (!published && !isAdmin) {
       content.innerHTML = `
         ${renderPicksHeaderHTML({
           role,
-          weekSelectHTML,
+          weekSelectHTML: buildWeekSelectHTML(weeks.filter(w => w.published === true), activeWeekId),
           weekLabel: wLabel,
-          rightLabel: published ? "Updated" : "Draft"
+          rightLabel: "Updated"
         })}
-        ${adminHTML}
-        ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games, myMap, allPicks, published })}
+        ${gpBuildGroupPicksCardHTML({
+          weekId: showWeekId,
+          weekLabel: wLabel,
+          games: [],
+          myMap: {},
+          allPicks: {},
+          published: false,
+          isAdmin
+        })}
       `;
-
       postRender();
-    } catch (err) {
-      console.error("renderPicks error:", err);
-      content.innerHTML = `
-        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error", weekSelectHTML: "" })}
-        <div class="notice">Couldn’t load Picks right now.</div>
-      `;
-      postRender();
+      return;
     }
+
+    const games = await gpGetSlateGames(db, showWeekId);
+    await gpHydrateLiveStateForGames(games);
+    await gpHydrateOddsForGames(games);
+
+    const myMap = await gpGetMyPicksMap(db, showWeekId, playerId);
+    const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
+
+    gpPendingResetIfSlateChanged(showWeekId);
+    window.__GP_PENDING.sid = showWeekId;
+
+    content.innerHTML = `
+      ${renderPicksHeaderHTML({
+        role,
+        weekSelectHTML,
+        weekLabel: wLabel,
+        rightLabel: published ? "Updated" : "Draft"
+      })}
+      ${adminHTML}
+      ${gpBuildGroupPicksCardHTML({
+        weekId: showWeekId,
+        weekLabel: wLabel,
+        games,
+        myMap,
+        allPicks,
+        published,
+        isAdmin
+      })}
+    `;
+
+    postRender();
+  } catch (err) {
+    console.error("renderPicks error:", err);
+    content.innerHTML = `
+      ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error", weekSelectHTML: "" })}
+      <div class="notice">Couldn’t load Picks right now.</div>
+    `;
+    postRender();
   }
+}
 
   function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
     const isAdmin = role === "admin";
