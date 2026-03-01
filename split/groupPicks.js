@@ -19,11 +19,19 @@
   const META_PUBLIC_DOC = "public";
   const META_ADMIN_DOC = "admin";
 
+  // ✅ Picks Identity (Option A) — only for Picks tab
+  const PICKS_PLAYER_CODE_KEY = "theShopPicksPlayerCode_v1";     // stored only if "remember" checked
+  const PICKS_PLAYER_REMEMBER_KEY = "theShopPicksRemember_v1";   // "1" or "0"
+  const PICKS_PLAYER_ID_KEY = "theShopPicksPlayerId_v1";         // cached computed id
+
   function safeGetLS(key) {
     try { return String(localStorage.getItem(key) || ""); } catch { return ""; }
   }
   function safeSetLS(key, val) {
     try { localStorage.setItem(key, String(val)); } catch {}
+  }
+  function safeDelLS(key) {
+    try { localStorage.removeItem(key); } catch {}
   }
 
   function esc(s) {
@@ -81,6 +89,214 @@
     const m = String(weekId || "").match(/^(\d{4})_W(\d{1,2})$/);
     if (!m) return { year: currentYear(), weekNum: 1 };
     return { year: Number(m[1]), weekNum: Number(m[2]) };
+  }
+
+  // -----------------------------
+  // Picks Identity (Option A) — stable player id (name + code)
+  // -----------------------------
+  function gpMem() {
+    window.__GP_MEM = window.__GP_MEM || {};
+    return window.__GP_MEM;
+  }
+
+  function gpNormalizeName(s) {
+    return String(s || "").trim().replace(/\s+/g, " ").slice(0, 20);
+  }
+
+  function gpNormalizeCode(s) {
+    return String(s || "").trim().slice(0, 64);
+  }
+
+  function gpRememberDefault() {
+    const v = safeGetLS(PICKS_PLAYER_REMEMBER_KEY).trim();
+    if (v === "0") return false;
+    if (v === "1") return true;
+    return true; // default ON
+  }
+
+  function gpGetIdentityFromStorageOrMem() {
+    const m = gpMem();
+    const name = gpNormalizeName(safeGetLS(PICKS_NAME_KEY) || m.picksName || "");
+    const remember = gpRememberDefault();
+
+    let code = "";
+    if (remember) code = gpNormalizeCode(safeGetLS(PICKS_PLAYER_CODE_KEY));
+    else code = gpNormalizeCode(m.picksCode || "");
+
+    let playerId = safeGetLS(PICKS_PLAYER_ID_KEY).trim() || String(m.picksPlayerId || "").trim();
+
+    return { name, code, remember, playerId };
+  }
+
+  function gpSetIdentity({ name, code, remember, playerId }) {
+    const m = gpMem();
+    const nm = gpNormalizeName(name);
+    const cd = gpNormalizeCode(code);
+    const rem = !!remember;
+
+    // Name is always stored (used in UI/leaderboard)
+    if (nm) safeSetLS(PICKS_NAME_KEY, nm);
+
+    // Remember toggle stored
+    safeSetLS(PICKS_PLAYER_REMEMBER_KEY, rem ? "1" : "0");
+
+    // Code: store only if remember
+    if (rem) {
+      if (cd) safeSetLS(PICKS_PLAYER_CODE_KEY, cd);
+      else safeDelLS(PICKS_PLAYER_CODE_KEY);
+      m.picksCode = ""; // don't keep mem if remembering
+    } else {
+      safeDelLS(PICKS_PLAYER_CODE_KEY);
+      m.picksCode = cd;
+    }
+
+    // Cache playerId
+    if (playerId) {
+      safeSetLS(PICKS_PLAYER_ID_KEY, String(playerId));
+      m.picksPlayerId = String(playerId);
+    }
+    m.picksName = nm;
+  }
+
+  function gpClearIdentity() {
+    const m = gpMem();
+    safeDelLS(PICKS_NAME_KEY);
+    safeDelLS(PICKS_PLAYER_CODE_KEY);
+    safeDelLS(PICKS_PLAYER_ID_KEY);
+    safeSetLS(PICKS_PLAYER_REMEMBER_KEY, "1");
+    m.picksName = "";
+    m.picksCode = "";
+    m.picksPlayerId = "";
+  }
+
+  // SHA-256 if available (best), fallback to tiny hash
+  async function gpComputePlayerId(name, code) {
+    const nm = gpNormalizeName(name);
+    const cd = gpNormalizeCode(code);
+    const raw = `picks:v1:${nm.toLowerCase()}|${cd}`;
+
+    try {
+      if (window.crypto && crypto.subtle && typeof TextEncoder !== "undefined") {
+        const bytes = new TextEncoder().encode(raw);
+        const hash = await crypto.subtle.digest("SHA-256", bytes);
+        const arr = Array.from(new Uint8Array(hash));
+        // shorter id: first 16 bytes -> 32 hex chars
+        const hex = arr.slice(0, 16).map(b => b.toString(16).padStart(2, "0")).join("");
+        return `p_${hex}`;
+      }
+    } catch {}
+
+    // Fallback (djb2-ish)
+    let h = 5381;
+    for (let i = 0; i < raw.length; i++) h = ((h << 5) + h) ^ raw.charCodeAt(i);
+    const hex = (h >>> 0).toString(16).padStart(8, "0");
+    return `p_${hex}_${raw.length}`;
+  }
+
+  function gpIsIdentityValid(idObj) {
+    const nm = gpNormalizeName(idObj?.name || "");
+    const cd = gpNormalizeCode(idObj?.code || "");
+    return (nm.length >= 2 && cd.length >= 3);
+  }
+
+  function gpBuildIdentityGateHTML({ prefillName, rememberChecked }) {
+    const nm = gpNormalizeName(prefillName || "");
+    const rem = (rememberChecked !== false);
+
+    return `
+      <div class="game" style="
+        margin-top:12px;
+        padding:14px;
+        border-radius:22px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      ">
+        <div class="gameHeader">
+          <div class="statusPill status-other">PICKS IDENTITY</div>
+        </div>
+
+        <div class="gameMetaTopLine" style="margin-top:10px; font-weight:950;">
+          Enter your name and a code
+        </div>
+
+        <div class="muted" style="margin-top:8px; font-weight:800;">
+          Use the same name + code on any phone to be the same player.
+        </div>
+
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+          <div>
+            <div class="muted" style="font-weight:900; margin-bottom:6px;">Display Name</div>
+            <input
+              id="gpIdName"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              autocapitalize="words"
+              spellcheck="false"
+              value="${esc(nm)}"
+              placeholder="Example: Victor"
+              style="
+                width:100%;
+                box-sizing:border-box;
+                padding:14px 14px;
+                border-radius:16px;
+                background:rgba(0,0,0,0.18);
+                border:1px solid rgba(255,255,255,0.12);
+                color:inherit;
+                font-weight:850;
+                font-size:16px;
+                outline:none;
+              "
+            />
+          </div>
+
+          <div>
+            <div class="muted" style="font-weight:900; margin-bottom:6px;">Player Code</div>
+            <input
+              id="gpIdCode"
+              type="password"
+              inputmode="text"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              placeholder="Make something you’ll remember"
+              style="
+                width:100%;
+                box-sizing:border-box;
+                padding:14px 14px;
+                border-radius:16px;
+                background:rgba(0,0,0,0.18);
+                border:1px solid rgba(255,255,255,0.12);
+                color:inherit;
+                font-weight:850;
+                font-size:16px;
+                outline:none;
+              "
+            />
+            <div class="muted" style="margin-top:6px; font-weight:800;">
+              Tip: “buckeyes27” / “victor-1595” / etc.
+            </div>
+          </div>
+
+          <label style="display:flex; align-items:center; gap:10px; margin-top:2px;">
+            <input id="gpIdRemember" type="checkbox" ${rem ? "checked" : ""} />
+            <span class="muted" style="font-weight:900;">Remember on this device</span>
+          </label>
+
+          <div style="display:flex; gap:10px; margin-top:6px;">
+            <button class="smallBtn" type="button" data-gpaction="playerContinue" style="flex:0 0 auto;">Continue</button>
+            <button class="smallBtn" type="button" data-gpaction="playerClear" style="flex:0 0 auto;">Clear</button>
+          </div>
+
+          <div id="gpIdErr" class="muted" style="margin-top:4px; font-weight:900;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function gpSetIdentityError(msg) {
+    const el = document.getElementById("gpIdErr");
+    if (el) el.textContent = String(msg || "");
   }
 
   // -----------------------------
@@ -334,24 +550,14 @@
   }
 
   function getPicksDisplayName() {
-  // Reuse the Shop chat name if it exists (your actual key)
-  const existingChat = (safeGetLS("theShopChatName_v1") || "").trim();
-  if (existingChat) return existingChat.slice(0, 20);
+    // Reuse the Shop chat name if it exists (your actual key)
+    const existingChat = (safeGetLS("theShopChatName_v1") || "").trim();
+    if (existingChat) return existingChat.slice(0, 20);
 
-  let name = (safeGetLS(PICKS_NAME_KEY) || "").trim();
-  if (!name) {
-    const picked = prompt("Name for Picks (example: Victor):", "") || "";
-    name = String(picked).trim() || "Anon";
-    safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
+    let name = (safeGetLS(PICKS_NAME_KEY) || "").trim();
+    if (!name) name = "Anon";
+    return String(name).trim().slice(0, 20);
   }
-  return name.slice(0, 20);
-}
-  
-  function ensurePicksNameOnOpen() {
-  const existing = (safeGetLS(PICKS_NAME_KEY) || "").trim();
-  if (existing) return existing.slice(0, 20);
-  return getPicksDisplayName(); // will prompt + persist
-}
 
   function setPicksNameUI() {
     const btn = document.querySelector('[data-gpaction="name"]');
@@ -422,10 +628,11 @@
     return list;
   }
 
-  async function gpGetMyPicksMap(db, slateId, uid) {
-    if (!uid) return {};
+  // ✅ playerId is now the "user key" for picks (stable across devices)
+  async function gpGetMyPicksMap(db, slateId, playerId) {
+    if (!playerId) return {};
     const snap = await db.collection("pickSlates").doc(slateId)
-      .collection("picks").doc(uid)
+      .collection("picks").doc(playerId)
       .collection("games").get();
 
     const map = {};
@@ -439,10 +646,10 @@
     const userDocs = usersSnap.docs || [];
 
     for (const u of userDocs) {
-      const uid = u.id;
+      const playerId = u.id;
 
       const gamesSnap = await db.collection("pickSlates").doc(slateId)
-        .collection("picks").doc(uid)
+        .collection("picks").doc(playerId)
         .collection("games").get();
 
       gamesSnap.forEach(d => {
@@ -452,7 +659,7 @@
         const side = String(data.side || "");
 
         if (!out[eventId]) out[eventId] = [];
-        out[eventId].push({ uid, name, side });
+        out[eventId].push({ uid: playerId, name, side }); // keep field name uid for compatibility
       });
     }
 
@@ -463,19 +670,19 @@
     return out;
   }
 
-  async function gpSaveMyPicksBatch(db, slateId, uid, pendingMap) {
+  async function gpSaveMyPicksBatch(db, slateId, playerId, pendingMap) {
     const keys = Object.keys(pendingMap || {});
     if (!keys.length) return;
 
     const picksUserRef = db.collection("pickSlates").doc(slateId)
-      .collection("picks").doc(uid);
+      .collection("picks").doc(playerId);
 
     const name = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
 
     const batch = db.batch();
 
     batch.set(picksUserRef, {
-      uid: String(uid || ""),
+      uid: String(playerId || ""), // keep uid field name, but store playerId
       name,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
@@ -484,7 +691,7 @@
       const side = String(pendingMap[eventId] || "");
       const gameRef = picksUserRef.collection("games").doc(String(eventId));
       batch.set(gameRef, {
-        uid: String(uid || ""),
+        uid: String(playerId || ""),
         name,
         side,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -928,13 +1135,13 @@
       if (!u) return `<div style="flex:1;"></div>`;
       return `
         <div style="
-  flex:1 1 220px;
-  min-width:0;
-  padding:12px;
-  border-radius:18px;
-  background:rgba(255,255,255,0.06);
-  border:1px solid rgba(255,255,255,0.08);
-">
+          flex:1 1 220px;
+          min-width:0;
+          padding:12px;
+          border-radius:18px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+        ">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
             <div style="display:flex; align-items:center; gap:10px; min-width:0;">
               <div style="
@@ -1099,7 +1306,6 @@
       `;
     }
 
-    // ✅ FIXED: this block got corrupted in your paste (it was referencing gameCards/saveRow before defined)
     if (!published) {
       return `
         <div class="game">
@@ -1118,7 +1324,6 @@
 
     const now = Date.now();
 
-    // ✅ Leaderboard (computed from FINAL games only)
     const lb = gpComputeWeeklyLeaderboard(games, allPicks);
     const leaderboardHTML = gpBuildLeaderboardHTML({
       weekLabel: weekLabel || weekId,
@@ -1329,7 +1534,6 @@
       </div>
     `;
 
-    // ✅ Leaderboard rendered right under the week title
     return `
       <div class="game">
         <div class="gameHeader">
@@ -1446,9 +1650,19 @@
       }
 
       const db = firebase.firestore();
-      const uid = firebase.auth().currentUser?.uid || "";
-      // ✅ First-time Picks visit: force name prompt if missing
-ensurePicksNameOnOpen();
+
+      // ✅ Mandatory identity gate (Option A) — ONLY for Picks page
+      const ident = gpGetIdentityFromStorageOrMem();
+      if (!gpIsIdentityValid(ident) || !String(ident.playerId || "").trim()) {
+        content.innerHTML = `
+          ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Player", weekSelectHTML: "" })}
+          ${gpBuildIdentityGateHTML({ prefillName: ident.name, rememberChecked: ident.remember })}
+        `;
+        postRender();
+        return;
+      }
+
+      const playerId = String(ident.playerId || "").trim();
 
       const metaPub = await gpGetMetaPublic(db);
       const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
@@ -1519,7 +1733,7 @@ ensurePicksNameOnOpen();
       await gpHydrateLiveStateForGames(games);
       await gpHydrateOddsForGames(games);
 
-      const myMap = await gpGetMyPicksMap(db, showWeekId, uid);
+      const myMap = await gpGetMyPicksMap(db, showWeekId, playerId);
       const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
 
       gpPendingResetIfSlateChanged(showWeekId);
@@ -1548,65 +1762,64 @@ ensurePicksNameOnOpen();
   }
 
   function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
-  const isAdmin = role === "admin";
+    const isAdmin = role === "admin";
 
-  return `
-    <div class="header">
-      <div class="headerTop">
-        <div class="brand">
-          <h2 style="margin:0;">Picks</h2>
-          <span class="badge">Group</span>
+    return `
+      <div class="header">
+        <div class="headerTop">
+          <div class="brand">
+            <h2 style="margin:0;">Picks</h2>
+            <span class="badge">Group</span>
+          </div>
+
+          <div class="headerActions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+            <button class="smallBtn" data-gpaction="name">Name</button>
+            <button class="smallBtn" data-gpaction="savePicks">Save</button>
+            <button class="smallBtn" data-gpaction="refresh">Refresh</button>
+          </div>
         </div>
 
-        <div class="headerActions" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
-          <button class="smallBtn" data-gpaction="name">Name</button>
-          <button class="smallBtn" data-gpaction="savePicks">Save</button>
-          <button class="smallBtn" data-gpaction="refresh">Refresh</button>
+        <div class="subline" style="display:block;">
+          <div
+            class="sublineLeft"
+            style="
+              display:flex;
+              gap:10px;
+              align-items:center;
+              flex-wrap:nowrap;
+              overflow-x:auto;
+              -webkit-overflow-scrolling:touch;
+              max-width:100%;
+              padding-bottom:6px;
+            "
+          >
+            <span style="flex:0 0 auto; display:inline-flex; align-items:center;">
+              ${weekSelectHTML || ""}
+            </span>
+
+            ${isAdmin ? `
+              <button class="smallBtn" data-gpadmin="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
+              <button class="smallBtn" data-gpadmin="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
+            ` : ""}
+          </div>
+
+          <div style="margin-top:4px; text-align:right; white-space:nowrap;">
+            ${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}
+          </div>
         </div>
       </div>
 
-      <div class="subline" style="display:block;">
-        <div
-          class="sublineLeft"
-          style="
-            display:flex;
-            gap:10px;
-            align-items:center;
-            flex-wrap:nowrap;
-            overflow-x:auto;
-            -webkit-overflow-scrolling:touch;
-            max-width:100%;
-            padding-bottom:6px;
-          "
-        >
-          <span style="flex:0 0 auto; display:inline-flex; align-items:center;">
-            ${weekSelectHTML || ""}
-          </span>
-
-          ${isAdmin ? `
-            <!-- Admin actions MUST use data-gpadmin (your click handler routes admin via data-gpadmin) -->
-            <button class="smallBtn" data-gpadmin="newWeek" type="button" style="flex:0 0 auto;">New Week</button>
-            <button class="smallBtn" data-gpadmin="setActive" type="button" style="flex:0 0 auto;">Set Active</button>
-          ` : ""}
-        </div>
-
-        <div style="margin-top:4px; text-align:right; white-space:nowrap;">
-          ${esc(weekLabel || "Week")} • ${esc(rightLabel || "")}
-        </div>
-      </div>
-    </div>
-
-    <style>
-      select[data-gpweeksel="1"]{
-        -webkit-appearance:none;
-        appearance:none;
-        background:rgba(255,255,255,0.06) !important;
-        color:inherit !important;
-        border:1px solid rgba(255,255,255,0.12) !important;
-      }
-    </style>
-  `;
-}
+      <style>
+        select[data-gpweeksel="1"]{
+          -webkit-appearance:none;
+          appearance:none;
+          background:rgba(255,255,255,0.06) !important;
+          color:inherit !important;
+          border:1px solid rgba(255,255,255,0.12) !important;
+        }
+      </style>
+    `;
+  }
 
   function postRender() {
     try { setPicksNameUI(); } catch {}
@@ -1628,14 +1841,56 @@ ensurePicksNameOnOpen();
       if (!btn) return;
 
       const act = btn.getAttribute("data-gpaction");
+
       if (act === "refresh") { renderPicks(true); return; }
 
+      // ✅ Name button now opens identity gate (Option A)
       if (act === "name") {
-        const cur = getPicksDisplayName();
-        const picked = prompt("Enter name for Picks:", cur) || "";
-        const name = String(picked).trim();
-        if (name) safeSetLS(PICKS_NAME_KEY, name.slice(0, 20));
+        const content = document.getElementById("content");
+        const role = getRole();
+        const ident = gpGetIdentityFromStorageOrMem();
+        if (content) {
+          content.innerHTML = `
+            ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Player", weekSelectHTML: "" })}
+            ${gpBuildIdentityGateHTML({ prefillName: ident.name, rememberChecked: ident.remember })}
+          `;
+          postRender();
+          // Focus name input
+          setTimeout(() => { try { document.getElementById("gpIdName")?.focus(); } catch {} }, 0);
+        }
+        return;
+      }
+
+      // ✅ Identity gate actions
+      if (act === "playerClear") {
+        gpClearIdentity();
+        gpSetIdentityError("");
         renderPicks(true);
+        return;
+      }
+
+      if (act === "playerContinue") {
+        (async () => {
+          try {
+            const nm = gpNormalizeName(document.getElementById("gpIdName")?.value || "");
+            const cd = gpNormalizeCode(document.getElementById("gpIdCode")?.value || "");
+            const remember = !!document.getElementById("gpIdRemember")?.checked;
+
+            if (nm.length < 2) { gpSetIdentityError("Name must be at least 2 characters."); return; }
+            if (cd.length < 3) { gpSetIdentityError("Code must be at least 3 characters."); return; }
+
+            gpSetIdentityError("Saving…");
+
+            const pid = await gpComputePlayerId(nm, cd);
+            gpSetIdentity({ name: nm, code: cd, remember, playerId: pid });
+
+            gpSetIdentityError("");
+            renderPicks(true);
+          } catch (err) {
+            console.error("playerContinue error:", err);
+            gpSetIdentityError("Couldn’t save identity. Try again.");
+          }
+        })();
         return;
       }
 
@@ -1643,8 +1898,16 @@ ensurePicksNameOnOpen();
         ensureFirebaseReadySafe()
           .then(async () => {
             const db = firebase.firestore();
-            const uid = firebase.auth().currentUser?.uid || "";
-            if (!uid) throw new Error("No uid (not signed in)");
+
+            // ✅ require identity for saving too
+            const ident = gpGetIdentityFromStorageOrMem();
+            if (!gpIsIdentityValid(ident) || !String(ident.playerId || "").trim()) {
+              renderPicks(true);
+              return;
+            }
+
+            const playerId = String(ident.playerId || "").trim();
+            if (!playerId) throw new Error("No playerId");
 
             const slateId = String(window.__GP_PENDING?.sid || "");
             const pendingMap = window.__GP_PENDING?.map || {};
@@ -1655,7 +1918,7 @@ ensurePicksNameOnOpen();
               return;
             }
 
-            await gpSaveMyPicksBatch(db, slateId, uid, pendingMap);
+            await gpSaveMyPicksBatch(db, slateId, playerId, pendingMap);
             gpPendingClear();
           })
           .then(() => renderPicks(true))
@@ -1848,8 +2111,13 @@ ensurePicksNameOnOpen();
         try {
           const gamesWrap = document.getElementById("gpGamesWrap");
           if (!gamesWrap) return;
+
           // If user has unsaved pending picks, don't refresh the cards (avoid UI flicker/desync)
-if (window.__GP_PENDING && Object.keys(window.__GP_PENDING.map || {}).length) return;
+          if (window.__GP_PENDING && Object.keys(window.__GP_PENDING.map || {}).length) return;
+
+          // Must have identity to refresh picks
+          const ident = gpGetIdentityFromStorageOrMem();
+          if (!gpIsIdentityValid(ident) || !String(ident.playerId || "").trim()) return;
 
           const role = (typeof window.getRole === "function")
             ? window.getRole()
@@ -1873,8 +2141,8 @@ if (window.__GP_PENDING && Object.keys(window.__GP_PENDING.map || {}).length) re
           await gpHydrateLiveStateForGames(games);
           await gpHydrateOddsForGames(games);
 
-          const uid = firebase.auth().currentUser?.uid || "";
-          const myMap = await gpGetMyPicksMap(db, weekId, uid);
+          const playerId = String(ident.playerId || "").trim();
+          const myMap = await gpGetMyPicksMap(db, weekId, playerId);
           const allPicks = await gpGetAllPicksForSlate(db, weekId);
 
           const html = gpBuildGroupPicksCardHTML({
