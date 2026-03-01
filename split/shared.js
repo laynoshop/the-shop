@@ -20,6 +20,23 @@
   };
 })();
 
+// ---- Hard reset for login/app init guards (allows re-login after logout) ----
+window.hardResetAppInitState = function hardResetAppInitState() {
+  // Common guard flags
+  try { window.__APP_LOADING = false; } catch {}
+  try { window.__APP_INIT = false; } catch {}
+  try { window.__APP_READY = false; } catch {}
+
+  // Common "init promise" patterns
+  try { window.__APP_INIT_PROMISE = null; } catch {}
+  try { window.__BOOT_PROMISE = null; } catch {}
+  try { window.__INIT_PROMISE = null; } catch {}
+
+  // Your split/router boot guard patterns (safe even if unused)
+  try { window.__SPLIT_BOOTED = false; } catch {}
+  try { window.__ROUTER_READY = false; } catch {}
+};
+
   // ------------------------------------------------------------
   // Tiny safe storage helpers (private browsing can throw)
   // ------------------------------------------------------------
@@ -253,82 +270,93 @@ window.replaceMichiganText = replaceMichiganText;
   // Login (invite code -> role)
   // ------------------------------------------------------------
   async function checkCode() {
-    const input = document.getElementById("code");
-    const btn = document.getElementById("loginBtn");
+  const input = document.getElementById("code");
+  const btn = document.getElementById("loginBtn");
 
-    if (!input) return;
-    const entered = String(input.value || "").trim();
-    if (!entered) {
-      input.focus();
-      return;
-    }
+  if (!input) return;
+  const entered = String(input.value || "").trim();
+  if (!entered) {
+    input.focus();
+    return;
+  }
 
+  // ✅ Guard: prevent double-taps, but NEVER get stuck after logout/errors
+  if (window.__APP_LOADING) {
+    alert("App is still loading — try again in a second.");
+    return;
+  }
+  window.__APP_LOADING = true;
+
+  try {
+    if (btn) btn.textContent = "Loading…";
+
+    // If firebase isn't ready yet, exit cleanly and release the guard
     if (typeof window.ensureFirebaseChatReady !== "function" || !window.firebase) {
       alert("App is still loading — try again in a second.");
       return;
     }
 
-    try {
-      if (btn) btn.textContent = "Loading…";
+    await window.ensureFirebaseChatReady();
 
-      await window.ensureFirebaseChatReady();
+    const user = firebase.auth().currentUser;
+    if (!user) throw new Error("No auth user");
 
-      const user = firebase.auth().currentUser;
-      if (!user) throw new Error("No auth user");
+    const token = await user.getIdToken();
 
-      const token = await user.getIdToken();
+    const redeemUrls = [
+      "https://us-central1-the-shop-chat.cloudfunctions.net/redeemInviteCodeHttp",
+      "https://redeeminvitecodehttp-an5l4al3xa-uc.a.run.app"
+    ];
 
-      const redeemUrls = [
-        "https://us-central1-the-shop-chat.cloudfunctions.net/redeemInviteCodeHttp",
-        "https://redeeminvitecodehttp-an5l4al3xa-uc.a.run.app"
-      ];
+    let role = "";
+    let lastErr = null;
 
-      let role = "";
-      let lastErr = null;
+    for (const url of redeemUrls) {
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({ code: entered })
+        });
 
-      for (const url of redeemUrls) {
-        try {
-          const resp = await fetch(url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer " + token
-            },
-            body: JSON.stringify({ code: entered })
-          });
+        const data = await resp.json().catch(() => ({}));
+        role = String(data?.role || "");
 
-          const data = await resp.json().catch(() => ({}));
-          role = String(data?.role || "");
-
-          if (resp.ok && (role === "admin" || role === "guest")) {
-            lastErr = null;
-            break;
-          }
-          lastErr = new Error("Invalid code");
-        } catch (e) {
-          lastErr = e;
+        if (resp.ok && (role === "admin" || role === "guest")) {
+          lastErr = null;
+          break;
         }
+        lastErr = new Error("Invalid code");
+      } catch (e) {
+        lastErr = e;
       }
-
-      if (lastErr) throw lastErr;
-
-      safeRoleSet(role);
-      window.__serverRoleCache = role;
-
-      input.value = "";
-
-      buildTabsForRole(role);
-      showEntryScreen();
-
-      if (btn) btn.textContent = "Unlock";
-    } catch (e) {
-      console.error("checkCode failed:", e);
-      if (btn) btn.textContent = "Load error";
-      alert("App is still loading — try again in a second.");
-      setTimeout(() => { if (btn) btn.textContent = "Unlock"; }, 900);
     }
+
+    if (lastErr) throw lastErr;
+
+    safeRoleSet(role);
+    window.__serverRoleCache = role;
+
+    input.value = "";
+
+    buildTabsForRole(role);
+    showEntryScreen();
+  } catch (e) {
+    console.error("checkCode failed:", e);
+    if (btn) btn.textContent = "Load error";
+    alert("App is still loading — try again in a second.");
+    setTimeout(() => { if (btn) btn.textContent = "Unlock"; }, 900);
+    return;
+  } finally {
+    // ✅ Critical: always release the loading guard + normalize button label
+    window.__APP_LOADING = false;
+    if (btn) btn.textContent = "Unlock";
   }
-  window.checkCode = checkCode;
+}
+window.checkCode = checkCode;
 
   // ------------------------------------------------------------
   // Global click delegation for tabs
