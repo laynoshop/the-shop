@@ -65,6 +65,14 @@
         `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${eventId}`
     },
     {
+      key: "mls",
+      name: "MLS (Soccer)",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=${eventId}`
+    },
+    {
       key: "nfl",
       name: "NFL",
       endpoint: (date) =>
