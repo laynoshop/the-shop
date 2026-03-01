@@ -1212,16 +1212,20 @@
           justify-content:flex-end;
           align-items:flex-start;
         ">
-          <div style="
-            font-weight:1000;
-            font-size:${top3 ? "28px" : "22px"};
-            line-height:1;
-            letter-spacing:0.2px;
-            color:rgba(255,255,255,0.92);
-          ">
-            ${esc(String(rank))}
-          </div>
-          ${medal ? `<div class="muted" style="margin-top:6px; font-weight:900;">${esc(medal)}</div>` : ``}
+          ${top3
+  ? `<div style="
+        font-weight:1000;
+        font-size:30px;   /* medal slightly bigger */
+        line-height:1;
+      ">${esc(medal)}</div>`
+  : `<div style="
+        font-weight:1000;
+        font-size:22px;
+        line-height:1;
+        letter-spacing:0.2px;
+        color:rgba(255,255,255,0.92);
+      ">${esc(String(rank))}</div>`
+}
         </div>
 
         <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center;">
