@@ -1589,66 +1589,83 @@
   }
 
   // -----------------------------
-  // Admin builder UI (multi-league add)
-  // -----------------------------
-  function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, events }) {
-    const now = Date.now();
-    const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+// Admin builder UI (multi-league add)
+// -----------------------------
+function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, events }) {
+  const now = Date.now();
+  const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
 
-    const rows = sorted.map(ev => {
-      const eventId = String(ev?.id || "");
-      if (!eventId) return "";
-      const comp = ev?.competitions?.[0];
-      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-      const home = competitors.find(c => c.homeAway === "home");
-      const away = competitors.find(c => c.homeAway === "away");
-      const homeName = home?.team?.displayName || home?.team?.name || "Home";
-      const awayName = away?.team?.displayName || away?.team?.name || "Away";
+  const isRankedLeague = (String(leagueKey || "").trim() === "cfb" || String(leagueKey || "").trim() === "ncaam");
 
-      const startMs = kickoffMsFromEvent(ev);
-      const started = startMs ? (startMs <= now) : false;
+  function top25Prefix(competitor) {
+    if (!isRankedLeague) return "";
+    const r = competitor?.curatedRank?.current ?? competitor?.rank ?? competitor?.team?.rank ?? "";
+    const n = Number(r);
+    if (Number.isFinite(n) && n >= 1 && n <= 25) return `#${n} `;
+    return "";
+  }
 
-      return `
-        <div class="gpAdminRow">
-          <label class="gpAdminLabel">
-            <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
-            <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
-            <span class="muted gpAdminTime">${esc(fmtKickoffFromMs(startMs))}${started ? " • Started" : ""}</span>
-          </label>
-        </div>
-      `;
-    }).join("");
+  function teamNameWithRank(competitor) {
+    const t = competitor?.team || {};
+    const name = String(t?.displayName || t?.name || "").trim() || "Team";
+    return `${top25Prefix(competitor)}${name}`.trim();
+  }
+
+  const rows = sorted.map(ev => {
+    const eventId = String(ev?.id || "");
+    if (!eventId) return "";
+    const comp = ev?.competitions?.[0];
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const home = competitors.find(c => c.homeAway === "home");
+    const away = competitors.find(c => c.homeAway === "away");
+
+    const homeName = teamNameWithRank(home);
+    const awayName = teamNameWithRank(away);
+
+    const startMs = kickoffMsFromEvent(ev);
+    const started = startMs ? (startMs <= now) : false;
 
     return `
-      <div class="game" data-gpadminwrap="1" data-weekid="${esc(weekId || "")}">
-        <div class="gameHeader">
-          <div class="statusPill status-other">ADMIN: WEEK BUILDER</div>
-        </div>
-
-        <div class="gameMetaTopLine">${esc(weekLabel || weekId || "Week")}</div>
-        <div class="gameMetaOddsLine">Pick games from any league/day and add them into this week.</div>
-
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          ${buildLeagueSelectHTMLSafe(leagueKey)}
-          ${buildCalendarButtonHTMLSafe()}
-          <button class="smallBtn" type="button" data-gpadmin="loadEvents">Load</button>
-        </div>
-
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
-          <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
-          <button class="smallBtn" type="button" data-gpadmin="addSelected">Add Selected</button>
-          <button class="smallBtn" type="button" data-gpadmin="publishWeek">Publish Week</button>
-        </div>
-
-        <div style="margin-top:10px;">
-          ${rows || `<div class="notice">No games loaded yet (tap Load).</div>`}
-        </div>
-
-        <div class="muted" id="gpAdminStatus" style="margin-top:10px;"></div>
+      <div class="gpAdminRow">
+        <label class="gpAdminLabel">
+          <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
+          <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
+          <span class="muted gpAdminTime">${esc(fmtKickoffFromMs(startMs))}${started ? " • Started" : ""}</span>
+        </label>
       </div>
     `;
-  }
+  }).join("");
+
+  return `
+    <div class="game" data-gpadminwrap="1" data-weekid="${esc(weekId || "")}">
+      <div class="gameHeader">
+        <div class="statusPill status-other">ADMIN: WEEK BUILDER</div>
+      </div>
+
+      <div class="gameMetaTopLine">${esc(weekLabel || weekId || "Week")}</div>
+      <div class="gameMetaOddsLine">Pick games from any league/day and add them into this week.</div>
+
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        ${buildLeagueSelectHTMLSafe(leagueKey)}
+        ${buildCalendarButtonHTMLSafe()}
+        <button class="smallBtn" type="button" data-gpadmin="loadEvents">Load</button>
+      </div>
+
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
+        <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
+        <button class="smallBtn" type="button" data-gpadmin="addSelected">Add Selected</button>
+        <button class="smallBtn" type="button" data-gpadmin="publishWeek">Publish Week</button>
+      </div>
+
+      <div style="margin-top:10px;">
+        ${rows || `<div class="notice">No games loaded yet (tap Load).</div>`}
+      </div>
+
+      <div class="muted" id="gpAdminStatus" style="margin-top:10px;"></div>
+    </div>
+  `;
+}
 
   function gpApplyAdminSelection(wrapEl, mode) {
     if (!wrapEl) return;
