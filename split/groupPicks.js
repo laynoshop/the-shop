@@ -1552,7 +1552,7 @@
             ${lockedGame ? `<div class="muted">Locked</div>` : ``}
           </div>
 
-          <details class="gpEveryone" ${lockedGame ? "open" : ""} style="margin-top:10px;">
+          <details class="gpEveryone" style="margin-top:10px;">
             <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
             <div class="gpEveryoneBody">${everyoneLines}</div>
           </details>
