@@ -1746,12 +1746,33 @@ function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, e
     const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
     const activeWeekId = String(metaPub.activeWeekId || "").trim();
 
+    // ✅ For guests, if active week isn't published, fall back to a published week
+    const publishedWeeks = weeks.filter(w => w && w.published === true);
+    const latestPublishedWeekId = String(publishedWeeks[publishedWeeks.length - 1]?.id || "").trim();
+
     const requested = getSelectedWeekFromLS();
-    const requestedOk =
-      requested &&
+    const requestedIsAllowed =
+      !!requested &&
       weeks.some(w => String(w.id) === requested && (w.published === true || isAdmin));
 
-    const showWeekId = requestedOk ? requested : activeWeekId;
+    const activeIsAllowedForThisRole =
+      !!activeWeekId &&
+      (isAdmin || weeks.some(w => String(w.id) === activeWeekId && w.published === true));
+
+    let showWeekId = "";
+
+    if (requestedIsAllowed) {
+      showWeekId = requested;
+    } else if (activeIsAllowedForThisRole) {
+      showWeekId = activeWeekId;
+    } else if (!isAdmin && latestPublishedWeekId) {
+      // guest fallback when active is unpublished
+      showWeekId = latestPublishedWeekId;
+    } else {
+      // admin fallback (or no published weeks exist yet)
+      showWeekId = activeWeekId || requested || "";
+    }
+
     if (showWeekId) setSelectedWeekToLS(showWeekId);
 
     const wLabel =
@@ -1775,22 +1796,14 @@ function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, e
       });
     }
 
-    const weekOptions = isAdmin ? weeks : weeks.filter(w => w.published === true);
+    const weekOptions = isAdmin ? weeks : publishedWeeks;
     const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId || "");
 
     if (!showWeekId) {
       content.innerHTML = `
         ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: "Week", rightLabel: "Updated" })}
         ${adminHTML}
-        ${gpBuildGroupPicksCardHTML({
-          weekId: "",
-          weekLabel: "",
-          games: [],
-          myMap: {},
-          allPicks: {},
-          published: false,
-          isAdmin
-        })}
+        ${gpBuildGroupPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, allPicks: {}, published: false })}
       `;
       postRender();
       return;
@@ -1801,24 +1814,23 @@ function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, e
     const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
     const published = (slateData.published === true);
 
-    // ✅ Guests still cannot view unpublished weeks
     if (!published && !isAdmin) {
+      // ✅ Guests should never land on an unpublished week (extra safety)
+      const fallbackId = latestPublishedWeekId || "";
+      if (fallbackId && fallbackId !== showWeekId) {
+        setSelectedWeekToLS(fallbackId);
+        renderPicks(true);
+        return;
+      }
+
       content.innerHTML = `
         ${renderPicksHeaderHTML({
           role,
-          weekSelectHTML: buildWeekSelectHTML(weeks.filter(w => w.published === true), activeWeekId),
+          weekSelectHTML: buildWeekSelectHTML(publishedWeeks, latestPublishedWeekId || ""),
           weekLabel: wLabel,
           rightLabel: "Updated"
         })}
-        ${gpBuildGroupPicksCardHTML({
-          weekId: showWeekId,
-          weekLabel: wLabel,
-          games: [],
-          myMap: {},
-          allPicks: {},
-          published: false,
-          isAdmin
-        })}
+        ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games: [], myMap: {}, allPicks: {}, published: false })}
       `;
       postRender();
       return;
@@ -1842,15 +1854,7 @@ function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, e
         rightLabel: published ? "Updated" : "Draft"
       })}
       ${adminHTML}
-      ${gpBuildGroupPicksCardHTML({
-        weekId: showWeekId,
-        weekLabel: wLabel,
-        games,
-        myMap,
-        allPicks,
-        published,
-        isAdmin
-      })}
+      ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games, myMap, allPicks, published })}
     `;
 
     postRender();
