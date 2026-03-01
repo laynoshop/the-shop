@@ -1141,123 +1141,9 @@
 
   // ✅ NEW standings-style leaderboard (rank left prominent, no initials bubbles, top 3 emphasized)
   function gpBuildLeaderboardHTML({ weekLabel, finalsCount, rows }) {
-    const list = Array.isArray(rows) ? rows : [];
+  const list = Array.isArray(rows) ? rows : [];
 
-    if (!finalsCount) {
-      return `
-        <div class="gpLeaderCard" style="
-          margin-top:12px;
-          padding:14px;
-          border-radius:22px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.08);
-        ">
-          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-            <div style="font-weight:950;">Leaderboard</div>
-            <div class="muted" style="font-weight:900;">${esc(weekLabel || "")}</div>
-          </div>
-          <div class="muted" style="margin-top:8px; font-weight:800;">
-            No finals yet — leaderboard will appear once games go final.
-          </div>
-        </div>
-      `;
-    }
-
-    function medalForRank(rank) {
-      if (rank === 1) return "🥇";
-      if (rank === 2) return "🥈";
-      if (rank === 3) return "🥉";
-      return "";
-    }
-
-    function rowHTML(u, rank) {
-      const top3 = rank <= 3;
-      const medal = medalForRank(rank);
-
-      return `
-        <div style="
-          display:flex;
-          align-items:stretch;
-          gap:12px;
-          padding:12px;
-          border-radius:18px;
-          background:${top3 ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)"};
-          border:1px solid ${top3 ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
-        ">
-          <div style="
-            flex:0 0 auto;
-            min-width:54px;
-            display:flex;
-            flex-direction:column;
-            justify-content:flex-end;
-            align-items:flex-start;
-          ">
-            <div style="
-              font-weight:1000;
-              font-size:${top3 ? "28px" : "22px"};
-              line-height:1;
-              letter-spacing:0.2px;
-              color:rgba(255,255,255,0.92);
-            ">
-              ${esc(String(rank))}
-            </div>
-            ${medal ? `<div class="muted" style="margin-top:6px; font-weight:900;">${esc(medal)}</div>` : ``}
-          </div>
-
-          <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center;">
-            <div style="
-              display:flex;
-              align-items:center;
-              justify-content:space-between;
-              gap:10px;
-            ">
-              <div style="min-width:0;">
-                <div style="
-                  font-weight:${top3 ? "1000" : "950"};
-                  font-size:${top3 ? "20px" : "18px"};
-                  white-space:nowrap;
-                  overflow:hidden;
-                  text-overflow:ellipsis;
-                ">
-                  ${esc(String(u?.name || "Someone"))}
-                </div>
-                <div class="muted" style="margin-top:4px; font-weight:850;">
-                  Picks: ${esc(String(u?.picks ?? 0))} • W: ${esc(String(u?.wins ?? 0))} • L: ${esc(String(u?.losses ?? 0))}
-                </div>
-              </div>
-
-              <div class="statusPill" style="
-                background:rgba(0,200,120,0.18);
-                border:1px solid rgba(0,200,120,0.35);
-                color:rgba(180,255,220,0.95);
-                font-weight:1000;
-                white-space:nowrap;
-              ">
-                ${esc(String(u?.points ?? 0))}pts
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    const headerRow = `
-      <div class="muted" style="
-        margin-top:10px;
-        display:flex;
-        justify-content:space-between;
-        gap:10px;
-        font-weight:950;
-      ">
-        <div>Finals: ${esc(String(finalsCount))}</div>
-        <div>${esc(String(weekLabel || ""))}</div>
-      </div>
-    `;
-
-    const body = list.length
-      ? list.map((u, idx) => rowHTML(u, idx + 1)).join("")
-      : `<div class="muted" style="margin-top:10px; font-weight:800;">No picks yet.</div>`;
-
+  if (!finalsCount) {
     return `
       <div class="gpLeaderCard" style="
         margin-top:12px;
@@ -1268,17 +1154,140 @@
       ">
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
           <div style="font-weight:950;">Leaderboard</div>
-          <div class="muted" style="font-weight:900;">Standings</div>
+          <div class="muted" style="font-weight:900;">${esc(String(weekLabel || ""))}</div>
+        </div>
+        <div class="muted" style="margin-top:8px; font-weight:800;">
+          No finals yet — leaderboard will appear once games go final.
         </div>
 
-        ${headerRow}
-
-        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          ${body}
+        <div style="
+          margin-top:12px;
+          padding-top:12px;
+          border-top:1px solid rgba(255,255,255,0.08);
+        ">
+          <div class="muted" style="font-weight:950;">How Points Awarded:</div>
+          <div class="muted" style="margin-top:6px; font-weight:850;">2pts • Picking Underdog Winner</div>
+          <div class="muted" style="margin-top:4px; font-weight:850;">1pt • Picking Favored Winner</div>
         </div>
       </div>
     `;
   }
+
+  function medalForRank(rank) {
+    if (rank === 1) return "🥇";
+    if (rank === 2) return "🥈";
+    if (rank === 3) return "🥉";
+    return "";
+  }
+
+  function rowHTML(u, rank) {
+    const top3 = rank <= 3;
+    const medal = medalForRank(rank);
+
+    return `
+      <div style="
+        display:flex;
+        align-items:stretch;
+        gap:12px;
+        padding:12px;
+        border-radius:18px;
+        background:${top3 ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)"};
+        border:1px solid ${top3 ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
+      ">
+        <div style="
+          flex:0 0 auto;
+          min-width:54px;
+          display:flex;
+          flex-direction:column;
+          justify-content:flex-end;
+          align-items:flex-start;
+        ">
+          <div style="
+            font-weight:1000;
+            font-size:${top3 ? "28px" : "22px"};
+            line-height:1;
+            letter-spacing:0.2px;
+            color:rgba(255,255,255,0.92);
+          ">
+            ${esc(String(rank))}
+          </div>
+          ${medal ? `<div class="muted" style="margin-top:6px; font-weight:900;">${esc(medal)}</div>` : ``}
+        </div>
+
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center;">
+          <div style="
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+          ">
+            <div style="min-width:0;">
+              <div style="
+                font-weight:${top3 ? "1000" : "950"};
+                font-size:${top3 ? "20px" : "18px"};
+                white-space:nowrap;
+                overflow:hidden;
+                text-overflow:ellipsis;
+              ">
+                ${esc(String(u?.name || "Someone"))}
+              </div>
+              <div class="muted" style="margin-top:4px; font-weight:850;">
+                Picks: ${esc(String(u?.picks ?? 0))} • W: ${esc(String(u?.wins ?? 0))} • L: ${esc(String(u?.losses ?? 0))}
+              </div>
+            </div>
+
+            <div class="statusPill" style="
+              background:rgba(0,200,120,0.18);
+              border:1px solid rgba(0,200,120,0.35);
+              color:rgba(180,255,220,0.95);
+              font-weight:1000;
+              white-space:nowrap;
+            ">
+              ${esc(String(u?.points ?? 0))}pts
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const body = list.length
+    ? list.map((u, idx) => rowHTML(u, idx + 1)).join("")
+    : `<div class="muted" style="margin-top:10px; font-weight:800;">No picks yet.</div>`;
+
+  const footer = `
+    <div style="
+      margin-top:12px;
+      padding-top:12px;
+      border-top:1px solid rgba(255,255,255,0.08);
+    ">
+      <div class="muted" style="font-weight:950;">How Points Awarded:</div>
+      <div class="muted" style="margin-top:6px; font-weight:850;">2pts • Picking Underdog Winner</div>
+      <div class="muted" style="margin-top:4px; font-weight:850;">1pt • Picking Favored Winner</div>
+    </div>
+  `;
+
+  return `
+    <div class="gpLeaderCard" style="
+      margin-top:12px;
+      padding:14px;
+      border-radius:22px;
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.08);
+    ">
+      <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+        <div style="font-weight:950;">Leaderboard</div>
+        <div class="muted" style="font-weight:900;">${esc(String(weekLabel || ""))}</div>
+      </div>
+
+      <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+        ${body}
+      </div>
+
+      ${footer}
+    </div>
+  `;
+}
 
   function toNum(v) {
     const n = Number(v);
