@@ -406,6 +406,20 @@
       return null;
     }
   }
+  
+  function gpYYYYMMDDFromStartTime(g) {
+  try {
+    const ms = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+    if (!ms) return "";
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    return `${y}${m}${da}`;
+  } catch {
+    return "";
+  }
+}
 
   async function gpHydrateLiveStateForGames(games) {
     const list = Array.isArray(games) ? games : [];
@@ -414,7 +428,7 @@
     const groups = new Map(); // key => { leagueKey, dateYYYYMMDD, ids:Set }
     for (const g of list) {
       const leagueKey = String(g?.leagueKey || "").trim();
-      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
+      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim() || gpYYYYMMDDFromStartTime(g);
       const eventId = String(g?.eventId || g?.id || "").trim();
       if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
 
@@ -501,7 +515,7 @@
     const groups = new Map();
     for (const g of needs) {
       const leagueKey = String(g?.leagueKey || "").trim();
-      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim();
+      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim() || gpYYYYMMDDFromStartTime(g);
       const eventId = String(g?.eventId || g?.id || "").trim();
       if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
 
