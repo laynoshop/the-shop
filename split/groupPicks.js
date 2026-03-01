@@ -1216,7 +1216,7 @@
           ${top3
   ? `<div style="
         font-weight:1000;
-        font-size:30px;   /* medal slightly bigger */
+        font-size:36px;   /* medal slightly bigger */
         line-height:1;
       ">${esc(medal)}</div>`
   : `<div style="
