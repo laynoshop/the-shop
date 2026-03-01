@@ -1205,13 +1205,14 @@
         border:1px solid ${top3 ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
       ">
         <div style="
-          flex:0 0 auto;
-          min-width:54px;
-          display:flex;
-          flex-direction:column;
-          justify-content:flex-end;
-          align-items:flex-start;
-        ">
+  flex:0 0 auto;
+  min-width:54px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;   /* ✅ center vertically */
+  align-items:center;       /* ✅ center horizontally */
+  text-align:center;
+">
           ${top3
   ? `<div style="
         font-weight:1000;
