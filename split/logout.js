@@ -96,17 +96,41 @@
   }
 
   async function doLogout() {
-    clearLocalKeys();
-    clearSessionKeys();
-    await safeFirebaseSignOut();
+  // ✅ Never allow the login gate to get stuck thinking the app is "loading"
+  try { window.__APP_LOADING = false; } catch {}
 
-    // Prefer soft return to login; otherwise hard reload
-    if (!showLoginFallback()) {
-      window.location.reload();
-    }
+  // Clear app state first
+  clearLocalKeys();
+  clearSessionKeys();
+
+  // ✅ Try to sign out, but NEVER block returning to login if signOut hangs/errors
+  let signedOut = false;
+  try {
+    await Promise.race([
+      (async () => { await safeFirebaseSignOut(); signedOut = true; })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("signOut timeout")), 3000))
+    ]);
+  } catch (e) {
+    console.warn("safeFirebaseSignOut issue (continuing to login anyway):", e);
   }
 
-  // ✅ Backwards-compatible exports
-  window.doLogout = doLogout;
-  window.logout = doLogout; // fixes "Can't find variable: logout"
+  // ✅ Ensure firebase auth state is not left in a weird in-between
+  try {
+    if (!signedOut && window.firebase?.auth) {
+      // If auth exists but signOut failed, force a token refresh path next login
+      // (no-op safe, just defensive)
+      window.__serverRoleCache = "";
+    }
+  } catch {}
+
+  // Prefer soft return to login; otherwise hard reload
+  try { window.__APP_LOADING = false; } catch {}
+  if (!showLoginFallback()) {
+    window.location.reload();
+  }
+}
+
+// ✅ Backwards-compatible exports
+window.doLogout = doLogout;
+window.logout = doLogout; // fixes "Can't find variable: logout"
 })();
