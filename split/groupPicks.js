@@ -1238,28 +1238,36 @@
           ">
             <div style="min-width:0;">
               <div style="
-                font-weight:${top3 ? "1000" : "950"};
-                font-size:${top3 ? "20px" : "18px"};
-                white-space:nowrap;
-                overflow:hidden;
-                text-overflow:ellipsis;
-              ">
+  font-weight:${top3 ? "1000" : "950"};
+  font-size:${top3 ? "22px" : "20px"};   /* ⬆ bigger */
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+">
                 ${esc(String(u?.name || "Someone"))}
               </div>
-              <div class="muted" style="margin-top:4px; font-weight:850;">
-                Picks: ${esc(String(u?.picks ?? 0))} • W: ${esc(String(u?.wins ?? 0))} • L: ${esc(String(u?.losses ?? 0))}
-              </div>
+              <div class="muted" style="margin-top:4px; font-weight:800; font-size:14px; opacity:0.85;">
+  Picks: ${esc(String(u?.picks ?? 0))} • W: ${esc(String(u?.wins ?? 0))} • L: ${esc(String(u?.losses ?? 0))}
+</div>
             </div>
 
             <div class="statusPill" style="
-              background:rgba(0,200,120,0.18);
-              border:1px solid rgba(0,200,120,0.35);
-              color:rgba(180,255,220,0.95);
-              font-weight:1000;
-              white-space:nowrap;
-            ">
-              ${esc(String(u?.points ?? 0))}pts
-            </div>
+  background:rgba(0,200,120,0.18);
+  border:1px solid rgba(0,200,120,0.35);
+  color:rgba(180,255,220,0.95);
+  white-space:nowrap;
+  display:flex;
+  align-items:baseline;
+  gap:2px;
+  padding:10px 14px;
+">
+  <span style="font-weight:1000; font-size:22px; line-height:1;">
+    ${esc(String(u?.points ?? 0))}
+  </span>
+  <span style="font-weight:900; font-size:12px; opacity:0.85;">
+    pts
+  </span>
+</div>
           </div>
         </div>
       </div>
