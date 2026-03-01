@@ -3,6 +3,9 @@
    LOGOUT / RESET SESSION (SAFE)
    - Clears local + session keys
    - Best-effort Firebase sign out (if loaded)
+   - IMPORTANT FIX: after signOut, immediately re-establish anonymous auth
+     so checkCode won't get stuck with "No auth user" when ensureFirebaseChatReady
+     short-circuits (chatReady true) after logout.
    - Returns to login
    ========================= */
 
@@ -40,10 +43,29 @@
     }
   }
 
+  // ✅ Key fix: make sure there's an auth user again after logout
+  // This prevents checkCode() from throwing "No auth user" if ensureFirebaseChatReady
+  // returns early due to its internal chatReady flag.
+  async function safeFirebaseEnsureAnon() {
+    try {
+      if (!(window.firebase && firebase.auth)) return;
+      const auth = firebase.auth();
+      if (!auth) return;
+
+      if (!auth.currentUser) {
+        await auth.signInAnonymously();
+      }
+    } catch (e) {
+      console.warn("Firebase anon sign-in failed (ignored):", e);
+    }
+  }
+
   function clearLocalKeys() {
     for (const k of KEYS_TO_CLEAR) {
       try { localStorage.removeItem(k); } catch {}
     }
+    // also clear any in-memory role cache if you use one
+    try { window.__serverRoleCache = ""; } catch {}
   }
 
   function clearSessionKeys() {
@@ -89,6 +111,13 @@
       const code = document.getElementById("code");
       if (code) code.value = "";
 
+      // If you disable the login button anywhere, re-enable it
+      const btn = document.getElementById("loginBtn");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Unlock";
+      }
+
       return true;
     } catch {}
 
@@ -96,41 +125,38 @@
   }
 
   async function doLogout() {
-  // ✅ Never allow the login gate to get stuck thinking the app is "loading"
-  try { window.__APP_LOADING = false; } catch {}
+    // Clear app state first
+    clearLocalKeys();
+    clearSessionKeys();
 
-  // Clear app state first
-  clearLocalKeys();
-  clearSessionKeys();
-
-  // ✅ Try to sign out, but NEVER block returning to login if signOut hangs/errors
-  let signedOut = false;
-  try {
-    await Promise.race([
-      (async () => { await safeFirebaseSignOut(); signedOut = true; })(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("signOut timeout")), 3000))
-    ]);
-  } catch (e) {
-    console.warn("safeFirebaseSignOut issue (continuing to login anyway):", e);
-  }
-
-  // ✅ Ensure firebase auth state is not left in a weird in-between
-  try {
-    if (!signedOut && window.firebase?.auth) {
-      // If auth exists but signOut failed, force a token refresh path next login
-      // (no-op safe, just defensive)
-      window.__serverRoleCache = "";
+    // Best-effort sign out (don't ever block logout UI)
+    try {
+      await Promise.race([
+        safeFirebaseSignOut(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("signOut timeout")), 2500))
+      ]);
+    } catch (e) {
+      console.warn("safeFirebaseSignOut issue (continuing):", e);
     }
-  } catch {}
 
-  // Prefer soft return to login; otherwise hard reload
-  try { window.__APP_LOADING = false; } catch {}
-  if (!showLoginFallback()) {
-    window.location.reload();
+    // ✅ Critical: ensure we have an anon auth user ready for checkCode()
+    // (prevents the infinite “App is still loading” loop after logout)
+    try {
+      await Promise.race([
+        safeFirebaseEnsureAnon(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("anon signin timeout")), 2500))
+      ]);
+    } catch (e) {
+      console.warn("safeFirebaseEnsureAnon issue (continuing):", e);
+    }
+
+    // Return to login
+    if (!showLoginFallback()) {
+      window.location.reload();
+    }
   }
-}
 
-// ✅ Backwards-compatible exports
-window.doLogout = doLogout;
-window.logout = doLogout; // fixes "Can't find variable: logout"
+  // ✅ Backwards-compatible exports
+  window.doLogout = doLogout;
+  window.logout = doLogout; // fixes "Can't find variable: logout"
 })();
