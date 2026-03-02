@@ -340,6 +340,16 @@ window.replaceMichiganText = replaceMichiganText;
     safeRoleSet(role);
     window.__serverRoleCache = role;
 
+    // ✅ NEW: On successful login, default Scores date to TODAY (YYYYMMDD)
+    try {
+      const DATE_KEY = "theShopDate_v1";
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      localStorage.setItem(DATE_KEY, `${y}${m}${da}`);
+    } catch {}
+
     input.value = "";
 
     buildTabsForRole(role);
