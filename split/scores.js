@@ -1392,78 +1392,57 @@
 
         if (eventId) card.setAttribute("data-eventid", eventId);
 
-        const shouldShowAI = (state === "pre") && !!initialOddsText && !!eventId;
-
         card.innerHTML = `
-          <div class="gameHeader">
-            <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
-          </div>
+  <div class="gameHeader">
+    <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
+  </div>
 
-          <div class="gameMetaTopPlain" aria-label="Venue">
-            ${escapeHtml(venueLine)}
-          </div>
+  <div class="gameMetaTopPlain" aria-label="Venue">
+    ${escapeHtml(venueLine)}
+  </div>
 
-          ${initialOddsText ? `
-            <div class="gameMetaOddsPlain" aria-label="Betting line">
-              ${escapeHtml(initialOddsText)}
-            </div>
-          ` : ""}
+  ${initialOddsText ? `
+    <div class="gameMetaOddsPlain" aria-label="Betting line">
+      ${escapeHtml(initialOddsText)}
+    </div>
+  ` : ""}
 
-          ${shouldShowAI ? `
-            <div class="gameMetaAIPlain" aria-label="AI insight">
-              <div class="aiRow" data-ai-line1="${escapeHtml(eventId)}">AI EDGE: — • Lean: —</div>
-              <div class="aiConfidenceRow" data-ai-line2="${escapeHtml(eventId)}">Confidence: —/10</div>
-            </div>
-          ` : ""}
+  <div class="teamRow">
+    <div class="teamLeft">
+      <div class="teamLine">
+        ${
+          awayLogo
+            ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
+            : `<div class="teamLogoFallback">${awayAbbrev || "—"}</div>`
+        }
+        <div class="teamText">
+          <div class="teamName">${escapeHtml(awayName)}</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${escapeHtml(metaLineWithConference("Away", away, selectedKey))}</div>
+        </div>
+      </div>
+    </div>
+    <div class="score">${awayScore}</div>
+  </div>
 
-          <div class="teamRow">
-            <div class="teamLeft">
-              <div class="teamLine">
-                ${
-                  awayLogo
-                    ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
-                    : `<div class="teamLogoFallback">${awayAbbrev || "—"}</div>`
-                }
-                <div class="teamText">
-                  <div class="teamName">${escapeHtml(awayName)}</div>
-                  <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${escapeHtml(metaLineWithConference("Away", away, selectedKey))}</div>
-                </div>
-              </div>
-            </div>
-            <div class="score">${awayScore}</div>
-          </div>
-
-          <div class="teamRow">
-            <div class="teamLeft">
-              <div class="teamLine">
-                ${
-                  homeLogo
-                    ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
-                    : `<div class="teamLogoFallback">${homeAbbrev || "—"}</div>`
-                }
-                <div class="teamText">
-                  <div class="teamName">${escapeHtml(homeName)}</div>
-                  <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${escapeHtml(metaLineWithConference("Home", home, selectedKey))}</div>
-                </div>
-              </div>
-            </div>
-            <div class="score">${homeScore}</div>
-          </div>
-        `;
+  <div class="teamRow">
+    <div class="teamLeft">
+      <div class="teamLine">
+        ${
+          homeLogo
+            ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
+            : `<div class="teamLogoFallback">${homeAbbrev || "—"}</div>`
+        }
+        <div class="teamText">
+          <div class="teamName">${escapeHtml(homeName)}</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${escapeHtml(metaLineWithConference("Home", home, selectedKey))}</div>
+        </div>
+      </div>
+    </div>
+    <div class="score">${homeScore}</div>
+  </div>
+`;
 
         grid.appendChild(card);
-
-        if (shouldShowAI) {
-          aiJobs.push({
-            eventId,
-            leagueKey: selectedKey,
-            dateYYYYMMDD: selectedDate,
-            home: homeBaseName,
-            away: awayBaseName,
-            spread: initialOdds.favored || "",
-            total: initialOdds.ou || ""
-          });
-        }
       }
 
       content.appendChild(grid);
