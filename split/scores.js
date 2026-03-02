@@ -1516,43 +1516,6 @@
 
       hydrateAllOdds(events, league, selectedKey, selectedDate);
 
-      const limit = 4;
-      let idx = 0;
-
-      async function runNext() {
-        while (idx < aiJobs.length) {
-          const job = aiJobs[idx++];
-
-          const line1 = document.querySelector(`[data-ai-line1="${CSS.escape(String(job.eventId))}"]`);
-          const line2 = document.querySelector(`[data-ai-line2="${CSS.escape(String(job.eventId))}"]`);
-
-          if (line1) line1.textContent = job.spread ? "AI EDGE: Analyzing…" : "AI EDGE: Waiting for line…";
-          if (line2) line2.textContent = "Confidence: —/10";
-
-          const data = await fetchAIInsight({
-            eventId: job.eventId,
-            league: job.leagueKey,
-            date: job.dateYYYYMMDD,
-            home: job.home,
-            away: job.away,
-            spread: job.spread || "",
-            total: job.total || ""
-          });
-
-          if (!data) continue;
-
-          const edge = (data.edge || "—");
-          const lean = (data.lean || "");
-          const conf = (data.confidence ?? "—");
-
-          const leanPart = lean ? ` • Lean: ${lean}` : "";
-          if (line1) line1.textContent = `AI EDGE: ${edge}${leanPart}`;
-          if (line2) line2.textContent = `Confidence: ${conf}/10`;
-        }
-      }
-
-      await Promise.all(new Array(Math.min(limit, aiJobs.length)).fill(0).map(runNext));
-
     } catch (error) {
       content.innerHTML = `
         <div class="header">
