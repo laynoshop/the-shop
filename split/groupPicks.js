@@ -300,6 +300,119 @@
   }
 
   // -----------------------------
+  // Lazy-load "Everyone's Picks" (speed)
+  // -----------------------------
+  function gpGetAllPicksCacheBucket(weekId) {
+    window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
+    const k = String(weekId || "");
+    if (!window.__GP_ALLPICKS_CACHE[k]) window.__GP_ALLPICKS_CACHE[k] = { ts: 0, data: null, promise: null };
+    return window.__GP_ALLPICKS_CACHE[k];
+  }
+
+  // Returns full allPicks map for a week, but only when needed.
+  // Uses in-memory cache and dedupes in-flight requests.
+  async function gpEnsureAllPicksForWeek(db, weekId) {
+    const k = String(weekId || "").trim();
+    if (!k) return {};
+
+    const bucket = gpGetAllPicksCacheBucket(k);
+
+    // Short TTL is fine; we just want the UI to be snappy.
+    const TTL = 30 * 1000;
+    const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+    if (fresh) return bucket.data || {};
+
+    if (bucket.promise) return bucket.promise;
+
+    bucket.promise = (async () => {
+      try {
+        const data = await gpGetAllPicksForSlate(db, k);
+        bucket.data = data || {};
+        bucket.ts = Date.now();
+        return bucket.data;
+      } catch (e) {
+        bucket.data = {};
+        bucket.ts = Date.now();
+        return bucket.data;
+      } finally {
+        bucket.promise = null;
+      }
+    })();
+
+    return bucket.promise;
+  }
+
+  function gpBuildEveryoneLinesForEvent({ everyoneArr, awayName, homeName }) {
+    const arr = Array.isArray(everyoneArr) ? everyoneArr : [];
+    if (!arr.length) return `<div class="muted">No picks yet.</div>`;
+
+    return arr.map(p => {
+      const nm = String(p?.name || "Someone");
+      const side = String(p?.side || "");
+      const team = (side === "away") ? (awayName || "—") : (side === "home" ? (homeName || "—") : "—");
+      return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
+    }).join("");
+  }
+
+  // ✅ Load on <details> open
+  if (!window.__GP_EVERYONE_TOGGLE_BOUND) {
+    window.__GP_EVERYONE_TOGGLE_BOUND = true;
+
+    document.addEventListener("toggle", (e) => {
+      const details = e.target;
+      if (!details || details.tagName !== "DETAILS") return;
+      if (details.getAttribute("data-gpeveryone") !== "1") return;
+
+      // Only load when opened
+      if (!details.open) return;
+
+      (async () => {
+        try {
+          const weekId = String(details.getAttribute("data-weekid") || "").trim();
+          const eventId = String(details.getAttribute("data-eid") || "").trim();
+          if (!weekId || !eventId) return;
+
+          const bodyId = `gpEveryone_${weekId}_${eventId}`;
+          const bodyEl = document.getElementById(bodyId);
+          if (!bodyEl) return;
+
+          // If already loaded, don't redo
+          if (bodyEl.getAttribute("data-loaded") === "1") return;
+
+          bodyEl.innerHTML = `<div class="muted">Loading…</div>`;
+
+          await ensureFirebaseReadySafe();
+          const db = firebase.firestore();
+
+          const all = await gpEnsureAllPicksForWeek(db, weekId);
+          const everyoneArr = Array.isArray(all?.[eventId]) ? all[eventId] : [];
+
+          const awayName = String(details.getAttribute("data-away") || "Away");
+          const homeName = String(details.getAttribute("data-home") || "Home");
+
+          bodyEl.innerHTML = gpBuildEveryoneLinesForEvent({
+            everyoneArr,
+            awayName,
+            homeName
+          });
+
+          bodyEl.setAttribute("data-loaded", "1");
+        } catch (err) {
+          console.error("Everyone's Picks lazy-load error:", err);
+          try {
+            const details = e.target;
+            const weekId = String(details?.getAttribute("data-weekid") || "").trim();
+            const eventId = String(details?.getAttribute("data-eid") || "").trim();
+            const bodyId = `gpEveryone_${weekId}_${eventId}`;
+            const bodyEl = document.getElementById(bodyId);
+            if (bodyEl) bodyEl.innerHTML = `<div class="muted">Couldn’t load picks.</div>`;
+          } catch {}
+        }
+      })();
+    }, true);
+  }
+
+  // -----------------------------
   // Leagues (admin add-games tool)
   // -----------------------------
   const __LEAGUES_FALLBACK_FULL = [
@@ -768,47 +881,47 @@
   // Week selector UI
   // -----------------------------
   function buildWeekSelectHTML(weeks, selectedWeekId) {
-  const list = Array.isArray(weeks) ? weeks : [];
+    const list = Array.isArray(weeks) ? weeks : [];
 
-  // ✅ Admin should be able to select draft weeks
-  const role = (typeof window.getRole === "function")
-    ? window.getRole()
-    : (localStorage.getItem("theShopRole_v1") || "guest");
-  const isAdmin = String(role) === "admin";
+    // ✅ Admin should be able to select draft weeks
+    const role = (typeof window.getRole === "function")
+      ? window.getRole()
+      : (localStorage.getItem("theShopRole_v1") || "guest");
+    const isAdmin = String(role) === "admin";
 
-  const options = list.map(w => {
-    const id = String(w?.id || "");
-    const label = String(w?.label || id);
+    const options = list.map(w => {
+      const id = String(w?.id || "");
+      const label = String(w?.label || id);
 
-    // ✅ Only disable unpublished weeks for non-admins
-    const disabled = (!isAdmin && w?.published === false) ? " disabled" : "";
+      // ✅ Only disable unpublished weeks for non-admins
+      const disabled = (!isAdmin && w?.published === false) ? " disabled" : "";
 
-    const sel = (id === selectedWeekId) ? " selected" : "";
-    return `<option value="${esc(id)}"${sel}${disabled}>${esc(label)}</option>`;
-  }).join("");
+      const sel = (id === selectedWeekId) ? " selected" : "";
+      return `<option value="${esc(id)}"${sel}${disabled}>${esc(label)}</option>`;
+    }).join("");
 
-  return `
-    <select
-      data-gpweeksel="1"
-      style="
-        -webkit-appearance:none;
-        appearance:none;
-        background:rgba(255,255,255,0.06);
-        color:inherit;
-        border:1px solid rgba(255,255,255,0.12);
-        padding:12px 16px;
-        border-radius:18px;
-        font-weight:800;
-        font-size:16px;
-        line-height:1;
-        min-width:110px;
-        flex:0 0 auto;
-      "
-    >
-      ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
-    </select>
-  `;
-}
+    return `
+      <select
+        data-gpweeksel="1"
+        style="
+          -webkit-appearance:none;
+          appearance:none;
+          background:rgba(255,255,255,0.06);
+          color:inherit;
+          border:1px solid rgba(255,255,255,0.12);
+          padding:12px 16px;
+          border-radius:18px;
+          font-weight:800;
+          font-size:16px;
+          line-height:1;
+          min-width:110px;
+          flex:0 0 auto;
+        "
+      >
+        ${options || `<option value="${esc(selectedWeekId)}" selected>${esc(selectedWeekId)}</option>`}
+      </select>
+    `;
+  }
 
   function getSelectedWeekFromLS() {
     return safeGetLS(PICKS_WEEK_KEY).trim();
@@ -1151,9 +1264,140 @@
 
   // ✅ NEW standings-style leaderboard (rank left prominent, no initials bubbles, top 3 emphasized)
   function gpBuildLeaderboardHTML({ weekLabel, finalsCount, rows }) {
-  const list = Array.isArray(rows) ? rows : [];
+    const list = Array.isArray(rows) ? rows : [];
 
-  if (!finalsCount) {
+    if (!finalsCount) {
+      return `
+        <div class="gpLeaderCard" style="
+          margin-top:12px;
+          padding:14px;
+          border-radius:22px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+        ">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+            <div style="font-weight:950;">Leaderboard</div>
+            <div class="muted" style="font-weight:900;">${esc(String(weekLabel || ""))}</div>
+          </div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">
+            No finals yet — leaderboard will appear once games go final.
+          </div>
+
+          <div style="
+            margin-top:12px;
+            padding-top:12px;
+            border-top:1px solid rgba(255,255,255,0.08);
+          ">
+            <div class="muted" style="font-weight:950;">How Points Awarded:</div>
+            <div class="muted" style="margin-top:6px; font-weight:850;">2pts • Picking Underdog Winner</div>
+            <div class="muted" style="margin-top:4px; font-weight:850;">1pt • Picking Favored Winner</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function medalForRank(rank) {
+      if (rank === 1) return "🥇";
+      if (rank === 2) return "🥈";
+      if (rank === 3) return "🥉";
+      return "";
+    }
+
+    function rowHTML(u, rank) {
+      const top3 = rank <= 3;
+      const medal = medalForRank(rank);
+
+      return `
+        <div style="
+          display:flex;
+          align-items:stretch;
+          gap:12px;
+          padding:12px;
+          border-radius:18px;
+          background:${top3 ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)"};
+          border:1px solid ${top3 ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
+        ">
+          <div style="
+            flex:0 0 auto;
+            min-width:54px;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            align-items:center;
+            text-align:center;
+          ">
+            ${top3
+              ? `<div style="
+                    font-weight:1000;
+                    font-size:36px;
+                    line-height:1;
+                  ">${esc(medal)}</div>`
+              : `<div style="
+                    font-weight:1000;
+                    font-size:22px;
+                    line-height:1;
+                    letter-spacing:0.2px;
+                    color:rgba(255,255,255,0.92);
+                  ">${esc(String(rank))}</div>`
+            }
+          </div>
+
+          <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+              <div style="min-width:0;">
+                <div style="
+                  font-weight:${top3 ? "1000" : "950"};
+                  font-size:${top3 ? "22px" : "20px"};
+                  white-space:nowrap;
+                  overflow:hidden;
+                  text-overflow:ellipsis;
+                ">
+                  ${esc(String(u?.name || "Someone"))}
+                </div>
+                <div class="muted" style="margin-top:4px; font-weight:800; font-size:14px; opacity:0.85;">
+                  Picks: ${esc(String(u?.picks ?? 0))} • W: ${esc(String(u?.wins ?? 0))} • L: ${esc(String(u?.losses ?? 0))}
+                </div>
+              </div>
+
+              <div class="statusPill" style="
+                background:rgba(0,200,120,0.18);
+                border:1px solid rgba(0,200,120,0.35);
+                color:rgba(180,255,220,0.95);
+                white-space:nowrap;
+                display:flex;
+                align-items:baseline;
+                gap:2px;
+                padding:10px 14px;
+              ">
+                <span style="font-weight:1000; font-size:22px; line-height:1;">
+                  ${esc(String(u?.points ?? 0))}
+                </span>
+                <span style="font-weight:900; font-size:12px; opacity:0.85;">
+                  pts
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    const body = list.length
+      ? list.map((u, idx) => rowHTML(u, idx + 1)).join("")
+      : `<div class="muted" style="margin-top:10px; font-weight:800;">No picks yet.</div>`;
+
+    const footer = `
+      <div style="
+        margin-top:12px;
+        padding-top:12px;
+        border-top:1px solid rgba(255,255,255,0.08);
+      ">
+        <div class="muted" style="font-weight:950;">How Points Awarded:</div>
+        <div class="muted" style="margin-top:6px; font-weight:850;">2pts • Picking Underdog Winner</div>
+        <div class="muted" style="margin-top:4px; font-weight:850;">1pt • Picking Favored Winner</div>
+      </div>
+    `;
+
     return `
       <div class="gpLeaderCard" style="
         margin-top:12px;
@@ -1166,151 +1410,15 @@
           <div style="font-weight:950;">Leaderboard</div>
           <div class="muted" style="font-weight:900;">${esc(String(weekLabel || ""))}</div>
         </div>
-        <div class="muted" style="margin-top:8px; font-weight:800;">
-          No finals yet — leaderboard will appear once games go final.
+
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+          ${body}
         </div>
 
-        <div style="
-          margin-top:12px;
-          padding-top:12px;
-          border-top:1px solid rgba(255,255,255,0.08);
-        ">
-          <div class="muted" style="font-weight:950;">How Points Awarded:</div>
-          <div class="muted" style="margin-top:6px; font-weight:850;">2pts • Picking Underdog Winner</div>
-          <div class="muted" style="margin-top:4px; font-weight:850;">1pt • Picking Favored Winner</div>
-        </div>
+        ${footer}
       </div>
     `;
   }
-
-  function medalForRank(rank) {
-    if (rank === 1) return "🥇";
-    if (rank === 2) return "🥈";
-    if (rank === 3) return "🥉";
-    return "";
-  }
-
-  function rowHTML(u, rank) {
-    const top3 = rank <= 3;
-    const medal = medalForRank(rank);
-
-    return `
-      <div style="
-        display:flex;
-        align-items:stretch;
-        gap:12px;
-        padding:12px;
-        border-radius:18px;
-        background:${top3 ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)"};
-        border:1px solid ${top3 ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
-      ">
-        <div style="
-  flex:0 0 auto;
-  min-width:54px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;   /* ✅ center vertically */
-  align-items:center;       /* ✅ center horizontally */
-  text-align:center;
-">
-          ${top3
-  ? `<div style="
-        font-weight:1000;
-        font-size:36px;   /* medal slightly bigger */
-        line-height:1;
-      ">${esc(medal)}</div>`
-  : `<div style="
-        font-weight:1000;
-        font-size:22px;
-        line-height:1;
-        letter-spacing:0.2px;
-        color:rgba(255,255,255,0.92);
-      ">${esc(String(rank))}</div>`
-}
-        </div>
-
-        <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center;">
-          <div style="
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            gap:10px;
-          ">
-            <div style="min-width:0;">
-              <div style="
-  font-weight:${top3 ? "1000" : "950"};
-  font-size:${top3 ? "22px" : "20px"};   /* ⬆ bigger */
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-">
-                ${esc(String(u?.name || "Someone"))}
-              </div>
-              <div class="muted" style="margin-top:4px; font-weight:800; font-size:14px; opacity:0.85;">
-  Picks: ${esc(String(u?.picks ?? 0))} • W: ${esc(String(u?.wins ?? 0))} • L: ${esc(String(u?.losses ?? 0))}
-</div>
-            </div>
-
-            <div class="statusPill" style="
-  background:rgba(0,200,120,0.18);
-  border:1px solid rgba(0,200,120,0.35);
-  color:rgba(180,255,220,0.95);
-  white-space:nowrap;
-  display:flex;
-  align-items:baseline;
-  gap:2px;
-  padding:10px 14px;
-">
-  <span style="font-weight:1000; font-size:22px; line-height:1;">
-    ${esc(String(u?.points ?? 0))}
-  </span>
-  <span style="font-weight:900; font-size:12px; opacity:0.85;">
-    pts
-  </span>
-</div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  const body = list.length
-    ? list.map((u, idx) => rowHTML(u, idx + 1)).join("")
-    : `<div class="muted" style="margin-top:10px; font-weight:800;">No picks yet.</div>`;
-
-  const footer = `
-    <div style="
-      margin-top:12px;
-      padding-top:12px;
-      border-top:1px solid rgba(255,255,255,0.08);
-    ">
-      <div class="muted" style="font-weight:950;">How Points Awarded:</div>
-      <div class="muted" style="margin-top:6px; font-weight:850;">2pts • Picking Underdog Winner</div>
-      <div class="muted" style="margin-top:4px; font-weight:850;">1pt • Picking Favored Winner</div>
-    </div>
-  `;
-
-  return `
-    <div class="gpLeaderCard" style="
-      margin-top:12px;
-      padding:14px;
-      border-radius:22px;
-      background:rgba(255,255,255,0.06);
-      border:1px solid rgba(255,255,255,0.08);
-    ">
-      <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-        <div style="font-weight:950;">Leaderboard</div>
-        <div class="muted" style="font-weight:900;">${esc(String(weekLabel || ""))}</div>
-      </div>
-
-      <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-        ${body}
-      </div>
-
-      ${footer}
-    </div>
-  `;
-}
 
   function toNum(v) {
     const n = Number(v);
@@ -1363,32 +1471,58 @@
     }
 
     if (!published && !isAdmin) {
-  return `
-    <div class="game">
-      <div class="gameHeader">
-        <div class="statusPill status-other">GROUP PICKS</div>
-      </div>
-      <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-        ${esc(weekLabel || weekId)} not published yet
-      </div>
-      <div class="muted" style="margin-top:8px; font-weight:800;">
-        Waiting on admin.
-      </div>
-    </div>
-  `;
-}
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GROUP PICKS</div>
+          </div>
+          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+            ${esc(weekLabel || weekId)} not published yet
+          </div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">
+            Waiting on admin.
+          </div>
+        </div>
+      `;
+    }
 
-// ✅ Admin draft view (shows games but clearly marked as draft)
-const isDraft = (!published && !!isAdmin);
+    // ✅ Admin draft view (shows games but clearly marked as draft)
+    const isDraft = (!published && !!isAdmin);
 
     const now = Date.now();
 
-    const lb = gpComputeWeeklyLeaderboard(games, allPicks);
-    const leaderboardHTML = gpBuildLeaderboardHTML({
-      weekLabel: weekLabel || weekId,
-      finalsCount: lb.finalsCount,
-      rows: lb.rows
-    });
+    // Leaderboard:
+    // - If allPicks is empty (lazy-load mode), show a lightweight placeholder (but don't block UI).
+    const hasAllPicks = !!(allPicks && typeof allPicks === "object" && Object.keys(allPicks).length);
+    let leaderboardHTML = "";
+    if (isDraft) {
+      leaderboardHTML = ""; // drafts show draft text instead of leaderboard
+    } else if (!hasAllPicks) {
+      leaderboardHTML = `
+        <div class="gpLeaderCard" style="
+          margin-top:12px;
+          padding:14px;
+          border-radius:22px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+        ">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+            <div style="font-weight:950;">Leaderboard</div>
+            <div class="muted" style="font-weight:900;">${esc(String(weekLabel || weekId || ""))}</div>
+          </div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">
+            Loading leaderboard… (picks load on demand)
+          </div>
+        </div>
+      `;
+    } else {
+      const lb = gpComputeWeeklyLeaderboard(games, allPicks);
+      leaderboardHTML = gpBuildLeaderboardHTML({
+        weekLabel: weekLabel || weekId,
+        finalsCount: lb.finalsCount,
+        rows: lb.rows
+      });
+    }
 
     function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
       return `
@@ -1505,18 +1639,8 @@ const isDraft = (!published && !!isAdmin);
       const saved = String(myMap?.[eventId]?.side || "");
       const my = pending || saved;
 
-      const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
       const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
       const isPending = !!pending && pending !== saved;
-
-      const everyoneLines = everyone.length
-        ? everyone.map(p => {
-            const nm = String(p?.name || "Someone");
-            const side = String(p?.side || "");
-            const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
-            return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
-          }).join("")
-        : `<div class="muted">No picks yet.</div>`;
 
       const venueLine = String(g?.venueLine || "").trim();
       const oddsLine = fmtOddsLine(g);
@@ -1533,6 +1657,9 @@ const isDraft = (!published && !!isAdmin);
       const showScores = (isLive || isFinal) && awayScore !== "" && homeScore !== "";
       const awayScoreText = showScores ? awayScore : "";
       const homeScoreText = showScores ? homeScore : "";
+
+      // ✅ Everyone's Picks lazy placeholder
+      const everyoneBodyId = `gpEveryone_${weekId}_${eventId}`;
 
       return `
         <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
@@ -1578,9 +1705,17 @@ const isDraft = (!published && !!isAdmin);
             ${lockedGame ? `<div class="muted">Locked</div>` : ``}
           </div>
 
-          <details class="gpEveryone" style="margin-top:10px;">
+          <details
+            class="gpEveryone"
+            data-gpeveryone="1"
+            data-weekid="${esc(weekId)}"
+            data-eid="${esc(eventId)}"
+            data-away="${esc(String(away?.name || g?.awayName || "Away"))}"
+            data-home="${esc(String(home?.name || g?.homeName || "Home"))}"
+            style="margin-top:10px;"
+          >
             <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-            <div class="gpEveryoneBody">${everyoneLines}</div>
+            <div class="gpEveryoneBody" id="${esc(everyoneBodyId)}"><div class="muted">Tap to load picks…</div></div>
           </details>
         </div>
       `;
@@ -1594,118 +1729,118 @@ const isDraft = (!published && !!isAdmin);
     `;
 
     return `
-  <div class="game">
-    <div class="gameHeader">
-      <div class="statusPill status-other">GROUP PICKS</div>
-      ${isDraft ? `
-        <div class="statusPill" style="
-          margin-left:10px;
-          background:rgba(255,200,0,0.14);
-          border:1px solid rgba(255,200,0,0.30);
-          color:rgba(255,230,170,0.95);
-          font-weight:950;
-          white-space:nowrap;
-        ">DRAFT</div>
-      ` : ``}
-    </div>
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">GROUP PICKS</div>
+          ${isDraft ? `
+            <div class="statusPill" style="
+              margin-left:10px;
+              background:rgba(255,200,0,0.14);
+              border:1px solid rgba(255,200,0,0.30);
+              color:rgba(255,230,170,0.95);
+              font-weight:950;
+              white-space:nowrap;
+            ">DRAFT</div>
+          ` : ``}
+        </div>
 
-    <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-      ${esc(weekLabel || weekId)}
-    </div>
+        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+          ${esc(weekLabel || weekId)}
+        </div>
 
-    ${isDraft ? `
-      <div class="muted" style="margin-top:8px; font-weight:850;">
-        Draft mode — only admins can see this until you Publish Week.
+        ${isDraft ? `
+          <div class="muted" style="margin-top:8px; font-weight:850;">
+            Draft mode — only admins can see this until you Publish Week.
+          </div>
+        ` : leaderboardHTML}
+
+        <div id="gpGamesWrap">
+          ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+        </div>
+
+        ${saveRow}
       </div>
-    ` : leaderboardHTML}
-
-    <div id="gpGamesWrap">
-      ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
-    </div>
-
-    ${saveRow}
-  </div>
-`;
+    `;
   }
 
   // -----------------------------
-// Admin builder UI (multi-league add)
-// -----------------------------
-function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, events }) {
-  const now = Date.now();
-  const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
+  // Admin builder UI (multi-league add)
+  // -----------------------------
+  function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, events }) {
+    const now = Date.now();
+    const sorted = [...(events || [])].sort((a, b) => kickoffMsFromEvent(a) - kickoffMsFromEvent(b));
 
-  const isRankedLeague = (String(leagueKey || "").trim() === "cfb" || String(leagueKey || "").trim() === "ncaam");
+    const isRankedLeague = (String(leagueKey || "").trim() === "cfb" || String(leagueKey || "").trim() === "ncaam");
 
-  function top25Prefix(competitor) {
-    if (!isRankedLeague) return "";
-    const r = competitor?.curatedRank?.current ?? competitor?.rank ?? competitor?.team?.rank ?? "";
-    const n = Number(r);
-    if (Number.isFinite(n) && n >= 1 && n <= 25) return `#${n} `;
-    return "";
-  }
+    function top25Prefix(competitor) {
+      if (!isRankedLeague) return "";
+      const r = competitor?.curatedRank?.current ?? competitor?.rank ?? competitor?.team?.rank ?? "";
+      const n = Number(r);
+      if (Number.isFinite(n) && n >= 1 && n <= 25) return `#${n} `;
+      return "";
+    }
 
-  function teamNameWithRank(competitor) {
-    const t = competitor?.team || {};
-    const name = String(t?.displayName || t?.name || "").trim() || "Team";
-    return `${top25Prefix(competitor)}${name}`.trim();
-  }
+    function teamNameWithRank(competitor) {
+      const t = competitor?.team || {};
+      const name = String(t?.displayName || t?.name || "").trim() || "Team";
+      return `${top25Prefix(competitor)}${name}`.trim();
+    }
 
-  const rows = sorted.map(ev => {
-    const eventId = String(ev?.id || "");
-    if (!eventId) return "";
-    const comp = ev?.competitions?.[0];
-    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-    const home = competitors.find(c => c.homeAway === "home");
-    const away = competitors.find(c => c.homeAway === "away");
+    const rows = sorted.map(ev => {
+      const eventId = String(ev?.id || "");
+      if (!eventId) return "";
+      const comp = ev?.competitions?.[0];
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const home = competitors.find(c => c.homeAway === "home");
+      const away = competitors.find(c => c.homeAway === "away");
 
-    const homeName = teamNameWithRank(home);
-    const awayName = teamNameWithRank(away);
+      const homeName = teamNameWithRank(home);
+      const awayName = teamNameWithRank(away);
 
-    const startMs = kickoffMsFromEvent(ev);
-    const started = startMs ? (startMs <= now) : false;
+      const startMs = kickoffMsFromEvent(ev);
+      const started = startMs ? (startMs <= now) : false;
+
+      return `
+        <div class="gpAdminRow">
+          <label class="gpAdminLabel">
+            <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
+            <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
+            <span class="muted gpAdminTime">${esc(fmtKickoffFromMs(startMs))}${started ? " • Started" : ""}</span>
+          </label>
+        </div>
+      `;
+    }).join("");
 
     return `
-      <div class="gpAdminRow">
-        <label class="gpAdminLabel">
-          <input type="checkbox" data-gpcheck="1" data-eid="${esc(eventId)}" />
-          <span class="gpAdminText">${esc(awayName)} @ ${esc(homeName)}</span>
-          <span class="muted gpAdminTime">${esc(fmtKickoffFromMs(startMs))}${started ? " • Started" : ""}</span>
-        </label>
+      <div class="game" data-gpadminwrap="1" data-weekid="${esc(weekId || "")}">
+        <div class="gameHeader">
+          <div class="statusPill status-other">ADMIN: WEEK BUILDER</div>
+        </div>
+
+        <div class="gameMetaTopLine">${esc(weekLabel || weekId || "Week")}</div>
+        <div class="gameMetaOddsLine">Pick games from any league/day and add them into this week.</div>
+
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          ${buildLeagueSelectHTMLSafe(leagueKey)}
+          ${buildCalendarButtonHTMLSafe()}
+          <button class="smallBtn" type="button" data-gpadmin="loadEvents">Load</button>
+        </div>
+
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
+          <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
+          <button class="smallBtn" type="button" data-gpadmin="addSelected">Add Selected</button>
+          <button class="smallBtn" type="button" data-gpadmin="publishWeek">Publish Week</button>
+        </div>
+
+        <div style="margin-top:10px;">
+          ${rows || `<div class="notice">No games loaded yet (tap Load).</div>`}
+        </div>
+
+        <div class="muted" id="gpAdminStatus" style="margin-top:10px;"></div>
       </div>
     `;
-  }).join("");
-
-  return `
-    <div class="game" data-gpadminwrap="1" data-weekid="${esc(weekId || "")}">
-      <div class="gameHeader">
-        <div class="statusPill status-other">ADMIN: WEEK BUILDER</div>
-      </div>
-
-      <div class="gameMetaTopLine">${esc(weekLabel || weekId || "Week")}</div>
-      <div class="gameMetaOddsLine">Pick games from any league/day and add them into this week.</div>
-
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        ${buildLeagueSelectHTMLSafe(leagueKey)}
-        ${buildCalendarButtonHTMLSafe()}
-        <button class="smallBtn" type="button" data-gpadmin="loadEvents">Load</button>
-      </div>
-
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="smallBtn" type="button" data-gpselect="all">Select All</button>
-        <button class="smallBtn" type="button" data-gpselect="none">Select None</button>
-        <button class="smallBtn" type="button" data-gpadmin="addSelected">Add Selected</button>
-        <button class="smallBtn" type="button" data-gpadmin="publishWeek">Publish Week</button>
-      </div>
-
-      <div style="margin-top:10px;">
-        ${rows || `<div class="notice">No games loaded yet (tap Load).</div>`}
-      </div>
-
-      <div class="muted" id="gpAdminStatus" style="margin-top:10px;"></div>
-    </div>
-  `;
-}
+  }
 
   function gpApplyAdminSelection(wrapEl, mode) {
     if (!wrapEl) return;
@@ -1718,169 +1853,208 @@ function gpBuildAdminBuilderHTML({ weekId, weekLabel, leagueKey, dateYYYYMMDD, e
   // Main renderer
   // -----------------------------
   async function renderPicks(showLoading) {
-  const content = document.getElementById("content");
-  if (!content) return;
+    const content = document.getElementById("content");
+    if (!content) return;
 
-  const role = getRole();
-  const isAdmin = (role === "admin");
-  const dbReady = ensureFirebaseReadySafe();
+    const role = getRole();
+    const isAdmin = (role === "admin");
+    const dbReady = ensureFirebaseReadySafe();
 
-  if (showLoading) {
-    content.innerHTML = `
-      ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Loading…", weekSelectHTML: "" })}
-      <div class="notice">Loading picks…</div>
-    `;
-  }
-
-  try {
-    await dbReady;
-
-    const user = firebase?.auth?.().currentUser;
-    if (!user) {
-      try { await firebase.auth().signInAnonymously(); } catch {}
-    }
-
-    const db = firebase.firestore();
-
-    // ✅ Mandatory identity gate (Option A) — ONLY for Picks page
-    const ident = gpGetIdentityFromStorageOrMem();
-    if (!gpIsIdentityValid(ident) || !String(ident.playerId || "").trim()) {
+    if (showLoading) {
       content.innerHTML = `
-        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Player", weekSelectHTML: "" })}
-        ${gpBuildIdentityGateHTML({ prefillName: ident.name, rememberChecked: ident.remember })}
+        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Loading…", weekSelectHTML: "" })}
+        <div class="notice">Loading picks…</div>
       `;
-      postRender();
-      return;
     }
 
-    const playerId = String(ident.playerId || "").trim();
+    try {
+      await dbReady;
 
-    const metaPub = await gpGetMetaPublic(db);
-    const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
-    const activeWeekId = String(metaPub.activeWeekId || "").trim();
+      const user = firebase?.auth?.().currentUser;
+      if (!user) {
+        try { await firebase.auth().signInAnonymously(); } catch {}
+      }
 
-    // ✅ For guests, if active week isn't published, fall back to a published week
-    const publishedWeeks = weeks.filter(w => w && w.published === true);
-    const latestPublishedWeekId = String(publishedWeeks[publishedWeeks.length - 1]?.id || "").trim();
+      const db = firebase.firestore();
 
-    let showWeekId = "";
-
-if (!isAdmin) {
-  // ✅ Guests ALWAYS default to active week (if published)
-  const activeIsPublished =
-    !!activeWeekId &&
-    weeks.some(w => String(w.id) === activeWeekId && w.published === true);
-
-  showWeekId = activeIsPublished
-    ? activeWeekId
-    : latestPublishedWeekId || "";
-
-} else {
-  // ✅ Admin keeps smart behavior (can view drafts, local selection, etc.)
-  const requested = getSelectedWeekFromLS();
-  const requestedIsAllowed =
-    !!requested &&
-    weeks.some(w => String(w.id) === requested && (w.published === true || isAdmin));
-
-  showWeekId = requestedIsAllowed
-    ? requested
-    : activeWeekId || requested || "";
-}
-
-    if (showWeekId) setSelectedWeekToLS(showWeekId);
-
-    const wLabel =
-      (weeks.find(w => String(w.id) === String(showWeekId))?.label) ||
-      showWeekId ||
-      "Week";
-
-    let adminHTML = "";
-    let adminEvents = [];
-    const selectedLeagueKey = getSavedLeagueKeySafe();
-    const selectedDate = getSavedDateYYYYMMDDSafe();
-
-    if (isAdmin) {
-      adminEvents = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
-      adminHTML = gpBuildAdminBuilderHTML({
-        weekId: showWeekId,
-        weekLabel: wLabel,
-        leagueKey: selectedLeagueKey,
-        dateYYYYMMDD: selectedDate,
-        events: adminEvents
-      });
-    }
-
-    const weekOptions = isAdmin ? weeks : publishedWeeks;
-    const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId || "");
-
-    if (!showWeekId) {
-      content.innerHTML = `
-        ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: "Week", rightLabel: "Updated" })}
-        ${adminHTML}
-        ${gpBuildGroupPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, allPicks: {}, published: false })}
-      `;
-      postRender();
-      return;
-    }
-
-    const slateRef = db.collection("pickSlates").doc(showWeekId);
-    const slateSnap = await slateRef.get();
-    const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
-    const published = (slateData.published === true);
-
-    if (!published && !isAdmin) {
-      // ✅ Guests should never land on an unpublished week (extra safety)
-      const fallbackId = latestPublishedWeekId || "";
-      if (fallbackId && fallbackId !== showWeekId) {
-        setSelectedWeekToLS(fallbackId);
-        renderPicks(true);
+      // ✅ Mandatory identity gate (Option A) — ONLY for Picks page
+      const ident = gpGetIdentityFromStorageOrMem();
+      if (!gpIsIdentityValid(ident) || !String(ident.playerId || "").trim()) {
+        content.innerHTML = `
+          ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Player", weekSelectHTML: "" })}
+          ${gpBuildIdentityGateHTML({ prefillName: ident.name, rememberChecked: ident.remember })}
+        `;
+        postRender();
         return;
       }
+
+      const playerId = String(ident.playerId || "").trim();
+
+      const metaPub = await gpGetMetaPublic(db);
+      const weeks = Array.isArray(metaPub.weeks) ? metaPub.weeks : [];
+      const activeWeekId = String(metaPub.activeWeekId || "").trim();
+
+      // ✅ For guests, if active week isn't published, fall back to a published week
+      const publishedWeeks = weeks.filter(w => w && w.published === true);
+      const latestPublishedWeekId = String(publishedWeeks[publishedWeeks.length - 1]?.id || "").trim();
+
+      let showWeekId = "";
+
+      if (!isAdmin) {
+        // ✅ Guests ALWAYS default to active week (if published)
+        const activeIsPublished =
+          !!activeWeekId &&
+          weeks.some(w => String(w.id) === activeWeekId && w.published === true);
+
+        showWeekId = activeIsPublished
+          ? activeWeekId
+          : latestPublishedWeekId || "";
+      } else {
+        // ✅ Admin keeps smart behavior (can view drafts, local selection, etc.)
+        const requested = getSelectedWeekFromLS();
+        const requestedIsAllowed =
+          !!requested &&
+          weeks.some(w => String(w.id) === requested && (w.published === true || isAdmin));
+
+        showWeekId = requestedIsAllowed
+          ? requested
+          : activeWeekId || requested || "";
+      }
+
+      if (showWeekId) setSelectedWeekToLS(showWeekId);
+
+      const wLabel =
+        (weeks.find(w => String(w.id) === String(showWeekId))?.label) ||
+        showWeekId ||
+        "Week";
+
+      let adminHTML = "";
+      let adminEvents = [];
+      const selectedLeagueKey = getSavedLeagueKeySafe();
+      const selectedDate = getSavedDateYYYYMMDDSafe();
+
+      if (isAdmin) {
+        adminEvents = Array.isArray(window.__GP_ADMIN_EVENTS) ? window.__GP_ADMIN_EVENTS : [];
+        adminHTML = gpBuildAdminBuilderHTML({
+          weekId: showWeekId,
+          weekLabel: wLabel,
+          leagueKey: selectedLeagueKey,
+          dateYYYYMMDD: selectedDate,
+          events: adminEvents
+        });
+      }
+
+      const weekOptions = isAdmin ? weeks : publishedWeeks;
+      const weekSelectHTML = buildWeekSelectHTML(weekOptions, showWeekId || "");
+
+      if (!showWeekId) {
+        content.innerHTML = `
+          ${renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel: "Week", rightLabel: "Updated" })}
+          ${adminHTML}
+          ${gpBuildGroupPicksCardHTML({ weekId: "", weekLabel: "", games: [], myMap: {}, allPicks: {}, published: false })}
+        `;
+        postRender();
+        return;
+      }
+
+      const slateRef = db.collection("pickSlates").doc(showWeekId);
+
+      // ✅ Fetch slate doc + games + my picks in parallel
+      const [slateSnap, games, myMap] = await Promise.all([
+        slateRef.get(),
+        gpGetSlateGames(db, showWeekId),
+        gpGetMyPicksMap(db, showWeekId, playerId)
+      ]);
+
+      const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
+      const published = (slateData.published === true);
+
+      if (!published && !isAdmin) {
+        // ✅ Guests should never land on an unpublished week (extra safety)
+        const fallbackId = latestPublishedWeekId || "";
+        if (fallbackId && fallbackId !== showWeekId) {
+          setSelectedWeekToLS(fallbackId);
+          renderPicks(true);
+          return;
+        }
+
+        content.innerHTML = `
+          ${renderPicksHeaderHTML({
+            role,
+            weekSelectHTML: buildWeekSelectHTML(publishedWeeks, latestPublishedWeekId || ""),
+            weekLabel: wLabel,
+            rightLabel: "Updated"
+          })}
+          ${gpBuildGroupPicksCardHTML({
+            weekId: showWeekId,
+            weekLabel: wLabel,
+            games: [],
+            myMap: {},
+            allPicks: {},
+            published: false
+          })}
+        `;
+        postRender();
+        return;
+      }
+
+      // ✅ Hydrate in parallel (faster)
+      await Promise.all([
+        gpHydrateLiveStateForGames(games),
+        gpHydrateOddsForGames(games)
+      ]);
+
+      // ✅ FAST PATH: do NOT block initial render on "everyone's picks"
+      const allPicks = {};
+
+      gpPendingResetIfSlateChanged(showWeekId);
+      window.__GP_PENDING.sid = showWeekId;
 
       content.innerHTML = `
         ${renderPicksHeaderHTML({
           role,
-          weekSelectHTML: buildWeekSelectHTML(publishedWeeks, latestPublishedWeekId || ""),
+          weekSelectHTML,
           weekLabel: wLabel,
-          rightLabel: "Updated"
+          rightLabel: published ? "Updated" : "Draft"
         })}
-        ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games: [], myMap: {}, allPicks: {}, published: false })}
+        ${adminHTML}
+        ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games, myMap, allPicks, published, isAdmin })}
+      `;
+
+      postRender();
+
+      // ✅ Warm the cache in the background (NO await, never blocks UI)
+      try {
+        const bucket = gpGetAllPicksCacheBucket(showWeekId);
+        const TTL = 25 * 1000;
+        const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+
+        if (!fresh && !bucket.promise) {
+          bucket.promise = gpGetAllPicksForSlate(db, showWeekId)
+            .then((data) => {
+              bucket.data = data || {};
+              bucket.ts = Date.now();
+              return bucket.data;
+            })
+            .catch(() => {
+              bucket.data = {};
+              bucket.ts = Date.now();
+              return bucket.data;
+            })
+            .finally(() => {
+              bucket.promise = null;
+            });
+        }
+      } catch {}
+    } catch (err) {
+      console.error("renderPicks error:", err);
+      content.innerHTML = `
+        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error", weekSelectHTML: "" })}
+        <div class="notice">Couldn’t load Picks right now.</div>
       `;
       postRender();
-      return;
     }
-
-    const games = await gpGetSlateGames(db, showWeekId);
-    await gpHydrateLiveStateForGames(games);
-    await gpHydrateOddsForGames(games);
-
-    const myMap = await gpGetMyPicksMap(db, showWeekId, playerId);
-    const allPicks = await gpGetAllPicksForSlate(db, showWeekId);
-
-    gpPendingResetIfSlateChanged(showWeekId);
-    window.__GP_PENDING.sid = showWeekId;
-
-    content.innerHTML = `
-      ${renderPicksHeaderHTML({
-        role,
-        weekSelectHTML,
-        weekLabel: wLabel,
-        rightLabel: published ? "Updated" : "Draft"
-      })}
-      ${adminHTML}
-      ${gpBuildGroupPicksCardHTML({ weekId: showWeekId, weekLabel: wLabel, games, myMap, allPicks, published })}
-    `;
-
-    postRender();
-  } catch (err) {
-    console.error("renderPicks error:", err);
-    content.innerHTML = `
-      ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error", weekSelectHTML: "" })}
-      <div class="notice">Couldn’t load Picks right now.</div>
-    `;
-    postRender();
   }
-}
 
   function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
     const isAdmin = role === "admin";
@@ -2264,7 +2438,9 @@ if (!isAdmin) {
 
           const playerId = String(ident.playerId || "").trim();
           const myMap = await gpGetMyPicksMap(db, weekId, playerId);
-          const allPicks = await gpGetAllPicksForSlate(db, weekId);
+
+          // ✅ Do NOT fetch everyone's picks during auto-refresh (keeps it fast)
+          const allPicks = {};
 
           const html = gpBuildGroupPicksCardHTML({
             weekId,
@@ -2272,7 +2448,8 @@ if (!isAdmin) {
             games,
             myMap,
             allPicks,
-            published: true
+            published: true,
+            isAdmin: false
           });
 
           const temp = document.createElement("div");
@@ -2282,6 +2459,29 @@ if (!isAdmin) {
           if (newWrap) {
             gamesWrap.innerHTML = newWrap.innerHTML;
           }
+
+          // ✅ Warm cache in background (no await)
+          try {
+            const bucket = gpGetAllPicksCacheBucket(weekId);
+            const TTL = 25 * 1000;
+            const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+            if (!fresh && !bucket.promise) {
+              bucket.promise = gpGetAllPicksForSlate(db, weekId)
+                .then((data) => {
+                  bucket.data = data || {};
+                  bucket.ts = Date.now();
+                  return bucket.data;
+                })
+                .catch(() => {
+                  bucket.data = {};
+                  bucket.ts = Date.now();
+                  return bucket.data;
+                })
+                .finally(() => {
+                  bucket.promise = null;
+                });
+            }
+          } catch {}
         } catch (err) {
           console.error("GP auto-refresh error:", err);
         }
