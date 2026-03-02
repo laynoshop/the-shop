@@ -341,6 +341,49 @@
 
     return bucket.promise;
   }
+  
+  async function gpUpdateLeaderboardAsync(db, weekId, weekLabel, games, published, isAdmin) {
+  try {
+    if (!weekId) return;
+    if (!published) return;        // don't show real leaderboard for unpublished slates
+    if (isAdmin) {
+      // admins can still see it, but only when published
+    }
+
+    const host = document.getElementById("gpLeaderboard");
+    if (!host) return;
+
+    // Load all picks (cached + deduped)
+    const all = await gpEnsureAllPicksForWeek(db, weekId);
+
+    // Compute + render
+    const lb = gpComputeWeeklyLeaderboard(games, all);
+    host.innerHTML = gpBuildLeaderboardHTML({
+      weekLabel: weekLabel || weekId,
+      finalsCount: lb.finalsCount,
+      rows: lb.rows
+    });
+  } catch (err) {
+    console.error("gpUpdateLeaderboardAsync error:", err);
+    const host = document.getElementById("gpLeaderboard");
+    if (host) {
+      host.innerHTML = `
+        <div class="gpLeaderCard" style="
+          margin-top:12px;
+          padding:14px;
+          border-radius:22px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+        ">
+          <div style="font-weight:950;">Leaderboard</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">
+            Couldn’t load leaderboard.
+          </div>
+        </div>
+      `;
+    }
+  }
+}
 
   function gpBuildEveryoneLinesForEvent({ everyoneArr, awayName, homeName }) {
     const arr = Array.isArray(everyoneArr) ? everyoneArr : [];
@@ -1458,310 +1501,314 @@
   }
 
   function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks, isAdmin }) {
-    if (!weekId) {
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">GROUP PICKS</div>
-          </div>
-          <div class="gameMetaTopLine">No active week yet</div>
-          <div class="gameMetaOddsLine">Waiting on admin to create Week 1.</div>
-        </div>
-      `;
-    }
-
-    if (!published && !isAdmin) {
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">GROUP PICKS</div>
-          </div>
-          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-            ${esc(weekLabel || weekId)} not published yet
-          </div>
-          <div class="muted" style="margin-top:8px; font-weight:800;">
-            Waiting on admin.
-          </div>
-        </div>
-      `;
-    }
-
-    // ✅ Admin draft view (shows games but clearly marked as draft)
-    const isDraft = (!published && !!isAdmin);
-
-    const now = Date.now();
-
-    // Leaderboard:
-    // - If allPicks is empty (lazy-load mode), show a lightweight placeholder (but don't block UI).
-    const hasAllPicks = !!(allPicks && typeof allPicks === "object" && Object.keys(allPicks).length);
-    let leaderboardHTML = "";
-    if (isDraft) {
-      leaderboardHTML = ""; // drafts show draft text instead of leaderboard
-    } else if (!hasAllPicks) {
-      leaderboardHTML = `
-        <div class="gpLeaderCard" style="
-          margin-top:12px;
-          padding:14px;
-          border-radius:22px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.08);
-        ">
-          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-            <div style="font-weight:950;">Leaderboard</div>
-            <div class="muted" style="font-weight:900;">${esc(String(weekLabel || weekId || ""))}</div>
-          </div>
-          <div class="muted" style="margin-top:8px; font-weight:800;">
-            Loading leaderboard… (picks load on demand)
-          </div>
-        </div>
-      `;
-    } else {
-      const lb = gpComputeWeeklyLeaderboard(games, allPicks);
-      leaderboardHTML = gpBuildLeaderboardHTML({
-        weekLabel: weekLabel || weekId,
-        finalsCount: lb.finalsCount,
-        rows: lb.rows
-      });
-    }
-
-    function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
-      return `
-        <button
-          class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
-          type="button"
-          ${lockedGame ? "disabled" : ""}
-          data-gppick="${esc(side)}"
-          data-slate="${esc(weekId)}"
-          data-eid="${esc(eventId)}"
-          style="
-            width:100%;
-            display:flex;
-            align-items:center;
-            gap:12px;
-            padding:12px;
-            border-radius:16px;
-            background:rgba(255,255,255,0.06);
-            border:1px solid rgba(255,255,255,0.10);
-            text-align:left;
-          "
-        >
-          <div style="
-            width:44px; height:44px; border-radius:12px;
-            background:rgba(255,255,255,0.06);
-            border:1px solid rgba(255,255,255,0.08);
-            display:flex; align-items:center; justify-content:center;
-            overflow:hidden;
-            flex:0 0 44px;
-          ">
-            ${logoUrl
-              ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
-              : ``
-            }
-          </div>
-
-          <div style="flex:1; min-width:0;">
-            <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-              ${esc(safeTeamLabel(t))}
-            </div>
-            <div class="muted" style="margin-top:4px;">
-              ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
-            </div>
-          </div>
-
-          ${scoreText !== "" ? `
-            <div style="
-              flex:0 0 auto;
-              min-width:44px;
-              text-align:right;
-              font-weight:950;
-              font-size:34px;
-              line-height:1;
-              letter-spacing:0.2px;
-              color:rgba(255,255,255,0.92);
-            ">
-              ${esc(scoreText)}
-            </div>
-          ` : ``}
-        </button>
-      `;
-    }
-
-    const gameCards = (games || []).map(g => {
-      const eventId = String(g?.eventId || g?.id || "");
-      if (!eventId) return "";
-
-      const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
-      const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
-
-      const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-
-      const kickoffLabel = fmtKickoffFromMs(startMs);
-      const kickoffDateLabel = gpPrettyDateFromStartMs(startMs);
-
-      const lockedGame = startMs ? now >= startMs : false;
-
-      const live = g.__live || null;
-      const state = String(live?.state || "").toLowerCase();
-      const isLive = state === "in";
-      const isFinal = state === "post";
-
-      const awayScore = (live && live.awayScore != null) ? String(live.awayScore) : "";
-      const homeScore = (live && live.homeScore != null) ? String(live.homeScore) : "";
-
-      let pillHTML = "";
-      if (isLive || isFinal) {
-        const pillText = isLive ? `LIVE • ${String(live?.detail || "").trim()}` : "FINAL";
-        pillHTML = `
-          <div class="statusPill" style="
-            display:inline-flex;
-            align-items:center;
-            gap:8px;
-            padding:10px 14px;
-            border-radius:999px;
-            width:100%;
-            max-width:100%;
-            box-sizing:border-box;
-            background:${isLive ? "rgba(0,200,120,0.18)" : "rgba(255,255,255,0.10)"};
-            border:1px solid ${isLive ? "rgba(0,200,120,0.35)" : "rgba(255,255,255,0.16)"};
-            color:${isLive ? "rgba(180,255,220,0.95)" : "rgba(255,255,255,0.88)"};
-            font-weight:950;
-            letter-spacing:0.3px;
-            white-space:nowrap;
-            overflow:hidden;
-            text-overflow:ellipsis;
-          ">
-            ${esc(pillText)}
-          </div>
-        `;
-      }
-
-      const pending = gpPendingGet(eventId);
-      const saved = String(myMap?.[eventId]?.side || "");
-      const my = pending || saved;
-
-      const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
-      const isPending = !!pending && pending !== saved;
-
-      const venueLine = String(g?.venueLine || "").trim();
-      const oddsLine = fmtOddsLine(g);
-
-      const awayLogo = safeLogo(away);
-      const homeLogo = safeLogo(home);
-
-      const hasPick = !!my;
-      const awayActive = my === "away";
-      const homeActive = my === "home";
-      const awayFade = hasPick && !awayActive;
-      const homeFade = hasPick && !homeActive;
-
-      const showScores = (isLive || isFinal) && awayScore !== "" && homeScore !== "";
-      const awayScoreText = showScores ? awayScore : "";
-      const homeScoreText = showScores ? homeScore : "";
-
-      // ✅ Everyone's Picks lazy placeholder
-      const everyoneBodyId = `gpEveryone_${weekId}_${eventId}`;
-
-      return `
-        <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
-          margin-top:14px;
-          padding:14px;
-          border-radius:22px;
-          background:rgba(255,255,255,0.06);
-          border:1px solid rgba(255,255,255,0.08);
-        ">
-
-          ${pillHTML ? `
-            <div style="margin-bottom:10px;">
-              ${pillHTML}
-            </div>
-          ` : ``}
-
-          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-            <div class="muted" style="font-weight:800;">
-              ${venueLine ? esc(venueLine) : ""}
-            </div>
-
-            <div class="muted" style="white-space:nowrap; font-weight:900; text-align:right;">
-              ${kickoffDateLabel ? `<div style="font-weight:800; line-height:1.05;">${esc(kickoffDateLabel)}</div>` : ``}
-              <div style="line-height:1.05;">${esc(kickoffLabel)}</div>
-            </div>
-          </div>
-
-          ${oddsLine
-            ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
-            : `<div class="muted" style="margin-top:8px; font-weight:800;">Odds unavailable</div>`
-          }
-
-          <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-            ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId, scoreText: awayScoreText })}
-            ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId, scoreText: homeScoreText })}
-          </div>
-
-          <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
-            ${my
-              ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
-              : `<div class="muted">No pick yet</div>`
-            }
-            ${lockedGame ? `<div class="muted">Locked</div>` : ``}
-          </div>
-
-          <details
-            class="gpEveryone"
-            data-gpeveryone="1"
-            data-weekid="${esc(weekId)}"
-            data-eid="${esc(eventId)}"
-            data-away="${esc(String(away?.name || g?.awayName || "Away"))}"
-            data-home="${esc(String(home?.name || g?.homeName || "Home"))}"
-            style="margin-top:10px;"
-          >
-            <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-            <div class="gpEveryoneBody" id="${esc(everyoneBodyId)}"><div class="muted">Tap to load picks…</div></div>
-          </details>
-        </div>
-      `;
-    }).join("");
-
-    const saveRow = `
-      <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
-        <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
-        <div class="muted">(Saves your pending picks)</div>
-      </div>
-    `;
-
+  if (!weekId) {
     return `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">GROUP PICKS</div>
-          ${isDraft ? `
-            <div class="statusPill" style="
-              margin-left:10px;
-              background:rgba(255,200,0,0.14);
-              border:1px solid rgba(255,200,0,0.30);
-              color:rgba(255,230,170,0.95);
-              font-weight:950;
-              white-space:nowrap;
-            ">DRAFT</div>
-          ` : ``}
         </div>
-
-        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
-          ${esc(weekLabel || weekId)}
-        </div>
-
-        ${isDraft ? `
-          <div class="muted" style="margin-top:8px; font-weight:850;">
-            Draft mode — only admins can see this until you Publish Week.
-          </div>
-        ` : leaderboardHTML}
-
-        <div id="gpGamesWrap">
-          ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
-        </div>
-
-        ${saveRow}
+        <div class="gameMetaTopLine">No active week yet</div>
+        <div class="gameMetaOddsLine">Waiting on admin to create Week 1.</div>
       </div>
     `;
   }
+
+  if (!published && !isAdmin) {
+    return `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">GROUP PICKS</div>
+        </div>
+        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+          ${esc(weekLabel || weekId)} not published yet
+        </div>
+        <div class="muted" style="margin-top:8px; font-weight:800;">
+          Waiting on admin.
+        </div>
+      </div>
+    `;
+  }
+
+  // ✅ Admin draft view (shows games but clearly marked as draft)
+  const isDraft = (!published && !!isAdmin);
+
+  const now = Date.now();
+
+  // Leaderboard:
+  // - If allPicks is empty (lazy-load mode), show a lightweight placeholder (but don't block UI).
+  // - IMPORTANT: Wrap in #gpLeaderboard so async loader can replace it later.
+  const hasAllPicks = !!(allPicks && typeof allPicks === "object" && Object.keys(allPicks).length);
+  let leaderboardInnerHTML = "";
+
+  if (isDraft) {
+    leaderboardInnerHTML = ""; // drafts show draft text instead of leaderboard
+  } else if (!hasAllPicks) {
+    leaderboardInnerHTML = `
+      <div class="gpLeaderCard" style="
+        margin-top:12px;
+        padding:14px;
+        border-radius:22px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      ">
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+          <div style="font-weight:950;">Leaderboard</div>
+          <div class="muted" style="font-weight:900;">${esc(String(weekLabel || weekId || ""))}</div>
+        </div>
+        <div class="muted" style="margin-top:8px; font-weight:800;">
+          Loading leaderboard…
+        </div>
+      </div>
+    `;
+  } else {
+    const lb = gpComputeWeeklyLeaderboard(games, allPicks);
+    leaderboardInnerHTML = gpBuildLeaderboardHTML({
+      weekLabel: weekLabel || weekId,
+      finalsCount: lb.finalsCount,
+      rows: lb.rows
+    });
+  }
+
+  // ✅ This is what the async updater will target and replace
+  const leaderboardHTML = isDraft ? "" : `<div id="gpLeaderboard">${leaderboardInnerHTML}</div>`;
+
+  function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
+    return `
+      <button
+        class="gpPickRowBtn ${isActive ? "gpPickRowActive" : ""} ${isFaded ? "gpFaded" : ""}"
+        type="button"
+        ${lockedGame ? "disabled" : ""}
+        data-gppick="${esc(side)}"
+        data-slate="${esc(weekId)}"
+        data-eid="${esc(eventId)}"
+        style="
+          width:100%;
+          display:flex;
+          align-items:center;
+          gap:12px;
+          padding:12px;
+          border-radius:16px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.10);
+          text-align:left;
+        "
+      >
+        <div style="
+          width:44px; height:44px; border-radius:12px;
+          background:rgba(255,255,255,0.06);
+          border:1px solid rgba(255,255,255,0.08);
+          display:flex; align-items:center; justify-content:center;
+          overflow:hidden;
+          flex:0 0 44px;
+        ">
+          ${logoUrl
+            ? `<img src="${esc(logoUrl)}" alt="" style="width:34px;height:34px;object-fit:contain;" onerror="this.style.display='none'">`
+            : ``
+          }
+        </div>
+
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:900; font-size:18px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${esc(safeTeamLabel(t))}
+          </div>
+          <div class="muted" style="margin-top:4px;">
+            ${esc(extraSub || "")}${extraSub && safeRecord(t) ? " • " : ""}${esc(safeRecord(t))}
+          </div>
+        </div>
+
+        ${scoreText !== "" ? `
+          <div style="
+            flex:0 0 auto;
+            min-width:44px;
+            text-align:right;
+            font-weight:950;
+            font-size:34px;
+            line-height:1;
+            letter-spacing:0.2px;
+            color:rgba(255,255,255,0.92);
+          ">
+            ${esc(scoreText)}
+          </div>
+        ` : ``}
+      </button>
+    `;
+  }
+
+  const gameCards = (games || []).map(g => {
+    const eventId = String(g?.eventId || g?.id || "");
+    if (!eventId) return "";
+
+    const away = g?.awayTeam || { name: g?.awayName || "Away", rank: g?.awayRank, record: g?.awayRecord, logo: g?.awayLogo };
+    const home = g?.homeTeam || { name: g?.homeName || "Home", rank: g?.homeRank, record: g?.homeRecord, logo: g?.homeLogo };
+
+    const startMs = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+
+    const kickoffLabel = fmtKickoffFromMs(startMs);
+    const kickoffDateLabel = gpPrettyDateFromStartMs(startMs);
+
+    const lockedGame = startMs ? now >= startMs : false;
+
+    const live = g.__live || null;
+    const state = String(live?.state || "").toLowerCase();
+    const isLive = state === "in";
+    const isFinal = state === "post";
+
+    const awayScore = (live && live.awayScore != null) ? String(live.awayScore) : "";
+    const homeScore = (live && live.homeScore != null) ? String(live.homeScore) : "";
+
+    let pillHTML = "";
+    if (isLive || isFinal) {
+      const pillText = isLive ? `LIVE • ${String(live?.detail || "").trim()}` : "FINAL";
+      pillHTML = `
+        <div class="statusPill" style="
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          padding:10px 14px;
+          border-radius:999px;
+          width:100%;
+          max-width:100%;
+          box-sizing:border-box;
+          background:${isLive ? "rgba(0,200,120,0.18)" : "rgba(255,255,255,0.10)"};
+          border:1px solid ${isLive ? "rgba(0,200,120,0.35)" : "rgba(255,255,255,0.16)"};
+          color:${isLive ? "rgba(180,255,220,0.95)" : "rgba(255,255,255,0.88)"};
+          font-weight:950;
+          letter-spacing:0.3px;
+          white-space:nowrap;
+          overflow:hidden;
+          text-overflow:ellipsis;
+        ">
+          ${esc(pillText)}
+        </div>
+      `;
+    }
+
+    const pending = gpPendingGet(eventId);
+    const saved = String(myMap?.[eventId]?.side || "");
+    const my = pending || saved;
+
+    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+    const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
+    const isPending = !!pending && pending !== saved;
+
+    const everyoneLines = everyone.length
+      ? everyone.map(p => {
+          const nm = String(p?.name || "Someone");
+          const side = String(p?.side || "");
+          const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
+          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
+        }).join("")
+      : `<div class="muted">No picks yet.</div>`;
+
+    const venueLine = String(g?.venueLine || "").trim();
+    const oddsLine = fmtOddsLine(g);
+
+    const awayLogo = safeLogo(away);
+    const homeLogo = safeLogo(home);
+
+    const hasPick = !!my;
+    const awayActive = my === "away";
+    const homeActive = my === "home";
+    const awayFade = hasPick && !awayActive;
+    const homeFade = hasPick && !homeActive;
+
+    const showScores = (isLive || isFinal) && awayScore !== "" && homeScore !== "";
+    const awayScoreText = showScores ? awayScore : "";
+    const homeScoreText = showScores ? homeScore : "";
+
+    return `
+      <div class="game gpMiniGameCard gpGameRow" data-saved="${esc(saved)}" style="
+        margin-top:14px;
+        padding:14px;
+        border-radius:22px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      ">
+
+        ${pillHTML ? `
+          <div style="margin-bottom:10px;">
+            ${pillHTML}
+          </div>
+        ` : ``}
+
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+          <div class="muted" style="font-weight:800;">
+            ${venueLine ? esc(venueLine) : ""}
+          </div>
+
+          <div class="muted" style="white-space:nowrap; font-weight:900; text-align:right;">
+            ${kickoffDateLabel ? `<div style="font-weight:800; line-height:1.05;">${esc(kickoffDateLabel)}</div>` : ``}
+            <div style="line-height:1.05;">${esc(kickoffLabel)}</div>
+          </div>
+        </div>
+
+        ${oddsLine
+          ? `<div class="muted" style="margin-top:8px; font-weight:800;">${esc(oddsLine)}</div>`
+          : `<div class="muted" style="margin-top:8px; font-weight:800;">Odds unavailable</div>`
+        }
+
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+          ${teamRowBtn({ side: "away", t: away, logoUrl: awayLogo, extraSub: "Away", isActive: awayActive, isFaded: awayFade, lockedGame, eventId, scoreText: awayScoreText })}
+          ${teamRowBtn({ side: "home", t: home, logoUrl: homeLogo, extraSub: "Home", isActive: homeActive, isFaded: homeFade, lockedGame, eventId, scoreText: homeScoreText })}
+        </div>
+
+        <div class="gpMetaRow" style="margin-top:10px; display:flex; justify-content:space-between; gap:10px; align-items:center;">
+          ${my
+            ? `<div class="gpYouPicked">✓ ${isPending ? "Pending" : "Your Pick"}: ${esc(pickedTeam)}</div>`
+            : `<div class="muted">No pick yet</div>`
+          }
+          ${lockedGame ? `<div class="muted">Locked</div>` : ``}
+        </div>
+
+        <details class="gpEveryone" style="margin-top:10px;">
+          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
+          <div class="gpEveryoneBody">${everyoneLines}</div>
+        </details>
+      </div>
+    `;
+  }).join("");
+
+  const saveRow = `
+    <div class="gpSaveRow" style="margin-top:14px; display:flex; align-items:center; gap:10px;">
+      <button class="smallBtn" data-gpaction="savePicks" type="button">Save</button>
+      <div class="muted">(Saves your pending picks)</div>
+    </div>
+  `;
+
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">GROUP PICKS</div>
+        ${isDraft ? `
+          <div class="statusPill" style="
+            margin-left:10px;
+            background:rgba(255,200,0,0.14);
+            border:1px solid rgba(255,200,0,0.30);
+            color:rgba(255,230,170,0.95);
+            font-weight:950;
+            white-space:nowrap;
+          ">DRAFT</div>
+        ` : ``}
+      </div>
+
+      <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">
+        ${esc(weekLabel || weekId)}
+      </div>
+
+      ${isDraft ? `
+        <div class="muted" style="margin-top:8px; font-weight:850;">
+          Draft mode — only admins can see this until you Publish Week.
+        </div>
+      ` : leaderboardHTML}
+
+      <div id="gpGamesWrap">
+        ${gameCards || `<div class="notice" style="margin-top:12px;">No games in this week.</div>`}
+      </div>
+
+      ${saveRow}
+    </div>
+  `;
+}
 
   // -----------------------------
   // Admin builder UI (multi-league add)
@@ -1885,6 +1932,14 @@
           ${gpBuildIdentityGateHTML({ prefillName: ident.name, rememberChecked: ident.remember })}
         `;
         postRender();
+        // ✅ After initial paint: load leaderboard data and inject it (does not block UI)
+try {
+  if (!isAdmin && published) {
+    gpUpdateLeaderboardAsync(db, showWeekId, wLabel, games, published, isAdmin);
+  } else if (isAdmin && published) {
+    gpUpdateLeaderboardAsync(db, showWeekId, wLabel, games, published, isAdmin);
+  }
+} catch {}
         return;
       }
 
