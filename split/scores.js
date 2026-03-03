@@ -1571,7 +1571,6 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
     if (s === "0" || s.toLowerCase() === "e" || s.toLowerCase() === "even") return { text: "E", cls: "pgaEven" };
     if (s.startsWith("-")) return { text: s, cls: "pgaUnder" };
     if (s.startsWith("+")) return { text: s, cls: "pgaOver" };
-    // sometimes ESPN gives "5" (meaning +5)
     const n = Number(s);
     if (Number.isFinite(n)) {
       if (n === 0) return { text: "E", cls: "pgaEven" };
@@ -1619,7 +1618,6 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
     `;
   }
 
-  // ESPN shape can vary; try to locate events safely
   const events =
     (Array.isArray(j?.events) && j.events) ||
     (Array.isArray(j?.leagues?.[0]?.events) && j.leagues[0].events) ||
@@ -1646,200 +1644,189 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
     (Array.isArray(ev?.competitions) ? ev.competitions[0] : null) ||
     null;
 
-  // Tournament/venue/round info
   const tournamentName = pickFirst(ev?.name, ev?.shortName, ev?.season?.name, "PGA Tournament");
   const venueName = pickFirst(comp?.venue?.fullName, comp?.venue?.name, ev?.venues?.[0]?.fullName, "");
   const statusDetail = pickFirst(comp?.status?.type?.shortDetail, comp?.status?.type?.detail, ev?.status?.type?.shortDetail, "");
 
-  // Leaderboard entries live in competitors for golf
   const competitors =
     (Array.isArray(comp?.competitors) && comp.competitors) ||
     (Array.isArray(ev?.competitors) && ev.competitors) ||
     [];
 
   // Normalize leaderboard rows
-const rows = competitors.map((c, idx) => {
-  const athleteName =
-    pickFirst(c?.athlete?.displayName, c?.athlete?.shortName, c?.athlete?.fullName, c?.name, "Player");
+  const rows = competitors.map((c, idx) => {
+    const athleteName =
+      pickFirst(c?.athlete?.displayName, c?.athlete?.shortName, c?.athlete?.fullName, c?.name, "Player");
 
-  // ---- POSITION (ESPN varies a lot for golf) ----
-  function extractPosText(cc) {
-    // Common candidates
-    const direct = pickFirst(
-      cc?.place,
-      cc?.position?.displayName,
-      cc?.position?.name,
-      cc?.position,
-      cc?.standing?.position?.displayName,
-      cc?.standing?.position,
-      cc?.rank,
-      cc?.seed,
-      ""
-    );
+    // ---- POSITION (ESPN varies a lot for golf) ----
+    function extractPosText(cc) {
+      const direct = pickFirst(
+        cc?.place,
+        cc?.position?.displayName,
+        cc?.position?.name,
+        cc?.position,
+        cc?.standing?.position?.displayName,
+        cc?.standing?.position,
+        cc?.rank,
+        cc?.seed,
+        ""
+      );
 
-    // Sometimes stored in "statistics" entries
-    const stats = Array.isArray(cc?.statistics) ? cc.statistics : [];
-    for (const s of stats) {
-      const n = String(s?.name || s?.abbreviation || "").toLowerCase();
-      if (n === "pos" || n === "position" || n === "place") {
-        const v = pickFirst(s?.displayValue, s?.value, s?.summary, "");
-        if (v) return v;
+      const stats = Array.isArray(cc?.statistics) ? cc.statistics : [];
+      for (const s of stats) {
+        const n = String(s?.name || s?.abbreviation || "").toLowerCase();
+        if (n === "pos" || n === "position" || n === "place") {
+          const v = pickFirst(s?.displayValue, s?.value, s?.summary, "");
+          if (v) return v;
+        }
       }
+
+      return direct;
     }
 
-    return direct;
+    const posTextRaw = String(extractPosText(c) || "").trim();
+
+    const totalToParRaw =
+      pickFirst(c?.score?.displayValue, c?.score, c?.toPar, c?.summary?.toPar, "");
+
+    const todayRaw =
+      pickFirst(
+        c?.linescores?.[0]?.displayValue,
+        c?.linescores?.[0]?.value,
+        c?.scorecard?.[0]?.displayValue,
+        c?.today,
+        c?.rounds?.[0]?.scoreToPar?.displayValue,
+        ""
+      );
+
+    const thru =
+      pickFirst(
+        c?.status?.type?.shortDetail,
+        c?.status?.displayValue,
+        c?.status?.type?.detail,
+        c?.status?.type?.state,
+        c?.thru,
+        ""
+      );
+
+    const totalFmt = fmtToPar(totalToParRaw);
+    const todayFmt = fmtToday(todayRaw);
+
+    const posNum = (() => {
+      const m = posTextRaw.match(/(\d+)/);
+      if (m) return Number(m[1]);
+      return idx + 1;
+    })();
+
+    const posText = posTextRaw || String(idx + 1);
+
+    return {
+      athleteName,
+      pos: posText,
+      posNum,
+      totalText: totalFmt.text,
+      totalCls: totalFmt.cls,
+      todayText: todayFmt,
+      thru: String(thru || ""),
+      __hasRealPos: !!posTextRaw
+    };
+  });
+
+  const hasAnyRealPos = rows.some(r => r.__hasRealPos);
+
+  if (hasAnyRealPos) {
+    rows.sort((a, b) => {
+      if (a.posNum !== b.posNum) return a.posNum - b.posNum;
+      return a.athleteName.localeCompare(b.athleteName);
+    });
   }
 
-  const posTextRaw = String(extractPosText(c) || "").trim();
+  const topN = rows.slice(0, 20);
 
-  // Total to par: ESPN commonly uses c.score.displayValue or c.score
-  const totalToParRaw =
-    pickFirst(c?.score?.displayValue, c?.score, c?.toPar, c?.summary?.toPar, "");
+  const body = topN.map((r, idx) => {
+    const isLeader = idx === 0 || r.posNum === 1;
+    return `
+      <div style="
+        display:flex;
+        align-items:center;
+        gap:6px;
+        padding:8px 10px;
+        border-radius:14px;
+        background:${isLeader ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"};
+        border:1px solid ${isLeader ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
+      ">
+        <div style="flex:0 0 30px; font-weight:1000; text-align:center;">
+          ${esc(r.pos || "")}
+        </div>
 
-  // Today: various possibilities
-  const todayRaw =
-    pickFirst(
-      c?.linescores?.[0]?.displayValue,        // sometimes “Today”
-      c?.linescores?.[0]?.value,
-      c?.scorecard?.[0]?.displayValue,
-      c?.today,
-      c?.rounds?.[0]?.scoreToPar?.displayValue,
-      ""
-    );
+        <div style="flex:1; min-width:0;">
+          <div style="
+            font-weight:${isLeader ? "1000" : "900"};
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+          ">${esc(r.athleteName)}</div>
+        </div>
 
-  // Thru: ESPN often uses status fields; could be "F", "18", "10", "CUT"
-  const thru =
-    pickFirst(
-      c?.status?.type?.shortDetail,
-      c?.status?.displayValue,
-      c?.status?.type?.detail,
-      c?.status?.type?.state,
-      c?.thru,
-      ""
-    );
+        <div class="${esc(r.totalCls)}" style="flex:0 0 48px; text-align:right; font-weight:1000;">
+          ${esc(r.totalText)}
+        </div>
 
-  const totalFmt = fmtToPar(totalToParRaw);
-  const todayFmt = fmtToday(todayRaw);
+        <div style="flex:0 0 40px; text-align:right; font-weight:900; opacity:0.92;">
+          ${esc(r.todayText || "—")}
+        </div>
 
-  // numeric sort position if possible (T1 -> 1)
-  // If ESPN doesn't provide a usable pos field, preserve ESPN ordering using idx.
-  const posNum = (() => {
-    const m = posTextRaw.match(/(\d+)/);
-    if (m) return Number(m[1]);
-    return idx + 1; // keep ESPN leaderboard order
-  })();
+        <div style="flex:0 0 42px; text-align:right; font-weight:900; opacity:0.85;">
+          ${esc(r.thru || "—")}
+        </div>
+      </div>
+    `;
+  }).join("");
 
-  const posText = posTextRaw || String(idx + 1);
-
-  return {
-    athleteName,
-    pos: posText,
-    posNum,
-    totalText: totalFmt.text,
-    totalCls: totalFmt.cls,
-    todayText: todayFmt,
-    thru: String(thru || ""),
-    __hasRealPos: !!posTextRaw
-  };
-});
-
-// If ESPN didn't provide real position fields, DON'T sort (keep native leaderboard order)
-const hasAnyRealPos = rows.some(r => r.__hasRealPos);
-
-// Sort by position (only when we actually have positions), then name
-if (hasAnyRealPos) {
-  rows.sort((a, b) => {
-    if (a.posNum !== b.posNum) return a.posNum - b.posNum;
-    return a.athleteName.localeCompare(b.athleteName);
-  });
-}
-
-const topN = rows.slice(0, 20);
-
-const body = topN.map((r, idx) => {
-  const isLeader = idx === 0 || r.posNum === 1;
   return `
-    <div style="
-      display:flex;
-      align-items:center;
-      gap:10px;
-      padding:10px 12px;
-      border-radius:16px;
-      background:${isLeader ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"};
-      border:1px solid ${isLeader ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
-    ">
-      <div style="flex:0 0 40px; font-weight:1000; text-align:center;">
-        ${esc(r.pos || "")}
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">GOLF (PGA)</div>
       </div>
 
-      <div style="flex:1; min-width:0;">
-        <div style="
-          font-weight:${isLeader ? "1000" : "900"};
-          white-space:nowrap;
-          overflow:hidden;
-          text-overflow:ellipsis;
-        ">${esc(r.athleteName)}</div>
+      <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+        ${esc(tournamentName)}
       </div>
 
-      <div class="${esc(r.totalCls)}" style="flex:0 0 56px; text-align:right; font-weight:1000;">
-        ${esc(r.totalText)}
+      <div class="muted" style="margin-top:6px; font-weight:850;">
+        ${esc(statusDetail || "Leaderboard")} ${venueName ? `• ${esc(venueName)}` : ""}
       </div>
 
-      <div style="flex:0 0 52px; text-align:right; font-weight:900; opacity:0.92;">
-        ${esc(r.todayText || "—")}
+      <div style="
+        margin-top:12px;
+        display:flex;
+        gap:6px;
+        align-items:center;
+        justify-content:space-between;
+        padding:10px 10px;
+        border-radius:16px;
+        background:rgba(255,255,255,0.04);
+        border:1px solid rgba(255,255,255,0.06);
+        font-weight:950;
+      ">
+        <div style="flex:0 0 30px; text-align:center;">POS</div>
+        <div style="flex:1;">PLAYER</div>
+        <div style="flex:0 0 48px; text-align:right;">TOT</div>
+        <div style="flex:0 0 40px; text-align:right;">TOD</div>
+        <div style="flex:0 0 42px; text-align:right;">THRU</div>
       </div>
 
-      <div style="flex:0 0 56px; text-align:right; font-weight:900; opacity:0.85;">
-        ${esc(r.thru || "—")}
+      <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+        ${body || `<div class="muted" style="margin-top:10px; font-weight:800;">No leaderboard data.</div>`}
       </div>
+
+      <style>
+        .pgaUnder { color: rgba(120,255,190,0.95); }
+        .pgaOver  { color: rgba(255,140,140,0.95); }
+        .pgaEven  { color: rgba(255,255,255,0.92); }
+      </style>
     </div>
   `;
-}).join("");
-
-return `
-  <div class="game">
-    <div class="gameHeader">
-      <div class="statusPill status-other">GOLF (PGA)</div>
-    </div>
-
-    <div style="margin-top:10px; font-weight:1000; font-size:20px;">
-      ${esc(tournamentName)}
-    </div>
-
-    <div class="muted" style="margin-top:6px; font-weight:850;">
-      ${esc(statusDetail || "Leaderboard")} ${venueName ? `• ${esc(venueName)}` : ""}
-    </div>
-
-    <div style="
-      margin-top:12px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-      justify-content:space-between;
-      padding:10px 12px;
-      border-radius:16px;
-      background:rgba(255,255,255,0.04);
-      border:1px solid rgba(255,255,255,0.06);
-      font-weight:950;
-    ">
-      <div style="flex:0 0 40px; text-align:center;">POS</div>
-      <div style="flex:1;">PLAYER</div>
-      <div style="flex:0 0 56px; text-align:right;">TOT</div>
-      <div style="flex:0 0 52px; text-align:right;">TOD</div>
-      <div style="flex:0 0 56px; text-align:right;">THRU</div>
-    </div>
-
-    <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
-      ${body || `<div class="muted" style="margin-top:10px; font-weight:800;">No leaderboard data.</div>`}
-    </div>
-
-    <style>
-      .pgaUnder { color: rgba(120,255,190,0.95); }
-      .pgaOver  { color: rgba(255,140,140,0.95); }
-      .pgaEven  { color: rgba(255,255,255,0.92); }
-    </style>
-  </div>
-`;
 }
 
   // ---------- Exports ----------
