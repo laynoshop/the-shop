@@ -1599,6 +1599,18 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
     return "";
   };
 
+  // Convert "E", "-15", "+3", "0" -> number for tie math
+  const toParNumber = (raw) => {
+    const s = String(raw ?? "").trim();
+    if (!s) return NaN;
+    const low = s.toLowerCase();
+    if (low === "e" || low === "even") return 0;
+    if (s === "0") return 0;
+    // allow "5" meaning +5
+    const n = Number(s);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
   const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
   let j = null;
 
@@ -1658,7 +1670,6 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
     const athleteName =
       pickFirst(c?.athlete?.displayName, c?.athlete?.shortName, c?.athlete?.fullName, c?.name, "Player");
 
-    // ---- POSITION (ESPN varies a lot for golf) ----
     function extractPosText(cc) {
       const direct = pickFirst(
         cc?.place,
@@ -1712,6 +1723,7 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
     const totalFmt = fmtToPar(totalToParRaw);
     const todayFmt = fmtToday(todayRaw);
 
+    // numeric sort position if possible (T1 -> 1)
     const posNum = (() => {
       const m = posTextRaw.match(/(\d+)/);
       if (m) return Number(m[1]);
@@ -1720,20 +1732,27 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
 
     const posText = posTextRaw || String(idx + 1);
 
+    const totalNum = toParNumber(totalFmt.text);
+
     return {
       athleteName,
-      pos: posText,
-      posNum,
+      pos: posText,        // raw (fallback)
+      posNum,              // raw-ish
       totalText: totalFmt.text,
       totalCls: totalFmt.cls,
+      totalNum,            // numeric for ties
       todayText: todayFmt,
       thru: String(thru || ""),
-      __hasRealPos: !!posTextRaw
+      __hasRealPos: !!posTextRaw,
+      posDisplay: posText  // will be replaced below
     };
   });
 
   const hasAnyRealPos = rows.some(r => r.__hasRealPos);
 
+  // Keep your existing ordering rules:
+  // - If ESPN gave real position fields, sort by that
+  // - Otherwise keep ESPN ordering (don’t sort)
   if (hasAnyRealPos) {
     rows.sort((a, b) => {
       if (a.posNum !== b.posNum) return a.posNum - b.posNum;
@@ -1741,22 +1760,59 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
     });
   }
 
+  // ✅ ESPN-style competition ranking with ties: 1, T2, T2, T2, 5...
+  (function applyTiePositions(arr) {
+    let prevTotal = null;
+    let currentRank = 1;
+
+    for (let i = 0; i < arr.length; i++) {
+      const r = arr[i];
+
+      // If we can't compute totals, keep whatever POS we had
+      if (!Number.isFinite(r.totalNum)) {
+        r.posDisplay = r.pos;
+        continue;
+      }
+
+      if (i === 0) {
+        currentRank = 1;
+      } else {
+        // if total changed, rank becomes "i+1" (competition ranking)
+        if (r.totalNum !== prevTotal) currentRank = i + 1;
+      }
+
+      const next = arr[i + 1];
+      const nextTotal = next && Number.isFinite(next.totalNum) ? next.totalNum : null;
+
+      const isTiedWithPrev = (i > 0 && r.totalNum === prevTotal);
+      const isTiedWithNext = (nextTotal !== null && r.totalNum === nextTotal);
+      const isTie = isTiedWithPrev || isTiedWithNext;
+
+      r.posDisplay = isTie ? `T${currentRank}` : String(currentRank);
+
+      // keep posNum aligned with displayed rank for leader styling checks
+      r.posNum = currentRank;
+
+      prevTotal = r.totalNum;
+    }
+  })(rows);
+
   const topN = rows.slice(0, 20);
 
   const body = topN.map((r, idx) => {
-    const isLeader = idx === 0 || r.posNum === 1;
+    const isLeader = (r.posNum === 1);
     return `
       <div style="
         display:flex;
         align-items:center;
-        gap:6px;
-        padding:8px 10px;
-        border-radius:14px;
+        gap:10px;
+        padding:10px 12px;
+        border-radius:16px;
         background:${isLeader ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"};
         border:1px solid ${isLeader ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
       ">
-        <div style="flex:0 0 30px; font-weight:1000; text-align:center;">
-          ${esc(r.pos || "")}
+        <div style="flex:0 0 40px; font-weight:1000; text-align:center;">
+          ${esc(r.posDisplay || "")}
         </div>
 
         <div style="flex:1; min-width:0;">
@@ -1768,15 +1824,15 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
           ">${esc(r.athleteName)}</div>
         </div>
 
-        <div class="${esc(r.totalCls)}" style="flex:0 0 48px; text-align:right; font-weight:1000;">
+        <div class="${esc(r.totalCls)}" style="flex:0 0 56px; text-align:right; font-weight:1000;">
           ${esc(r.totalText)}
         </div>
 
-        <div style="flex:0 0 40px; text-align:right; font-weight:900; opacity:0.92;">
+        <div style="flex:0 0 52px; text-align:right; font-weight:900; opacity:0.92;">
           ${esc(r.todayText || "—")}
         </div>
 
-        <div style="flex:0 0 42px; text-align:right; font-weight:900; opacity:0.85;">
+        <div style="flex:0 0 56px; text-align:right; font-weight:900; opacity:0.85;">
           ${esc(r.thru || "—")}
         </div>
       </div>
@@ -1800,20 +1856,20 @@ async function renderPGAScoreboard({ dateYYYYMMDD }) {
       <div style="
         margin-top:12px;
         display:flex;
-        gap:6px;
+        gap:10px;
         align-items:center;
         justify-content:space-between;
-        padding:10px 10px;
+        padding:10px 12px;
         border-radius:16px;
         background:rgba(255,255,255,0.04);
         border:1px solid rgba(255,255,255,0.06);
         font-weight:950;
       ">
-        <div style="flex:0 0 30px; text-align:center;">POS</div>
+        <div style="flex:0 0 40px; text-align:center;">POS</div>
         <div style="flex:1;">PLAYER</div>
-        <div style="flex:0 0 48px; text-align:right;">TOT</div>
-        <div style="flex:0 0 40px; text-align:right;">TOD</div>
-        <div style="flex:0 0 42px; text-align:right;">THRU</div>
+        <div style="flex:0 0 56px; text-align:right;">TOT</div>
+        <div style="flex:0 0 52px; text-align:right;">TOD</div>
+        <div style="flex:0 0 56px; text-align:right;">THRU</div>
       </div>
 
       <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
