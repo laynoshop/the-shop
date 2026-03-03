@@ -1186,18 +1186,6 @@
     return detail || "STATUS";
   }
 
-  // ---------- PGA view ----------
-  if (leagueKey === "pga") {
-  const dateYYYYMMDD = getSavedDateYYYYMMDD ? getSavedDateYYYYMMDD() : (localStorage.getItem("theShopDate_v1") || "");
-  content.innerHTML = `
-    ${headerHTML}
-    <div class="notice">Loading PGA…</div>
-  `;
-  const pgaHTML = await renderPGAScoreboard({ dateYYYYMMDD });
-  content.innerHTML = `${headerHTML}${pgaHTML}`;
-  return;
-}
-
   // ---------- The actual Scores loader ----------
   async function loadScores(showLoading) {
     const content = document.getElementById("content");
@@ -1242,6 +1230,26 @@
         ` : ``}
       </div>
     `;
+    
+    // ---------- PGA (Golf) ----------
+if (selectedKey === "pga") {
+  const selectedDate = getSavedDateYYYYMMDD();
+  const prettyDate = yyyymmddToPretty(selectedDate);
+  const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  // show header + loading
+  content.innerHTML = `
+    ${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}
+    <div class="notice">Loading PGA…</div>
+  `;
+
+  // render leaderboard
+  const pgaHTML = await renderPGAScoreboard({ dateYYYYMMDD: selectedDate });
+
+  // keep the same header
+  content.innerHTML = `${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}${pgaHTML}`;
+  return;
+}
 
     if (showLoading) {
       content.innerHTML = `
@@ -1284,11 +1292,6 @@
             </div>
           </div>
         `;
-        return;
-      }
-
-      if (league.key === "pga") {
-        renderGolfPlaceholder(events, content);
         return;
       }
 
