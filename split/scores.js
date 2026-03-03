@@ -1187,9 +1187,16 @@
   }
 
   // ---------- PGA view ----------
-  function renderGolfPlaceholder(events, content) {
-    content.innerHTML += `<div class="notice">PGA view is handled in your main script (or add it here if needed).</div>`;
-  }
+  if (leagueKey === "pga") {
+  const dateYYYYMMDD = getSavedDateYYYYMMDD ? getSavedDateYYYYMMDD() : (localStorage.getItem("theShopDate_v1") || "");
+  content.innerHTML = `
+    ${headerHTML}
+    <div class="notice">Loading PGA…</div>
+  `;
+  const pgaHTML = await renderPGAScoreboard({ dateYYYYMMDD });
+  content.innerHTML = `${headerHTML}${pgaHTML}`;
+  return;
+}
 
   // ---------- The actual Scores loader ----------
   async function loadScores(showLoading) {
@@ -1541,6 +1548,259 @@
       `;
     }
   }
+  
+  // =========================
+// PGA (Golf) — Active Tournament Leaderboard
+// =========================
+async function renderPGAScoreboard({ dateYYYYMMDD }) {
+  const esc = (s) => {
+    if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
+    return String(s ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  };
+
+  const fmtToPar = (v) => {
+    const s = String(v ?? "").trim();
+    if (!s) return { text: "E", cls: "pgaEven" };
+    if (s === "0" || s.toLowerCase() === "e" || s.toLowerCase() === "even") return { text: "E", cls: "pgaEven" };
+    if (s.startsWith("-")) return { text: s, cls: "pgaUnder" };
+    if (s.startsWith("+")) return { text: s, cls: "pgaOver" };
+    // sometimes ESPN gives "5" (meaning +5)
+    const n = Number(s);
+    if (Number.isFinite(n)) {
+      if (n === 0) return { text: "E", cls: "pgaEven" };
+      if (n < 0) return { text: String(n), cls: "pgaUnder" };
+      return { text: `+${n}`, cls: "pgaOver" };
+    }
+    return { text: s, cls: "pgaEven" };
+  };
+
+  const fmtToday = (v) => {
+    const s = String(v ?? "").trim();
+    if (!s) return "";
+    if (s === "0" || s.toLowerCase() === "e") return "E";
+    if (s.startsWith("-") || s.startsWith("+")) return s;
+    const n = Number(s);
+    if (Number.isFinite(n)) return n > 0 ? `+${n}` : String(n);
+    return s;
+  };
+
+  const pickFirst = (...vals) => {
+    for (const v of vals) {
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) return s;
+    }
+    return "";
+  };
+
+  const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
+  let j = null;
+
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("ESPN fetch failed");
+    j = await r.json();
+  } catch (e) {
+    return `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">GOLF (PGA)</div>
+        </div>
+        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">Couldn’t load PGA</div>
+        <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
+      </div>
+    `;
+  }
+
+  // ESPN shape can vary; try to locate events safely
+  const events =
+    (Array.isArray(j?.events) && j.events) ||
+    (Array.isArray(j?.leagues?.[0]?.events) && j.leagues[0].events) ||
+    [];
+
+  const ev = events[0] || null;
+
+  if (!ev) {
+    return `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">GOLF (PGA)</div>
+        </div>
+        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">No PGA event found</div>
+        <div class="muted" style="margin-top:8px; font-weight:800;">Nothing scheduled for this date.</div>
+      </div>
+    `;
+  }
+
+  const comp =
+    (Array.isArray(ev?.competitions) && ev.competitions[0]) ||
+    (Array.isArray(ev?.competitions?.competitions) && ev.competitions.competitions[0]) ||
+    (Array.isArray(ev?.competitions?.[0]?.competitions) && ev.competitions[0].competitions[0]) ||
+    (Array.isArray(ev?.competitions) ? ev.competitions[0] : null) ||
+    null;
+
+  // Tournament/venue/round info
+  const tournamentName = pickFirst(ev?.name, ev?.shortName, ev?.season?.name, "PGA Tournament");
+  const venueName = pickFirst(comp?.venue?.fullName, comp?.venue?.name, ev?.venues?.[0]?.fullName, "");
+  const statusDetail = pickFirst(comp?.status?.type?.shortDetail, comp?.status?.type?.detail, ev?.status?.type?.shortDetail, "");
+
+  // Leaderboard entries live in competitors for golf
+  const competitors =
+    (Array.isArray(comp?.competitors) && comp.competitors) ||
+    (Array.isArray(ev?.competitors) && ev.competitors) ||
+    [];
+
+  // Normalize leaderboard rows
+  const rows = competitors.map((c) => {
+    const athleteName =
+      pickFirst(c?.athlete?.displayName, c?.athlete?.shortName, c?.athlete?.fullName, c?.name, "Player");
+
+    const pos =
+      pickFirst(c?.place, c?.position?.displayName, c?.position, c?.rank, "");
+
+    // Total to par: ESPN commonly uses c.score.displayValue or c.score
+    const totalToParRaw =
+      pickFirst(c?.score?.displayValue, c?.score, c?.toPar, c?.summary?.toPar, "");
+
+    // Today: various possibilities
+    const todayRaw =
+      pickFirst(
+        c?.linescores?.[0]?.displayValue,        // sometimes “Today”
+        c?.linescores?.[0]?.value,
+        c?.scorecard?.[0]?.displayValue,
+        c?.today,
+        c?.rounds?.[0]?.scoreToPar?.displayValue,
+        ""
+      );
+
+    // Thru: ESPN often uses status fields; could be "F", "18", "10", "CUT"
+    const thru =
+      pickFirst(
+        c?.status?.type?.shortDetail,
+        c?.status?.displayValue,
+        c?.status?.type?.detail,
+        c?.status?.type?.state,
+        c?.thru,
+        ""
+      );
+
+    const totalFmt = fmtToPar(totalToParRaw);
+    const todayFmt = fmtToday(todayRaw);
+
+    // numeric sort position if possible (T1 -> 1)
+    const posNum = (() => {
+      const m = String(pos || "").match(/(\d+)/);
+      return m ? Number(m[1]) : 9999;
+    })();
+
+    return {
+      athleteName,
+      pos: String(pos || ""),
+      posNum,
+      totalText: totalFmt.text,
+      totalCls: totalFmt.cls,
+      todayText: todayFmt,
+      thru: String(thru || ""),
+    };
+  });
+
+  // Sort by position, then name
+  rows.sort((a, b) => {
+    if (a.posNum !== b.posNum) return a.posNum - b.posNum;
+    return a.athleteName.localeCompare(b.athleteName);
+  });
+
+  const topN = rows.slice(0, 20);
+
+  const body = topN.map((r, idx) => {
+    const isLeader = idx === 0 || r.posNum === 1;
+    return `
+      <div style="
+        display:flex;
+        align-items:center;
+        gap:10px;
+        padding:10px 12px;
+        border-radius:16px;
+        background:${isLeader ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"};
+        border:1px solid ${isLeader ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
+      ">
+        <div style="flex:0 0 40px; font-weight:1000; text-align:center;">
+          ${esc(r.pos || "")}
+        </div>
+
+        <div style="flex:1; min-width:0;">
+          <div style="
+            font-weight:${isLeader ? "1000" : "900"};
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+          ">${esc(r.athleteName)}</div>
+        </div>
+
+        <div class="${esc(r.totalCls)}" style="flex:0 0 56px; text-align:right; font-weight:1000;">
+          ${esc(r.totalText)}
+        </div>
+
+        <div style="flex:0 0 52px; text-align:right; font-weight:900; opacity:0.92;">
+          ${esc(r.todayText || "—")}
+        </div>
+
+        <div style="flex:0 0 56px; text-align:right; font-weight:900; opacity:0.85;">
+          ${esc(r.thru || "—")}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">GOLF (PGA)</div>
+      </div>
+
+      <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+        ${esc(tournamentName)}
+      </div>
+
+      <div class="muted" style="margin-top:6px; font-weight:850;">
+        ${esc(statusDetail || "Leaderboard")} ${venueName ? `• ${esc(venueName)}` : ""}
+      </div>
+
+      <div style="
+        margin-top:12px;
+        display:flex;
+        gap:10px;
+        align-items:center;
+        justify-content:space-between;
+        padding:10px 12px;
+        border-radius:16px;
+        background:rgba(255,255,255,0.04);
+        border:1px solid rgba(255,255,255,0.06);
+        font-weight:950;
+      ">
+        <div style="flex:0 0 40px; text-align:center;">POS</div>
+        <div style="flex:1;">PLAYER</div>
+        <div style="flex:0 0 56px; text-align:right;">TOT</div>
+        <div style="flex:0 0 52px; text-align:right;">TOD</div>
+        <div style="flex:0 0 56px; text-align:right;">THRU</div>
+      </div>
+
+      <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+        ${body || `<div class="muted" style="margin-top:10px; font-weight:800;">No leaderboard data.</div>`}
+      </div>
+
+      <style>
+        .pgaUnder { color: rgba(120,255,190,0.95); }
+        .pgaOver  { color: rgba(255,140,140,0.95); }
+        .pgaEven  { color: rgba(255,255,255,0.92); }
+      </style>
+    </div>
+  `;
+}
 
   // ---------- Exports ----------
   window.loadScores = loadScores;
