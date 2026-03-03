@@ -342,6 +342,66 @@
     return bucket.promise;
   }
   
+  try {
+  // ✅ Warm the cache in the background + update leaderboard when it arrives (NO await)
+  const bucket = gpGetAllPicksCacheBucket(showWeekId);
+
+  // bump TTL a bit so we’re not refetching constantly
+  const TTL = 2 * 60 * 1000; // 2 minutes
+  const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+
+  // take snapshots so async doesn’t get stale
+  const gamesSnapshot = Array.isArray(games) ? games.slice() : [];
+  const weekLabelSnapshot = String(wLabel || showWeekId);
+  const weekIdSnapshot = String(showWeekId || "");
+
+  if (fresh) {
+    // If already cached, apply leaderboard immediately (still non-blocking)
+    setTimeout(() => {
+      try {
+        if (String(window.__GP_PENDING?.sid || "") !== weekIdSnapshot) return;
+        if (typeof gpApplyLeaderboardFromAllPicks === "function") {
+          gpApplyLeaderboardFromAllPicks({
+            weekId: weekIdSnapshot,
+            weekLabel: weekLabelSnapshot,
+            games: gamesSnapshot,
+            allPicks: bucket.data || {}
+          });
+        }
+      } catch {}
+    }, 0);
+  } else if (!bucket.promise) {
+    bucket.promise = gpGetAllPicksForSlate(db, weekIdSnapshot)
+      .then((data) => {
+        bucket.data = data || {};
+        bucket.ts = Date.now();
+
+        // ✅ Apply leaderboard once picks arrive (still never blocks initial render)
+        try {
+          if (String(window.__GP_PENDING?.sid || "") !== weekIdSnapshot) return bucket.data;
+          if (typeof gpApplyLeaderboardFromAllPicks === "function") {
+            gpApplyLeaderboardFromAllPicks({
+              weekId: weekIdSnapshot,
+              weekLabel: weekLabelSnapshot,
+              games: gamesSnapshot,
+              allPicks: bucket.data || {}
+            });
+          }
+        } catch {}
+
+        return bucket.data;
+      })
+      .catch(() => {
+        bucket.data = {};
+        bucket.ts = Date.now();
+        return bucket.data;
+      })
+      .finally(() => {
+        bucket.promise = null;
+      });
+  }
+} catch {}
+  
   async function gpUpdateLeaderboardAsync(db, weekId, weekLabel, games, published, isAdmin) {
   try {
     if (!weekId) return;
@@ -1244,6 +1304,46 @@
     }
   }
 
+function gpGetAllPicksCached(db, slateId) {
+  window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
+  const cache = window.__GP_ALLPICKS_CACHE[slateId] || (window.__GP_ALLPICKS_CACHE[slateId] = {});
+  const TTL = 2 * 60 * 1000; // 2 minutes (real cache, not 25s)
+
+  const fresh = cache.ts && (Date.now() - cache.ts) < TTL && cache.data;
+  if (fresh) return Promise.resolve(cache.data);
+
+  if (cache.promise) return cache.promise;
+
+  cache.promise = gpGetAllPicksForSlate(db, slateId)
+    .then((data) => {
+      cache.data = data || {};
+      cache.ts = Date.now();
+      return cache.data;
+    })
+    .catch(() => {
+      cache.data = {};
+      cache.ts = Date.now();
+      return cache.data;
+    })
+    .finally(() => {
+      cache.promise = null;
+    });
+
+  return cache.promise;
+}
+
+function gpApplyLeaderboardFromAllPicks({ weekId, weekLabel, games, allPicks }) {
+  const host = document.getElementById("gpLeaderboard");
+  if (!host) return;
+
+  const lb = gpComputeWeeklyLeaderboard(games, allPicks || {});
+  host.innerHTML = gpBuildLeaderboardHTML({
+    weekLabel: weekLabel || weekId,
+    finalsCount: lb.finalsCount,
+    rows: lb.rows
+  });
+}
+
   // ✅ NEW leaderboard calc (points / wins / losses / picks) + sorting rules
   function gpComputeWeeklyLeaderboard(games, allPicks) {
     const list = Array.isArray(games) ? games : [];
@@ -1500,7 +1600,9 @@
     return parts.join(" • ");
   }
 
-  function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks, isAdmin }) {
+
+
+function gpBuildGroupPicksCardHTML({ weekId, weekLabel, games, myMap, published, allPicks, isAdmin }) {
   if (!weekId) {
     return `
       <div class="game">
@@ -1529,48 +1631,58 @@
     `;
   }
 
-  // ✅ Admin draft view (shows games but clearly marked as draft)
   const isDraft = (!published && !!isAdmin);
-
   const now = Date.now();
 
-  // Leaderboard:
-  // - If allPicks is empty (lazy-load mode), show a lightweight placeholder (but don't block UI).
-  // - IMPORTANT: Wrap in #gpLeaderboard so async loader can replace it later.
-  const hasAllPicks = !!(allPicks && typeof allPicks === "object" && Object.keys(allPicks).length);
-  let leaderboardInnerHTML = "";
+  // ✅ Prefer cached allPicks (if it already arrived) even if caller passed {}
+  const cachedAll =
+    (window.__GP_ALLPICKS_CACHE &&
+      window.__GP_ALLPICKS_CACHE[weekId] &&
+      window.__GP_ALLPICKS_CACHE[weekId].data) || null;
 
-  if (isDraft) {
-    leaderboardInnerHTML = ""; // drafts show draft text instead of leaderboard
-  } else if (!hasAllPicks) {
-    leaderboardInnerHTML = `
-      <div class="gpLeaderCard" style="
-        margin-top:12px;
-        padding:14px;
-        border-radius:22px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.08);
-      ">
-        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-          <div style="font-weight:950;">Leaderboard</div>
-          <div class="muted" style="font-weight:900;">${esc(String(weekLabel || weekId || ""))}</div>
+  const effectiveAllPicks =
+    (allPicks && typeof allPicks === "object" && Object.keys(allPicks).length)
+      ? allPicks
+      : (cachedAll && typeof cachedAll === "object" ? cachedAll : {});
+
+  const hasAllPicks = !!Object.keys(effectiveAllPicks).length;
+
+  // ✅ Leaderboard always renders a target div we can replace later
+  let leaderboardHTML = "";
+  if (!isDraft) {
+    if (!hasAllPicks) {
+      leaderboardHTML = `
+        <div id="gpLeaderboard">
+          <div class="gpLeaderCard" style="
+            margin-top:12px;
+            padding:14px;
+            border-radius:22px;
+            background:rgba(255,255,255,0.06);
+            border:1px solid rgba(255,255,255,0.08);
+          ">
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+              <div style="font-weight:950;">Leaderboard</div>
+              <div class="muted" style="font-weight:900;">${esc(String(weekLabel || weekId || ""))}</div>
+            </div>
+            <div class="muted" style="margin-top:8px; font-weight:800;">
+              Loading leaderboard…
+            </div>
+          </div>
         </div>
-        <div class="muted" style="margin-top:8px; font-weight:800;">
-          Loading leaderboard…
+      `;
+    } else {
+      const lb = gpComputeWeeklyLeaderboard(games, effectiveAllPicks);
+      leaderboardHTML = `
+        <div id="gpLeaderboard">
+          ${gpBuildLeaderboardHTML({
+            weekLabel: weekLabel || weekId,
+            finalsCount: lb.finalsCount,
+            rows: lb.rows
+          })}
         </div>
-      </div>
-    `;
-  } else {
-    const lb = gpComputeWeeklyLeaderboard(games, allPicks);
-    leaderboardInnerHTML = gpBuildLeaderboardHTML({
-      weekLabel: weekLabel || weekId,
-      finalsCount: lb.finalsCount,
-      rows: lb.rows
-    });
+      `;
+    }
   }
-
-  // ✅ This is what the async updater will target and replace
-  const leaderboardHTML = isDraft ? "" : `<div id="gpLeaderboard">${leaderboardInnerHTML}</div>`;
 
   function teamRowBtn({ side, t, logoUrl, extraSub, isActive, isFaded, lockedGame, eventId, scoreText }) {
     return `
@@ -1687,18 +1799,8 @@
     const saved = String(myMap?.[eventId]?.side || "");
     const my = pending || saved;
 
-    const everyone = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
     const pickedTeam = (my === "away") ? (away?.name || "") : (my === "home" ? (home?.name || "") : "");
     const isPending = !!pending && pending !== saved;
-
-    const everyoneLines = everyone.length
-      ? everyone.map(p => {
-          const nm = String(p?.name || "Someone");
-          const side = String(p?.side || "");
-          const team = (side === "away") ? (away?.name || "—") : (side === "home" ? (home?.name || "—") : "—");
-          return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
-        }).join("")
-      : `<div class="muted">No picks yet.</div>`;
 
     const venueLine = String(g?.venueLine || "").trim();
     const oddsLine = fmtOddsLine(g);
@@ -1725,11 +1827,7 @@
         border:1px solid rgba(255,255,255,0.08);
       ">
 
-        ${pillHTML ? `
-          <div style="margin-bottom:10px;">
-            ${pillHTML}
-          </div>
-        ` : ``}
+        ${pillHTML ? `<div style="margin-bottom:10px;">${pillHTML}</div>` : ``}
 
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
           <div class="muted" style="font-weight:800;">
@@ -1760,10 +1858,13 @@
           ${lockedGame ? `<div class="muted">Locked</div>` : ``}
         </div>
 
-        <details class="gpEveryone" style="margin-top:10px;">
-          <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
-          <div class="gpEveryoneBody">${everyoneLines}</div>
-        </details>
+        <!-- ✅ Everyone’s picks loads on demand, but will be instant once cache warms -->
+        <details class="gpEveryone" data-gpeveryone="1" data-weekid="${esc(weekId)}" data-eid="${esc(eventId)}" style="margin-top:10px;">
+  <summary class="gpEveryoneSummary">Everyone’s Picks</summary>
+  <div id="gpEveryone_${esc(weekId)}_${esc(eventId)}" class="gpEveryoneBody">
+    <div class="muted">Loading picks…</div>
+  </div>
+</details>
       </div>
     `;
   }).join("");
@@ -2080,36 +2181,64 @@ try {
 
       // ✅ Warm the cache in the background (NO await, never blocks UI)
       try {
-        const bucket = gpGetAllPicksCacheBucket(showWeekId);
-        const TTL = 25 * 1000;
-        const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+  // ✅ Warm the cache in the background + update leaderboard when it arrives (NO await)
+  const bucket = gpGetAllPicksCacheBucket(showWeekId);
 
-        if (!fresh && !bucket.promise) {
-          bucket.promise = gpGetAllPicksForSlate(db, showWeekId)
-            .then((data) => {
-              bucket.data = data || {};
-              bucket.ts = Date.now();
-              return bucket.data;
-            })
-            .catch(() => {
-              bucket.data = {};
-              bucket.ts = Date.now();
-              return bucket.data;
-            })
-            .finally(() => {
-              bucket.promise = null;
-            });
+  // bump TTL a bit so we’re not refetching constantly
+  const TTL = 2 * 60 * 1000; // 2 minutes
+  const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+
+  // take snapshots so async doesn’t get stale
+  const gamesSnapshot = Array.isArray(games) ? games.slice() : [];
+  const weekLabelSnapshot = String(wLabel || showWeekId);
+  const weekIdSnapshot = String(showWeekId || "");
+
+  if (fresh) {
+    // If already cached, apply leaderboard immediately (still non-blocking)
+    setTimeout(() => {
+      try {
+        if (String(window.__GP_PENDING?.sid || "") !== weekIdSnapshot) return;
+        if (typeof gpApplyLeaderboardFromAllPicks === "function") {
+          gpApplyLeaderboardFromAllPicks({
+            weekId: weekIdSnapshot,
+            weekLabel: weekLabelSnapshot,
+            games: gamesSnapshot,
+            allPicks: bucket.data || {}
+          });
         }
       } catch {}
-    } catch (err) {
-      console.error("renderPicks error:", err);
-      content.innerHTML = `
-        ${renderPicksHeaderHTML({ role, weekLabel: "Week", rightLabel: "Error", weekSelectHTML: "" })}
-        <div class="notice">Couldn’t load Picks right now.</div>
-      `;
-      postRender();
-    }
+    }, 0);
+  } else if (!bucket.promise) {
+    bucket.promise = gpGetAllPicksForSlate(db, weekIdSnapshot)
+      .then((data) => {
+        bucket.data = data || {};
+        bucket.ts = Date.now();
+
+        // ✅ Apply leaderboard once picks arrive (still never blocks initial render)
+        try {
+          if (String(window.__GP_PENDING?.sid || "") !== weekIdSnapshot) return bucket.data;
+          if (typeof gpApplyLeaderboardFromAllPicks === "function") {
+            gpApplyLeaderboardFromAllPicks({
+              weekId: weekIdSnapshot,
+              weekLabel: weekLabelSnapshot,
+              games: gamesSnapshot,
+              allPicks: bucket.data || {}
+            });
+          }
+        } catch {}
+
+        return bucket.data;
+      })
+      .catch(() => {
+        bucket.data = {};
+        bucket.ts = Date.now();
+        return bucket.data;
+      })
+      .finally(() => {
+        bucket.promise = null;
+      });
   }
+} catch {}
 
   function renderPicksHeaderHTML({ role, weekSelectHTML, weekLabel, rightLabel }) {
     const isAdmin = role === "admin";
