@@ -1922,134 +1922,149 @@
   // =========================
   // UFC — Fight Card
   // =========================
-  async function renderUFCScoreboard({ dateYYYYMMDD }) {
-    const esc = (s) => escapeHtml(String(s ?? ""));
+// =========================
+// UFC — Fight Card (renders ALL bouts from event.competitions[])
+// =========================
+async function renderUFCScoreboard({ dateYYYYMMDD }) {
+  const esc = (s) => escapeHtml(String(s ?? ""));
 
-    const url = `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
+  const url = `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
 
-    let data = null;
-    try {
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      data = await r.json();
-    } catch (e) {
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill status-other">UFC</div>
-          </div>
-          <div class="gameMetaTopPlain" style="margin-top:8px; font-weight:900;">Couldn’t load UFC</div>
-          <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
-        </div>
-      `;
-    }
-
-    const events = Array.isArray(data?.events) ? data.events : [];
-    if (!events.length) {
-      return `
-        <div class="notice">
-          No UFC fights found for this date.
-        </div>
-      `;
-    }
-
-    // Event-level name/venue for the card header (best-effort)
-    const topEvent = events[0];
-    const topComp = topEvent?.competitions?.[0] || null;
-    const topVenue = topComp?.venue?.fullName || topComp?.venue?.name || "";
-    const topLoc = (() => {
-      const city = topComp?.venue?.address?.city || topComp?.venue?.city || "";
-      const state = topComp?.venue?.address?.state || topComp?.venue?.state || "";
-      const country = topComp?.venue?.address?.country || topComp?.venue?.country || "";
-      if (city && state) return `${city}, ${state}`;
-      return city || state || country || "";
-    })();
-
-    const headerCard = `
+  let data = null;
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    data = await r.json();
+  } catch (e) {
+    return `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">UFC</div>
         </div>
-        <div style="margin-top:10px; font-weight:1000; font-size:20px;">
-          ${esc(topEvent?.name || topEvent?.shortName || "UFC Fight Card")}
-        </div>
-        <div class="muted" style="margin-top:6px; font-weight:850;">
-          ${esc([topVenue, topLoc].filter(Boolean).join(" • ") || "—")}
-        </div>
-      </div>
-    `;
-
-    const fightsHTML = events.map((ev) => {
-      const comp = ev?.competitions?.[0];
-      if (!comp) return "";
-
-      const state = ev?.status?.type?.state || comp?.status?.type?.state || "unknown";
-      const detail = ev?.status?.type?.detail || comp?.status?.type?.detail || "Status unavailable";
-      const pillClass = statusClassFromState(String(state).toLowerCase());
-      const pillText = statusLabelFromState(String(state).toLowerCase(), detail);
-
-      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-      const home = competitors.find(c => c?.homeAway === "home") || competitors[0] || null;
-      const away = competitors.find(c => c?.homeAway === "away") || competitors[1] || null;
-
-      const f1 = away ? buildFighter(away) : { name: "Fighter", logo: "", record: "", homeAway: "away" };
-      const f2 = home ? buildFighter(home) : { name: "Fighter", logo: "", record: "", homeAway: "home" };
-
-      const bout =
-        comp?.type?.text ||
-        comp?.type?.abbreviation ||
-        comp?.notes?.[0]?.headline ||
-        comp?.title ||
-        "";
-
-      const f1Score = away?.score ? String(away.score) : "";
-      const f2Score = home?.score ? String(home.score) : "";
-
-      const showScores = (String(state).toLowerCase() !== "pre") && (f1Score || f2Score);
-
-      const row = (fighter, score) => {
-        const ab = (fighter.name || "").split(" ").map(w => w[0]).join("").slice(0, 3).toUpperCase();
-        return `
-          <div class="teamRow">
-            <div class="teamLeft">
-              <div class="teamLine">
-                ${
-                  fighter.logo
-                    ? `<img class="teamLogo" src="${esc(fighter.logo)}" alt="${esc(fighter.name)}" loading="lazy" decoding="async" />`
-                    : `<div class="teamLogoFallback">${esc(ab || "—")}</div>`
-                }
-                <div class="teamText">
-                  <div class="teamName">${esc(fighter.name)}</div>
-                  <div class="teamMeta">${esc(fighter.record || "")}</div>
-                </div>
-              </div>
-            </div>
-            <div class="score">${esc(score || "")}</div>
-          </div>
-        `;
-      };
-
-      return `
-        <div class="game">
-          <div class="gameHeader">
-            <div class="statusPill ${pillClass}">${esc(pillText)}</div>
-          </div>
-
-          ${bout ? `<div class="gameMetaTopPlain" aria-label="Bout">${esc(bout)}</div>` : ``}
-
-          ${row(f1, showScores ? f1Score : "")}
-          ${row(f2, showScores ? f2Score : "")}
-        </div>
-      `;
-    }).join("");
-
-    return `
-      <div class="grid">
-        ${headerCard}
-        ${fightsHTML}
+        <div class="gameMetaTopPlain" style="margin-top:8px; font-weight:900;">Couldn’t load UFC</div>
+        <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
       </div>
     `;
   }
+
+  const events = Array.isArray(data?.events) ? data.events : [];
+  if (!events.length) {
+    return `<div class="notice">No UFC fights found for this date.</div>`;
+  }
+
+  // ESPN UFC scoreboard typically returns ONE event (the card) with many competitions (bouts)
+  const cardEvent = events[0] || null;
+  const competitions = Array.isArray(cardEvent?.competitions) ? cardEvent.competitions : [];
+
+  // Venue/Location (best-effort)
+  const anyComp = competitions[0] || cardEvent?.competitions?.[0] || null;
+  const venueObj = anyComp?.venue || null;
+
+  const venueName = venueObj?.fullName || venueObj?.name || "";
+  const loc = (() => {
+    const city = venueObj?.address?.city || venueObj?.city || "";
+    const state = venueObj?.address?.state || venueObj?.state || "";
+    const country = venueObj?.address?.country || venueObj?.country || "";
+    if (city && state) return `${city}, ${state}`;
+    return city || state || country || "";
+  })();
+
+  const headerCard = `
+    <div class="game">
+      <div class="gameHeader">
+        <div class="statusPill status-other">UFC</div>
+      </div>
+      <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+        ${esc(cardEvent?.name || cardEvent?.shortName || "UFC Fight Card")}
+      </div>
+      <div class="muted" style="margin-top:6px; font-weight:850;">
+        ${esc([venueName, loc].filter(Boolean).join(" • ") || "—")}
+      </div>
+    </div>
+  `;
+
+  if (!competitions.length) {
+    // Fallback: if ESPN ever sends fights as events, at least show something
+    return `
+      <div class="grid">
+        ${headerCard}
+        <div class="notice">No bout list available yet (ESPN hasn’t published the full card).</div>
+      </div>
+    `;
+  }
+
+  const row = (fighter, score) => {
+    const ab = (fighter.name || "").split(" ").map(w => w[0]).join("").slice(0, 3).toUpperCase();
+    return `
+      <div class="teamRow">
+        <div class="teamLeft">
+          <div class="teamLine">
+            ${
+              fighter.logo
+                ? `<img class="teamLogo" src="${esc(fighter.logo)}" alt="${esc(fighter.name)}" loading="lazy" decoding="async" />`
+                : `<div class="teamLogoFallback">${esc(ab || "—")}</div>`
+            }
+            <div class="teamText">
+              <div class="teamName">${esc(fighter.name)}</div>
+              <div class="teamMeta">${esc(fighter.record || "")}</div>
+            </div>
+          </div>
+        </div>
+        <div class="score">${esc(score || "")}</div>
+      </div>
+    `;
+  };
+
+  const fightsHTML = competitions.map((comp) => {
+    const state = String(comp?.status?.type?.state || "").toLowerCase() || "unknown";
+    const detail =
+      comp?.status?.type?.detail ||
+      comp?.status?.type?.shortDetail ||
+      "Status unavailable";
+
+    const pillClass = statusClassFromState(state);
+    const pillText = statusLabelFromState(state, detail);
+
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const home = competitors.find(c => c?.homeAway === "home") || competitors[0] || null;
+    const away = competitors.find(c => c?.homeAway === "away") || competitors[1] || null;
+
+    const f1 = away ? buildFighter(away) : { name: "Fighter", logo: "", record: "" };
+    const f2 = home ? buildFighter(home) : { name: "Fighter", logo: "", record: "" };
+
+    const bout =
+      comp?.type?.text ||
+      comp?.type?.abbreviation ||
+      comp?.notes?.[0]?.headline ||
+      comp?.title ||
+      "";
+
+    const f1Score = away?.score ? String(away.score) : "";
+    const f2Score = home?.score ? String(home.score) : "";
+
+    const showScores = (state !== "pre") && (f1Score || f2Score);
+
+    return `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill ${pillClass}">${esc(pillText)}</div>
+        </div>
+
+        ${bout ? `<div class="gameMetaTopPlain" aria-label="Bout">${esc(bout)}</div>` : ``}
+
+        ${row(f1, showScores ? f1Score : "")}
+        ${row(f2, showScores ? f2Score : "")}
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="grid">
+      ${headerCard}
+      ${fightsHTML}
+    </div>
+  `;
+}
 
   // ---------- Exports ----------
   window.loadScores = loadScores;
