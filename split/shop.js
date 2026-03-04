@@ -28,29 +28,71 @@
 
   // ---------- Firebase init/auth ----------
   async function ensureFirebaseChatReady() {
-    if (chatReady) return;
+  if (chatReady) return;
 
-    if (!window.firebase || !firebase.initializeApp) {
-      throw new Error("Firebase SDK not loaded. Check index_split.html script tags.");
-    }
-
-    if (!window.FIREBASE_CONFIG) {
-      throw new Error("FIREBASE_CONFIG missing. Check split/boot.js loads first.");
-    }
-
-    if (!firebase.apps || !firebase.apps.length) {
-      firebase.initializeApp(window.FIREBASE_CONFIG);
-    }
-
-    const auth = firebase.auth();
-    if (!auth.currentUser) {
-      await auth.signInAnonymously();
-    }
-
-    chatReady = true;
+  if (!window.firebase || !firebase.initializeApp) {
+    throw new Error("Firebase SDK not loaded. Check index.html script tags.");
   }
-  window.ensureFirebaseChatReady = ensureFirebaseChatReady;
 
+  if (!window.FIREBASE_CONFIG) {
+    throw new Error("FIREBASE_CONFIG missing. Check split/boot.js loads first.");
+  }
+
+  if (!firebase.apps || !firebase.apps.length) {
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+  }
+
+  const auth = firebase.auth();
+
+  // ---- iOS/PWA stability: persist auth and wait for restoration ----
+  try {
+    // Must be set before (or at least near) sign-in to reduce "null user" windows.
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+  } catch (e) {
+    // If persistence isn't available (rare), we still proceed.
+  }
+
+  // Wait once for auth to hydrate (restored session OR null)
+  const waitForAuthOnce = (timeoutMs = 1500) =>
+    new Promise((resolve) => {
+      let done = false;
+      const t = setTimeout(() => {
+        if (done) return;
+        done = true;
+        try { unsub && unsub(); } catch {}
+        resolve();
+      }, timeoutMs);
+
+      let unsub = null;
+      try {
+        unsub = auth.onAuthStateChanged(() => {
+          if (done) return;
+          done = true;
+          clearTimeout(t);
+          try { unsub && unsub(); } catch {}
+          resolve();
+        });
+      } catch {
+        clearTimeout(t);
+        resolve();
+      }
+    });
+
+  await waitForAuthOnce();
+
+  // If still no user, create one
+  if (!auth.currentUser) {
+    await auth.signInAnonymously();
+    await waitForAuthOnce();
+  }
+
+  if (!auth.currentUser) {
+    throw new Error("Auth not ready (anonymous user missing).");
+  }
+
+  chatReady = true;
+}
+window.ensureFirebaseChatReady = ensureFirebaseChatReady;
   // ---------- Name / UI ----------
   function getChatDisplayName() {
     const key = "theShopChatName_v1";
