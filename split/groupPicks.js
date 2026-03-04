@@ -556,87 +556,265 @@
     }
   }
 
+  function gpCleanFavoredText(s) {
+    return String(s || "")
+      .trim()
+      .replace(/^Line:\s*/i, "")
+      .replace(/^Spread:\s*/i, "")
+      .replace(/^Odds:\s*/i, "")
+      .trim();
+  }
+
+  function gpNormalizeNumberString(n) {
+    if (n === null || n === undefined || n === "") return "";
+    return String(n).trim();
+  }
+
+  function gpFirstOddsFromCompetition(comp) {
+    const arr = comp?.odds;
+    if (Array.isArray(arr) && arr.length) return arr[0];
+    return null;
+  }
+
+  function gpFirstPickcenterFromCompetition(comp) {
+    const pc = comp?.pickcenter;
+    if (Array.isArray(pc) && pc.length) return pc[0];
+    return null;
+  }
+
+  function gpParseOddsFromPickcenter(pc) {
+    if (!pc) return null;
+
+    // total / O-U
+    const overUnder = gpNormalizeNumberString(pc.overUnder ?? pc.total ?? pc.overunder ?? "");
+
+    // ESPN sometimes gives a perfect "details" string like: "Blue Jackets -135"
+    const detailsRaw = gpCleanFavoredText(
+      pc.details ||
+      pc.displayValue ||
+      pc.awayTeamOdds?.details ||
+      pc.homeTeamOdds?.details ||
+      ""
+    );
+
+    if (detailsRaw || overUnder) {
+      return { details: detailsRaw, overUnder };
+    }
+
+    // fallback: derive from spread + favorite flags
+    const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
+    if (!Number.isFinite(spreadNum)) return null;
+
+    const homeFav = !!pc.homeTeamOdds?.favorite;
+    const awayFav = !!pc.awayTeamOdds?.favorite;
+
+    // We don’t reliably know team names here; keep it minimal.
+    let favoredTeam = homeFav ? "Home" : awayFav ? "Away" : (spreadNum < 0 ? "Home" : "Away");
+    const abs = Math.abs(spreadNum);
+    const spreadVal = abs % 1 === 0 ? String(abs.toFixed(0)) : String(abs);
+    return { details: `${favoredTeam} -${spreadVal}`, overUnder };
+  }
+
   function gpGetEventOddsFromScoreboardEvent(ev) {
     try {
-      const comp = ev?.competitions?.[0] || {};
-      const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
-      if (!o) return null;
+      const comp = ev?.competitions?.[0] || null;
+      if (!comp) return null;
 
-      const details = String(o?.details || "").trim();
-      const overUnder = (o?.overUnder != null) ? String(o.overUnder).trim() : "";
+      // 1) standard odds array
+      const o = gpFirstOddsFromCompetition(comp);
+      if (o) {
+        const details = gpCleanFavoredText(o?.details || o?.displayValue || "");
+        const overUnder = gpNormalizeNumberString(o?.overUnder ?? o?.total ?? "");
+        if (details || overUnder) return { details, overUnder };
+      }
 
-      const homeFav = !!o?.homeTeamOdds?.favorite;
-      const awayFav = !!o?.awayTeamOdds?.favorite;
+      // 2) pickcenter (very common on ESPN)
+      const pc = gpFirstPickcenterFromCompetition(comp);
+      const fromPc = gpParseOddsFromPickcenter(pc);
+      if (fromPc && (fromPc.details || fromPc.overUnder)) return fromPc;
 
-      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-      const homeC = competitors.find(c => c?.homeAway === "home") || {};
-      const awayC = competitors.find(c => c?.homeAway === "away") || {};
-
-      const homeAbbr = String(homeC?.team?.abbreviation || homeC?.team?.shortDisplayName || "").trim();
-      const awayAbbr = String(awayC?.team?.abbreviation || awayC?.team?.shortDisplayName || "").trim();
-
-      const favoredTeam =
-        homeFav ? (homeAbbr || "Home") :
-        awayFav ? (awayAbbr || "Away") :
-        "";
-
-      if (!details && !overUnder) return null;
-      return { details, overUnder, favoredTeam };
+      return null;
     } catch {
       return null;
     }
   }
 
-  async function gpHydrateOddsForGames(games) {
-    const list = Array.isArray(games) ? games : [];
-    if (!list.length) return;
-
-    const needs = list.filter(g => {
-      const d = String(g?.oddsDetails || "").trim();
-      const ou = String(g?.oddsOU || "").trim();
-      return (!d && !ou);
-    });
-    if (!needs.length) return;
-
-    const groups = new Map();
-    for (const g of needs) {
-      const leagueKey = String(g?.leagueKey || "").trim();
-      const dateYYYYMMDD = gpYYYYMMDDFromStartTime(g) || String(g?.dateYYYYMMDD || "").trim();
-      const eventId = String(g?.eventId || g?.id || "").trim();
-      if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
-
-      const k = `${leagueKey}__${dateYYYYMMDD}`;
-      if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
-      groups.get(k).ids.add(eventId);
+  function gpWithLangRegion(url) {
+    try {
+      const u = new URL(url);
+      if (!u.searchParams.has("lang")) u.searchParams.set("lang", "en");
+      if (!u.searchParams.has("region")) u.searchParams.set("region", "us");
+      return u.toString();
+    } catch {
+      return url;
     }
-    if (!groups.size) return;
+  }
 
+  async function gpFetchJsonNoStore(url) {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
+  function gpInferSummaryUrls(league, eventId) {
+    // Derive summary URL from the scoreboard endpoint so we don’t have to hardcode per-league.
+    // Example:
+    //   .../scoreboard?dates=YYYYMMDD  -> .../summary?event=EVENTID
+    const urls = [];
+    try {
+      const base = String(league?.endpoint?.(getSavedDateYYYYMMDDSafe()) || "");
+      if (!base) return [];
+      const baseNoDates = base.replace(/([?&])dates=\d{8}(&?)/i, (m, p1, p2) => (p2 ? p1 : ""));
+      const withoutScoreboard = baseNoDates.replace(/\/scoreboard(\?.*)?$/i, "");
+      const u1 = `${withoutScoreboard}/summary?event=${encodeURIComponent(eventId)}`;
+      const u2 = `${withoutScoreboard}/summary?eventId=${encodeURIComponent(eventId)}`;
+      urls.push(gpWithLangRegion(u1), gpWithLangRegion(u2), u1, u2);
+    } catch {}
+    return urls.filter(Boolean);
+  }
+
+  function gpParseOddsFromSummaryData(summaryData) {
+    // Try the same places ESPN commonly uses.
+    const pcArr = summaryData?.pickcenter;
+    if (Array.isArray(pcArr) && pcArr.length) {
+      const parsed = gpParseOddsFromPickcenter(pcArr[0]);
+      if (parsed && (parsed.details || parsed.overUnder)) return parsed;
+    }
+
+    const comp = summaryData?.header?.competitions?.[0] || null;
+    if (comp) {
+      const pc2 = gpFirstPickcenterFromCompetition(comp);
+      const parsed2 = gpParseOddsFromPickcenter(pc2);
+      if (parsed2 && (parsed2.details || parsed2.overUnder)) return parsed2;
+
+      const o2 = gpFirstOddsFromCompetition(comp);
+      if (o2) {
+        const details = gpCleanFavoredText(o2?.details || o2?.displayValue || "");
+        const overUnder = gpNormalizeNumberString(o2?.overUnder ?? o2?.total ?? "");
+        if (details || overUnder) return { details, overUnder };
+      }
+    }
+
+    const oTop = Array.isArray(summaryData?.odds) ? summaryData.odds[0] : null;
+    if (oTop) {
+      const details = gpCleanFavoredText(oTop?.details || oTop?.displayValue || "");
+      const overUnder = gpNormalizeNumberString(oTop?.overUnder ?? oTop?.total ?? "");
+      if (details || overUnder) return { details, overUnder };
+    }
+
+    return null;
+  }
+
+  // Odds cache (session) to avoid re-fetching summaries
+  const GP_ODDS_CACHE_PREFIX = "theShopGpOddsCache_v2_"; // bump version
+  const GP_ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+  function gpOddsCacheKey(leagueKey, dateYYYYMMDD) {
+    return `${GP_ODDS_CACHE_PREFIX}${String(leagueKey || "")}_${String(dateYYYYMMDD || "")}`;
+  }
+
+  function gpLoadOddsCache(leagueKey, dateYYYYMMDD) {
+    try {
+      const raw = sessionStorage.getItem(gpOddsCacheKey(leagueKey, dateYYYYMMDD));
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return {};
+      const now = Date.now();
+      const out = {};
+      for (const [eventId, val] of Object.entries(parsed)) {
+        const ts = Number(val?.ts || 0);
+        if (!Number.isFinite(ts) || (now - ts) > GP_ODDS_CACHE_TTL_MS) continue;
+        out[eventId] = { details: val.details || "", overUnder: val.overUnder || "", ts };
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  function gpSaveOddsCache(leagueKey, dateYYYYMMDD, obj) {
+    try {
+      sessionStorage.setItem(gpOddsCacheKey(leagueKey, dateYYYYMMDD), JSON.stringify(obj || {}));
+    } catch {}
+  }
+
+  async function gpHydrateOddsForGames(list, leagueKey) {
+    if (!Array.isArray(list) || !list.length) return;
+
+    const dateYYYYMMDD = getSavedDateYYYYMMDDSafe();
+    const league = getLeagueByKeySafe(leagueKey);
+
+    // 1) Load cached odds
+    const cacheObj = gpLoadOddsCache(leagueKey, dateYYYYMMDD);
     const oddsMap = new Map();
 
-    for (const grp of groups.values()) {
-      const league = getLeagueByKeySafe(grp.leagueKey);
-      const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
-      if (!url) continue;
-
-      try {
-        const r = await fetch(url, { cache: "no-store" });
-        if (!r.ok) continue;
-
-        const j = await r.json().catch(() => ({}));
-        const events = Array.isArray(j?.events) ? j.events : [];
-        for (const ev of events) {
-          const eid = String(ev?.id || "");
-          if (!eid || !grp.ids.has(eid)) continue;
-
-          const odds = gpGetEventOddsFromScoreboardEvent(ev);
-          if (odds) oddsMap.set(eid, odds);
-        }
-      } catch {}
+    for (const [eid, val] of Object.entries(cacheObj)) {
+      if (eid && val && (val.details || val.overUnder)) oddsMap.set(eid, val);
     }
 
+    // 2) Pull odds from scoreboard first (fast)
+    let events = [];
+    try {
+      const resp = await fetch(league.endpoint(dateYYYYMMDD), { cache: "no-store" });
+      if (resp.ok) {
+        const sb = await resp.json();
+        events = Array.isArray(sb?.events) ? sb.events : [];
+      }
+    } catch {}
+
+    for (const ev of events) {
+      const eid = String(ev?.id || "").trim();
+      if (!eid || oddsMap.has(eid)) continue;
+
+      const odds = gpGetEventOddsFromScoreboardEvent(ev);
+      if (odds && (odds.details || odds.overUnder)) {
+        oddsMap.set(eid, { details: odds.details || "", overUnder: odds.overUnder || "", ts: Date.now() });
+        cacheObj[eid] = { details: odds.details || "", overUnder: odds.overUnder || "", ts: Date.now() };
+      }
+    }
+
+    // 3) Summary fallback for anything still missing (common)
+    const missing = [];
     for (const g of list) {
       const eid = String(g?.eventId || g?.id || "").trim();
-      g.__odds = oddsMap.get(eid) || null;
+      if (!eid) continue;
+      const val = oddsMap.get(eid);
+      if (!(val && (val.details || val.overUnder))) missing.push(eid);
+    }
+
+    const CONCURRENCY = 6;
+    let idx = 0;
+
+    async function worker() {
+      while (idx < missing.length) {
+        const eid = missing[idx++];
+        const urls = gpInferSummaryUrls(league, eid);
+
+        for (const url of urls) {
+          try {
+            const data = await gpFetchJsonNoStore(url);
+            const parsed = gpParseOddsFromSummaryData(data);
+            if (parsed && (parsed.details || parsed.overUnder)) {
+              const val = { details: parsed.details || "", overUnder: parsed.overUnder || "", ts: Date.now() };
+              oddsMap.set(eid, val);
+              cacheObj[eid] = val;
+              break;
+            }
+          } catch {}
+        }
+
+        // Cache a negative result too (prevents hammering)
+        if (!cacheObj[eid]) cacheObj[eid] = { details: "", overUnder: "", ts: Date.now() };
+      }
+    }
+
+    await Promise.all(new Array(Math.min(CONCURRENCY, missing.length)).fill(0).map(worker));
+    gpSaveOddsCache(leagueKey, dateYYYYMMDD, cacheObj);
+
+    // 4) Apply to each game object
+    for (const g of list) {
+      const eid = String(g?.eventId || g?.id || "").trim();
+      g.__odds = eid ? (oddsMap.get(eid) || null) : null;
     }
   }
 
@@ -644,41 +822,11 @@
   // Firebase ready
   // -----------------------------
   async function ensureFirebaseReadySafe() {
-    if (picksFirebaseReady) return;
-
-    // Firebase compat expected to be on window.firebase
-    if (!window.firebase || !firebase.initializeApp) {
-      throw new Error("Firebase not loaded");
+    if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
+    if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
+      firebase.initializeApp(window.FIREBASE_CONFIG);
+      try { await firebase.auth().signInAnonymously(); } catch {}
     }
-
-    // Init app once (use existing if already initialized elsewhere)
-    if (!firebase.apps || !firebase.apps.length) {
-      firebase.initializeApp(FIREBASE_CONFIG);
-    }
-
-    // Make sure Auth exists + user is signed in (anonymous OK)
-    const auth = firebase.auth();
-    if (!auth.currentUser) {
-      try { await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch {}
-      try { await auth.signInAnonymously(); } catch {}
-
-      // Wait briefly for auth state to settle (important on iOS Safari/PWA)
-      await new Promise((resolve) => {
-        let done = false;
-        const t = setTimeout(() => { if (!done) { done = true; resolve(); } }, 4000);
-        const unsub = auth.onAuthStateChanged((u) => {
-          if (done) return;
-          if (u) {
-            done = true;
-            clearTimeout(t);
-            try { unsub(); } catch {}
-            resolve();
-          }
-        });
-      });
-    }
-
-    picksFirebaseReady = true;
   }
 
   function getPicksDisplayName() {
@@ -789,8 +937,6 @@
   }
 
   async function gpSaveMyPicksBatch(db, slateId, playerId, pendingMap) {
-    // Ensure Firebase + Auth are ready before attempting writes
-    try { await ensureFirebaseReadySafe(); } catch (e) {}
     const keys = Object.keys(pendingMap || {});
     if (!keys.length) return;
 
