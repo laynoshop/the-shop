@@ -822,12 +822,59 @@
   // Firebase ready
   // -----------------------------
   async function ensureFirebaseReadySafe() {
-    if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
-    if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
-      firebase.initializeApp(window.FIREBASE_CONFIG);
-      try { await firebase.auth().signInAnonymously(); } catch {}
-    }
+  // Prefer the shared initializer (it now handles persistence + hydration)
+  if (typeof window.ensureFirebaseChatReady === "function") {
+    await window.ensureFirebaseChatReady();
+    const u = firebase.auth().currentUser;
+    if (!u) throw new Error("Auth not ready (no currentUser).");
+    return;
   }
+
+  // Fallback (should be rare): init + anon sign-in with persistence + hydration
+  if (window.firebase && window.FIREBASE_CONFIG && (!firebase.apps || !firebase.apps.length)) {
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+  }
+
+  const auth = firebase.auth();
+
+  try { await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch {}
+
+  const waitForAuthOnce = (timeoutMs = 1500) =>
+    new Promise((resolve) => {
+      let done = false;
+      const t = setTimeout(() => {
+        if (done) return;
+        done = true;
+        try { unsub && unsub(); } catch {}
+        resolve();
+      }, timeoutMs);
+
+      let unsub = null;
+      try {
+        unsub = auth.onAuthStateChanged(() => {
+          if (done) return;
+          done = true;
+          clearTimeout(t);
+          try { unsub && unsub(); } catch {}
+          resolve();
+        });
+      } catch {
+        clearTimeout(t);
+        resolve();
+      }
+    });
+
+  await waitForAuthOnce();
+
+  if (!auth.currentUser) {
+    await auth.signInAnonymously();
+    await waitForAuthOnce();
+  }
+
+  if (!auth.currentUser) {
+    throw new Error("Auth not ready (anonymous user missing).");
+  }
+}
 
   function getPicksDisplayName() {
     const existingChat = (safeGetLS("theShopChatName_v1") || "").trim();
