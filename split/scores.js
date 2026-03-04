@@ -96,10 +96,13 @@
       summaryEndpoint: (eventId) =>
         `https://site.api.espn.com/apis/site/v2/sports/golf/pga/summary?event=${eventId}`
     },
-    { 
+    {
       key: "ufc",
       name: "UFC",
-      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${date}`
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/summary?event=${eventId}`
     }
   ];
 
@@ -1257,6 +1260,23 @@
       </div>
     `;
 
+    // ---------- UFC ----------
+    if (selectedKey === "ufc") {
+      const selectedDate2 = getSavedDateYYYYMMDD();
+      const prettyDate2 = yyyymmddToPretty(selectedDate2);
+      const updatedTime2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+      content.innerHTML = `
+        ${headerHTML(`${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}
+        <div class="notice">Loading UFC…</div>
+      `;
+
+      const ufcHTML = await renderUFCScoreboard({ dateYYYYMMDD: selectedDate2 });
+
+      content.innerHTML = `${headerHTML(`${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}${ufcHTML}`;
+      return;
+    }
+
     // ---------- PGA (Golf) ----------
     if (selectedKey === "pga") {
       const selectedDate = getSavedDateYYYYMMDD();
@@ -1322,8 +1342,6 @@
       }
 
       // Apply conference filter:
-      // - If we have cached confs, filter immediately using the cached map (accurate)
-      // - If not, defer filtering until hydration fills confs (we’ll re-render once)
       const savedConf = isCollege ? getSavedConferenceFilter(selectedKey) : "";
       const savedConfNorm = savedConf ? norm(savedConf) : "";
       const cached = isCollege ? loadConfCache(selectedKey, selectedDate) : null;
@@ -1379,16 +1397,12 @@
       const grid = document.createElement("div");
       grid.className = "grid";
 
-      const aiJobs = [];
-
       for (const event of events) {
         const competition = event?.competitions?.[0];
         if (!competition) continue;
 
         const home = competition.competitors.find(t => t.homeAway === "home");
         const away = competition.competitors.find(t => t.homeAway === "away");
-
-        const isUFC = String(selectedKey || "").toLowerCase() === "ufc";
 
         const state = event?.status?.type?.state || "unknown";
         const detail = event?.status?.type?.detail || "Status unavailable";
@@ -1398,21 +1412,20 @@
         const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
         const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
 
-        // ✅ UFC: treat competitors as fighters (headshot/name/record)
-        const homeTeam = isUFC ? buildFighter(home) : (home?.team || null);
-        const awayTeam = isUFC ? buildFighter(away) : (away?.team || null);
+        const homeTeam = home?.team || null;
+        const awayTeam = away?.team || null;
 
-        const homeBaseName = isUFC ? (homeTeam?.name || "Fighter") : getTeamDisplayNameUI(homeTeam);
-        const awayBaseName = isUFC ? (awayTeam?.name || "Fighter") : getTeamDisplayNameUI(awayTeam);
+        const homeBaseName = getTeamDisplayNameUI(homeTeam);
+        const awayBaseName = getTeamDisplayNameUI(awayTeam);
 
-        const homeName = isUFC ? homeBaseName : teamDisplayNameWithRank(homeBaseName, home, selectedKey);
-        const awayName = isUFC ? awayBaseName : teamDisplayNameWithRank(awayBaseName, away, selectedKey);
+        const homeName = teamDisplayNameWithRank(homeBaseName, home, selectedKey);
+        const awayName = teamDisplayNameWithRank(awayBaseName, away, selectedKey);
 
-        const homeLogo = isUFC ? (homeTeam?.logo || "") : getTeamLogoUrl(homeTeam);
-        const awayLogo = isUFC ? (awayTeam?.logo || "") : getTeamLogoUrl(awayTeam);
+        const homeLogo = getTeamLogoUrl(homeTeam);
+        const awayLogo = getTeamLogoUrl(awayTeam);
 
-        const homeAbbrev = isUFC ? "" : escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
-        const awayAbbrev = isUFC ? "" : escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
+        const homeAbbrev = escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
+        const awayAbbrev = escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
 
         const venueLine = buildVenueLine(competition);
 
@@ -1456,13 +1469,7 @@
         }
         <div class="teamText">
           <div class="teamName">${escapeHtml(awayName)}</div>
-          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${
-            escapeHtml(
-              isUFC
-                ? (`Away${awayTeam?.record ? " • " + awayTeam.record : ""}`)
-                : metaLineWithConference("Away", away, selectedKey)
-            )
-          }</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${escapeHtml(metaLineWithConference("Away", away, selectedKey))}</div>
         </div>
       </div>
     </div>
@@ -1479,13 +1486,7 @@
         }
         <div class="teamText">
           <div class="teamName">${escapeHtml(homeName)}</div>
-          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${
-            escapeHtml(
-              isUFC
-                ? (`Home${homeTeam?.record ? " • " + homeTeam.record : ""}`)
-                : metaLineWithConference("Home", home, selectedKey)
-            )
-          }</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${escapeHtml(metaLineWithConference("Home", home, selectedKey))}</div>
         </div>
       </div>
     </div>
@@ -1791,9 +1792,6 @@
 
     const hasAnyRealPos = rows.some(r => r.__hasRealPos);
 
-    // Keep your existing ordering rules:
-    // - If ESPN gave real position fields, sort by that
-    // - Otherwise keep ESPN ordering (don’t sort)
     if (hasAnyRealPos) {
       rows.sort((a, b) => {
         if (a.posNum !== b.posNum) return a.posNum - b.posNum;
@@ -1801,7 +1799,6 @@
       });
     }
 
-    // ✅ ESPN-style competition ranking with ties: 1, T2, T2, T2, 5...
     (function applyTiePositions(arr) {
       let prevTotal = null;
       let currentRank = 1;
@@ -1809,7 +1806,6 @@
       for (let i = 0; i < arr.length; i++) {
         const r = arr[i];
 
-        // If we can't compute totals, keep whatever POS we had
         if (!Number.isFinite(r.totalNum)) {
           r.posDisplay = r.pos;
           continue;
@@ -1818,7 +1814,6 @@
         if (i === 0) {
           currentRank = 1;
         } else {
-          // if total changed, rank becomes "i+1" (competition ranking)
           if (r.totalNum !== prevTotal) currentRank = i + 1;
         }
 
@@ -1830,8 +1825,6 @@
         const isTie = isTiedWithPrev || isTiedWithNext;
 
         r.posDisplay = isTie ? `T${currentRank}` : String(currentRank);
-
-        // keep posNum aligned with displayed rank for leader styling checks
         r.posNum = currentRank;
 
         prevTotal = r.totalNum;
@@ -1840,7 +1833,7 @@
 
     const topN = rows.slice(0, 20);
 
-    const body = topN.map((r, idx) => {
+    const body = topN.map((r) => {
       const isLeader = (r.posNum === 1);
       return `
         <div style="
@@ -1922,6 +1915,138 @@
           .pgaOver  { color: rgba(255,140,140,0.95); }
           .pgaEven  { color: rgba(255,255,255,0.92); }
         </style>
+      </div>
+    `;
+  }
+
+  // =========================
+  // UFC — Fight Card
+  // =========================
+  async function renderUFCScoreboard({ dateYYYYMMDD }) {
+    const esc = (s) => escapeHtml(String(s ?? ""));
+
+    const url = `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
+
+    let data = null;
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      data = await r.json();
+    } catch (e) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">UFC</div>
+          </div>
+          <div class="gameMetaTopPlain" style="margin-top:8px; font-weight:900;">Couldn’t load UFC</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
+        </div>
+      `;
+    }
+
+    const events = Array.isArray(data?.events) ? data.events : [];
+    if (!events.length) {
+      return `
+        <div class="notice">
+          No UFC fights found for this date.
+        </div>
+      `;
+    }
+
+    // Event-level name/venue for the card header (best-effort)
+    const topEvent = events[0];
+    const topComp = topEvent?.competitions?.[0] || null;
+    const topVenue = topComp?.venue?.fullName || topComp?.venue?.name || "";
+    const topLoc = (() => {
+      const city = topComp?.venue?.address?.city || topComp?.venue?.city || "";
+      const state = topComp?.venue?.address?.state || topComp?.venue?.state || "";
+      const country = topComp?.venue?.address?.country || topComp?.venue?.country || "";
+      if (city && state) return `${city}, ${state}`;
+      return city || state || country || "";
+    })();
+
+    const headerCard = `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">UFC</div>
+        </div>
+        <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+          ${esc(topEvent?.name || topEvent?.shortName || "UFC Fight Card")}
+        </div>
+        <div class="muted" style="margin-top:6px; font-weight:850;">
+          ${esc([topVenue, topLoc].filter(Boolean).join(" • ") || "—")}
+        </div>
+      </div>
+    `;
+
+    const fightsHTML = events.map((ev) => {
+      const comp = ev?.competitions?.[0];
+      if (!comp) return "";
+
+      const state = ev?.status?.type?.state || comp?.status?.type?.state || "unknown";
+      const detail = ev?.status?.type?.detail || comp?.status?.type?.detail || "Status unavailable";
+      const pillClass = statusClassFromState(String(state).toLowerCase());
+      const pillText = statusLabelFromState(String(state).toLowerCase(), detail);
+
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const home = competitors.find(c => c?.homeAway === "home") || competitors[0] || null;
+      const away = competitors.find(c => c?.homeAway === "away") || competitors[1] || null;
+
+      const f1 = away ? buildFighter(away) : { name: "Fighter", logo: "", record: "", homeAway: "away" };
+      const f2 = home ? buildFighter(home) : { name: "Fighter", logo: "", record: "", homeAway: "home" };
+
+      const bout =
+        comp?.type?.text ||
+        comp?.type?.abbreviation ||
+        comp?.notes?.[0]?.headline ||
+        comp?.title ||
+        "";
+
+      const f1Score = away?.score ? String(away.score) : "";
+      const f2Score = home?.score ? String(home.score) : "";
+
+      const showScores = (String(state).toLowerCase() !== "pre") && (f1Score || f2Score);
+
+      const row = (fighter, score) => {
+        const ab = (fighter.name || "").split(" ").map(w => w[0]).join("").slice(0, 3).toUpperCase();
+        return `
+          <div class="teamRow">
+            <div class="teamLeft">
+              <div class="teamLine">
+                ${
+                  fighter.logo
+                    ? `<img class="teamLogo" src="${esc(fighter.logo)}" alt="${esc(fighter.name)}" loading="lazy" decoding="async" />`
+                    : `<div class="teamLogoFallback">${esc(ab || "—")}</div>`
+                }
+                <div class="teamText">
+                  <div class="teamName">${esc(fighter.name)}</div>
+                  <div class="teamMeta">${esc(fighter.record || "")}</div>
+                </div>
+              </div>
+            </div>
+            <div class="score">${esc(score || "")}</div>
+          </div>
+        `;
+      };
+
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill ${pillClass}">${esc(pillText)}</div>
+          </div>
+
+          ${bout ? `<div class="gameMetaTopPlain" aria-label="Bout">${esc(bout)}</div>` : ``}
+
+          ${row(f1, showScores ? f1Score : "")}
+          ${row(f2, showScores ? f2Score : "")}
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="grid">
+        ${headerCard}
+        ${fightsHTML}
       </div>
     `;
   }
