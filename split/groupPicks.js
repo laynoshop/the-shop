@@ -295,34 +295,32 @@
   }
 
   async function gpEnsureAllPicksForWeek(db, weekId) {
-    const k = String(weekId || "").trim();
-    if (!k) return {};
+  const k = String(weekId || "").trim();
+  if (!k) return {};
 
-    const bucket = gpGetAllPicksCacheBucket(k);
-    const TTL = 2 * 60 * 1000; // 2 minutes
+  const bucket = gpGetAllPicksCacheBucket(k);
+  const TTL = 2 * 60 * 1000; // 2 minutes
 
-    const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
-    if (fresh) return bucket.data || {};
+  const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+  if (fresh) return bucket.data || {};
 
-    if (bucket.promise) return bucket.promise;
+  if (bucket.promise) return bucket.promise;
 
-    bucket.promise = (async () => {
-      try {
-        const data = await gpGetAllPicksForSlate(db, k);
-        bucket.data = data || {};
-        bucket.ts = Date.now();
-        return bucket.data;
-      } catch {
-        bucket.data = {};
-        bucket.ts = Date.now();
-        return bucket.data;
-      } finally {
-        bucket.promise = null;
-      }
-    })();
+  bucket.promise = (async () => {
+    try {
+      const data = await gpGetAllPicksForSlate(db, k);
+      bucket.data = data || {};
+      bucket.ts = Date.now();
+      return bucket.data;
+    } finally {
+      // IMPORTANT: do not swallow errors here.
+      // If Firestore denies reads, let it throw so the UI can show "Couldn’t load picks."
+      bucket.promise = null;
+    }
+  })();
 
-    return bucket.promise;
-  }
+  return bucket.promise;
+}
 
   function gpBuildEveryoneLinesForEvent({ everyoneArr, awayName, homeName }) {
     const arr = Array.isArray(everyoneArr) ? everyoneArr : [];
