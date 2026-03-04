@@ -586,36 +586,141 @@
       return null;
     }
   }
+  
+  function gpSummaryUrlForEvent(leagueKey, eventId) {
+  const k = String(leagueKey || "").trim();
+
+  // leagueKey -> ESPN sport/league path
+  const map = {
+    nhl:   "hockey/nhl",
+    nba:   "basketball/nba",
+    ncaam: "basketball/mens-college-basketball",
+    nfl:   "football/nfl",
+    cfb:   "football/college-football",
+    mlb:   "baseball/mlb",
+    mls:   "soccer/usa.1",
+    pga:   "golf/pga"
+  };
+
+  const path = map[k];
+  if (!path) return "";
+  return `https://site.api.espn.com/apis/site/v2/sports/${path}/summary?event=${encodeURIComponent(String(eventId || ""))}`;
+}
+
+function gpGetEventOddsFromSummaryJson(j) {
+  try {
+    // Summary usually has pickcenter[]
+    const pc = Array.isArray(j?.pickcenter) ? j.pickcenter[0] : null;
+    if (!pc) return null;
+
+    const details = String(pc?.details || "").trim();
+    const overUnder = (pc?.overUnder != null) ? String(pc.overUnder).trim() : "";
+
+    // favoredTeam: try to infer from home/away favorite flags when present
+    const homeFav = !!pc?.homeTeamOdds?.favorite;
+    const awayFav = !!pc?.awayTeamOdds?.favorite;
+
+    // Sometimes summary includes competitors with abbreviations
+    const comp = j?.header?.competitions?.[0] || j?.competitions?.[0] || {};
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const homeC = competitors.find(c => c?.homeAway === "home") || {};
+    const awayC = competitors.find(c => c?.homeAway === "away") || {};
+    const homeAbbr = String(homeC?.team?.abbreviation || homeC?.team?.shortDisplayName || "").trim();
+    const awayAbbr = String(awayC?.team?.abbreviation || awayC?.team?.shortDisplayName || "").trim();
+
+    const favoredTeam =
+      homeFav ? (homeAbbr || "Home") :
+      awayFav ? (awayAbbr || "Away") :
+      "";
+
+    if (!details && !overUnder) return null;
+    return { details, overUnder, favoredTeam };
+  } catch {
+    return null;
+  }
+}
 
   async function gpHydrateOddsForGames(games) {
-    const list = Array.isArray(games) ? games : [];
-    if (!list.length) return;
+  const list = Array.isArray(games) ? games : [];
+  if (!list.length) return;
 
-    const needs = list.filter(g => {
-      const d = String(g?.oddsDetails || "").trim();
-      const ou = String(g?.oddsOU || "").trim();
-      return (!d && !ou);
-    });
-    if (!needs.length) return;
+  const needs = list.filter(g => {
+    const d = String(g?.oddsDetails || "").trim();
+    const ou = String(g?.oddsOU || "").trim();
+    return (!d && !ou);
+  });
+  if (!needs.length) return;
 
-    const groups = new Map();
-    for (const g of needs) {
+  // ---- Pass 1: Scoreboard odds (fast) ----
+  const groups = new Map();
+  for (const g of needs) {
+    const leagueKey = String(g?.leagueKey || "").trim();
+    const dateYYYYMMDD = gpYYYYMMDDFromStartTime(g) || String(g?.dateYYYYMMDD || "").trim();
+    const eventId = String(g?.eventId || g?.id || "").trim();
+    if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
+
+    const k = `${leagueKey}__${dateYYYYMMDD}`;
+    if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
+    groups.get(k).ids.add(eventId);
+  }
+
+  const oddsMap = new Map();
+
+  for (const grp of groups.values()) {
+    const league = getLeagueByKeySafe(grp.leagueKey);
+    const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
+    if (!url) continue;
+
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) continue;
+
+      const j = await r.json().catch(() => ({}));
+      const events = Array.isArray(j?.events) ? j.events : [];
+      for (const ev of events) {
+        const eid = String(ev?.id || "");
+        if (!eid || !grp.ids.has(eid)) continue;
+
+        const odds = gpGetEventOddsFromScoreboardEvent(ev);
+        if (odds) oddsMap.set(eid, odds);
+      }
+    } catch {}
+  }
+
+  // Apply whatever we found from scoreboard
+  for (const g of list) {
+    const eid = String(g?.eventId || g?.id || "").trim();
+    if (!eid) continue;
+    g.__odds = oddsMap.get(eid) || g.__odds || null;
+  }
+
+  // ---- Pass 2: Summary fallback for anything still missing (common in NHL) ----
+  const stillMissing = needs.filter(g => {
+    const eid = String(g?.eventId || g?.id || "").trim();
+    if (!eid) return false;
+
+    const storedDetails = String(g?.oddsDetails || "").trim();
+    const storedOU = String(g?.oddsOU || "").trim();
+    const hydDetails = String(g?.__odds?.details || "").trim();
+    const hydOU = String(g?.__odds?.overUnder || "").trim();
+
+    return (!storedDetails && !storedOU && !hydDetails && !hydOU);
+  });
+
+  if (!stillMissing.length) return;
+
+  // Limit concurrency so we don't hammer ESPN
+  const CONCURRENCY = 6;
+  let idx = 0;
+
+  async function worker() {
+    while (idx < stillMissing.length) {
+      const g = stillMissing[idx++];
       const leagueKey = String(g?.leagueKey || "").trim();
-      const dateYYYYMMDD = gpYYYYMMDDFromStartTime(g) || String(g?.dateYYYYMMDD || "").trim();
       const eventId = String(g?.eventId || g?.id || "").trim();
-      if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
+      if (!leagueKey || !eventId) continue;
 
-      const k = `${leagueKey}__${dateYYYYMMDD}`;
-      if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
-      groups.get(k).ids.add(eventId);
-    }
-    if (!groups.size) return;
-
-    const oddsMap = new Map();
-
-    for (const grp of groups.values()) {
-      const league = getLeagueByKeySafe(grp.leagueKey);
-      const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
+      const url = gpSummaryUrlForEvent(leagueKey, eventId);
       if (!url) continue;
 
       try {
@@ -623,22 +728,20 @@
         if (!r.ok) continue;
 
         const j = await r.json().catch(() => ({}));
-        const events = Array.isArray(j?.events) ? j.events : [];
-        for (const ev of events) {
-          const eid = String(ev?.id || "");
-          if (!eid || !grp.ids.has(eid)) continue;
-
-          const odds = gpGetEventOddsFromScoreboardEvent(ev);
-          if (odds) oddsMap.set(eid, odds);
+        const odds = gpGetEventOddsFromSummaryJson(j);
+        if (odds) {
+          g.__odds = odds;
         }
       } catch {}
     }
-
-    for (const g of list) {
-      const eid = String(g?.eventId || g?.id || "").trim();
-      g.__odds = oddsMap.get(eid) || null;
-    }
   }
+
+  const workers = [];
+  for (let i = 0; i < Math.min(CONCURRENCY, stillMissing.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+}
 
   // -----------------------------
   // Firebase ready
