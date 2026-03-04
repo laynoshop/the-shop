@@ -1021,18 +1021,69 @@
     return full || loc || "";
   }
   function buildOdds(comp, homeTeam, awayTeam) {
+    // ESPN is inconsistent: odds may appear in comp.odds[0] OR comp.pickcenter[0]
+    const homeName = String(homeTeam?.abbr || homeTeam?.name || "Home");
+    const awayName = String(awayTeam?.abbr || awayTeam?.name || "Away");
+
+    const pickFirst = (...vals) => {
+      for (const v of vals) {
+        if (v == null) continue;
+        const s = String(v).trim();
+        if (s) return s;
+      }
+      return "";
+    };
+
+    // 1) Try PickCenter (best for spreads/totals)
+    const pc = Array.isArray(comp?.pickcenter) ? comp.pickcenter[0] : null;
+    if (pc) {
+      const ou = pickFirst(pc.overUnder, pc.total, pc.overunder, pc.over_under);
+      let details = pickFirst(
+        pc.details,
+        pc.displayValue,
+        pc.awayTeamOdds?.details,
+        pc.homeTeamOdds?.details
+      );
+
+      let favoredTeam = "";
+      const homeFav = !!pc.homeTeamOdds?.favorite;
+      const awayFav = !!pc.awayTeamOdds?.favorite;
+
+      if (homeFav) favoredTeam = homeName;
+      else if (awayFav) favoredTeam = awayName;
+
+      // If details isn't provided but spread exists, compute a clean details string
+      if (!details) {
+        const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
+        if (Number.isFinite(spreadNum) && spreadNum !== 0) {
+          // ESPN spreads: negative means home favored (usually), but we honor favorite flags first
+          let favName = favoredTeam;
+          if (!favName) favName = spreadNum < 0 ? homeName : awayName;
+          const abs = Math.abs(spreadNum);
+          const spreadVal = abs % 1 === 0 ? String(abs.toFixed(0)) : String(abs);
+          details = `${favName} -${spreadVal}`;
+          favoredTeam = favName;
+        }
+      }
+
+      if (details || ou || favoredTeam) {
+        return { details, overUnder: ou, favoredTeam };
+      }
+    }
+
+    // 2) Fallback: comp.odds[0]
     const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
     if (!o) return { details: "", overUnder: "", favoredTeam: "" };
 
-    const details = String(o?.details || "");
-    const overUnder = (o?.overUnder != null) ? String(o.overUnder) : "";
+    const details = pickFirst(o?.details, o?.displayValue);
+    const overUnder = (o?.overUnder != null) ? String(o.overUnder) : pickFirst(o?.total);
 
+    // Favoring team hints (not always present)
+    let favoredTeam = "";
     const homeFav = !!o?.homeTeamOdds?.favorite;
     const awayFav = !!o?.awayTeamOdds?.favorite;
-    const favoredTeam =
-      homeFav ? (homeTeam?.abbr || homeTeam?.name || "") :
-      awayFav ? (awayTeam?.abbr || awayTeam?.name || "") :
-      "";
+    if (homeFav) favoredTeam = homeName;
+    else if (awayFav) favoredTeam = awayName;
 
     return { details, overUnder, favoredTeam };
   }
@@ -1075,7 +1126,8 @@
     const venueLine = buildVenueLine(comp);
     const odds = buildOdds(comp, homeTeam, awayTeam);
 
-    await slateRef.collection("games").doc(eventId).set({
+    // Build payload defensively so we don't overwrite stored odds with blanks
+    const gameDoc = {
       eventId,
       weekId: String(weekId),
       leagueKey: String(leagueKey || ""),
@@ -1088,14 +1140,18 @@
       startTime,
 
       venueLine: String(venueLine || ""),
-      oddsDetails: String(odds.details || ""),
-      oddsOU: String(odds.overUnder || ""),
-      oddsFavored: String(odds.favoredTeam || ""),
       homeTeam,
       awayTeam,
 
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    };
+
+    // Only write odds fields if we actually have them (prevents wiping odds later)
+    if (odds && String(odds.details || "").trim()) gameDoc.oddsDetails = String(odds.details).trim();
+    if (odds && String(odds.overUnder || "").trim()) gameDoc.oddsOU = String(odds.overUnder).trim();
+    if (odds && String(odds.favoredTeam || "").trim()) gameDoc.oddsFavored = String(odds.favoredTeam).trim();
+
+    await slateRef.collection("games").doc(eventId).set(gameDoc, { merge: true });
   }
 }
 
