@@ -738,95 +738,184 @@
     } catch {}
   }
 
-  async function gpHydrateOddsForGames(list, leagueKey) {
-    if (!Array.isArray(list) || !list.length) return;
+  async function gpHydrateOddsForGames(list /* games */) {
+    const games = Array.isArray(list) ? list : [];
+    if (!games.length) return;
 
-    const dateYYYYMMDD = getSavedDateYYYYMMDDSafe();
-    const league = getLeagueByKeySafe(leagueKey);
-
-    // 1) Load cached odds
-    const cacheObj = gpLoadOddsCache(leagueKey, dateYYYYMMDD);
-    const oddsMap = new Map();
-
-    for (const [eid, val] of Object.entries(cacheObj)) {
-      if (eid && val && (val.details || val.overUnder)) oddsMap.set(eid, val);
+    // Group by league+date so mixed-league slates hydrate correctly (NFL+NHL+NCAAM, etc.)
+    const groups = new Map();
+    for (const g of games) {
+      const lk = String(g?.leagueKey || "").trim();
+      const dk = String(g?.dateYYYYMMDD || "").trim();
+      if (!lk || !/^\d{8}$/.test(dk)) continue;
+      const k = `${lk}|${dk}`;
+      if (!groups.has(k)) groups.set(k, { leagueKey: lk, dateYYYYMMDD: dk, games: [] });
+      groups.get(k).games.push(g);
     }
 
-    // 2) Pull odds from scoreboard first (fast)
-    let events = [];
-    try {
-      const resp = await fetch(league.endpoint(dateYYYYMMDD), { cache: "no-store" });
-      if (resp.ok) {
-        const sb = await resp.json();
-        events = Array.isArray(sb?.events) ? sb.events : [];
+    // If nothing grouped, fall back to previous behavior (won't usually happen)
+    if (!groups.size) return;
+
+    await Promise.all(Array.from(groups.values()).map(async (grp) => {
+      const leagueKey = grp.leagueKey;
+      const dateYYYYMMDD = grp.dateYYYYMMDD;
+
+      const league = getLeagueByKeySafe(leagueKey);
+      if (!league) return;
+
+      // Cache warm
+      gpLoadOddsCacheFromSession(leagueKey, dateYYYYMMDD);
+
+      // Only hydrate odds for games that are NOT locked yet.
+      // Lock window: 5 minutes before scheduled start.
+      const nowMs = Date.now();
+      const candidates = (grp.games || []).filter(g => {
+        const startMs = Number(g?.startTimeMs || 0);
+        if (!Number.isFinite(startMs) || startMs <= 0) return true; // unknown start => keep trying
+        const lockMs = startMs - (5 * 60 * 1000);
+        // If locked, don't overwrite stored odds; still keep any hydrated odds for display fallback.
+        return nowMs < lockMs;
+      });
+
+      if (!candidates.length) return;
+
+      // ---------- Pull scoreboard for that league/date ----------
+      let scoreboard = null;
+      try {
+        const url = league.endpoint(dateYYYYMMDD);
+        const r = await fetch(url, { cache: "no-store" });
+        if (r.ok) scoreboard = await r.json();
+      } catch {}
+
+      const events = Array.isArray(scoreboard?.events) ? scoreboard.events : [];
+      const byId = new Map();
+      for (const ev of events) {
+        const id = String(ev?.id || "");
+        if (id) byId.set(id, ev);
       }
-    } catch {}
 
-    for (const ev of events) {
-      const eid = String(ev?.id || "").trim();
-      if (!eid || oddsMap.has(eid)) continue;
+      // Apply scoreboard odds immediately where present
+      for (const g of candidates) {
+        const eventId = String(g?.eventId || g?.id || "");
+        if (!eventId) continue;
 
-      const odds = gpGetEventOddsFromScoreboardEvent(ev);
-      if (odds && (odds.details || odds.overUnder)) {
-        oddsMap.set(eid, { details: odds.details || "", overUnder: odds.overUnder || "", ts: Date.now() });
-        cacheObj[eid] = { details: odds.details || "", overUnder: odds.overUnder || "", ts: Date.now() };
+        const cached = gpGetCachedOddsMaybe(leagueKey, dateYYYYMMDD, eventId);
+        if (cached) {
+          g.__odds = cached;
+          continue;
+        }
+
+        const ev = byId.get(eventId);
+        const comp = ev?.competitions?.[0] || null;
+        const parsed = gpParseOddsFromScoreboardCompetition(comp);
+
+        if (parsed?.details || parsed?.overUnder) {
+          g.__odds = parsed;
+          gpSetCachedOdds(leagueKey, dateYYYYMMDD, eventId, parsed);
+        }
       }
-    }
 
-    // 3) Summary fallback for anything still missing (common)
-    const missing = [];
-    for (const g of list) {
-      const eid = String(g?.eventId || g?.id || "").trim();
-      if (!eid) continue;
-      const val = oddsMap.get(eid);
-      if (!(val && (val.details || val.overUnder))) missing.push(eid);
-    }
+      gpSaveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
 
-    const CONCURRENCY = 6;
-    let idx = 0;
+      // ---------- Summary hydration for missing odds ----------
+      // Only for games still missing after scoreboard, and only if this league has a summary endpoint.
+      if (!league.summaryEndpoint) return;
 
-    async function worker() {
-      while (idx < missing.length) {
-        const eid = missing[idx++];
-        const urls = gpInferSummaryUrls(league, eid);
+      const need = candidates.filter(g => {
+        const eventId = String(g?.eventId || g?.id || "");
+        if (!eventId) return false;
+        const storedDetails = String(g?.oddsDetails || "").trim();
+        const storedOU = String(g?.oddsOU || "").trim();
+        if (storedDetails || storedOU) return false;
+        const hyd = g?.__odds || null;
+        return !(hyd && (hyd.details || hyd.overUnder));
+      });
 
-        for (const url of urls) {
+      if (!need.length) return;
+
+      await gpRunWithConcurrency(need, GP_ODDS_CONCURRENCY_LIMIT, async (g) => {
+        const eventId = String(g?.eventId || g?.id || "");
+        if (!eventId) return;
+
+        // cache check again (another worker may have filled)
+        const cached = gpGetCachedOddsMaybe(leagueKey, dateYYYYMMDD, eventId);
+        if (cached) { g.__odds = cached; return; }
+
+        // summary fallbacks similar to Scores tab
+        const base = league.summaryEndpoint(eventId);
+        const urls = [
+          gpWithLangRegion(base),
+          gpWithLangRegion(base.replace("?event=", "?eventId=")),
+          gpWithLangRegion(base.replace("summary?event=", "summary?eventId=")),
+          base
+        ];
+
+        for (const u of urls) {
           try {
-            const data = await gpFetchJsonNoStore(url);
-            const parsed = gpParseOddsFromSummaryData(data);
-            if (parsed && (parsed.details || parsed.overUnder)) {
-              const val = { details: parsed.details || "", overUnder: parsed.overUnder || "", ts: Date.now() };
-              oddsMap.set(eid, val);
-              cacheObj[eid] = val;
-              break;
+            const data = await gpFetchJsonNoStore(u);
+            const parsed = gpParseOddsFromSummary(data);
+            if (parsed?.details || parsed?.overUnder) {
+              g.__odds = parsed;
+              gpSetCachedOdds(leagueKey, dateYYYYMMDD, eventId, parsed);
+              gpSaveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
+              return;
             }
           } catch {}
         }
+      });
+    }));
 
-        // Cache a negative result too (prevents hammering)
-        if (!cacheObj[eid]) cacheObj[eid] = { details: "", overUnder: "", ts: Date.now() };
+    // Re-render picks page if visible so odds lines update
+    try {
+      if (window.__activeTab === "picks" && typeof window.showTab === "function") {
+        // Lightweight refresh: just rebuild the tab (keeps state in memory)
+        window.showTab("picks");
       }
-    }
-
-    await Promise.all(new Array(Math.min(CONCURRENCY, missing.length)).fill(0).map(worker));
-    gpSaveOddsCache(leagueKey, dateYYYYMMDD, cacheObj);
-
-    // 4) Apply to each game object
-    for (const g of list) {
-      const eid = String(g?.eventId || g?.id || "").trim();
-      g.__odds = eid ? (oddsMap.get(eid) || null) : null;
-    }
+    } catch {}
   }
 
   // -----------------------------
   // Firebase ready
   // -----------------------------
   async function ensureFirebaseReadySafe() {
-    if (typeof window.ensureFirebaseChatReady === "function") return window.ensureFirebaseChatReady();
-    if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
-      firebase.initializeApp(window.FIREBASE_CONFIG);
-      try { await firebase.auth().signInAnonymously(); } catch {}
-    }
+    // Prefer the existing shared Firebase init (chat) if present
+    try {
+      if (typeof window.ensureFirebaseChatReady === "function") {
+        await window.ensureFirebaseChatReady();
+      } else if (window.firebase && window.FIREBASE_CONFIG) {
+        if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
+      }
+    } catch {}
+
+    // ✅ Always ensure we actually have an authenticated user (anon) for Firestore rules.
+    // (Chat init can be "ready" while auth user is still null on iOS/PWA after reload.)
+    try {
+      if (!window.firebase || !firebase.auth) return;
+      const auth = firebase.auth();
+
+      if (auth.currentUser) return;
+
+      // Kick off anon sign-in (non-blocking) and also wait briefly for auth state.
+      try { auth.signInAnonymously().catch(() => {}); } catch {}
+
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(true); } };
+
+        const unsub = auth.onAuthStateChanged((u) => {
+          if (u) {
+            try { unsub(); } catch {}
+            finish();
+          }
+        });
+
+        // Fallback: don't hang forever
+        setTimeout(() => {
+          try { unsub(); } catch {}
+          finish();
+        }, 3500);
+      });
+    } catch {}
   }
 
   function getPicksDisplayName() {
@@ -1586,7 +1675,12 @@
     const ou = storedOU || String(hyd?.overUnder || "").trim();
 
     const parts = [];
-    if (details) parts.push(`Favored: ${details}`);
+    if (details) {
+      let d = details;
+      // Rivalry rename in odds line
+      d = d.replace(/\bMICH\b/g, "TTUN").replace(/\bMichigan\b/gi, "TTUN");
+      parts.push(`Favored: ${d}`);
+    }
     if (ou) parts.push(`O/U: ${ou}`);
     return parts.join(" • ");
   }
