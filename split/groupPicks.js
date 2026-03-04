@@ -2155,21 +2155,33 @@
       const publishedWeeks = weeks.filter(w => w && w.published === true);
       const latestPublishedWeekId = String(publishedWeeks[publishedWeeks.length - 1]?.id || "").trim();
 
-      let showWeekId = "";
+            let showWeekId = "";
+
+      const requested = getSelectedWeekFromLS();
 
       if (!isAdmin) {
+        // ✅ Guests: allow viewing ANY published week they selected
+        const requestedIsPublished =
+          !!requested &&
+          weeks.some(w => String(w.id) === String(requested) && w.published === true);
+
         const activeIsPublished =
           !!activeWeekId &&
-          weeks.some(w => String(w.id) === activeWeekId && w.published === true);
+          weeks.some(w => String(w.id) === String(activeWeekId) && w.published === true);
 
-        showWeekId = activeIsPublished ? activeWeekId : (latestPublishedWeekId || "");
+        showWeekId =
+          (requestedIsPublished ? String(requested) : "") ||
+          (activeIsPublished ? String(activeWeekId) : "") ||
+          (latestPublishedWeekId || "");
       } else {
-        const requested = getSelectedWeekFromLS();
+        // Admins: can view any week in meta list (published or not)
         const requestedIsAllowed =
           !!requested &&
-          weeks.some(w => String(w.id) === requested && (w.published === true || isAdmin));
+          weeks.some(w => String(w.id) === String(requested));
 
-        showWeekId = requestedIsAllowed ? requested : (activeWeekId || requested || "");
+        showWeekId = requestedIsAllowed
+          ? String(requested)
+          : (String(activeWeekId || "").trim() || String(requested || "").trim() || "");
       }
 
       if (showWeekId) setSelectedWeekToLS(showWeekId);
