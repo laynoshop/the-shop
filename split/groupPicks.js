@@ -394,14 +394,78 @@
   // Leagues (admin add-games tool)
   // -----------------------------
   const __LEAGUES_FALLBACK_FULL = [
-    { key: "ncaam", name: "Men’s College Basketball", endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200` },
-    { key: "nba",   name: "NBA",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}` },
-    { key: "nhl",   name: "NHL",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}` },
-    { key: "mls",   name: "MLS (Soccer)",           endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${date}` },
-    { key: "nfl",   name: "NFL",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}` },
-    { key: "cfb",   name: "College Football",       endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}` },
-    { key: "mlb",   name: "MLB",                    endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}` },
-    { key: "pga",   name: "Golf (PGA)",             endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}` }
+    {
+      key: "ncaam",
+      name: "Men’s College Basketball",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=${eventId}`
+    },
+    {
+      key: "cfb",
+      name: "College Football",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${eventId}`
+    },
+    {
+      key: "nba",
+      name: "NBA",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${eventId}`
+    },
+    {
+      key: "nhl",
+      name: "NHL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${eventId}`
+    },
+    {
+      key: "mls",
+      name: "MLS (Soccer)",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=${eventId}`
+    },
+    {
+      key: "nfl",
+      name: "NFL",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${eventId}`
+    },
+    {
+      key: "mlb",
+      name: "MLB",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=${eventId}`
+    },
+    {
+      key: "pga",
+      name: "Golf (PGA)",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/golf/pga/summary?event=${eventId}`
+    },
+    {
+      key: "ufc",
+      name: "UFC",
+      endpoint: (date) =>
+        `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) =>
+        `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/summary?event=${eventId}`
+    }
   ];
 
   function __getLeaguesFullList() {
@@ -557,37 +621,134 @@
   }
 
   function gpGetEventOddsFromScoreboardEvent(ev) {
-    try {
-      const comp = ev?.competitions?.[0] || {};
-      const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
-      if (!o) return null;
+  const comp = ev?.competitions?.[0] || null;
+  if (!comp) return null;
 
-      const details = String(o?.details || "").trim();
-      const overUnder = (o?.overUnder != null) ? String(o.overUnder).trim() : "";
-
-      const homeFav = !!o?.homeTeamOdds?.favorite;
-      const awayFav = !!o?.awayTeamOdds?.favorite;
-
-      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-      const homeC = competitors.find(c => c?.homeAway === "home") || {};
-      const awayC = competitors.find(c => c?.homeAway === "away") || {};
-
-      const homeAbbr = String(homeC?.team?.abbreviation || homeC?.team?.shortDisplayName || "").trim();
-      const awayAbbr = String(awayC?.team?.abbreviation || awayC?.team?.shortDisplayName || "").trim();
-
-      const favoredTeam =
-        homeFav ? (homeAbbr || "Home") :
-        awayFav ? (awayAbbr || "Away") :
-        "";
-
-      if (!details && !overUnder) return null;
-      return { details, overUnder, favoredTeam };
-    } catch {
-      return null;
-    }
+  // Prefer pickcenter (often where NHL odds live)
+  const pcArr = comp?.pickcenter;
+  const pc = Array.isArray(pcArr) && pcArr.length ? pcArr[0] : null;
+  if (pc) {
+    const parsed = gpParseOddsFromPickcenter(pc, comp);
+    if (parsed && (parsed.details || parsed.overUnder)) return parsed;
   }
 
-  async function gpHydrateOddsForGames(games) {
+  // Fallback to odds[]
+  const oArr = comp?.odds;
+  const o = Array.isArray(oArr) && oArr.length ? oArr[0] : null;
+  if (!o) return null;
+
+  return {
+    details: String(o?.details || o?.displayValue || "").trim(),
+    overUnder:
+      o?.overUnder !== undefined ? String(o.overUnder) :
+      o?.total !== undefined ? String(o.total) :
+      ""
+  };
+}
+
+function gpParseOddsFromPickcenter(pc, competition) {
+  if (!pc) return null;
+
+  const competitors = competition?.competitors || [];
+  const home = competitors.find(c => c?.homeAway === "home");
+  const away = competitors.find(c => c?.homeAway === "away");
+
+  const homeName = String(home?.team?.abbreviation || home?.team?.shortDisplayName || home?.team?.displayName || "Home").trim();
+  const awayName = String(away?.team?.abbreviation || away?.team?.shortDisplayName || away?.team?.displayName || "Away").trim();
+
+  const overUnder =
+    pc?.overUnder !== undefined ? String(pc.overUnder) :
+    pc?.total !== undefined ? String(pc.total) :
+    pc?.overunder !== undefined ? String(pc.overunder) :
+    "";
+
+  const details = String(
+    pc?.details ||
+    pc?.displayValue ||
+    pc?.awayTeamOdds?.details ||
+    pc?.homeTeamOdds?.details ||
+    ""
+  ).trim();
+
+  if (details) return { details, overUnder };
+
+  // If ESPN doesn't provide a details string, build one from spread + favorite flags
+  const spreadNum = Number(pc?.spread ?? pc?.line ?? pc?.handicap);
+  if (!Number.isFinite(spreadNum)) return { details: "", overUnder };
+
+  const homeFav = !!pc?.homeTeamOdds?.favorite;
+  const awayFav = !!pc?.awayTeamOdds?.favorite;
+
+  let favoredTeam = "";
+  if (homeFav) favoredTeam = homeName;
+  else if (awayFav) favoredTeam = awayName;
+  else favoredTeam = spreadNum < 0 ? homeName : awayName;
+
+  const abs = Math.abs(spreadNum);
+  const spreadVal = abs % 1 === 0 ? String(abs.toFixed(0)) : String(abs);
+  return { details: `${favoredTeam} -${spreadVal}`, overUnder };
+}
+
+async function gpFetchOddsFromSummary(league, eventId) {
+  if (!league?.summaryEndpoint || !eventId) return null;
+
+  const base = league.summaryEndpoint(eventId);
+  const urls = [
+    gpWithLangRegion(base),
+    gpWithLangRegion(base.replace("?event=", "?eventId=")),
+    gpWithLangRegion(base.replace("summary?event=", "summary?eventId=")),
+    base
+  ];
+
+  for (const url of urls) {
+    try {
+      const data = await gpFetchJsonNoStore(url);
+
+      // try top-level pickcenter first
+      const pcTop = Array.isArray(data?.pickcenter) && data.pickcenter.length ? data.pickcenter[0] : null;
+
+      const comp =
+        data?.header?.competitions?.[0] ||
+        data?.competitions?.[0] ||
+        null;
+
+      const pcComp = Array.isArray(comp?.pickcenter) && comp.pickcenter.length ? comp.pickcenter[0] : null;
+
+      const parsed =
+        (pcTop ? gpParseOddsFromPickcenter(pcTop, comp || null) : null) ||
+        (pcComp ? gpParseOddsFromPickcenter(pcComp, comp || null) : null);
+
+      if (parsed && (parsed.details || parsed.overUnder)) return parsed;
+
+      const oArr = comp?.odds;
+      const o = Array.isArray(oArr) && oArr.length ? oArr[0] : null;
+      if (o && (o.details || o.displayValue || o.overUnder !== undefined || o.total !== undefined)) {
+        return {
+          details: String(o?.details || o?.displayValue || "").trim(),
+          overUnder:
+            o?.overUnder !== undefined ? String(o.overUnder) :
+            o?.total !== undefined ? String(o.total) :
+            ""
+        };
+      }
+
+      const oTop = Array.isArray(data?.odds) && data.odds.length ? data.odds[0] : null;
+      if (oTop && (oTop.details || oTop.displayValue || oTop.overUnder !== undefined || oTop.total !== undefined)) {
+        return {
+          details: String(oTop?.details || oTop?.displayValue || "").trim(),
+          overUnder:
+            oTop?.overUnder !== undefined ? String(oTop.overUnder) :
+            oTop?.total !== undefined ? String(oTop.total) :
+            ""
+        };
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+async function gpHydrateOddsForGames(games) {
     const list = Array.isArray(games) ? games : [];
     if (!list.length) return;
 
@@ -638,7 +799,40 @@
       const eid = String(g?.eventId || g?.id || "").trim();
       g.__odds = oddsMap.get(eid) || null;
     }
+
+// Summary fallback for games where scoreboard odds are missing (common for NHL/finished games)
+const missing = list.filter(g => {
+  const o = g && g.__odds;
+  const hasDetails = !!String(o?.details || "").trim();
+  const hasOU = (o?.overUnder !== undefined && String(o.overUnder || "").trim() !== "");
+  return !hasDetails && !hasOU;
+});
+
+if (missing.length) {
+  const LIMIT = 6;
+  let k = 0;
+
+  const runners = new Array(Math.min(LIMIT, missing.length)).fill(0).map(async () => {
+    while (k < missing.length) {
+      const g = missing[k++];
+      const eid = String(g?.eventId || "").trim();
+      if (!eid) continue;
+
+      try {
+        const league = getLeagueByKeySafe(g.__leagueKey);
+        const parsed = await gpFetchOddsFromSummary(league, eid);
+        if (parsed && (String(parsed.details || "").trim() || String(parsed.overUnder || "").trim())) {
+          oddsMap.set(eid, parsed);
+          g.__odds = parsed;
+        }
+      } catch {}
+    }
+  });
+
+  await Promise.all(runners);
+}
   }
+
 
   // -----------------------------
   // Firebase ready
