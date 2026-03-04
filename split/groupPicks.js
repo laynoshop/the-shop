@@ -517,7 +517,7 @@
     const groups = new Map();
     for (const g of list) {
       const leagueKey = String(g?.leagueKey || "").trim();
-      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim() || gpYYYYMMDDFromStartTime(g);
+      const dateYYYYMMDD = gpYYYYMMDDFromStartTime(g) || String(g?.dateYYYYMMDD || "").trim();
       const eventId = String(g?.eventId || g?.id || "").trim();
       if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
 
@@ -601,7 +601,7 @@
     const groups = new Map();
     for (const g of needs) {
       const leagueKey = String(g?.leagueKey || "").trim();
-      const dateYYYYMMDD = String(g?.dateYYYYMMDD || "").trim() || gpYYYYMMDDFromStartTime(g);
+      const dateYYYYMMDD = gpYYYYMMDDFromStartTime(g) || String(g?.dateYYYYMMDD || "").trim();
       const eventId = String(g?.eventId || g?.id || "").trim();
       if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
 
@@ -1038,54 +1038,66 @@
   }
 
   async function gpAdminAddSelectedGamesToWeek(db, uid, weekId, leagueKey, dateYYYYMMDD, selectedEventIds, events) {
-    const slateRef = db.collection("pickSlates").doc(String(weekId));
+  const slateRef = db.collection("pickSlates").doc(String(weekId));
 
-    await slateRef.set({
-      type: "week",
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: uid
+  await slateRef.set({
+    type: "week",
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy: uid
+  }, { merge: true });
+
+  for (const ev of (events || [])) {
+    const eventId = String(ev?.id || "");
+    if (!eventId) continue;
+    if (!selectedEventIds.has(eventId)) continue;
+
+    const comp = ev?.competitions?.[0] || {};
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const homeC = competitors.find(c => c?.homeAway === "home") || {};
+    const awayC = competitors.find(c => c?.homeAway === "away") || {};
+
+    const homeTeam = buildTeam(homeC);
+    const awayTeam = buildTeam(awayC);
+
+    const startMs = kickoffMsFromEvent(ev);
+    const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
+
+    // ✅ Use the game’s REAL date (derived from kickoff), not the admin picker date
+    const actualYYYYMMDD = (() => {
+      if (!startMs) return String(dateYYYYMMDD || "");
+      const d = new Date(startMs);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      return `${y}${m}${da}`;
+    })();
+
+    const venueLine = buildVenueLine(comp);
+    const odds = buildOdds(comp, homeTeam, awayTeam);
+
+    await slateRef.collection("games").doc(eventId).set({
+      eventId,
+      weekId: String(weekId),
+      leagueKey: String(leagueKey || ""),
+
+      // ✅ this is the field you were asking about
+      dateYYYYMMDD: String(actualYYYYMMDD || ""),
+
+      homeName: homeTeam.name || "Home",
+      awayName: awayTeam.name || "Away",
+      startTime,
+
+      venueLine: String(venueLine || ""),
+      oddsDetails: String(odds.details || ""),
+      oddsOU: String(odds.overUnder || ""),
+      oddsFavored: String(odds.favoredTeam || ""),
+      homeTeam,
+      awayTeam,
+
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
-
-    for (const ev of (events || [])) {
-      const eventId = String(ev?.id || "");
-      if (!eventId) continue;
-      if (!selectedEventIds.has(eventId)) continue;
-
-      const comp = ev?.competitions?.[0] || {};
-      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-      const homeC = competitors.find(c => c?.homeAway === "home") || {};
-      const awayC = competitors.find(c => c?.homeAway === "away") || {};
-
-      const homeTeam = buildTeam(homeC);
-      const awayTeam = buildTeam(awayC);
-
-      const startMs = kickoffMsFromEvent(ev);
-      const startTime = startMs ? firebase.firestore.Timestamp.fromMillis(startMs) : null;
-
-      const venueLine = buildVenueLine(comp);
-      const odds = buildOdds(comp, homeTeam, awayTeam);
-
-      await slateRef.collection("games").doc(eventId).set({
-        eventId,
-        weekId: String(weekId),
-        leagueKey: String(leagueKey || ""),
-        dateYYYYMMDD: String(dateYYYYMMDD || ""),
-
-        homeName: homeTeam.name || "Home",
-        awayName: awayTeam.name || "Away",
-        startTime,
-
-        venueLine: String(venueLine || ""),
-        oddsDetails: String(odds.details || ""),
-        oddsOU: String(odds.overUnder || ""),
-        oddsFavored: String(odds.favoredTeam || ""),
-        homeTeam,
-        awayTeam,
-
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    }
   }
+}
 
   async function gpAdminPublishWeek(db, uid, weekId) {
     const slateRef = db.collection("pickSlates").doc(String(weekId));
