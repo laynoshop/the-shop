@@ -2446,7 +2446,22 @@
               return;
             }
 
-            await gpSaveMyPicksBatch(db, slateId, playerId, pendingMap);
+                        await gpSaveMyPicksBatch(db, slateId, playerId, pendingMap);
+
+            // ✅ Invalidate Everyone's Picks cache for this week so it reflects the new pick immediately
+            try {
+              const bucket = gpGetAllPicksCacheBucket(slateId);
+              bucket.ts = 0;
+              bucket.data = null;
+              bucket.promise = null;
+            } catch {}
+
+            // (Optional but nice) If any Everyone sections are currently open, force them to re-load next open
+            try {
+              document.querySelectorAll('details[data-gpeveryone="1"] .gpEveryoneBody[data-loaded="1"]')
+                .forEach(el => el.removeAttribute("data-loaded"));
+            } catch {}
+
             gpPendingClear();
           })
           .then(() => renderPicks(true))
