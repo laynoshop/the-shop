@@ -877,46 +877,61 @@
   // -----------------------------
   // Firebase ready
   // -----------------------------
-  async function ensureFirebaseReadySafe() {
-    // Prefer the existing shared Firebase init (chat) if present
-    try {
-      if (typeof window.ensureFirebaseChatReady === "function") {
-        await window.ensureFirebaseChatReady();
-      } else if (window.firebase && window.FIREBASE_CONFIG) {
-        if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
-      }
-    } catch {}
-
-    // ✅ Always ensure we actually have an authenticated user (anon) for Firestore rules.
-    // (Chat init can be "ready" while auth user is still null on iOS/PWA after reload.)
-    try {
-      if (!window.firebase || !firebase.auth) return;
-      const auth = firebase.auth();
-
-      if (auth.currentUser) return;
-
-      // Kick off anon sign-in (non-blocking) and also wait briefly for auth state.
-      try { auth.signInAnonymously().catch(() => {}); } catch {}
-
-      await new Promise((resolve) => {
-        let done = false;
-        const finish = () => { if (!done) { done = true; resolve(true); } };
-
-        const unsub = auth.onAuthStateChanged((u) => {
-          if (u) {
-            try { unsub(); } catch {}
-            finish();
-          }
-        });
-
-        // Fallback: don't hang forever
-        setTimeout(() => {
-          try { unsub(); } catch {}
-          finish();
-        }, 3500);
-      });
-    } catch {}
+  // ✅ Replace your existing ensureFirebaseReadySafe() with this version
+async function ensureFirebaseReadySafe() {
+  // 1) Wait briefly for firebase to exist (in case scripts load slightly later)
+  const t0 = Date.now();
+  while (!window.firebase && (Date.now() - t0) < 2500) {
+    await new Promise(r => setTimeout(r, 50));
   }
+
+  // 2) If your shared chat initializer exists, use it (keeps everything consistent)
+  if (typeof window.ensureFirebaseChatReady === "function") {
+    await window.ensureFirebaseChatReady();
+  }
+
+  // 3) If firebase still isn't present, we can't proceed
+  if (!window.firebase) {
+    throw new Error("Firebase SDK not loaded (window.firebase missing).");
+  }
+
+  // 4) Ensure an app exists (only if none already)
+  const hasApps = Array.isArray(firebase.apps) ? firebase.apps.length > 0 : !!firebase.app;
+  if (!hasApps) {
+    const cfg =
+      window.FIREBASE_CONFIG ||
+      window.firebaseConfig ||
+      window.__FIREBASE_CONFIG__ ||
+      null;
+
+    if (!cfg) {
+      throw new Error("Missing Firebase config (no app initialized and no config found).");
+    }
+    firebase.initializeApp(cfg);
+  }
+
+  // 5) ✅ Ensure the user is signed in BEFORE Firestore reads (rules require request.auth)
+  try {
+    const auth = firebase.auth();
+    if (!auth.currentUser) {
+      await auth.signInAnonymously();
+    }
+  } catch (e) {
+    const msg = String(e?.message || e || "");
+    // This is the most common gotcha if anon auth isn't enabled
+    if (msg.includes("operation-not-allowed") || msg.includes("auth/operation-not-allowed")) {
+      throw new Error(
+        "Anonymous Auth is disabled in Firebase. Enable it: Firebase Console → Authentication → Sign-in method → Anonymous → Enable."
+      );
+    }
+    throw e;
+  }
+
+  // 6) Firestore instance sanity check
+  if (!firebase.firestore) {
+    throw new Error("Firestore SDK not loaded (firebase.firestore missing).");
+  }
+}
 
   function getPicksDisplayName() {
     const existingChat = (safeGetLS("theShopChatName_v1") || "").trim();
