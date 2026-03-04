@@ -2159,12 +2159,24 @@ async function ensureFirebaseReadySafe() {
     try {
       await dbReady;
 
-      const user = firebase?.auth?.().currentUser;
-      if (!user) {
-        try { await firebase.auth().signInAnonymously(); } catch {}
-      }
+      // ---- Firebase auth/db bootstrap (SAFE) ----
+const fb = window.firebase;
+if (!fb || !fb.auth || !fb.firestore) throw new Error("Firebase not available");
 
-      const db = firebase.firestore();
+try {
+  const auth = fb.auth();
+  if (!auth.currentUser) {
+    await auth.signInAnonymously();
+  }
+} catch (e) {
+  // If anonymous auth is disabled, you'll still fail Firestore rules with permission-denied.
+  // Keep the error visible in console to diagnose quickly.
+  console.error("Anonymous auth failed:", e);
+  throw e;
+}
+
+const db = fb.firestore();
+// ------------------------------------------
 
       // Mandatory identity gate — ONLY for Picks page
       const ident = gpGetIdentityFromStorageOrMem();
