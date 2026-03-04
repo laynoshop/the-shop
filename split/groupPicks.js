@@ -879,58 +879,26 @@
   // -----------------------------
   // ✅ Replace your existing ensureFirebaseReadySafe() with this version
 async function ensureFirebaseReadySafe() {
-  // 1) Wait briefly for firebase to exist (in case scripts load slightly later)
-  const t0 = Date.now();
-  while (!window.firebase && (Date.now() - t0) < 2500) {
-    await new Promise(r => setTimeout(r, 50));
-  }
-
-  // 2) If your shared chat initializer exists, use it (keeps everything consistent)
+  // If chat bootstraps Firebase, use it first…
   if (typeof window.ensureFirebaseChatReady === "function") {
-    await window.ensureFirebaseChatReady();
+    try { await window.ensureFirebaseChatReady(); } catch {}
   }
 
-  // 3) If firebase still isn't present, we can't proceed
-  if (!window.firebase) {
-    throw new Error("Firebase SDK not loaded (window.firebase missing).");
+  // If Firebase exists but isn't initialized (somehow), initialize it.
+  if (window.firebase && window.FIREBASE_CONFIG && !firebase.apps?.length) {
+    firebase.initializeApp(window.FIREBASE_CONFIG);
   }
 
-  // 4) Ensure an app exists (only if none already)
-  const hasApps = Array.isArray(firebase.apps) ? firebase.apps.length > 0 : !!firebase.app;
-  if (!hasApps) {
-    const cfg =
-      window.FIREBASE_CONFIG ||
-      window.firebaseConfig ||
-      window.__FIREBASE_CONFIG__ ||
-      null;
-
-    if (!cfg) {
-      throw new Error("Missing Firebase config (no app initialized and no config found).");
-    }
-    firebase.initializeApp(cfg);
-  }
-
-  // 5) ✅ Ensure the user is signed in BEFORE Firestore reads (rules require request.auth)
+  // ✅ Critical: even if Firebase is already initialized,
+  // ensure we have an auth user for Firestore rules.
   try {
-    const auth = firebase.auth();
-    if (!auth.currentUser) {
-      await auth.signInAnonymously();
+    if (window.firebase && firebase.auth) {
+      const auth = firebase.auth();
+      if (!auth.currentUser) {
+        await auth.signInAnonymously();
+      }
     }
-  } catch (e) {
-    const msg = String(e?.message || e || "");
-    // This is the most common gotcha if anon auth isn't enabled
-    if (msg.includes("operation-not-allowed") || msg.includes("auth/operation-not-allowed")) {
-      throw new Error(
-        "Anonymous Auth is disabled in Firebase. Enable it: Firebase Console → Authentication → Sign-in method → Anonymous → Enable."
-      );
-    }
-    throw e;
-  }
-
-  // 6) Firestore instance sanity check
-  if (!firebase.firestore) {
-    throw new Error("Firestore SDK not loaded (firebase.firestore missing).");
-  }
+  } catch {}
 }
 
   function getPicksDisplayName() {
