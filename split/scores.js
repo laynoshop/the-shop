@@ -95,6 +95,11 @@
         `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`,
       summaryEndpoint: (eventId) =>
         `https://site.api.espn.com/apis/site/v2/sports/golf/pga/summary?event=${eventId}`
+    },
+    { 
+      key: "ufc",
+      name: "UFC",
+      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${date}`
     }
   ];
 
@@ -462,6 +467,27 @@
         return;
       }
     });
+  }
+
+  function buildFighter(competitor) {
+    const a = competitor?.athlete || {};
+    const headshot =
+      a?.headshot?.href ||
+      (Array.isArray(a?.headshots) ? a.headshots[0]?.href : "") ||
+      "";
+
+    // ESPN UFC often has records/summary in different places; keep it defensive
+    const rec =
+      (Array.isArray(competitor?.records) ? competitor.records[0]?.summary : "") ||
+      a?.record?.displayValue ||
+      "";
+
+    return {
+      name: String(a?.displayName || a?.shortName || competitor?.displayName || "Fighter"),
+      logo: String(headshot || ""),   // reuse your logo spot for headshot
+      record: String(rec || ""),
+      homeAway: String(competitor?.homeAway || "")
+    };
   }
 
   // ---------- Team / rank / record helpers ----------
@@ -1230,26 +1256,26 @@
         ` : ``}
       </div>
     `;
-    
+
     // ---------- PGA (Golf) ----------
-if (selectedKey === "pga") {
-  const selectedDate = getSavedDateYYYYMMDD();
-  const prettyDate = yyyymmddToPretty(selectedDate);
-  const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    if (selectedKey === "pga") {
+      const selectedDate = getSavedDateYYYYMMDD();
+      const prettyDate = yyyymmddToPretty(selectedDate);
+      const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-  // show header + loading
-  content.innerHTML = `
-    ${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}
-    <div class="notice">Loading PGA…</div>
-  `;
+      // show header + loading
+      content.innerHTML = `
+        ${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}
+        <div class="notice">Loading PGA…</div>
+      `;
 
-  // render leaderboard
-  const pgaHTML = await renderPGAScoreboard({ dateYYYYMMDD: selectedDate });
+      // render leaderboard
+      const pgaHTML = await renderPGAScoreboard({ dateYYYYMMDD: selectedDate });
 
-  // keep the same header
-  content.innerHTML = `${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}${pgaHTML}`;
-  return;
-}
+      // keep the same header
+      content.innerHTML = `${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}${pgaHTML}`;
+      return;
+    }
 
     if (showLoading) {
       content.innerHTML = `
@@ -1362,6 +1388,8 @@ if (selectedKey === "pga") {
         const home = competition.competitors.find(t => t.homeAway === "home");
         const away = competition.competitors.find(t => t.homeAway === "away");
 
+        const isUFC = String(selectedKey || "").toLowerCase() === "ufc";
+
         const state = event?.status?.type?.state || "unknown";
         const detail = event?.status?.type?.detail || "Status unavailable";
         const pillClass = statusClassFromState(state);
@@ -1370,20 +1398,21 @@ if (selectedKey === "pga") {
         const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
         const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
 
-        const homeTeam = home?.team || null;
-        const awayTeam = away?.team || null;
+        // ✅ UFC: treat competitors as fighters (headshot/name/record)
+        const homeTeam = isUFC ? buildFighter(home) : (home?.team || null);
+        const awayTeam = isUFC ? buildFighter(away) : (away?.team || null);
 
-        const homeBaseName = getTeamDisplayNameUI(homeTeam);
-        const awayBaseName = getTeamDisplayNameUI(awayTeam);
+        const homeBaseName = isUFC ? (homeTeam?.name || "Fighter") : getTeamDisplayNameUI(homeTeam);
+        const awayBaseName = isUFC ? (awayTeam?.name || "Fighter") : getTeamDisplayNameUI(awayTeam);
 
-        const homeName = teamDisplayNameWithRank(homeBaseName, home, selectedKey);
-        const awayName = teamDisplayNameWithRank(awayBaseName, away, selectedKey);
+        const homeName = isUFC ? homeBaseName : teamDisplayNameWithRank(homeBaseName, home, selectedKey);
+        const awayName = isUFC ? awayBaseName : teamDisplayNameWithRank(awayBaseName, away, selectedKey);
 
-        const homeLogo = getTeamLogoUrl(homeTeam);
-        const awayLogo = getTeamLogoUrl(awayTeam);
+        const homeLogo = isUFC ? (homeTeam?.logo || "") : getTeamLogoUrl(homeTeam);
+        const awayLogo = isUFC ? (awayTeam?.logo || "") : getTeamLogoUrl(awayTeam);
 
-        const homeAbbrev = escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
-        const awayAbbrev = escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
+        const homeAbbrev = isUFC ? "" : escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
+        const awayAbbrev = isUFC ? "" : escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
 
         const venueLine = buildVenueLine(competition);
 
@@ -1427,7 +1456,13 @@ if (selectedKey === "pga") {
         }
         <div class="teamText">
           <div class="teamName">${escapeHtml(awayName)}</div>
-          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${escapeHtml(metaLineWithConference("Away", away, selectedKey))}</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${
+            escapeHtml(
+              isUFC
+                ? (`Away${awayTeam?.record ? " • " + awayTeam.record : ""}`)
+                : metaLineWithConference("Away", away, selectedKey)
+            )
+          }</div>
         </div>
       </div>
     </div>
@@ -1444,7 +1479,13 @@ if (selectedKey === "pga") {
         }
         <div class="teamText">
           <div class="teamName">${escapeHtml(homeName)}</div>
-          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${escapeHtml(metaLineWithConference("Home", home, selectedKey))}</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${
+            escapeHtml(
+              isUFC
+                ? (`Home${homeTeam?.record ? " • " + homeTeam.record : ""}`)
+                : metaLineWithConference("Home", home, selectedKey)
+            )
+          }</div>
         </div>
       </div>
     </div>
@@ -1551,339 +1592,339 @@ if (selectedKey === "pga") {
       `;
     }
   }
-  
+
   // =========================
-// PGA (Golf) — Active Tournament Leaderboard
-// =========================
-async function renderPGAScoreboard({ dateYYYYMMDD }) {
-  const esc = (s) => {
-    if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
-    return String(s ?? "")
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  };
-
-  const fmtToPar = (v) => {
-    const s = String(v ?? "").trim();
-    if (!s) return { text: "E", cls: "pgaEven" };
-    if (s === "0" || s.toLowerCase() === "e" || s.toLowerCase() === "even") return { text: "E", cls: "pgaEven" };
-    if (s.startsWith("-")) return { text: s, cls: "pgaUnder" };
-    if (s.startsWith("+")) return { text: s, cls: "pgaOver" };
-    const n = Number(s);
-    if (Number.isFinite(n)) {
-      if (n === 0) return { text: "E", cls: "pgaEven" };
-      if (n < 0) return { text: String(n), cls: "pgaUnder" };
-      return { text: `+${n}`, cls: "pgaOver" };
-    }
-    return { text: s, cls: "pgaEven" };
-  };
-
-  const fmtToday = (v) => {
-    const s = String(v ?? "").trim();
-    if (!s) return "";
-    if (s === "0" || s.toLowerCase() === "e") return "E";
-    if (s.startsWith("-") || s.startsWith("+")) return s;
-    const n = Number(s);
-    if (Number.isFinite(n)) return n > 0 ? `+${n}` : String(n);
-    return s;
-  };
-
-  const pickFirst = (...vals) => {
-    for (const v of vals) {
-      if (v == null) continue;
-      const s = String(v).trim();
-      if (s) return s;
-    }
-    return "";
-  };
-
-  // Convert "E", "-15", "+3", "0" -> number for tie math
-  const toParNumber = (raw) => {
-    const s = String(raw ?? "").trim();
-    if (!s) return NaN;
-    const low = s.toLowerCase();
-    if (low === "e" || low === "even") return 0;
-    if (s === "0") return 0;
-    // allow "5" meaning +5
-    const n = Number(s);
-    return Number.isFinite(n) ? n : NaN;
-  };
-
-  const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
-  let j = null;
-
-  try {
-    const r = await fetch(url, { cache: "no-store" });
-    if (!r.ok) throw new Error("ESPN fetch failed");
-    j = await r.json();
-  } catch (e) {
-    return `
-      <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill status-other">GOLF (PGA)</div>
-        </div>
-        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">Couldn’t load PGA</div>
-        <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
-      </div>
-    `;
-  }
-
-  const events =
-    (Array.isArray(j?.events) && j.events) ||
-    (Array.isArray(j?.leagues?.[0]?.events) && j.leagues[0].events) ||
-    [];
-
-  const ev = events[0] || null;
-
-  if (!ev) {
-    return `
-      <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill status-other">GOLF (PGA)</div>
-        </div>
-        <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">No PGA event found</div>
-        <div class="muted" style="margin-top:8px; font-weight:800;">Nothing scheduled for this date.</div>
-      </div>
-    `;
-  }
-
-  const comp =
-    (Array.isArray(ev?.competitions) && ev.competitions[0]) ||
-    (Array.isArray(ev?.competitions?.competitions) && ev.competitions.competitions[0]) ||
-    (Array.isArray(ev?.competitions?.[0]?.competitions) && ev.competitions[0].competitions[0]) ||
-    (Array.isArray(ev?.competitions) ? ev.competitions[0] : null) ||
-    null;
-
-  const tournamentName = pickFirst(ev?.name, ev?.shortName, ev?.season?.name, "PGA Tournament");
-  const venueName = pickFirst(comp?.venue?.fullName, comp?.venue?.name, ev?.venues?.[0]?.fullName, "");
-  const statusDetail = pickFirst(comp?.status?.type?.shortDetail, comp?.status?.type?.detail, ev?.status?.type?.shortDetail, "");
-
-  const competitors =
-    (Array.isArray(comp?.competitors) && comp.competitors) ||
-    (Array.isArray(ev?.competitors) && ev.competitors) ||
-    [];
-
-  // Normalize leaderboard rows
-  const rows = competitors.map((c, idx) => {
-    const athleteName =
-      pickFirst(c?.athlete?.displayName, c?.athlete?.shortName, c?.athlete?.fullName, c?.name, "Player");
-
-    function extractPosText(cc) {
-      const direct = pickFirst(
-        cc?.place,
-        cc?.position?.displayName,
-        cc?.position?.name,
-        cc?.position,
-        cc?.standing?.position?.displayName,
-        cc?.standing?.position,
-        cc?.rank,
-        cc?.seed,
-        ""
-      );
-
-      const stats = Array.isArray(cc?.statistics) ? cc.statistics : [];
-      for (const s of stats) {
-        const n = String(s?.name || s?.abbreviation || "").toLowerCase();
-        if (n === "pos" || n === "position" || n === "place") {
-          const v = pickFirst(s?.displayValue, s?.value, s?.summary, "");
-          if (v) return v;
-        }
-      }
-
-      return direct;
-    }
-
-    const posTextRaw = String(extractPosText(c) || "").trim();
-
-    const totalToParRaw =
-      pickFirst(c?.score?.displayValue, c?.score, c?.toPar, c?.summary?.toPar, "");
-
-    const todayRaw =
-      pickFirst(
-        c?.linescores?.[0]?.displayValue,
-        c?.linescores?.[0]?.value,
-        c?.scorecard?.[0]?.displayValue,
-        c?.today,
-        c?.rounds?.[0]?.scoreToPar?.displayValue,
-        ""
-      );
-
-    const thru =
-      pickFirst(
-        c?.status?.type?.shortDetail,
-        c?.status?.displayValue,
-        c?.status?.type?.detail,
-        c?.status?.type?.state,
-        c?.thru,
-        ""
-      );
-
-    const totalFmt = fmtToPar(totalToParRaw);
-    const todayFmt = fmtToday(todayRaw);
-
-    // numeric sort position if possible (T1 -> 1)
-    const posNum = (() => {
-      const m = posTextRaw.match(/(\d+)/);
-      if (m) return Number(m[1]);
-      return idx + 1;
-    })();
-
-    const posText = posTextRaw || String(idx + 1);
-
-    const totalNum = toParNumber(totalFmt.text);
-
-    return {
-      athleteName,
-      pos: posText,        // raw (fallback)
-      posNum,              // raw-ish
-      totalText: totalFmt.text,
-      totalCls: totalFmt.cls,
-      totalNum,            // numeric for ties
-      todayText: todayFmt,
-      thru: String(thru || ""),
-      __hasRealPos: !!posTextRaw,
-      posDisplay: posText  // will be replaced below
+  // PGA (Golf) — Active Tournament Leaderboard
+  // =========================
+  async function renderPGAScoreboard({ dateYYYYMMDD }) {
+    const esc = (s) => {
+      if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
+      return String(s ?? "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     };
-  });
 
-  const hasAnyRealPos = rows.some(r => r.__hasRealPos);
-
-  // Keep your existing ordering rules:
-  // - If ESPN gave real position fields, sort by that
-  // - Otherwise keep ESPN ordering (don’t sort)
-  if (hasAnyRealPos) {
-    rows.sort((a, b) => {
-      if (a.posNum !== b.posNum) return a.posNum - b.posNum;
-      return a.athleteName.localeCompare(b.athleteName);
-    });
-  }
-
-  // ✅ ESPN-style competition ranking with ties: 1, T2, T2, T2, 5...
-  (function applyTiePositions(arr) {
-    let prevTotal = null;
-    let currentRank = 1;
-
-    for (let i = 0; i < arr.length; i++) {
-      const r = arr[i];
-
-      // If we can't compute totals, keep whatever POS we had
-      if (!Number.isFinite(r.totalNum)) {
-        r.posDisplay = r.pos;
-        continue;
+    const fmtToPar = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return { text: "E", cls: "pgaEven" };
+      if (s === "0" || s.toLowerCase() === "e" || s.toLowerCase() === "even") return { text: "E", cls: "pgaEven" };
+      if (s.startsWith("-")) return { text: s, cls: "pgaUnder" };
+      if (s.startsWith("+")) return { text: s, cls: "pgaOver" };
+      const n = Number(s);
+      if (Number.isFinite(n)) {
+        if (n === 0) return { text: "E", cls: "pgaEven" };
+        if (n < 0) return { text: String(n), cls: "pgaUnder" };
+        return { text: `+${n}`, cls: "pgaOver" };
       }
+      return { text: s, cls: "pgaEven" };
+    };
 
-      if (i === 0) {
-        currentRank = 1;
-      } else {
-        // if total changed, rank becomes "i+1" (competition ranking)
-        if (r.totalNum !== prevTotal) currentRank = i + 1;
+    const fmtToday = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      if (s === "0" || s.toLowerCase() === "e") return "E";
+      if (s.startsWith("-") || s.startsWith("+")) return s;
+      const n = Number(s);
+      if (Number.isFinite(n)) return n > 0 ? `+${n}` : String(n);
+      return s;
+    };
+
+    const pickFirst = (...vals) => {
+      for (const v of vals) {
+        if (v == null) continue;
+        const s = String(v).trim();
+        if (s) return s;
       }
+      return "";
+    };
 
-      const next = arr[i + 1];
-      const nextTotal = next && Number.isFinite(next.totalNum) ? next.totalNum : null;
+    // Convert "E", "-15", "+3", "0" -> number for tie math
+    const toParNumber = (raw) => {
+      const s = String(raw ?? "").trim();
+      if (!s) return NaN;
+      const low = s.toLowerCase();
+      if (low === "e" || low === "even") return 0;
+      if (s === "0") return 0;
+      // allow "5" meaning +5
+      const n = Number(s);
+      return Number.isFinite(n) ? n : NaN;
+    };
 
-      const isTiedWithPrev = (i > 0 && r.totalNum === prevTotal);
-      const isTiedWithNext = (nextTotal !== null && r.totalNum === nextTotal);
-      const isTie = isTiedWithPrev || isTiedWithNext;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
+    let j = null;
 
-      r.posDisplay = isTie ? `T${currentRank}` : String(currentRank);
-
-      // keep posNum aligned with displayed rank for leader styling checks
-      r.posNum = currentRank;
-
-      prevTotal = r.totalNum;
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error("ESPN fetch failed");
+      j = await r.json();
+    } catch (e) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GOLF (PGA)</div>
+          </div>
+          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">Couldn’t load PGA</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
+        </div>
+      `;
     }
-  })(rows);
 
-  const topN = rows.slice(0, 20);
+    const events =
+      (Array.isArray(j?.events) && j.events) ||
+      (Array.isArray(j?.leagues?.[0]?.events) && j.leagues[0].events) ||
+      [];
 
-  const body = topN.map((r, idx) => {
-    const isLeader = (r.posNum === 1);
+    const ev = events[0] || null;
+
+    if (!ev) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GOLF (PGA)</div>
+          </div>
+          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">No PGA event found</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">Nothing scheduled for this date.</div>
+        </div>
+      `;
+    }
+
+    const comp =
+      (Array.isArray(ev?.competitions) && ev.competitions[0]) ||
+      (Array.isArray(ev?.competitions?.competitions) && ev.competitions.competitions[0]) ||
+      (Array.isArray(ev?.competitions?.[0]?.competitions) && ev.competitions[0].competitions[0]) ||
+      (Array.isArray(ev?.competitions) ? ev.competitions[0] : null) ||
+      null;
+
+    const tournamentName = pickFirst(ev?.name, ev?.shortName, ev?.season?.name, "PGA Tournament");
+    const venueName = pickFirst(comp?.venue?.fullName, comp?.venue?.name, ev?.venues?.[0]?.fullName, "");
+    const statusDetail = pickFirst(comp?.status?.type?.shortDetail, comp?.status?.type?.detail, ev?.status?.type?.shortDetail, "");
+
+    const competitors =
+      (Array.isArray(comp?.competitors) && comp.competitors) ||
+      (Array.isArray(ev?.competitors) && ev.competitors) ||
+      [];
+
+    // Normalize leaderboard rows
+    const rows = competitors.map((c, idx) => {
+      const athleteName =
+        pickFirst(c?.athlete?.displayName, c?.athlete?.shortName, c?.athlete?.fullName, c?.name, "Player");
+
+      function extractPosText(cc) {
+        const direct = pickFirst(
+          cc?.place,
+          cc?.position?.displayName,
+          cc?.position?.name,
+          cc?.position,
+          cc?.standing?.position?.displayName,
+          cc?.standing?.position,
+          cc?.rank,
+          cc?.seed,
+          ""
+        );
+
+        const stats = Array.isArray(cc?.statistics) ? cc.statistics : [];
+        for (const s of stats) {
+          const n = String(s?.name || s?.abbreviation || "").toLowerCase();
+          if (n === "pos" || n === "position" || n === "place") {
+            const v = pickFirst(s?.displayValue, s?.value, s?.summary, "");
+            if (v) return v;
+          }
+        }
+
+        return direct;
+      }
+
+      const posTextRaw = String(extractPosText(c) || "").trim();
+
+      const totalToParRaw =
+        pickFirst(c?.score?.displayValue, c?.score, c?.toPar, c?.summary?.toPar, "");
+
+      const todayRaw =
+        pickFirst(
+          c?.linescores?.[0]?.displayValue,
+          c?.linescores?.[0]?.value,
+          c?.scorecard?.[0]?.displayValue,
+          c?.today,
+          c?.rounds?.[0]?.scoreToPar?.displayValue,
+          ""
+        );
+
+      const thru =
+        pickFirst(
+          c?.status?.type?.shortDetail,
+          c?.status?.displayValue,
+          c?.status?.type?.detail,
+          c?.status?.type?.state,
+          c?.thru,
+          ""
+        );
+
+      const totalFmt = fmtToPar(totalToParRaw);
+      const todayFmt = fmtToday(todayRaw);
+
+      // numeric sort position if possible (T1 -> 1)
+      const posNum = (() => {
+        const m = posTextRaw.match(/(\d+)/);
+        if (m) return Number(m[1]);
+        return idx + 1;
+      })();
+
+      const posText = posTextRaw || String(idx + 1);
+
+      const totalNum = toParNumber(totalFmt.text);
+
+      return {
+        athleteName,
+        pos: posText,        // raw (fallback)
+        posNum,              // raw-ish
+        totalText: totalFmt.text,
+        totalCls: totalFmt.cls,
+        totalNum,            // numeric for ties
+        todayText: todayFmt,
+        thru: String(thru || ""),
+        __hasRealPos: !!posTextRaw,
+        posDisplay: posText  // will be replaced below
+      };
+    });
+
+    const hasAnyRealPos = rows.some(r => r.__hasRealPos);
+
+    // Keep your existing ordering rules:
+    // - If ESPN gave real position fields, sort by that
+    // - Otherwise keep ESPN ordering (don’t sort)
+    if (hasAnyRealPos) {
+      rows.sort((a, b) => {
+        if (a.posNum !== b.posNum) return a.posNum - b.posNum;
+        return a.athleteName.localeCompare(b.athleteName);
+      });
+    }
+
+    // ✅ ESPN-style competition ranking with ties: 1, T2, T2, T2, 5...
+    (function applyTiePositions(arr) {
+      let prevTotal = null;
+      let currentRank = 1;
+
+      for (let i = 0; i < arr.length; i++) {
+        const r = arr[i];
+
+        // If we can't compute totals, keep whatever POS we had
+        if (!Number.isFinite(r.totalNum)) {
+          r.posDisplay = r.pos;
+          continue;
+        }
+
+        if (i === 0) {
+          currentRank = 1;
+        } else {
+          // if total changed, rank becomes "i+1" (competition ranking)
+          if (r.totalNum !== prevTotal) currentRank = i + 1;
+        }
+
+        const next = arr[i + 1];
+        const nextTotal = next && Number.isFinite(next.totalNum) ? next.totalNum : null;
+
+        const isTiedWithPrev = (i > 0 && r.totalNum === prevTotal);
+        const isTiedWithNext = (nextTotal !== null && r.totalNum === nextTotal);
+        const isTie = isTiedWithPrev || isTiedWithNext;
+
+        r.posDisplay = isTie ? `T${currentRank}` : String(currentRank);
+
+        // keep posNum aligned with displayed rank for leader styling checks
+        r.posNum = currentRank;
+
+        prevTotal = r.totalNum;
+      }
+    })(rows);
+
+    const topN = rows.slice(0, 20);
+
+    const body = topN.map((r, idx) => {
+      const isLeader = (r.posNum === 1);
+      return `
+        <div style="
+          display:flex;
+          align-items:center;
+          gap:10px;
+          padding:10px 12px;
+          border-radius:16px;
+          background:${isLeader ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"};
+          border:1px solid ${isLeader ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
+        ">
+          <div style="flex:0 0 40px; font-weight:1000; text-align:center;">
+            ${esc(r.posDisplay || "")}
+          </div>
+
+          <div style="flex:1; min-width:0;">
+            <div style="
+              font-weight:${isLeader ? "1000" : "900"};
+              white-space:nowrap;
+              overflow:hidden;
+              text-overflow:ellipsis;
+            ">${esc(r.athleteName)}</div>
+          </div>
+
+          <div class="${esc(r.totalCls)}" style="flex:0 0 56px; text-align:right; font-weight:1000;">
+            ${esc(r.totalText)}
+          </div>
+
+          <div style="flex:0 0 52px; text-align:right; font-weight:900; opacity:0.92;">
+            ${esc(r.todayText || "—")}
+          </div>
+
+          <div style="flex:0 0 56px; text-align:right; font-weight:900; opacity:0.85;">
+            ${esc(r.thru || "—")}
+          </div>
+        </div>
+      `;
+    }).join("");
+
     return `
-      <div style="
-        display:flex;
-        align-items:center;
-        gap:10px;
-        padding:10px 12px;
-        border-radius:16px;
-        background:${isLeader ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"};
-        border:1px solid ${isLeader ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
-      ">
-        <div style="flex:0 0 40px; font-weight:1000; text-align:center;">
-          ${esc(r.posDisplay || "")}
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">GOLF (PGA)</div>
         </div>
 
-        <div style="flex:1; min-width:0;">
-          <div style="
-            font-weight:${isLeader ? "1000" : "900"};
-            white-space:nowrap;
-            overflow:hidden;
-            text-overflow:ellipsis;
-          ">${esc(r.athleteName)}</div>
+        <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+          ${esc(tournamentName)}
         </div>
 
-        <div class="${esc(r.totalCls)}" style="flex:0 0 56px; text-align:right; font-weight:1000;">
-          ${esc(r.totalText)}
+        <div class="muted" style="margin-top:6px; font-weight:850;">
+          ${esc(statusDetail || "Leaderboard")} ${venueName ? `• ${esc(venueName)}` : ""}
         </div>
 
-        <div style="flex:0 0 52px; text-align:right; font-weight:900; opacity:0.92;">
-          ${esc(r.todayText || "—")}
+        <div style="
+          margin-top:12px;
+          display:flex;
+          gap:10px;
+          align-items:center;
+          justify-content:space-between;
+          padding:10px 12px;
+          border-radius:16px;
+          background:rgba(255,255,255,0.04);
+          border:1px solid rgba(255,255,255,0.06);
+          font-weight:950;
+        ">
+          <div style="flex:0 0 40px; text-align:center;">POS</div>
+          <div style="flex:1;">PLAYER</div>
+          <div style="flex:0 0 56px; text-align:right;">TOT</div>
+          <div style="flex:0 0 52px; text-align:right;">TOD</div>
+          <div style="flex:0 0 56px; text-align:right;">THRU</div>
         </div>
 
-        <div style="flex:0 0 56px; text-align:right; font-weight:900; opacity:0.85;">
-          ${esc(r.thru || "—")}
+        <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+          ${body || `<div class="muted" style="margin-top:10px; font-weight:800;">No leaderboard data.</div>`}
         </div>
+
+        <style>
+          .pgaUnder { color: rgba(120,255,190,0.95); }
+          .pgaOver  { color: rgba(255,140,140,0.95); }
+          .pgaEven  { color: rgba(255,255,255,0.92); }
+        </style>
       </div>
     `;
-  }).join("");
-
-  return `
-    <div class="game">
-      <div class="gameHeader">
-        <div class="statusPill status-other">GOLF (PGA)</div>
-      </div>
-
-      <div style="margin-top:10px; font-weight:1000; font-size:20px;">
-        ${esc(tournamentName)}
-      </div>
-
-      <div class="muted" style="margin-top:6px; font-weight:850;">
-        ${esc(statusDetail || "Leaderboard")} ${venueName ? `• ${esc(venueName)}` : ""}
-      </div>
-
-      <div style="
-        margin-top:12px;
-        display:flex;
-        gap:10px;
-        align-items:center;
-        justify-content:space-between;
-        padding:10px 12px;
-        border-radius:16px;
-        background:rgba(255,255,255,0.04);
-        border:1px solid rgba(255,255,255,0.06);
-        font-weight:950;
-      ">
-        <div style="flex:0 0 40px; text-align:center;">POS</div>
-        <div style="flex:1;">PLAYER</div>
-        <div style="flex:0 0 56px; text-align:right;">TOT</div>
-        <div style="flex:0 0 52px; text-align:right;">TOD</div>
-        <div style="flex:0 0 56px; text-align:right;">THRU</div>
-      </div>
-
-      <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
-        ${body || `<div class="muted" style="margin-top:10px; font-weight:800;">No leaderboard data.</div>`}
-      </div>
-
-      <style>
-        .pgaUnder { color: rgba(120,255,190,0.95); }
-        .pgaOver  { color: rgba(255,140,140,0.95); }
-        .pgaEven  { color: rgba(255,255,255,0.92); }
-      </style>
-    </div>
-  `;
-}
+  }
 
   // ---------- Exports ----------
   window.loadScores = loadScores;
