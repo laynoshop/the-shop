@@ -2446,75 +2446,73 @@
               return;
             }
 
-            // --- Write picks user doc once (like before) ---
-            const picksUserRef = db.collection("pickSlates").doc(slateId)
-              .collection("picks").doc(playerId);
+                        await gpSaveMyPicksBatch(db, slateId, playerId, pendingMap);
 
-            const name = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
+            // ✅ Invalidate Everyone's Picks cache for this week so it reflects the new pick immediately
+            try {
+              const bucket = gpGetAllPicksCacheBucket(slateId);
+              bucket.ts = 0;
+              bucket.data = null;
+              bucket.promise = null;
+            } catch {}
 
-            await picksUserRef.set({
-              uid: String(playerId || ""),
-              name,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            // (Optional but nice) If any Everyone sections are currently open, force them to re-load next open
+            try {
+              document.querySelectorAll('details[data-gpeveryone="1"] .gpEveryoneBody[data-loaded="1"]')
+                .forEach(el => el.removeAttribute("data-loaded"));
+            } catch {}
 
-            // --- Then write each pick doc individually so 1 failure doesn't kill all ---
-            const failed = [];
-            for (const eventId of keys) {
-              const side = String(pendingMap[eventId] || "").trim();
-
-              // sanity guard
-              if (!(side === "home" || side === "away")) {
-                failed.push({ eventId, reason: `Invalid side "${side}"` });
-                continue;
-              }
-
-              try {
-                const gameRef = picksUserRef.collection("games").doc(String(eventId));
-                await gameRef.set({
-                  uid: String(playerId || ""),
-                  name,
-                  side,
-                  updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                }, { merge: true });
-
-                // success → remove from pending
-                delete window.__GP_PENDING.map[eventId];
-              } catch (err) {
-                failed.push({
-                  eventId,
-                  code: err?.code || "",
-                  message: err?.message || String(err || "")
-                });
-              }
-            }
-
-            gpUpdateSaveBtnUI();
-
-            if (failed.length) {
-              console.error("Some picks failed to save:", failed);
-              alert(
-                `Saved ${keys.length - failed.length}/${keys.length} picks.\n\n` +
-                `Failed event(s):\n` +
-                failed.map(f => `• ${f.eventId}${f.code ? ` (${f.code})` : ""}`).join("\n") +
-                `\n\nOpen console for details.`
-              );
-            }
+            gpPendingClear();
           })
           .then(() => renderPicks(true))
           .catch((err) => {
             console.error("savePicks error:", err);
-
-            // show a much more useful error blob
-            let blob = "";
-            try { blob = JSON.stringify(err, Object.getOwnPropertyNames(err), 2); } catch {}
             const code = err?.code ? `\n\nCode: ${err.code}` : "";
             const msg = err?.message ? `\n${err.message}` : "";
-            const more = blob ? `\n\nDetails:\n${blob}` : "";
-
-            alert("Couldn’t save picks." + code + msg + more);
+            alert("Couldn’t save picks." + code + msg);
             gpUpdateSaveBtnUI();
           });
+        return;
+      }
+
+      const gpSelect = btn.getAttribute("data-gpselect");
+      if (gpSelect) {
+        const wrap = btn.closest('[data-gpadminwrap="1"]');
+        gpApplyAdminSelection(wrap, gpSelect);
+        return;
+      }
+
+      const gpPick = btn.getAttribute("data-gppick");
+      if (gpPick) {
+        const eventId = btn.getAttribute("data-eid") || "";
+        if (!eventId) return;
+        if (btn.disabled) return;
+
+        const cur = gpPendingGet(eventId);
+        if (cur === gpPick) gpPendingSet(eventId, "");
+        else gpPendingSet(eventId, gpPick);
+
+        gpUpdateSaveBtnUI();
+
+        const row = btn.closest(".gpGameRow");
+        if (row) {
+          const curPick = gpPendingGet(eventId) || String(row.getAttribute("data-saved") || "");
+          const awayBtn = row.querySelector('button[data-gppick="away"]');
+          const homeBtn = row.querySelector('button[data-gppick="home"]');
+
+          const hasPick = !!curPick;
+          const awayActive = curPick === "away";
+          const homeActive = curPick === "home";
+
+          if (awayBtn) {
+            awayBtn.classList.toggle("gpPickRowActive", awayActive);
+            awayBtn.classList.toggle("gpFaded", hasPick && !awayActive);
+          }
+          if (homeBtn) {
+            homeBtn.classList.toggle("gpPickRowActive", homeActive);
+            homeBtn.classList.toggle("gpFaded", hasPick && !homeActive);
+          }
+        }
         return;
       }
 
