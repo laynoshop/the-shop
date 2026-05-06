@@ -9,7 +9,7 @@
   "use strict";
 
   // ─── Constants ───────────────────────────────────────────────────────────
-  const COL   = () => window.__db;
+  const COL   = () => (window.firebase && firebase.apps && firebase.apps.length ? firebase.firestore() : null);
   const COURSES_PATH  = "putt_courses";
   const REGULARS_PATH = "putt_regulars";
   const ROUNDS_PATH   = "putt_rounds";
