@@ -92,7 +92,7 @@ window.hardResetAppInitState = function hardResetAppInitState() {
 window.replaceMichiganText = replaceMichiganText;
 
   // ------------------------------------------------------------
-  // Rivalry banner (bottom fixed)
+  // Rivalry banner (bottom fixed) + login screen day counter
   // ------------------------------------------------------------
   const LAST_TTUN_WIN_DATE = new Date(2024, 10, 30, 12, 0, 0); // Nov 30 2024 @ noon local
 
@@ -105,11 +105,18 @@ window.replaceMichiganText = replaceMichiganText;
   }
 
   function updateRivalryBanner() {
-    const banner = document.getElementById("rivalryBanner");
-    if (!banner) return;
     const days = daysSince(LAST_TTUN_WIN_DATE);
-    banner.textContent = `${days} days since TTUN has won in The Game`;
-    banner.style.display = "block";
+
+    // Bottom app banner
+    const banner = document.getElementById("rivalryBanner");
+    if (banner) {
+      banner.textContent = `${days} days since TTUN has won in The Game`;
+      banner.style.display = "block";
+    }
+
+    // Login screen day counter (was hardcoded 446 in index.html)
+    const loginCounter = document.getElementById("daysSinceNumber");
+    if (loginCounter) loginCounter.textContent = days;
   }
   window.updateRivalryBanner = updateRivalryBanner;
 
@@ -397,7 +404,7 @@ window.checkCode = checkCode;
     }
   });
 
-  // Initial banner update (safe)
+  // Initial banner update (safe) — also fixes #daysSinceNumber on login screen
   document.addEventListener("DOMContentLoaded", () => {
     try { updateRivalryBanner(); } catch {}
   });
