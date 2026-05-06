@@ -41,7 +41,7 @@
           autocomplete="one-time-code"
         />
         <button class="loginBtn" id="loginBtn" type="button" disabled>
-          Loading…
+          Loading&#x2026;
         </button>
       </div>
 
@@ -92,6 +92,7 @@
         <button class="doorBtn" type="button" data-go="beat">Beat TTUN</button>
         <button class="doorBtn" type="button" data-go="news">Top News</button>
         <button class="doorBtn adminOnly" type="button" data-go="shop" style="display:none;">Shop</button>
+        <button class="doorBtn adminOnly" type="button" id="piScoreboardBtn" style="display:none;">&#x1F4FA; Pi Scoreboard</button>
       </div>
     </div>
   </div>
@@ -106,11 +107,16 @@
   </div>
 
   <!-- =========================
+       PI SCOREBOARD OVERLAY
+       ========================= -->
+  <div id="piScoreboard" style="display:none;"></div>
+
+  <!-- =========================
        SPLIT LOAD FAILURE ALERT
        ========================= -->
   <script>
     window.__splitFail = function (file) {
-      alert("❌ Failed to load: " + file +
+      alert("\u274C Failed to load: " + file +
         "\nCheck that it exists in /split/ and was pushed to GitHub.");
     };
   </script>
@@ -135,6 +141,7 @@
   <script src="split/shop.js" defer onerror="__splitFail('split/shop.js')"></script>
   <script src="split/logout.js" defer onerror="__splitFail('split/logout.js')"></script>
   <script src="split/groupPicks.js" defer onerror="__splitFail('split/groupPicks.js')"></script>
+  <script src="split/pi.js" defer onerror="__splitFail('split/pi.js')"></script>
 
   <script src="split/app.js" defer onerror="__splitFail('split/app.js')"></script>
 
