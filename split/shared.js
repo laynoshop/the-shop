@@ -22,17 +22,12 @@
 
 // ---- Hard reset for login/app init guards (allows re-login after logout) ----
 window.hardResetAppInitState = function hardResetAppInitState() {
-  // Common guard flags
   try { window.__APP_LOADING = false; } catch {}
   try { window.__APP_INIT = false; } catch {}
   try { window.__APP_READY = false; } catch {}
-
-  // Common "init promise" patterns
   try { window.__APP_INIT_PROMISE = null; } catch {}
   try { window.__BOOT_PROMISE = null; } catch {}
   try { window.__INIT_PROMISE = null; } catch {}
-
-  // Your split/router boot guard patterns (safe even if unused)
   try { window.__SPLIT_BOOTED = false; } catch {}
   try { window.__ROUTER_READY = false; } catch {}
 };
@@ -59,7 +54,7 @@ window.hardResetAppInitState = function hardResetAppInitState() {
   // Globals / state
   // ------------------------------------------------------------
   const ROLE_KEY = "theShopRole_v1"; // "admin" | "guest"
-  window.__serverRoleCache = window.__serverRoleCache || ""; // optional cache from server user doc
+  window.__serverRoleCache = window.__serverRoleCache || "";
   window.__activeTab = window.__activeTab || "scores";
   let currentTab = window.__activeTab || "scores";
 
@@ -79,8 +74,6 @@ window.hardResetAppInitState = function hardResetAppInitState() {
 
       let next = t.replace(rxFull, "TTUN");
 
-      // Only replace lone "Wolverines" if the same text node ALSO contains "Michigan"
-      // (keeps other random Wolverines from getting changed)
       if (/Michigan/i.test(t)) {
         next = next.replace(rxWolv, "TTUN");
       }
@@ -107,14 +100,12 @@ window.replaceMichiganText = replaceMichiganText;
   function updateRivalryBanner() {
     const days = daysSince(LAST_TTUN_WIN_DATE);
 
-    // Bottom app banner
     const banner = document.getElementById("rivalryBanner");
     if (banner) {
       banner.textContent = `${days} days since TTUN has won in The Game`;
       banner.style.display = "block";
     }
 
-    // Login screen day counter (was hardcoded 446 in index.html)
     const loginCounter = document.getElementById("daysSinceNumber");
     if (loginCounter) loginCounter.textContent = days;
   }
@@ -140,7 +131,6 @@ window.replaceMichiganText = replaceMichiganText;
     if (app) app.style.display = "none";
     if (entry) entry.style.display = "flex";
 
-    // Show/hide admin-only entry buttons based on role
     const role = getRole();
 
     const shopDoor = document.querySelector('.doorBtn[data-go="shop"]');
@@ -151,7 +141,6 @@ window.replaceMichiganText = replaceMichiganText;
 
     updateRivalryBanner();
 
-    // Bind door clicks once
     if (!showEntryScreen._bound) {
       document.querySelectorAll(".doorBtn").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -160,7 +149,6 @@ window.replaceMichiganText = replaceMichiganText;
         });
       });
 
-      // Pi Scoreboard button — launches Pi overlay, does NOT enter normal app
       const piScoreboardBtn = document.getElementById("piScoreboardBtn");
       if (piScoreboardBtn) {
         piScoreboardBtn.addEventListener("click", () => {
@@ -196,7 +184,8 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "scores", label: "Scores" },
       { key: "picks",  label: "Picks" },
       { key: "beat",   label: "Beat<br/>TTUN" },
-      { key: "news",   label: "Top<br/>News" }
+      { key: "news",   label: "Top<br/>News" },
+      { key: "golf",   label: "⛳<br/>Putt" }
     ];
 
     if (role === "admin") baseTabs.push({ key: "shop", label: "Shop" });
@@ -205,7 +194,6 @@ window.replaceMichiganText = replaceMichiganText;
       .map(t => `<button type="button" data-tab="${t.key}">${t.label}</button>`)
       .join("");
 
-    // Keep current tab if possible
     const current = window.__activeTab || "scores";
     const exists = baseTabs.some(t => t.key === current);
     showTab(exists ? current : "scores");
@@ -227,7 +215,6 @@ window.replaceMichiganText = replaceMichiganText;
   window.getRole = getRole;
   window.safeRoleSet = safeRoleSet;
 
-  // Optional: refresh from server users/{uid}.role (works only if rules allow read)
   async function refreshServerRoleCache(db) {
     try {
       if (typeof window.ensureFirebaseChatReady !== "function") return "";
@@ -264,7 +251,6 @@ window.replaceMichiganText = replaceMichiganText;
 
     try { setActiveTabButton(tab); } catch (e) {}
 
-    // Render tab safely
     const safe = (fnName, ...args) => {
       try {
         const fn = window[fnName];
@@ -276,11 +262,12 @@ window.replaceMichiganText = replaceMichiganText;
       }
     };
 
-    if (tab === "scores") safe("loadScores", true);
+    if (tab === "scores")    safe("loadScores", true);
     else if (tab === "picks") safe("renderPicks", true);
-    else if (tab === "beat") safe("renderBeatTTUN");
-    else if (tab === "news") safe("renderTopNews", true);
-    else if (tab === "shop") safe("renderShop");
+    else if (tab === "beat")  safe("renderBeatTTUN");
+    else if (tab === "news")  safe("renderTopNews", true);
+    else if (tab === "shop")  safe("renderShop");
+    else if (tab === "golf")  safe("renderGolf");
     else safe("loadScores", true);
 
     updateRivalryBanner();
@@ -302,7 +289,6 @@ window.replaceMichiganText = replaceMichiganText;
     return;
   }
 
-  // ✅ Guard: prevent double-taps, but NEVER get stuck after logout/errors
   if (window.__APP_LOADING) {
     alert("App is still loading — try again in a second.");
     return;
@@ -312,7 +298,6 @@ window.replaceMichiganText = replaceMichiganText;
   try {
     if (btn) btn.textContent = "Loading\u2026";
 
-    // If firebase isn't ready yet, exit cleanly and release the guard
     if (typeof window.ensureFirebaseChatReady !== "function" || !window.firebase) {
       alert("App is still loading — try again in a second.");
       return;
@@ -362,7 +347,6 @@ window.replaceMichiganText = replaceMichiganText;
     safeRoleSet(role);
     window.__serverRoleCache = role;
 
-    // ✅ NEW: On successful login, default Scores date to TODAY (YYYYMMDD)
     try {
       const DATE_KEY = "theShopDate_v1";
       const d = new Date();
@@ -383,7 +367,6 @@ window.replaceMichiganText = replaceMichiganText;
     setTimeout(() => { if (btn) btn.textContent = "Unlock"; }, 900);
     return;
   } finally {
-    // ✅ Critical: always release the loading guard + normalize button label
     window.__APP_LOADING = false;
     if (btn) btn.textContent = "Unlock";
   }
@@ -404,7 +387,7 @@ window.checkCode = checkCode;
     }
   });
 
-  // Initial banner update (safe) — also fixes #daysSinceNumber on login screen
+  // Initial banner update (safe)
   document.addEventListener("DOMContentLoaded", () => {
     try { updateRivalryBanner(); } catch {}
   });
