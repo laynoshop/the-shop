@@ -18,6 +18,21 @@
   const LEAF_URL   = "https://raw.githubusercontent.com/laynoshop/the-shop/main/buckeye-leaf.png";
   const BLOCK_O    = "https://raw.githubusercontent.com/laynoshop/the-shop/main/buckeye-O.png";
 
+  // Shop Teams — the crews teams, matched against ESPN display/short/location names
+  const SHOP_TEAMS = [
+    "Ohio State Buckeyes",
+    "Duke Blue Devils",
+    "West Virginia Mountaineers",
+    "Columbus Blue Jackets",
+    "Columbus Crew",
+    "Carolina Hurricanes",
+    "Carolina Panthers",
+    "Dallas Cowboys",
+    "Boston Red Sox",
+    "Cleveland Guardians",
+  ];
+  const SHOP_TEAMS_NORM = SHOP_TEAMS.map(s => s.trim().toLowerCase().replace(/\s+/g, " "));
+
   const LEAGUES = [
     { key: "cfb",   label: "CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${d}&limit=50` },
     { key: "nfl",   label: "NFL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${d}&limit=50` },
@@ -30,7 +45,33 @@
     { key: "ufc",   label: "UFC",    url: d => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${d}&limit=50` },
   ];
 
-  let _intervals  = [];
+  // Summary endpoints for odds hydration (keyed by league key)
+  const SUMMARY_URLS = {
+    cfb:   id => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${id}`,
+    nfl:   id => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${id}`,
+    nba:   id => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${id}`,
+    mlb:   id => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=${id}`,
+    nhl:   id => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${id}`,
+    ncaam: id => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=${id}`,
+    mls:   id => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=${id}`,
+    pga:   id => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/summary?event=${id}`,
+    ufc:   id => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/summary?event=${id}`,
+  };
+
+  // League badge colors
+  const LEAGUE_COLORS = {
+    cfb:   "#bb0000",
+    nfl:   "#013369",
+    nba:   "#c9082a",
+    mlb:   "#002d72",
+    nhl:   "#000000",
+    ncaam: "#005fad",
+    mls:   "#009a44",
+    pga:   "#3d7a40",
+    ufc:   "#c8102e",
+  };
+
+  let _intervals    = [];
   let _activeLeague = "cfb";
   let _rightPanel   = "youtube"; // "youtube" | "top25"
 
@@ -84,9 +125,12 @@
   // Shell HTML
   // ----------------------------------------------------------------
   function buildShell() {
-    const leagueBtns = LEAGUES.map(l =>
-      `<button class="piLeagueBtn${l.key === _activeLeague ? " active" : ""}" data-league="${l.key}">${l.label}</button>`
-    ).join("");
+    const leagueBtns = [
+      ...LEAGUES.map(l =>
+        `<button class="piLeagueBtn${l.key === _activeLeague ? " active" : ""}" data-league="${l.key}">${l.label}</button>`
+      ),
+      `<button class="piLeagueBtn piShopTeamsBtn" data-league="shop">🏠 Shop Teams</button>`
+    ].join("");
 
     const days = _daysSince(LAST_TTUN_WIN);
     const leaf  = `<img src="${LEAF_URL}" class="piLeafSep" alt="leaf" />`;
@@ -243,6 +287,12 @@
     border-color: #cc0000;
     box-shadow: 0 0 10px rgba(200,0,0,0.5);
   }
+  /* Shop Teams button gets a special gold accent when active */
+  .piShopTeamsBtn.active {
+    background: linear-gradient(135deg, #a07800, #7a5500);
+    border-color: #c89a00;
+    box-shadow: 0 0 10px rgba(200,160,0,0.5);
+  }
 
   /* ---- Main panels ---- */
   #piScoresPanel {
@@ -365,6 +415,11 @@
     border-bottom: 1px solid rgba(180,0,0,0.3);
     text-shadow: 0 0 6px rgba(200,0,0,0.4);
   }
+  .piPanelHead.gold {
+    color: #c8a000;
+    border-bottom-color: rgba(200,160,0,0.3);
+    text-shadow: 0 0 6px rgba(200,160,0,0.35);
+  }
 
   /* ---- Score cards ---- */
   .piGame {
@@ -377,6 +432,7 @@
     border-radius: 6px;
     border-left: 3px solid #333;
     transition: border-color 0.2s;
+    pointer-events: none; /* read-only — no click interaction */
   }
   .piGame.live   { border-left-color: #cc0000; background: rgba(180,0,0,0.08); }
   .piGame.final  { border-left-color: #444; }
@@ -388,6 +444,109 @@
   .piGameStatus  { font-size: 0.68rem; color: #777; text-align: right; min-width: 52px; padding-left: 8px; }
   .piGameStatus.live { color: #ff4444; font-weight: 800; }
   .piNoGames { color: #444; font-size: 0.85rem; text-align: center; padding: 24px 0; }
+
+  /* ---- Shop Teams cards (richer) ---- */
+  .piShopCard {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 11px;
+    margin-bottom: 7px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 7px;
+    border-left: 3px solid #555;
+    pointer-events: none; /* read-only */
+  }
+  .piShopCard.live  { border-left-color: #cc0000; background: rgba(180,0,0,0.09); }
+  .piShopCard.final { border-left-color: #444; }
+  .piShopCard.sched { border-left-color: rgba(0,140,0,0.7); }
+
+  .piShopCardTop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .piShopLeagueBadge {
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 10px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .piShopStatusLabel {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #777;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .piShopStatusLabel.live { color: #ff4444; }
+
+  .piShopTeamsRow {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .piShopTeamLine {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .piShopTeamLineLeft {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .piShopTeamLogo {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 2px;
+  }
+  .piShopTeamNameFull {
+    font-size: clamp(0.7rem, 1.4vw, 0.86rem);
+    font-weight: 700;
+    color: #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .piShopTeamNameFull.fav { color: #ffcc66; }
+  .piShopTeamRecord {
+    font-size: 0.62rem;
+    color: #666;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .piShopTeamScore {
+    font-size: clamp(0.8rem, 1.6vw, 1rem);
+    font-weight: 900;
+    color: #fff;
+    min-width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .piShopMeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin-top: 2px;
+  }
+  .piShopMetaItem {
+    font-size: 0.61rem;
+    color: #666;
+    white-space: nowrap;
+  }
+  .piShopMetaItem.odds { color: #aaa; font-weight: 600; }
+  .piShopMetaItem.venue { color: #666; }
 
   /* ---- Bottom banner ---- */
   #piBanner {
@@ -451,7 +610,7 @@
 
   <!-- Scores panel (left) -->
   <div id="piScoresPanel">
-    <div class="piPanelHead">Scores</div>
+    <div class="piPanelHead" id="piPanelHeadLabel">Scores</div>
     <div id="piScoresContent"><div class="piNoGames">Loading&hellip;</div></div>
   </div>
 
@@ -486,6 +645,18 @@
         _activeLeague = btn.getAttribute("data-league");
         document.querySelectorAll(".piLeagueBtn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
+        // Update panel heading
+        const head = document.getElementById("piPanelHeadLabel");
+        if (head) {
+          if (_activeLeague === "shop") {
+            head.textContent = "🏠 Shop Teams";
+            head.classList.add("gold");
+          } else {
+            const league = LEAGUES.find(l => l.key === _activeLeague);
+            head.textContent = league ? league.label + " Scores" : "Scores";
+            head.classList.remove("gold");
+          }
+        }
         _renderScores();
       });
     });
@@ -575,9 +746,20 @@
   }
 
   // ----------------------------------------------------------------
-  // Scores
+  // Scores dispatcher
   // ----------------------------------------------------------------
   function _renderScores() {
+    if (_activeLeague === "shop") {
+      _renderShopTeams();
+    } else {
+      _renderLeagueScores();
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Standard league scores (unchanged logic)
+  // ----------------------------------------------------------------
+  function _renderLeagueScores() {
     const el = document.getElementById("piScoresContent");
     if (!el) return;
     const league = LEAGUES.find(l => l.key === _activeLeague) || LEAGUES[0];
@@ -593,6 +775,257 @@
       .catch(() => { el.innerHTML = `<div class="piNoGames">Scores unavailable.</div>`; });
   }
 
+  // ----------------------------------------------------------------
+  // Shop Teams — cross-league favorites view
+  // ----------------------------------------------------------------
+  async function _renderShopTeams() {
+    const el = document.getElementById("piScoresContent");
+    if (!el) return;
+    el.innerHTML = `<div class="piNoGames">Loading Shop Teams&hellip;</div>`;
+
+    // Determine display date: before 9am show yesterday's games, after 9am show today's
+    const now = new Date();
+    const displayDate = now.getHours() < 9
+      ? _dateStr(new Date(now.getTime() - 86400000))
+      : _todayStr();
+
+    // Fan out all league fetches in parallel
+    const results = await Promise.allSettled(
+      LEAGUES.map(lg =>
+        fetch(lg.url(displayDate))
+          .then(r => r.ok ? r.json() : Promise.reject(r.status))
+          .then(data => ({ leagueKey: lg.key, leagueLabel: lg.label, events: data?.events || [] }))
+          .catch(() => ({ leagueKey: lg.key, leagueLabel: lg.label, events: [] }))
+      )
+    );
+
+    // Collect all events that involve at least one Shop Team
+    const matched = [];
+    for (const result of results) {
+      if (result.status !== "fulfilled") continue;
+      const { leagueKey, leagueLabel, events } = result.value;
+      for (const ev of events) {
+        if (_eventHasShopTeam(ev)) {
+          matched.push({ leagueKey, leagueLabel, ev });
+        }
+      }
+    }
+
+    if (!matched.length) {
+      el.innerHTML = `<div class="piNoGames">No Shop Teams games today. Enjoy the day off.</div>`;
+      return;
+    }
+
+    // Sort: live first → scheduled → final, then by shop team rank
+    matched.sort((a, b) => {
+      const stateA = _getState(a.ev);
+      const stateB = _getState(b.ev);
+      const sRank = s => s === "in" ? 0 : s === "pre" ? 1 : 2;
+      if (sRank(stateA) !== sRank(stateB)) return sRank(stateA) - sRank(stateB);
+      // Within same state group, sort by best shop team rank
+      return _shopTeamRank(a.ev) - _shopTeamRank(b.ev);
+    });
+
+    // Render cards immediately (no odds yet)
+    el.innerHTML = matched.map(({ leagueKey, leagueLabel, ev }) =>
+      _buildShopCard(leagueKey, leagueLabel, ev, null, null)
+    ).join("");
+
+    // Hydrate odds in background — up to 4 concurrent summary fetches
+    const CONCURRENCY = 4;
+    let idx = 0;
+    async function worker() {
+      while (idx < matched.length) {
+        const i = idx++;
+        const { leagueKey, ev } = matched[i];
+        const eventId = String(ev?.id || "");
+        if (!eventId || !SUMMARY_URLS[leagueKey]) continue;
+        try {
+          const data = await fetch(SUMMARY_URLS[leagueKey](eventId)).then(r => r.ok ? r.json() : null);
+          if (!data) continue;
+          const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
+          if (odds.favored || odds.ou) {
+            // Patch just the odds element in the already-rendered card
+            const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+            if (card) {
+              const oddsEl = card.querySelector(".piShopMetaItem.odds");
+              if (oddsEl) oddsEl.textContent = _buildOddsLine(odds.favored, odds.ou);
+            }
+          }
+        } catch {}
+      }
+    }
+    await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
+  }
+
+  function _eventHasShopTeam(ev) {
+    const comp = (ev?.competitions || [])[0] || {};
+    const competitors = comp?.competitors || [];
+    return competitors.some(c => _isShopTeam(c?.team));
+  }
+
+  function _isShopTeam(team) {
+    if (!team) return false;
+    const displayName = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const shortName   = String(team.shortDisplayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const combo       = String((team.location || "") + " " + (team.name || "")).trim().toLowerCase().replace(/\s+/g, " ");
+    const name        = String(team.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return SHOP_TEAMS_NORM.some(t =>
+      t === displayName || t === shortName || t === combo || t === name ||
+      displayName.includes(t) || t.includes(displayName)
+    );
+  }
+
+  function _shopTeamRank(ev) {
+    const comp = (ev?.competitions || [])[0] || {};
+    const competitors = comp?.competitors || [];
+    let best = Infinity;
+    for (const c of competitors) {
+      const team = c?.team;
+      if (!team) continue;
+      const displayName = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+      const idx = SHOP_TEAMS_NORM.findIndex(t =>
+        t === displayName || displayName.includes(t) || t.includes(displayName)
+      );
+      if (idx !== -1 && idx < best) best = idx;
+    }
+    return best;
+  }
+
+  function _getState(ev) {
+    return String(ev?.status?.type?.state || "pre");
+  }
+
+  function _buildShopCard(leagueKey, leagueLabel, ev, favored, ou) {
+    try {
+      const comp       = (ev?.competitions || [])[0] || {};
+      const status     = ev?.status || {};
+      const state      = String(status?.type?.state || "pre");
+      const done       = !!(status?.type?.completed);
+      const clock      = String(status?.displayClock || "");
+      const period     = Number(status?.period || 0);
+      const eventId    = String(ev?.id || "");
+
+      let cls = "sched", statusLabel = ev.date ? _fmtTime(ev.date) : "Scheduled";
+      if (state === "in")           { cls = "live";  statusLabel = `Q${period} ${clock}`; }
+      if (state === "post" || done) { cls = "final"; statusLabel = "Final"; }
+
+      const badgeColor = LEAGUE_COLORS[leagueKey] || "#555";
+
+      // Venue
+      const venue = comp?.venue;
+      const venueName   = String(venue?.fullName || venue?.name || "");
+      const city        = String(venue?.address?.city || "");
+      const stateCode   = String(venue?.address?.state || "");
+      const venueText   = [venueName, [city, stateCode].filter(Boolean).join(", ")].filter(Boolean).join(" — ");
+
+      // Date display
+      const gameDateStr = ev.date ? _fmtGameDate(ev.date) : "";
+
+      const competitors = comp?.competitors || [];
+      const teamsHTML = competitors.map(c => {
+        const team   = c?.team || {};
+        const isFav  = _isShopTeam(team);
+        const name   = _applyTTUN(String(team.displayName || team.shortDisplayName || team.abbreviation || "TBD"));
+        const logo   = String(team.logo || (Array.isArray(team.logos) ? team.logos[0]?.href : "") || "");
+        const score  = String(c?.score || "");
+        const rec    = _getRecord(c);
+        const favCls = isFav ? " fav" : "";
+        const logoImg = logo
+          ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />`
+          : `<span style="width:20px;height:20px;flex-shrink:0;display:inline-block;"></span>`;
+        return `
+          <div class="piShopTeamLine">
+            <div class="piShopTeamLineLeft">
+              ${logoImg}
+              <span class="piShopTeamNameFull${favCls}">${_esc(name)}</span>
+              ${rec ? `<span class="piShopTeamRecord">${_esc(rec)}</span>` : ""}
+            </div>
+            <span class="piShopTeamScore">${_esc(score)}</span>
+          </div>`;
+      }).join("");
+
+      const oddsText = _buildOddsLine(favored || "", ou || "");
+
+      return `
+<div class="piShopCard ${cls}" data-eventid="${_esc(eventId)}">
+  <div class="piShopCardTop">
+    <span class="piShopLeagueBadge" style="background:${badgeColor};">${_esc(leagueLabel)}</span>
+    <span class="piShopStatusLabel${cls === 'live' ? ' live' : ''}">${_esc(statusLabel)}</span>
+  </div>
+  <div class="piShopTeamsRow">${teamsHTML}</div>
+  <div class="piShopMeta">
+    ${gameDateStr ? `<span class="piShopMetaItem">📅 ${_esc(gameDateStr)}</span>` : ""}
+    ${venueText    ? `<span class="piShopMetaItem venue">📍 ${_esc(venueText)}</span>` : ""}
+    <span class="piShopMetaItem odds">${oddsText ? _esc(oddsText) : "Fetching lines…"}</span>
+  </div>
+</div>`;
+    } catch { return ""; }
+  }
+
+  function _getRecord(competitor) {
+    const recs = competitor?.records;
+    if (!Array.isArray(recs) || !recs.length) return "";
+    const overall = recs.find(r => String(r?.name || "").toLowerCase() === "overall") ||
+                    recs.find(r => String(r?.type || "").toLowerCase() === "total") ||
+                    recs[0];
+    return String(overall?.summary || "").trim();
+  }
+
+  // ----------------------------------------------------------------
+  // Odds parsing from summary endpoint
+  // ----------------------------------------------------------------
+  function _parseOddsFromSummary(data, fallbackComp) {
+    // Try pickcenter array first
+    const pcArr = data?.pickcenter;
+    if (Array.isArray(pcArr) && pcArr.length) {
+      const comp = data?.header?.competitions?.[0] || fallbackComp || null;
+      const competitors = comp?.competitors || [];
+      const home = competitors.find(t => t.homeAway === "home");
+      const away = competitors.find(t => t.homeAway === "away");
+      const homeName = String(home?.team?.displayName || home?.team?.shortDisplayName || "Home");
+      const awayName = String(away?.team?.displayName || away?.team?.shortDisplayName || "Away");
+      const parsed = _parsePickcenter(pcArr[0], homeName, awayName);
+      if (parsed.favored || parsed.ou) return parsed;
+    }
+    // Try odds array
+    const oddsArr = data?.odds;
+    const o = Array.isArray(oddsArr) ? oddsArr[0] : null;
+    if (o) {
+      return {
+        favored: String(o.details || o.displayValue || "").replace(/^(Line|Spread|Odds):\s*/i, "").trim(),
+        ou: String(o.overUnder ?? o.total ?? "").trim()
+      };
+    }
+    return { favored: "", ou: "" };
+  }
+
+  function _parsePickcenter(pc, homeName, awayName) {
+    if (!pc) return { favored: "", ou: "" };
+    const ou = String(pc.overUnder ?? pc.total ?? pc.overunder ?? "").trim();
+    const details = String(pc.details || pc.displayValue || "").replace(/^(Line|Spread|Odds):\s*/i, "").trim();
+    if (details) return { favored: details, ou };
+    const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
+    if (!Number.isFinite(spreadNum)) return { favored: "", ou };
+    const homeFav = !!pc.homeTeamOdds?.favorite;
+    const awayFav = !!pc.awayTeamOdds?.favorite;
+    let favoredTeam = homeFav ? homeName : awayFav ? awayName : (spreadNum < 0 ? homeName : awayName);
+    const abs = Math.abs(spreadNum);
+    return { favored: `${favoredTeam} -${abs % 1 === 0 ? abs.toFixed(0) : abs}`, ou };
+  }
+
+  function _buildOddsLine(favored, ou) {
+    const hasFav = favored && favored !== "-";
+    const hasOu  = ou && ou !== "-";
+    if (!hasFav && !hasOu) return "";
+    if (hasFav && hasOu) return `Favored: ${favored} • O/U: ${ou}`;
+    if (hasFav) return `Favored: ${favored}`;
+    return `O/U: ${ou}`;
+  }
+
+  // ----------------------------------------------------------------
+  // Standard game card (unchanged)
+  // ----------------------------------------------------------------
   function _buildGameCard(ev) {
     try {
       const comp   = (ev.competitions || [])[0] || {};
@@ -629,12 +1062,21 @@
   }
 
   function _todayStr() {
-    const d = new Date();
+    return _dateStr(new Date());
+  }
+
+  function _dateStr(d) {
     return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
   }
 
   function _fmtTime(iso) {
     try { return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch { return ""; }
+  }
+
+  function _fmtGameDate(iso) {
+    try {
+      return new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    } catch { return ""; }
   }
 
   function _applyTTUN(s) {
