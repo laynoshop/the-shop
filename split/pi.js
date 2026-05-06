@@ -198,7 +198,8 @@
       `<button class="piLeagueBtn piShopTeamsBtn${_activeLeague === "shop" ? " active" : ""}" data-league="shop">Shop Teams</button>`,
       ...LEAGUES.map(l =>
         `<button class="piLeagueBtn${l.key === _activeLeague ? " active" : ""}" data-league="${l.key}">${l.label}</button>`
-      )
+      ),
+      `<button class="piLeagueBtn piPuttPuttBtn${_activeLeague === "puttputt" ? " active" : ""}" data-league="puttputt">⛳ Putt Putt</button>`,
     ].join("");
 
     const days = _daysSince(LAST_TTUN_WIN);
@@ -594,6 +595,34 @@
   .piBannerChunk strong { color: #ff6644; }
   .piLeafSep { height: 18px; width: auto; object-fit: contain; filter: drop-shadow(0 0 3px rgba(200,50,0,0.6)); flex-shrink: 0; }
   .piNoGames { color: #444; font-size: 1rem; text-align: center; padding: 24px 0; grid-column: 1 / -1; }
+
+  /* ---- Putt Putt pill ---- */
+  .piPuttPuttBtn { background: rgba(0,160,80,0.18); border-color: rgba(0,200,100,0.35); color: #7dffb3; }
+  .piPuttPuttBtn:hover { background: rgba(0,160,80,0.45); color: #fff; border-color: rgba(0,220,120,0.7); }
+  .piPuttPuttBtn.active { background: linear-gradient(135deg, #007a3a, #005528); color: #fff; border-color: #00cc66; box-shadow: 0 0 12px rgba(0,200,80,0.55); }
+
+  /* ---- Pi Putt Putt Scorecard (in scores panel) ---- */
+  .piPuttWrap { grid-column: 1 / -1; padding: 4px 0; }
+  .piPuttHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .piPuttCourseName { font-size: clamp(1.1rem, 2vw, 1.5rem); font-weight: 900; color: #fff; text-shadow: 0 0 8px rgba(0,200,80,0.4); }
+  .piPuttStatus { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 3px 12px; border-radius: 12px; }
+  .piPuttStatus.live { background: rgba(200,0,0,0.4); color: #ff6644; border: 1px solid rgba(220,0,0,0.5); }
+  .piPuttStatus.final { background: rgba(0,120,50,0.35); color: #7dffb3; border: 1px solid rgba(0,180,80,0.4); }
+  .piPuttScTableWrap { overflow-x: auto; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,160,60,0.2); }
+  .piPuttScorecard { width: 100%; border-collapse: collapse; }
+  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(0.95rem, 1.6vw, 1.25rem); font-variant-numeric: tabular-nums; }
+  .piPuttScorecard thead th { font-size: clamp(0.8rem, 1.2vw, 1rem); font-weight: 800; letter-spacing: 0.08em; color: #aaa; background: rgba(0,0,0,0.25); border-bottom: 2px solid rgba(0,160,60,0.3); }
+  .piPuttScorecard .piPuttNameCol { text-align: left; padding-left: 14px; font-weight: 800; font-size: clamp(1rem, 1.8vw, 1.35rem); color: #f0f0f0; min-width: 100px; }
+  .piPuttScorecard .piPuttParRow td { color: #888; font-size: clamp(0.8rem, 1.2vw, 1rem); background: rgba(0,0,0,0.15); font-weight: 600; }
+  .piPuttScorecard .piPuttTotalCol { font-weight: 900; font-size: clamp(1.05rem, 1.8vw, 1.4rem); }
+  .piPuttScorecard .pi-sc-under { color: #4fffaa; font-weight: 800; text-shadow: 0 0 8px rgba(0,255,150,0.4); }
+  .piPuttScorecard .pi-sc-over  { color: #ff7766; font-weight: 800; }
+  .piPuttScorecard .pi-sc-even  { color: #fff; font-weight: 700; }
+  .piPuttScorecard .pi-sc-empty { color: #444; }
+  .piPuttScorecard tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  .piPuttScorecard tbody tr:hover { background: rgba(0,160,60,0.07); }
+  .piPuttLeader { margin-top: 10px; padding: 10px 16px; background: rgba(0,120,50,0.25); border: 1px solid rgba(0,200,80,0.3); border-radius: 8px; font-size: clamp(0.95rem, 1.6vw, 1.2rem); font-weight: 800; color: #7dffb3; text-align: center; letter-spacing: 0.04em; text-shadow: 0 0 8px rgba(0,255,140,0.3); }
+  .piPuttNoRound { grid-column: 1 / -1; text-align: center; padding: 32px 16px; color: #555; font-size: 1rem; }
 </style>
 
 <div id="piWrap">
@@ -663,9 +692,18 @@
         btn.classList.add("active");
         const head = document.getElementById("piPanelHeadLabel");
         if (head) {
+          head.style.color = "";
+          head.style.borderBottomColor = "";
+          head.style.textShadow = "";
           if (_activeLeague === "shop") {
             head.textContent = "Shop Teams";
             head.classList.add("gold");
+          } else if (_activeLeague === "puttputt") {
+            head.textContent = "⛳ Putt Putt Scorecard";
+            head.classList.remove("gold");
+            head.style.color = "#00cc66";
+            head.style.borderBottomColor = "rgba(0,180,80,0.4)";
+            head.style.textShadow = "0 0 6px rgba(0,200,80,0.4)";
           } else {
             const league = LEAGUES.find(l => l.key === _activeLeague);
             head.textContent = league ? league.label + " Scores" : "Scores";
@@ -759,9 +797,109 @@
   // Scores dispatcher
   // ----------------------------------------------------------------
   function _renderScores() {
-    if (_activeLeague === "shop") _renderShopTeams();
+    if (_activeLeague === "shop")     _renderShopTeams();
     else if (_activeLeague === "pga") _renderPGA();
+    else if (_activeLeague === "puttputt") _renderPuttPutt();
     else _renderLeagueScores();
+  }
+
+  // ----------------------------------------------------------------
+  // Putt Putt — load active/latest round from Firebase
+  // ----------------------------------------------------------------
+  async function _renderPuttPutt() {
+    const el = document.getElementById("piScoresContent");
+    if (!el) return;
+    el.innerHTML = `<div class="piNoGames">Loading Putt Putt round…</div>`;
+
+    // Update panel head
+    const head = document.getElementById("piPanelHeadLabel");
+    if (head) { head.textContent = "⛳ Putt Putt Scorecard"; head.classList.remove("gold"); head.style.color = "#00cc66"; head.style.borderBottomColor = "rgba(0,180,80,0.4)"; head.style.textShadow = "0 0 6px rgba(0,200,80,0.4)"; }
+
+    const db = window.firebase && firebase.apps && firebase.apps.length ? firebase.firestore() : null;
+    if (!db) { el.innerHTML = `<div class="piPuttNoRound">Firebase not available — open the Shop App to start a round.</div>`; return; }
+
+    try {
+      const snap = await db.collection("putt_rounds")
+        .orderBy("startedAt", "desc")
+        .limit(1)
+        .get();
+
+      if (snap.empty) { el.innerHTML = `<div class="piPuttNoRound">No rounds found. Start one in the Shop App!</div>`; return; }
+
+      const round = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      el.innerHTML = `<div class="piPuttWrap">${_buildPiPuttScorecardHTML(round)}</div>`;
+    } catch(e) {
+      el.innerHTML = `<div class="piPuttNoRound">Could not load round data.</div>`;
+    }
+  }
+
+  function _buildPiPuttScorecardHTML(round) {
+    const pars     = round.holePars || [];
+    const players  = round.players  || [];
+    const totalPar = pars.reduce((a,b) => a+b, 0);
+    const isLive   = round.status !== "complete";
+
+    function totalVsPar(holes) {
+      let diff = 0, played = 0;
+      holes.forEach((s,i) => { if (typeof s === "number" && s > 0) { diff += s - (pars[i] || 0); played++; } });
+      return { diff, played };
+    }
+
+    function vpLabel(diff) {
+      if (diff === 0) return { text: "E", cls: "pi-sc-even" };
+      if (diff < 0)   return { text: String(diff), cls: "pi-sc-under" };
+      return { text: "+" + diff, cls: "pi-sc-over" };
+    }
+
+    // Sort players by current score (leader first)
+    const ranked = players.map(p => {
+      const holes = round.scores?.[p]?.holes || [];
+      const { diff, played } = totalVsPar(holes);
+      return { p, holes, diff, played };
+    }).sort((a,b) => a.diff - b.diff);
+
+    const holeCells = pars.map((_,i) => `<th>${i+1}</th>`).join("");
+    const parCells  = pars.map(p => `<td>${p}</td>`).join("");
+
+    const playerRows = ranked.map(({ p, holes, diff, played }) => {
+      const vp = played > 0 ? vpLabel(diff) : { text: "—", cls: "" };
+      const cells = pars.map((_,i) => {
+        const s = holes[i];
+        if (s == null) return `<td class="pi-sc-empty">·</td>`;
+        const d = s - pars[i];
+        const cls = d < 0 ? "pi-sc-under" : d > 0 ? "pi-sc-over" : "pi-sc-even";
+        return `<td class="${cls}">${s}</td>`;
+      }).join("");
+      return `<tr><td class="piPuttNameCol piPuttScorecard">${_esc(p)}</td>${cells}<td class="piPuttTotalCol ${vp.cls}">${vp.text}</td></tr>`;
+    }).join("");
+
+    // Leader line
+    const leader = ranked[0];
+    let leaderText = "";
+    if (leader && leader.played > 0) {
+      const vp = vpLabel(leader.diff);
+      leaderText = isLive
+        ? `🏌️ Leading: ${_esc(leader.p)} (${vp.text}) · Hole ${round.currentHole + 1} of ${pars.length}`
+        : `🏆 Winner: ${_esc(leader.p)} (${vp.text})`;
+    }
+
+    return `
+      <div class="piPuttHeader">
+        <span style="font-size:1.8rem;">⛳</span>
+        <span class="piPuttCourseName">${_esc(round.courseName || "Putt Putt")}</span>
+        <span class="piPuttStatus ${isLive ? "live" : "final"}">${isLive ? "LIVE" : "FINAL"}</span>
+      </div>
+      <div class="piPuttScTableWrap">
+        <table class="piPuttScorecard">
+          <thead>
+            <tr><th class="piPuttNameCol">Player</th>${holeCells}<th>Total</th></tr>
+            <tr class="piPuttParRow"><td>Par</td>${parCells}<td>${totalPar}</td></tr>
+          </thead>
+          <tbody>${playerRows}</tbody>
+        </table>
+      </div>
+      ${leaderText ? `<div class="piPuttLeader">${leaderText}</div>` : ""}
+    `;
   }
 
   // ----------------------------------------------------------------
