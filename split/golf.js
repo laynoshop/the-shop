@@ -698,7 +698,8 @@
       let roundBest = Infinity;
 
       for (const p of (r.players || [])) {
-        const holes = r.scores?.[p]?.holes || [];
+        // FIX: normalize before forEach so Firebase objects don't crash
+        const holes = normalizeHoles(r.scores?.[p]?.holes, pars.length);
         if (!playerStats[p]) playerStats[p] = { rounds: 0, totalDiff: 0, wins: 0, holeInOnes: 0 };
         playerStats[p].rounds++;
         const { diff } = totalVsPar(holes, pars);
@@ -719,7 +720,8 @@
       }
 
       for (const p of (r.players || [])) {
-        const holes = r.scores?.[p]?.holes || [];
+        // FIX: normalize here too for the wins/bestRound pass
+        const holes = normalizeHoles(r.scores?.[p]?.holes, pars.length);
         const { diff } = totalVsPar(holes, pars);
         if (diff === roundBest) {
           playerStats[p].wins++;
