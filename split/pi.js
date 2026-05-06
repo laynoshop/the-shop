@@ -40,23 +40,18 @@
   // Leagues that support playoff series tracking
   const PLAYOFF_LEAGUES = new Set(["nhl", "nba", "nfl", "mlb"]);
 
-  // Per-league lookahead windows for Shop Teams (days ahead to search when no game today).
-  // mls/nfl/cfb use 7 so that from Tuesday onward the full upcoming week is visible.
+  // Per-league lookahead windows for Shop Teams (days ahead to search when no game today)
   const LOOKAHEAD_DAYS = {
-    cfb:   7,
-    nfl:   7,
+    cfb:   6,
+    nfl:   6,
     nhl:   3,
     nba:   3,
     mlb:   3,
     ncaam: 3,
-    mls:   7,
+    mls:   3,
     pga:   0,
     ufc:   3,
   };
-
-  // Leagues that show the "upcoming week" window when it's Tuesday or later.
-  // These are primarily weekend-schedule leagues (MLS, NFL, CFB).
-  const WEEK_PREVIEW_LEAGUES = new Set(["mls", "nfl", "cfb"]);
 
   const LEAGUES = [
     { key: "cfb",   label: "🏈 CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${d}&limit=50` },
@@ -180,22 +175,23 @@
 
   function _weatherInfo(code, hour) {
     const isNight = hour < 6 || hour >= 20;
-    if (code === 0)               return { emoji: isNight ? "🌙" : "☀️",  label: isNight ? "Clear Night" : "Sunny",           bg: isNight ? "rgba(20,10,50,0.45)" : "rgba(255,180,0,0.12)" };
-    if (code === 1)               return { emoji: isNight ? "🌙" : "🌤️",  label: "Mainly Clear",                               bg: "rgba(255,180,0,0.09)" };
-    if (code === 2)               return { emoji: "⛅",                    label: "Partly Cloudy",                              bg: "rgba(180,180,180,0.1)" };
-    if (code === 3)               return { emoji: "☁️",                    label: "Overcast",                                   bg: "rgba(120,120,120,0.12)" };
-    if (code >= 45 && code <= 48) return { emoji: "🌫️",                   label: "Foggy",                                      bg: "rgba(160,160,160,0.15)" };
-    if (code >= 51 && code <= 57) return { emoji: "🌦️",                   label: "Drizzle",                                    bg: "rgba(80,120,200,0.12)" };
-    if (code >= 61 && code <= 67) return { emoji: "🌧️",                   label: code >= 65 ? "Heavy Rain" : "Rain",           bg: "rgba(40,80,180,0.15)" };
-    if (code >= 71 && code <= 77) return { emoji: "❄️",                   label: code >= 75 ? "Heavy Snow" : "Snow",           bg: "rgba(180,220,255,0.12)" };
-    if (code >= 80 && code <= 82) return { emoji: "🌦️",                   label: code === 82 ? "Heavy Showers" : "Rain Showers", bg: "rgba(40,80,180,0.15)" };
-    if (code >= 85 && code <= 86) return { emoji: "🌨️",                   label: "Snow Showers",                               bg: "rgba(180,220,255,0.12)" };
-    if (code >= 95 && code <= 99) return { emoji: "⛈️",                   label: "Thunderstorm",                               bg: "rgba(80,0,120,0.18)" };
+    // WMO weather codes → emoji + label + subtle bg tint
+    if (code === 0)                      return { emoji: isNight ? "🌙" : "☀️",  label: isNight ? "Clear Night"    : "Sunny",           bg: isNight ? "rgba(20,10,50,0.45)" : "rgba(255,180,0,0.12)" };
+    if (code === 1)                      return { emoji: isNight ? "🌙" : "🌤️",  label: "Mainly Clear",                                  bg: "rgba(255,180,0,0.09)" };
+    if (code === 2)                      return { emoji: "⛅",                    label: "Partly Cloudy",                                 bg: "rgba(180,180,180,0.1)" };
+    if (code === 3)                      return { emoji: "☁️",                    label: "Overcast",                                      bg: "rgba(120,120,120,0.12)" };
+    if (code >= 45 && code <= 48)        return { emoji: "🌫️",                   label: "Foggy",                                         bg: "rgba(160,160,160,0.15)" };
+    if (code >= 51 && code <= 57)        return { emoji: "🌦️",                   label: "Drizzle",                                       bg: "rgba(80,120,200,0.12)" };
+    if (code >= 61 && code <= 67)        return { emoji: "🌧️",                   label: code >= 65 ? "Heavy Rain"    : "Rain",           bg: "rgba(40,80,180,0.15)" };
+    if (code >= 71 && code <= 77)        return { emoji: "❄️",                   label: code >= 75 ? "Heavy Snow"    : "Snow",           bg: "rgba(180,220,255,0.12)" };
+    if (code >= 80 && code <= 82)        return { emoji: "🌦️",                   label: code === 82 ? "Heavy Showers" : "Rain Showers",  bg: "rgba(40,80,180,0.15)" };
+    if (code >= 85 && code <= 86)        return { emoji: "🌨️",                   label: "Snow Showers",                                  bg: "rgba(180,220,255,0.12)" };
+    if (code >= 95 && code <= 99)        return { emoji: "⛈️",                   label: "Thunderstorm",                                  bg: "rgba(80,0,120,0.18)" };
     return { emoji: "🌡️", label: "Unknown", bg: "rgba(0,0,0,0.1)" };
   }
 
   // ----------------------------------------------------------------
-  // Shell HTML  — original scarlet & gray theme
+  // Shell HTML
   // ----------------------------------------------------------------
   function buildShell() {
     const leagueBtns = [
@@ -269,7 +265,7 @@
     margin-top: 2px;
   }
 
-  /* ---- Countdown ---- */
+  /* ---- Countdown — sexied up ---- */
   #piCountdown {
     display: flex;
     align-items: center;
@@ -415,9 +411,8 @@
     gap: 10px;
     align-items: start;
   }
-  /* Panel head + section headers span full width */
+  /* Panel head spans full width */
   .piPanelHeadWrapper { grid-column: 1 / -1; }
-  .piSectionHeader    { grid-column: 1 / -1; }
 
   /* ---- Right panel ---- */
   #piRightPanel {
@@ -450,6 +445,7 @@
   .piRightToggleBtn:hover { color: #fff; background: rgba(180,0,0,0.25); }
   .piRightToggleBtn.active { color: #ff4444; border-bottom-color: #cc0000; background: rgba(180,0,0,0.15); }
 
+  /* Right panel content area — YouTube only in top portion */
   #piRightContent {
     display: flex;
     flex-direction: column;
@@ -460,6 +456,7 @@
   #piYoutubeSlot {
     flex-shrink: 0;
     width: 100%;
+    /* ~45% of right panel height = top portion only */
     height: 42%;
     position: relative;
     background: #000;
@@ -502,18 +499,6 @@
   }
   .piPanelHead.gold { color: #c8a000; border-bottom-color: rgba(200,160,0,0.3); text-shadow: 0 0 6px rgba(200,160,0,0.35); }
 
-  /* Section sub-headers (MLS weekend/midweek etc.) */
-  .piSectionHeader {
-    font-size: 0.8rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #aaa;
-    padding: 6px 4px 4px;
-    margin-top: 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-  }
-
   /* ---- Rich score cards — BIG fonts for TV ---- */
   .piShopCard {
     display: flex;
@@ -526,9 +511,9 @@
     border-left: 4px solid #555;
     pointer-events: none;
   }
-  .piShopCard.live     { border-left-color: #cc0000; background: rgba(180,0,0,0.09); }
-  .piShopCard.final    { border-left-color: #444; }
-  .piShopCard.sched    { border-left-color: rgba(0,140,0,0.7); }
+  .piShopCard.live    { border-left-color: #cc0000; background: rgba(180,0,0,0.09); }
+  .piShopCard.final   { border-left-color: #444; }
+  .piShopCard.sched   { border-left-color: rgba(0,140,0,0.7); }
   .piShopCard.upcoming { border-left-color: rgba(0,100,200,0.7); background: rgba(0,60,120,0.07); }
 
   .piShopCardTop { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -712,12 +697,14 @@
     if (!youtubeSlot || !bottomSlot) return;
 
     if (_rightPanel === "youtube") {
+      // YouTube in top slot only
       youtubeSlot.style.display = "block";
       youtubeSlot.innerHTML = `<iframe
         src="https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&modestbranding=1&rel=0"
         allow="autoplay; encrypted-media" allowfullscreen title="OSU Natty Replay"></iframe>`;
-      bottomSlot.innerHTML = "";
+      bottomSlot.innerHTML = ""; // empty space — will circle back
     } else {
+      // Top 25 fills the whole right content area
       youtubeSlot.style.display = "none";
       bottomSlot.innerHTML = "";
       _renderTop25(bottomSlot);
@@ -753,11 +740,7 @@
       const diff = THE_GAME_DATE.getTime() - Date.now();
       const d = document.getElementById("piCdD");
       if (!d) return;
-      if (diff <= 0) {
-        d.textContent = "0";
-        ["piCdH","piCdM","piCdS"].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = "00"; });
-        return;
-      }
+      if (diff <= 0) { d.textContent = "0"; ["piCdH","piCdM","piCdS"].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = "00"; }); return; }
       const tot  = Math.floor(diff / 1000);
       const days = Math.floor(tot / 86400);
       const hrs  = Math.floor((tot % 86400) / 3600);
@@ -859,15 +842,9 @@
     const el = document.getElementById("piScoresContent");
     if (!el) return;
     const league = LEAGUES.find(l => l.key === _activeLeague) || LEAGUES[0];
+    const date   = _todayStr();
     el.innerHTML = `<div class="piNoGames">Loading&hellip;</div>`;
 
-    // ── MLS: show the full weekend window (Fri–Sun) plus any midweek games ──
-    if (_activeLeague === "mls") {
-      await _renderMLSWeekend(el, league);
-      return;
-    }
-
-    const date = _todayStr();
     let events = [];
     try {
       const data = await fetch(league.url(date)).then(r => r.ok ? r.json() : Promise.reject(r.status));
@@ -919,127 +896,6 @@
   }
 
   // ----------------------------------------------------------------
-  // MLS — Weekend window + midweek games
-  // Shows Fri/Sat/Sun of the current/nearest weekend.
-  // Midweek games (Mon–Thu) within the next 5 days appended separately.
-  // ----------------------------------------------------------------
-  async function _renderMLSWeekend(el, league) {
-    const now = new Date();
-    const dow = now.getDay(); // 0=Sun … 6=Sat
-
-    function offsetDate(base, offsetDays) {
-      const d = new Date(base);
-      d.setDate(d.getDate() + offsetDays);
-      return d;
-    }
-
-    let fridayDate;
-    if (dow === 0)      fridayDate = offsetDate(now, -2); // Sun → prev Fri
-    else if (dow === 1) fridayDate = offsetDate(now,  4); // Mon → next Fri
-    else if (dow === 2) fridayDate = offsetDate(now,  3); // Tue → next Fri
-    else if (dow === 3) fridayDate = offsetDate(now,  2); // Wed → next Fri
-    else if (dow === 4) fridayDate = offsetDate(now,  1); // Thu → next Fri
-    else if (dow === 5) fridayDate = offsetDate(now,  0); // Fri → today
-    else                fridayDate = offsetDate(now, -1); // Sat → prev Fri
-
-    const weekendDates = [
-      _dateStr(fridayDate),
-      _dateStr(offsetDate(fridayDate, 1)),
-      _dateStr(offsetDate(fridayDate, 2)),
-    ];
-
-    const midweekDates = [];
-    for (let i = 0; i <= 5; i++) {
-      const d    = offsetDate(now, i);
-      const dDow = d.getDay();
-      const ds   = _dateStr(d);
-      if (dDow >= 1 && dDow <= 4 && !weekendDates.includes(ds)) {
-        midweekDates.push(ds);
-      }
-    }
-
-    const allDates = [...weekendDates, ...midweekDates];
-
-    const fetches = allDates.map(d =>
-      fetch(league.url(d))
-        .then(r => r.ok ? r.json() : Promise.reject(r.status))
-        .then(data => ({ date: d, events: data?.events || [] }))
-        .catch(() => ({ date: d, events: [] }))
-    );
-
-    const results = await Promise.allSettled(fetches);
-
-    const seen    = new Set();
-    const weekend = [];
-    const midweek = [];
-
-    for (const res of results) {
-      if (res.status !== "fulfilled") continue;
-      const { date: ds, events } = res.value;
-      const isMidweek = midweekDates.includes(ds);
-      for (const ev of events) {
-        const id = String(ev?.id || ev?.uid || "");
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        if (isMidweek) midweek.push(ev);
-        else           weekend.push(ev);
-      }
-    }
-
-    function sortGroup(arr) {
-      return arr.sort((a, b) => {
-        const sa = _getState(a), sb = _getState(b);
-        const rank = s => s === "in" ? 0 : s === "pre" ? 1 : 2;
-        if (rank(sa) !== rank(sb)) return rank(sa) - rank(sb);
-        return new Date(a.date || 0) - new Date(b.date || 0);
-      });
-    }
-    sortGroup(weekend);
-    sortGroup(midweek);
-
-    if (!weekend.length && !midweek.length) {
-      el.innerHTML = `<div class="piNoGames">No MLS matches found for this window.</div>`;
-      return;
-    }
-
-    let html = "";
-    if (weekend.length) {
-      const fri = fridayDate.toLocaleDateString([], { month: "short", day: "numeric" });
-      const sun = offsetDate(fridayDate, 2).toLocaleDateString([], { month: "short", day: "numeric" });
-      html += `<div class="piSectionHeader">⚽ Weekend Matches — ${fri}–${sun}</div>`;
-      html += weekend.map(ev => _buildShopCard("mls", "MLS", ev, null, null)).join("");
-    }
-    if (midweek.length) {
-      html += `<div class="piSectionHeader">⚽ Midweek Matches</div>`;
-      html += midweek.map(ev => _buildShopCard("mls", "MLS", ev, null, null)).join("");
-    }
-
-    el.innerHTML = html;
-
-    const allEvents = [...weekend, ...midweek];
-    const CONCURRENCY = 4;
-    let idx = 0;
-    async function worker() {
-      while (idx < allEvents.length) {
-        const i = idx++;
-        const ev = allEvents[i];
-        const eventId = String(ev?.id || "");
-        if (!eventId) continue;
-        try {
-          const data = await fetch(SUMMARY_URLS.mls(eventId)).then(r => r.ok ? r.json() : null);
-          if (!data) continue;
-          const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
-          if (odds.favored || odds.ou) {
-            const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
-            if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
-          }
-        } catch {}
-      }
-    }
-    await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
-  }
-
-  // ----------------------------------------------------------------
   // Shop Teams
   // ----------------------------------------------------------------
   async function _renderShopTeams() {
@@ -1080,18 +936,10 @@
 
     const missingTeams = SHOP_TEAMS_NORM.filter(t => !teamsFound.has(t));
     if (missingTeams.length) {
-      // From Tuesday onward, WEEK_PREVIEW_LEAGUES (mls/nfl/cfb) use the full 7-day
-      // lookahead so the upcoming weekend's games appear on Shop Teams.
-      // Sunday/Monday keep a tight 3-day cap so games too far out don't clutter the view.
-      const isTuesdayOrLater = now.getDay() >= 2; // 0=Sun, 1=Mon, 2=Tue+
-
       const lookaheadFetches = [];
       for (const lg of LEAGUES) {
-        const baseDays = LOOKAHEAD_DAYS[lg.key] || 0;
-        if (!baseDays) continue;
-        const days = (WEEK_PREVIEW_LEAGUES.has(lg.key) && !isTuesdayOrLater)
-          ? Math.min(baseDays, 3)
-          : baseDays;
+        const days = LOOKAHEAD_DAYS[lg.key] || 0;
+        if (!days) continue;
         for (let d = 1; d <= days; d++) {
           const futureDate = _dateStr(new Date(now.getTime() + d * 86400000));
           lookaheadFetches.push(
@@ -1124,7 +972,7 @@
       }
 
       const addedEventIds = new Set(matched.map(m => m.ev?.id));
-      for (const { leagueKey, leagueLabel, ev } of upcomingByTeam.values()) {
+      for (const { leagueKey, leagueLabel, ev, daysAhead } of upcomingByTeam.values()) {
         if (!addedEventIds.has(ev?.id)) {
           matched.push({ leagueKey, leagueLabel, ev, upcoming: true });
           addedEventIds.add(ev?.id);
@@ -1184,6 +1032,9 @@
     await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
   }
 
+  // ----------------------------------------------------------------
+  // Helpers — team matching
+  // ----------------------------------------------------------------
   function _eventHasShopTeam(ev) {
     const comp = (ev?.competitions || [])[0] || {};
     return (comp?.competitors || []).some(c => _isShopTeam(c?.team));
@@ -1191,214 +1042,222 @@
 
   function _isShopTeam(team) {
     if (!team) return false;
-    const display  = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const shortDis = String(team.shortDisplayName || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const name     = String(team.name || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const location = String(team.location || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const combo    = location && name ? `${location} ${name}` : "";
+    const displayName = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const shortName   = String(team.shortDisplayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const combo       = String((team.location || "") + " " + (team.name || "")).trim().toLowerCase().replace(/\s+/g, " ");
+    const name        = String(team.name || "").trim().toLowerCase().replace(/\s+/g, " ");
     return SHOP_TEAMS_NORM.some(t =>
-      t === display || t === shortDis || t === name || t === combo ||
-      (display && display.includes(t)) || (t && t.includes(display))
+      t === displayName || t === shortName || t === combo || t === name ||
+      displayName.includes(t) || t.includes(displayName)
     );
   }
 
   function _shopTeamKey(team) {
-    return String(team?.displayName || team?.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return String(team?.displayName || team?.shortDisplayName || "").trim().toLowerCase().replace(/\s+/g, " ");
   }
 
   function _shopTeamRank(ev) {
     const comp = (ev?.competitions || [])[0] || {};
+    let best = Infinity;
     for (const c of (comp?.competitors || [])) {
-      const displayName = _shopTeamKey(c?.team);
+      const team = c?.team;
+      if (!team) continue;
+      const displayName = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
       const i = SHOP_TEAMS_NORM.findIndex(t => t === displayName || displayName.includes(t) || t.includes(displayName));
-      if (i >= 0) return i;
+      if (i !== -1 && i < best) best = i;
     }
-    return 999;
+    return best;
   }
 
-  // ----------------------------------------------------------------
-  // State helpers
-  // ----------------------------------------------------------------
   function _getState(ev) {
-    return String(ev?.status?.type?.state || ev?.competitions?.[0]?.status?.type?.state || "unknown");
-  }
-
-  function _getStatusDetail(ev) {
-    return String(ev?.status?.type?.detail || ev?.competitions?.[0]?.status?.type?.detail || "");
-  }
-
-  function _getPeriodLabel(ev, leagueKey) {
-    const comp   = ev?.competitions?.[0] || {};
-    const status = comp?.status || ev?.status || {};
-    const period = Number(status?.period ?? status?.displayClock ?? 0);
-    const clock  = String(status?.displayClock || "");
-    const state  = String(status?.type?.state || "");
-    if (state !== "in") return { periodLabel: "", clock: "" };
-
-    if (leagueKey === "nfl" || leagueKey === "cfb") {
-      const labels = ["1st", "2nd", "3rd", "4th", "OT"];
-      return { periodLabel: labels[Math.min(period - 1, 4)] || `Q${period}`, clock };
-    }
-    if (leagueKey === "nba" || leagueKey === "ncaam") {
-      const labels = ["1st", "2nd", "3rd", "4th", "OT"];
-      return { periodLabel: labels[Math.min(period - 1, 4)] || `Q${period}`, clock };
-    }
-    if (leagueKey === "nhl") {
-      const labels = ["1st", "2nd", "3rd", "OT", "SO"];
-      return { periodLabel: labels[Math.min(period - 1, 4)] || `P${period}`, clock };
-    }
-    if (leagueKey === "mlb") {
-      const inning = String(status?.type?.shortDetail || status?.type?.description || "").replace(/^Top |^Bot /, "");
-      const half   = String(status?.type?.shortDetail || "").startsWith("Top") ? "▲" : "▼";
-      return { periodLabel: `${half} ${inning || period}`, clock: "" };
-    }
-    if (leagueKey === "mls") {
-      return { periodLabel: period <= 1 ? "1st Half" : "2nd Half", clock };
-    }
-    return { periodLabel: `P${period}`, clock };
+    return String(ev?.status?.type?.state || "pre");
   }
 
   // ----------------------------------------------------------------
-  // Record helper
+  // Playoff series parsing — scoreboard competition object (primary)
   // ----------------------------------------------------------------
+  function _parseSeriesFromComp(comp, leagueKey) {
+    if (!comp || !PLAYOFF_LEAGUES.has(leagueKey)) return null;
+    try {
+      const series = comp?.series;
+      if (!series) return null;
+      const seriesComps = series?.competitors || [];
+      if (seriesComps.length < 2) return null;
+      const w0 = Number(seriesComps[0]?.wins || 0);
+      const w1 = Number(seriesComps[1]?.wins || 0);
+      if (w0 === 0 && w1 === 0) {
+        const title = String(series?.title || series?.summary || "");
+        if (title) return { seriesSummary: title };
+        return null;
+      }
+      const gameComps = comp?.competitors || [];
+      const _nameForSeriesComp = (sc) => {
+        const scId = String(sc?.id || sc?.team?.id || "");
+        if (scId) {
+          const match = gameComps.find(gc =>
+            String(gc?.id || gc?.team?.id || "") === scId ||
+            String(gc?.team?.id || "") === scId
+          );
+          if (match) return String(match?.team?.shortDisplayName || match?.team?.displayName || match?.team?.abbreviation || "");
+        }
+        return String(sc?.team?.shortDisplayName || sc?.team?.displayName || sc?.team?.abbreviation || "");
+      };
+      const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
+      const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
+      return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
+    } catch { return null; }
+  }
+
+  // ----------------------------------------------------------------
+  // Playoff series parsing — summary endpoint (fallback)
+  // ----------------------------------------------------------------
+  function _parseSeriesFromSummary(data, fallbackComp) {
+    try {
+      const comp = data?.header?.competitions?.[0] || data?.competitions?.[0];
+      if (!comp) return null;
+      const seasonType = Number(data?.header?.season?.type || data?.season?.type || 0);
+      if (seasonType < 2) return null;
+      const series = comp?.series;
+      if (!series) return null;
+      const seriesComps = series?.competitors || [];
+      if (seriesComps.length < 2) return null;
+      const w0 = Number(seriesComps[0]?.wins || 0);
+      const w1 = Number(seriesComps[1]?.wins || 0);
+      const gameComps = [...(comp?.competitors || []), ...((fallbackComp?.competitors) || [])];
+      const _nameForSeriesComp = (sc) => {
+        const scId = String(sc?.id || sc?.team?.id || "");
+        if (scId) {
+          const match = gameComps.find(gc =>
+            String(gc?.id || gc?.team?.id || "") === scId ||
+            String(gc?.team?.id || "") === scId
+          );
+          if (match) return String(match?.team?.shortDisplayName || match?.team?.displayName || match?.team?.abbreviation || "");
+        }
+        return String(sc?.team?.shortDisplayName || sc?.team?.displayName || sc?.team?.abbreviation || "");
+      };
+      const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
+      const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
+      if (w0 === 0 && w1 === 0) {
+        const title = String(series?.title || series?.summary || "");
+        if (title) return { seriesSummary: title };
+      } else {
+        return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
+      }
+      const competitors = comp?.competitors || [];
+      if (competitors.length >= 2) {
+        const s0 = String(competitors[0]?.seriesSummary || "");
+        if (s0) return { seriesSummary: s0 };
+      }
+      return null;
+    } catch { return null; }
+  }
+
+  function _buildSeriesHTML(series) {
+    if (!series) return "";
+    if (series.seriesSummary) return `<span class="piSeriesBadge">🏆 ${_esc(series.seriesSummary)}</span>`;
+    const { name0, wins0, name1, wins1 } = series;
+    if (wins0 === wins1) return `<span class="piSeriesBadge tied">🏆 Series Tied ${wins0}-${wins1}</span>`;
+    const leader = wins0 > wins1 ? name0 : name1;
+    const lWins  = wins0 > wins1 ? wins0 : wins1;
+    const tWins  = wins0 > wins1 ? wins1 : wins0;
+    return `<span class="piSeriesBadge">🏆 ${_esc(leader)} leads ${lWins}-${tWins}</span>`;
+  }
+
+  // ----------------------------------------------------------------
+  // Rich card builder
+  // ----------------------------------------------------------------
+  function _buildShopCard(leagueKey, leagueLabel, ev, favored, ou, upcoming) {
+    try {
+      const comp       = (ev?.competitions || [])[0] || {};
+      const status     = ev?.status || {};
+      const state      = String(status?.type?.state || "pre");
+      const done       = !!(status?.type?.completed);
+      const clock      = String(status?.displayClock || "");
+      const period     = Number(status?.period || 0);
+      const eventId    = String(ev?.id || "");
+      const isPlayoff  = PLAYOFF_LEAGUES.has(leagueKey);
+      const periodLabel = _periodLabel(leagueKey, period);
+
+      let cls = upcoming ? "upcoming" : "sched";
+      let statusLabel = ev.date ? _fmtTime(ev.date) : "Scheduled";
+      if (upcoming) statusLabel = "📆 " + (ev.date ? _fmtGameDate(ev.date) : "Upcoming");
+      if (!upcoming && state === "in")             { cls = "live";  statusLabel = `${periodLabel} ${clock}`; }
+      if (!upcoming && (state === "post" || done)) { cls = "final"; statusLabel = "Final"; }
+
+      const statusCls  = cls === "live" ? " live" : cls === "upcoming" ? " upcoming" : "";
+      const badgeColor = LEAGUE_COLORS[leagueKey] || "#555";
+
+      const venue      = comp?.venue;
+      const venueName  = String(venue?.fullName || venue?.name || "");
+      const city       = String(venue?.address?.city || "");
+      const stateCode  = String(venue?.address?.state || "");
+      const venueText  = [venueName, [city, stateCode].filter(Boolean).join(", ")].filter(Boolean).join(" — ");
+      const gameDateStr = ev.date ? _fmtGameDate(ev.date) : "";
+
+      const competitors = comp?.competitors || [];
+      const teamsHTML = competitors.map(c => {
+        const team   = c?.team || {};
+        const isFav  = _isShopTeam(team);
+        const name   = _applyTTUN(String(team.displayName || team.shortDisplayName || team.abbreviation || "TBD"));
+        const logo   = String(team.logo || (Array.isArray(team.logos) ? team.logos[0]?.href : "") || "");
+        const score  = String(c?.score || "");
+        const rec    = _getRecord(c);
+        const favCls = isFav ? " fav" : "";
+        const logoImg = logo
+          ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />`
+          : `<span style="width:30px;height:30px;flex-shrink:0;display:inline-block;"></span>`;
+        return `<div class="piShopTeamLine">
+          <div class="piShopTeamLineLeft">
+            ${logoImg}
+            <span class="piShopTeamNameFull${favCls}">${_esc(name)}</span>
+            ${rec ? `<span class="piShopTeamRecord">${_esc(rec)}</span>` : ""}
+          </div>
+          <span class="piShopTeamScore">${_esc(score)}</span>
+        </div>`;
+      }).join("");
+
+      const oddsText = _buildOddsLine(favored || "", ou || "");
+
+      let seriesHTML = "";
+      if (isPlayoff) {
+        const seriesFromComp = _parseSeriesFromComp(comp, leagueKey);
+        seriesHTML = `<div class="piSeriesLine">${seriesFromComp ? _buildSeriesHTML(seriesFromComp) : ""}</div>`;
+      }
+
+      return `
+<div class="piShopCard ${cls}" data-eventid="${_esc(eventId)}">
+  <div class="piShopCardTop">
+    <span class="piShopLeagueBadge" style="background:${badgeColor};">${_esc(leagueLabel)}</span>
+    <span class="piShopStatusLabel${statusCls}">${_esc(statusLabel)}</span>
+  </div>
+  <div class="piShopTeamsRow">${teamsHTML}</div>
+  ${seriesHTML}
+  <div class="piShopMeta">
+    ${!upcoming && gameDateStr ? `<span class="piShopMetaItem">📅 ${_esc(gameDateStr)}</span>` : ""}
+    ${venueText ? `<span class="piShopMetaItem venue">📍 ${_esc(venueText)}</span>` : ""}
+    <span class="piShopMetaItem odds">${oddsText ? _esc(oddsText) : (state === "pre" || upcoming ? "Fetching lines…" : "")}</span>
+  </div>
+</div>`;
+    } catch { return ""; }
+  }
+
+  function _periodLabel(leagueKey, period) {
+    switch (leagueKey) {
+      case "nhl":   return `P${period}`;
+      case "mlb":   return `${period}th`;
+      case "nba": case "ncaam": return `Q${period}`;
+      case "cfb": case "nfl":   return `Q${period}`;
+      default: return `${period}`;
+    }
+  }
+
   function _getRecord(competitor) {
     const recs = competitor?.records;
     if (!Array.isArray(recs) || !recs.length) return "";
-    const overall = recs.find(r => String(r?.name || "").toLowerCase() === "overall") || recs[0];
+    const overall = recs.find(r => String(r?.name || "").toLowerCase() === "overall") ||
+                    recs.find(r => String(r?.type || "").toLowerCase() === "total") ||
+                    recs[0];
     return String(overall?.summary || "").trim();
-  }
-
-  // ----------------------------------------------------------------
-  // Series (playoff) parser
-  // ----------------------------------------------------------------
-  function _parseSeriesFromSummary(data, fallbackComp) {
-    const comp   = data?.header?.competitions?.[0] || fallbackComp || null;
-    const series = comp?.series || data?.series || null;
-    if (!series) return null;
-
-    const competitors = comp?.competitors || [];
-    const away = competitors.find(c => c.homeAway === "away");
-    const home = competitors.find(c => c.homeAway === "home");
-
-    const awayWins = Number(away?.series?.wins ?? series?.competitors?.find(c => c.homeAway === "away")?.wins ?? 0);
-    const homeWins = Number(home?.series?.wins ?? series?.competitors?.find(c => c.homeAway === "home")?.wins ?? 0);
-
-    const awayName = String(away?.team?.abbreviation || away?.team?.shortDisplayName || "Away");
-    const homeName = String(home?.team?.abbreviation || home?.team?.shortDisplayName || "Home");
-
-    const completed = !!series.completed;
-    return { awayName, homeName, awayWins, homeWins, completed };
-  }
-
-  function _buildSeriesHTML({ awayName, homeName, awayWins, homeWins, completed }) {
-    const leader = awayWins > homeWins
-      ? `${awayName} leads ${awayWins}–${homeWins}`
-      : homeWins > awayWins
-        ? `${homeName} leads ${homeWins}–${awayWins}`
-        : `Series tied ${awayWins}–${homeWins}`;
-    return completed ? `Series: ${leader} (Final)` : `Series: ${leader}`;
-  }
-
-  // ----------------------------------------------------------------
-  // Build shop card
-  // ----------------------------------------------------------------
-  function _buildShopCard(leagueKey, leagueLabel, ev, favored, ou, upcoming) {
-    const comp        = (ev?.competitions || [])[0] || {};
-    const state       = _getState(ev);
-    const done        = !!comp?.status?.type?.completed;
-    const { periodLabel, clock } = _getPeriodLabel(ev, leagueKey);
-    const competitors = comp?.competitors || [];
-    const away        = competitors.find(c => c.homeAway === "away") || competitors[0] || {};
-    const home        = competitors.find(c => c.homeAway === "home") || competitors[1] || {};
-
-    const color = LEAGUE_COLORS[leagueKey] || "#555";
-
-    if (leagueKey === "pga") {
-      const athlete = ev?.competitions?.[0]?.competitors?.[0]?.athlete || {};
-      const score   = ev?.competitions?.[0]?.competitors?.[0]?.score || "--";
-      const name    = athlete?.displayName || ev?.name || "Unknown";
-      const logo    = athlete?.headshot?.href || "";
-      return `
-        <div class="piShopCard${state === "in" ? " live" : state === "post" ? " final" : ""}" style="border-left-color:${color}" data-eventid="${_esc(String(ev?.id || ""))}">
-          <div class="piShopCardTop">
-            <span class="piShopLeagueBadge" style="background:${color};">${_esc(leagueLabel)}</span>
-            <span class="piShopStatusLabel${state === "in" ? " live" : ""}">${state === "in" ? `LIVE • ${periodLabel}` : state === "post" ? "Final" : _fmtGameDate(ev?.date)}</span>
-          </div>
-          <div class="piShopTeamsRow">
-            <div class="piShopTeamLine">
-              <div class="piShopTeamLineLeft">
-                ${logo ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />` : ""}
-                <span class="piShopTeamNameFull">${_esc(name)}</span>
-              </div>
-              <span class="piShopTeamScore">${_esc(String(score))}</span>
-            </div>
-          </div>
-          <div class="piShopMeta">
-            <span class="piShopMetaItem">${_esc(ev?.name || "")}</span>
-            <span class="piShopMetaItem odds"></span>
-          </div>
-        </div>`;
-    }
-
-    let cls = upcoming ? "upcoming" : "sched";
-    let statusLabel = state === "pre" ? _fmtTime(ev?.date) : "";
-    if (upcoming) statusLabel = "📆 " + (ev.date ? _fmtGameDate(ev.date) : "Upcoming");
-    if (!upcoming && state === "in")              { cls = "live";  statusLabel = `${periodLabel} ${clock}`; }
-    if (!upcoming && (state === "post" || done))  { cls = "final"; statusLabel = "Final"; }
-
-    const statusCls   = cls === "live" ? " live" : cls === "upcoming" ? " upcoming" : "";
-    const gameDateStr = (!upcoming && state === "pre") ? _fmtGameDate(ev?.date) : "";
-    const oddsText    = favored || ou ? _buildOddsLine(favored, ou) : "";
-    const eventId     = String(ev?.id || "");
-
-    const teamsHTML = [away, home].map((competitor, idx2) => {
-      const team   = competitor?.team || {};
-      const logo   = team?.logos?.[0]?.href || team?.logo || "";
-      const abbrev = String(team?.abbreviation || "").slice(0, 4);
-      const name   = _applyTTUN(String(team?.displayName || team?.name || (idx2 === 0 ? "Away" : "Home")));
-      const score  = state === "pre" || upcoming ? "" : String(competitor?.score ?? "");
-      const rec    = _getRecord(competitor);
-      const isFav  = _isShopTeam(team);
-      const favCls = isFav ? " fav" : "";
-      return `<div class="piShopTeamLine">
-        <div class="piShopTeamLineLeft">
-          ${logo
-            ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />`
-            : `<div class="piShopTeamLogo" style="background:#222;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:#888;">${_esc(abbrev)}</div>`}
-          <span class="piShopTeamNameFull${favCls}">${_esc(name)}</span>
-          ${rec ? `<span class="piShopTeamRecord">${_esc(rec)}</span>` : ""}
-        </div>
-        <span class="piShopTeamScore">${_esc(score)}</span>
-      </div>`;
-    }).join("");
-
-    return `
-      <div class="piShopCard ${cls}" style="border-left-color:${color}" data-eventid="${_esc(eventId)}">
-        <div class="piShopCardTop">
-          <span class="piShopLeagueBadge" style="background:${color};">${_esc(leagueLabel)}</span>
-          <span class="piShopStatusLabel${statusCls}">${_esc(statusLabel)}</span>
-        </div>
-        <div class="piShopTeamsRow">${teamsHTML}</div>
-        <div class="piShopMeta">
-          ${!upcoming && gameDateStr ? `<span class="piShopMetaItem">📅 ${_esc(gameDateStr)}</span>` : ""}
-          <span class="piShopMetaItem">${_esc(_buildVenueLine(comp))}</span>
-          <span class="piShopMetaItem odds">${oddsText ? _esc(oddsText) : (state === "pre" || upcoming ? "Fetching lines…" : "")}</span>
-        </div>
-        <div class="piSeriesLine"></div>
-      </div>`;
-  }
-
-  // ----------------------------------------------------------------
-  // Venue
-  // ----------------------------------------------------------------
-  function _buildVenueLine(comp) {
-    const v = comp?.venue || null;
-    if (!v) return "";
-    const name  = String(v?.fullName || v?.name || "").trim();
-    const city  = String(v?.address?.city || "").trim();
-    const state = String(v?.address?.state || "").trim();
-    const loc   = city && state ? `${city}, ${state}` : city || state;
-    return [name, loc].filter(Boolean).join(" – ");
   }
 
   // ----------------------------------------------------------------
@@ -1452,8 +1311,7 @@
   // ----------------------------------------------------------------
   function _daysSince(d) {
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const today = new Date();
-    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const today = new Date(); const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     return Math.max(0, Math.floor((t - start) / 86400000));
   }
   function _todayStr() { return _dateStr(new Date()); }
