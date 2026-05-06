@@ -41,6 +41,16 @@
     return { diff, played };
   }
 
+  // Safely convert Firebase holes (may be array or numeric-keyed object) to a real array
+  function normalizeHoles(holes, totalHoles) {
+    if (Array.isArray(holes)) return holes.slice();
+    const out = new Array(totalHoles || 0).fill(null);
+    if (holes && typeof holes === "object") {
+      Object.entries(holes).forEach(([k, v]) => { out[parseInt(k, 10)] = v; });
+    }
+    return out;
+  }
+
   function generateRoundId() {
     return `round_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   }
@@ -380,14 +390,14 @@
 
     _state.draftScores = {};
     players.forEach(p => {
-      const saved = roundData.scores[p]?.holes?.[currentHole];
+      const saved = normalizeHoles(roundData.scores[p]?.holes, totalHoles)[currentHole];
       _state.draftScores[p] = (typeof saved === "number" && saved > 0) ? saved : par;
     });
 
     function playerRows() {
       return players.map(p => {
         const score = _state.draftScores[p];
-        const allHoles = [...(roundData.scores[p]?.holes || [])];
+        const allHoles = normalizeHoles(roundData.scores[p]?.holes, totalHoles);
         allHoles[currentHole] = score;
         const rt = totalVsPar(allHoles, pars);
         const vpRun = rt.played > 0 ? vsParLabel(rt.diff, 0).text : "—";
@@ -452,8 +462,8 @@
 
   function updateRunningTotal(playerName) {
     const { roundData, currentHole, draftScores } = _state;
-    const pars  = roundData.holePars;
-    const allHoles = [...(roundData.scores[playerName]?.holes || [])];
+    const pars     = roundData.holePars;
+    const allHoles = normalizeHoles(roundData.scores[playerName]?.holes, pars.length);
     allHoles[currentHole] = draftScores[playerName];
     const rt = totalVsPar(allHoles, pars);
     const el = document.getElementById(`total_${playerName}`);
@@ -474,6 +484,9 @@
 
       roundData.players.forEach(p => {
         if (!roundData.scores[p]) roundData.scores[p] = { holes: [] };
+        if (!Array.isArray(roundData.scores[p].holes)) {
+          roundData.scores[p].holes = normalizeHoles(roundData.scores[p].holes, totalHoles);
+        }
         roundData.scores[p].holes[currentHole] = draftScores[p];
       });
 
@@ -491,7 +504,11 @@
 
   async function handleEndRound() {
     const { roundId, currentHole, draftScores, roundData } = _state;
+    const totalHoles = roundData.holePars.length;
     roundData.players.forEach(p => {
+      if (!Array.isArray(roundData.scores[p].holes)) {
+        roundData.scores[p].holes = normalizeHoles(roundData.scores[p].holes, totalHoles);
+      }
       roundData.scores[p].holes[currentHole] = draftScores[p];
     });
     await submitHoleScores(roundId, currentHole, draftScores, currentHole, true);
@@ -602,6 +619,13 @@
     if (isActive) {
       document.getElementById("golfResumeBtn")?.addEventListener("click", () => {
         const holePars = round.holePars || [];
+        const totalHoles = holePars.length;
+        const rawScores = round.scores || {};
+        // Normalize all player hole arrays before handing to scoring view
+        const scores = {};
+        (round.players || []).forEach(p => {
+          scores[p] = { holes: normalizeHoles(rawScores[p]?.holes, totalHoles) };
+        });
         _state.roundId       = round.id;
         _state.playerNames   = round.players || [];
         _state.currentHole   = typeof round.currentHole === "number" ? round.currentHole : 0;
@@ -610,10 +634,10 @@
           courseName:  round.courseName,
           holePars,
           players:     round.players || [],
-          scores:      round.scores  || {},
+          scores,
           status:      "active",
           currentHole: _state.currentHole,
-          totalHoles:  holePars.length,
+          totalHoles,
         };
         renderScoring();
       });
@@ -789,7 +813,6 @@
 
   // ─── Admin: Course Manager (legacy entry point from shop tab) ─────────────
   async function renderAdminGolf() {
-    // Now just re-renders the golf home, which includes the admin panel for admin users
     renderGolfHome();
   }
 
