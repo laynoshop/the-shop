@@ -655,6 +655,7 @@
 
     if (!events.length) { el.innerHTML = `<div class="piNoGames">No games today.</div>`; return; }
 
+    // Build cards — series badge populated directly from scoreboard comp object
     el.innerHTML = events.map(ev =>
       _buildShopCard(_activeLeague, league.label.replace(/^\S+\s/, ""), ev, null, null)
     ).join("");
@@ -679,12 +680,15 @@
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
           }
-          // Playoff series
+          // Playoff series fallback from summary (fills in if scoreboard comp had no series data)
           if (PLAYOFF_LEAGUES.has(_activeLeague)) {
-            const series = _parseSeriesFromSummary(data);
-            if (series) {
-              const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
-              if (card) { const s = card.querySelector(".piSeriesLine"); if (s) s.innerHTML = _buildSeriesHTML(series); }
+            const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+            if (card) {
+              const s = card.querySelector(".piSeriesLine");
+              if (s && !s.innerHTML.trim()) {
+                const series = _parseSeriesFromSummary(data);
+                if (series) s.innerHTML = _buildSeriesHTML(series);
+              }
             }
           }
         } catch {}
@@ -810,11 +814,12 @@
       return _shopTeamRank(a.ev) - _shopTeamRank(b.ev);
     });
 
+    // Build cards — series badge populated directly from scoreboard comp object
     el.innerHTML = matched.map(({ leagueKey, leagueLabel, ev, upcoming }) =>
       _buildShopCard(leagueKey, leagueLabel, ev, null, null, upcoming)
     ).join("");
 
-    // Hydrate odds + series in background
+    // Hydrate odds + series fallback in background
     const CONCURRENCY = 4;
     let idx = 0;
     async function worker() {
@@ -831,12 +836,15 @@
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
           }
-          // Playoff series
+          // Playoff series fallback from summary (only fills if scoreboard comp had no series data)
           if (PLAYOFF_LEAGUES.has(leagueKey)) {
-            const series = _parseSeriesFromSummary(data);
-            if (series) {
-              const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
-              if (card) { const s = card.querySelector(".piSeriesLine"); if (s) s.innerHTML = _buildSeriesHTML(series); }
+            const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+            if (card) {
+              const s = card.querySelector(".piSeriesLine");
+              if (s && !s.innerHTML.trim()) {
+                const series = _parseSeriesFromSummary(data);
+                if (series) s.innerHTML = _buildSeriesHTML(series);
+              }
             }
           }
         } catch {}
@@ -887,19 +895,64 @@
   }
 
   // ----------------------------------------------------------------
-  // Playoff series parsing
+  // Playoff series parsing — scoreboard competition object (primary)
+  // ----------------------------------------------------------------
+  // ESPN puts series wins directly on the scoreboard competition object
+  // under comp.series.competitors[]. This is the most reliable source
+  // since it's always present during playoffs without a summary fetch.
+  function _parseSeriesFromComp(comp, leagueKey) {
+    if (!comp || !PLAYOFF_LEAGUES.has(leagueKey)) return null;
+    try {
+      // Season type 3 = playoffs for NHL/NBA/MLB/NFL
+      const seasonType = Number(comp?.season?.type || 0);
+      // Also check the event-level season type via the notes or status
+      // Some leagues put it in the competition notes
+      const notes = comp?.notes || [];
+      const isPlayoffNote = notes.some(n =>
+        /playoff|round|series/i.test(String(n?.headline || n?.text || ""))
+      );
+
+      const series = comp?.series;
+      if (!series) return null;
+
+      const competitors = series?.competitors || [];
+      if (competitors.length >= 2) {
+        const w0 = Number(competitors[0]?.wins || 0);
+        const w1 = Number(competitors[1]?.wins || 0);
+        const n0 = String(competitors[0]?.team?.shortDisplayName || competitors[0]?.team?.displayName || "Team A");
+        const n1 = String(competitors[1]?.team?.shortDisplayName || competitors[1]?.team?.displayName || "Team B");
+        // Only return if there are actually wins recorded (i.e., series has started)
+        if (w0 > 0 || w1 > 0) {
+          return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
+        }
+        // Series exists but 0-0 — still show it if we have a title
+        const title = String(series?.title || series?.summary || "");
+        if (title) return { seriesSummary: title };
+      }
+
+      // Fallback: check competitor seriesSummary strings
+      const compArr = comp?.competitors || [];
+      if (compArr.length >= 2) {
+        const s0 = String(compArr[0]?.seriesSummary || "");
+        if (s0) return { seriesSummary: s0 };
+      }
+
+      return null;
+    } catch { return null; }
+  }
+
+  // ----------------------------------------------------------------
+  // Playoff series parsing — summary endpoint (fallback)
   // ----------------------------------------------------------------
   function _parseSeriesFromSummary(data) {
-    // ESPN puts series info in header.competitions[0].series or season.type === 3 (playoffs)
     try {
       const comp = data?.header?.competitions?.[0] || data?.competitions?.[0];
       if (!comp) return null;
 
-      // Check season type — 3 = playoffs for most ESPN leagues
+      // Accept any playoff season type (2=postseason, 3=playoffs — varies by sport)
       const seasonType = Number(data?.header?.season?.type || data?.season?.type || 0);
-      if (seasonType !== 3) return null; // not playoffs
+      if (seasonType < 2) return null;
 
-      // series object: { title, completed, type, totalGames, wins [] }
       const series = comp?.series;
       if (series) {
         const wins = series?.competitors || [];
@@ -912,7 +965,7 @@
         }
       }
 
-      // Fallback: look for seriesSummary in competitors
+      // Fallback: seriesSummary on competitors
       const competitors = comp?.competitors || [];
       if (competitors.length >= 2) {
         const s0 = String(competitors[0]?.seriesSummary || "");
@@ -994,8 +1047,13 @@
       }).join("");
 
       const oddsText = _buildOddsLine(favored || "", ou || "");
-      // Placeholder series line — gets hydrated by summary fetch if in playoffs
-      const seriesPlaceholder = isPlayoff ? `<div class="piSeriesLine"></div>` : "";
+
+      // --- Series badge: parse directly from scoreboard comp (no summary fetch needed) ---
+      let seriesHTML = "";
+      if (isPlayoff) {
+        const seriesFromComp = _parseSeriesFromComp(comp, leagueKey);
+        seriesHTML = `<div class="piSeriesLine">${seriesFromComp ? _buildSeriesHTML(seriesFromComp) : ""}</div>`;
+      }
 
       return `
 <div class="piShopCard ${cls}" data-eventid="${_esc(eventId)}">
@@ -1004,7 +1062,7 @@
     <span class="piShopStatusLabel${statusCls}">${_esc(statusLabel)}</span>
   </div>
   <div class="piShopTeamsRow">${teamsHTML}</div>
-  ${seriesPlaceholder}
+  ${seriesHTML}
   <div class="piShopMeta">
     ${!upcoming && gameDateStr ? `<span class="piShopMetaItem">📅 ${_esc(gameDateStr)}</span>` : ""}
     ${venueText ? `<span class="piShopMetaItem venue">📍 ${_esc(venueText)}</span>` : ""}
