@@ -9,7 +9,7 @@
   "use strict";
 
   // ─── Constants ───────────────────────────────────────────────────────────
-  const COL   = () => window.__db;          // Firestore instance (set by boot.js)
+  const COL   = () => window.__db;
   const COURSES_PATH  = "putt_courses";
   const REGULARS_PATH = "putt_regulars";
   const ROUNDS_PATH   = "putt_rounds";
@@ -44,20 +44,21 @@
     return `round_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   }
 
+  function isAdmin() {
+    return (typeof window.getRole === "function" ? window.getRole() : "") === "admin";
+  }
+
   // ─── State ───────────────────────────────────────────────────────────────
   let _state = {
-    view: "home",          // home | setup | scoring | history | stats | roundDetail
+    view: "home",
     courses: [],
     regulars: [],
-    // setup
     selectedCourse: null,
     playerNames: [],
-    // active round
     roundId: null,
     roundData: null,
-    currentHole: 0,        // 0-based index
-    draftScores: {},       // { playerName: score } for current hole being edited
-    // history
+    currentHole: 0,
+    draftScores: {},
     rounds: [],
     viewingRound: null,
   };
@@ -96,9 +97,7 @@
     const scores = {};
     playerNames.forEach(n => { scores[n] = { holes: new Array(holePars.length).fill(null) }; });
     await db.collection(ROUNDS_PATH).doc(roundId).set({
-      courseId,
-      courseName,
-      holePars,
+      courseId, courseName, holePars,
       players: playerNames,
       scores,
       status: "active",
@@ -134,7 +133,6 @@
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
-  // ─── Admin: Add Course ────────────────────────────────────────────────────
   async function adminSaveCourse(name, holePars) {
     const db = COL();
     if (!db) return;
@@ -148,18 +146,59 @@
   }
 
   // ─── Render: Main Shell ───────────────────────────────────────────────────
-  function getContent() {
-    return document.getElementById("content");
-  }
-
-  function setContent(html) {
-    const c = getContent();
-    if (c) c.innerHTML = html;
-  }
+  function getContent() { return document.getElementById("content"); }
+  function setContent(html) { const c = getContent(); if (c) c.innerHTML = html; }
 
   // ─── View: Golf Home ──────────────────────────────────────────────────────
   async function renderGolfHome() {
     _state.view = "home";
+
+    // If admin, also load courses + regulars to show the admin panel
+    let adminHTML = "";
+    if (isAdmin()) {
+      const [courses, regulars] = await Promise.all([loadCourses(), loadRegulars()]);
+      _state.courses  = courses;
+      _state.regulars = regulars;
+
+      const courseList = courses.length
+        ? courses.map(c => `<div class="golf-admin-row">${esc(c.name)} — ${c.holes} holes, par ${(c.par||[]).reduce((a,b)=>a+b,0)}</div>`).join("")
+        : `<div class="golf-admin-row golf-muted">No courses yet.</div>`;
+
+      const regularList = regulars.length
+        ? regulars.map(r => `
+            <div class="golf-admin-row golf-admin-regular">
+              <span>${esc(r)}</span>
+              <button class="golf-remove-regular golf-btn golf-btn-ghost" data-name="${esc(r)}">Remove</button>
+            </div>`).join("")
+        : `<div class="golf-admin-row golf-muted">No regulars saved yet.</div>`;
+
+      const holeInputs = Array.from({length: 9}, (_,i) => `
+        <div class="golf-hole-input-row">
+          <label class="golf-label">Hole ${i+1}</label>
+          <input class="golf-input golf-par-input" type="number" min="1" max="9"
+            data-hole="${i}" value="2" />
+        </div>
+      `).join("");
+
+      adminHTML = `
+        <div class="golf-admin-section">
+          <h3 class="golf-section-title">⛳ Add Course</h3>
+          <div class="golf-field">
+            <label class="golf-label">Course Name</label>
+            <input class="golf-input" id="adminCourseName" type="text" maxlength="40" placeholder="e.g. THE Putt Shop" />
+          </div>
+          <div class="golf-hole-inputs-grid" id="adminHoleInputs">${holeInputs}</div>
+          <button class="golf-btn golf-btn-primary" id="adminSaveCourse">Save Course</button>
+
+          <h3 class="golf-section-title" style="margin-top:20px;">📋 Courses</h3>
+          <div id="adminCourseList">${courseList}</div>
+
+          <h3 class="golf-section-title" style="margin-top:20px;">👥 Regulars</h3>
+          <div id="adminRegularsList">${regularList}</div>
+        </div>
+      `;
+    }
+
     setContent(`
       <div class="golf-wrap">
         <div class="golf-header">
@@ -171,11 +210,38 @@
           <button class="golf-btn golf-btn-secondary" id="golfHistoryBtn">📋 Prior Rounds</button>
           <button class="golf-btn golf-btn-secondary" id="golfStatsBtn">📊 Putt Putt Stats</button>
         </div>
+        ${adminHTML}
       </div>
     `);
+
     document.getElementById("golfStartBtn")?.addEventListener("click", () => renderSetup());
     document.getElementById("golfHistoryBtn")?.addEventListener("click", () => renderHistory());
     document.getElementById("golfStatsBtn")?.addEventListener("click", () => renderStats());
+
+    // Admin bindings
+    if (isAdmin()) {
+      document.getElementById("adminSaveCourse")?.addEventListener("click", async () => {
+        const name = document.getElementById("adminCourseName")?.value.trim();
+        if (!name) { alert("Enter a course name."); return; }
+        const inputs = [...document.querySelectorAll(".golf-par-input")];
+        const pars = inputs.map(i => Math.max(1, parseInt(i.value, 10) || 2));
+        const btn = document.getElementById("adminSaveCourse");
+        if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+        await adminSaveCourse(name, pars);
+        alert(`Course "${name}" saved!`);
+        renderGolfHome();
+      });
+
+      document.querySelectorAll(".golf-remove-regular").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const name = btn.dataset.name;
+          if (confirm(`Remove "${name}" from regulars?`)) {
+            await deleteRegular(name);
+            renderGolfHome();
+          }
+        });
+      });
+    }
   }
 
   // ─── View: Setup ─────────────────────────────────────────────────────────
@@ -222,7 +288,6 @@
       </div>
     `);
 
-    // Bind
     document.getElementById("golfBackHome")?.addEventListener("click", renderGolfHome);
     document.getElementById("golfAddPlayer")?.addEventListener("click", addPlayerRow);
     document.getElementById("golfConfirmStart")?.addEventListener("click", confirmStartRound);
@@ -230,7 +295,7 @@
       btn.addEventListener("click", () => addPlayerByName(btn.dataset.name));
     });
 
-    addPlayerRow(); // start with 1 empty row
+    addPlayerRow();
   }
 
   function addPlayerRow(prefill = "") {
@@ -253,12 +318,8 @@
   function addPlayerByName(name) {
     const list = document.getElementById("golfPlayerList");
     if (!list) return;
-    // If there's an empty input, fill it first
     const empties = [...list.querySelectorAll(".golf-player-input")].filter(i => !i.value.trim());
-    if (empties.length) {
-      empties[0].value = name;
-      return;
-    }
+    if (empties.length) { empties[0].value = name; return; }
     addPlayerRow(name);
   }
 
@@ -274,7 +335,6 @@
     const unique = [...new Set(names)];
     if (unique.length !== names.length) { alert("Player names must be unique."); return; }
 
-    // Save new regulars
     const known = new Set(_state.regulars);
     for (const n of unique) {
       if (!known.has(n)) await saveRegular(n);
@@ -286,11 +346,11 @@
     const roundId = await createRound(courseId, course.name, course.par, unique);
     if (!roundId) { alert("Failed to create round. Check Firebase."); return; }
 
-    _state.roundId    = roundId;
+    _state.roundId     = roundId;
     _state.playerNames = unique;
     _state.selectedCourse = course;
     _state.currentHole = 0;
-    _state.roundData  = {
+    _state.roundData   = {
       courseId, courseName: course.name,
       holePars: course.par, players: unique,
       scores: Object.fromEntries(unique.map(n => [n, { holes: new Array(course.par.length).fill(null) }])),
@@ -304,32 +364,22 @@
   function renderScoring() {
     _state.view = "scoring";
     const { roundData, currentHole } = _state;
-    const pars      = roundData.holePars;
-    const players   = roundData.players;
-    const holeNum   = currentHole + 1;
-    const par       = pars[currentHole];
+    const pars       = roundData.holePars;
+    const players    = roundData.players;
+    const holeNum    = currentHole + 1;
+    const par        = pars[currentHole];
     const totalHoles = pars.length;
-    const isLast    = currentHole === totalHoles - 1;
+    const isLast     = currentHole === totalHoles - 1;
 
-    // Init draft scores to saved score or par
     _state.draftScores = {};
     players.forEach(p => {
       const saved = roundData.scores[p]?.holes?.[currentHole];
       _state.draftScores[p] = (typeof saved === "number" && saved > 0) ? saved : par;
     });
 
-    // Running totals per player
-    function runningTotal(playerName) {
-      const holes = roundData.scores[playerName]?.holes || [];
-      return totalVsPar(holes, pars);
-    }
-
     function playerRows() {
       return players.map(p => {
         const score = _state.draftScores[p];
-        const { diff, played } = runningTotal(p);
-        const vp = played > 0 ? vsParLabel(diff + score - par, par + (diff)) : vsParLabel(score, par);
-        // Simpler: show running total including this hole's draft
         const allHoles = [...(roundData.scores[p]?.holes || [])];
         allHoles[currentHole] = score;
         const rt = totalVsPar(allHoles, pars);
@@ -375,7 +425,6 @@
       </div>
     `);
 
-    // Stepper buttons
     document.querySelectorAll(".golf-step-btn").forEach(btn => {
       btn.addEventListener("click", () => {
         const p = btn.dataset.player;
@@ -416,13 +465,11 @@
       const totalHoles = roundData.holePars.length;
       const isComplete = targetHole >= totalHoles;
 
-      // Persist scores to local state immediately
       roundData.players.forEach(p => {
         if (!roundData.scores[p]) roundData.scores[p] = { holes: [] };
         roundData.scores[p].holes[currentHole] = draftScores[p];
       });
 
-      // Write to Firebase
       await submitHoleScores(roundId, currentHole, draftScores, Math.min(targetHole, totalHoles - 1), isComplete);
 
       if (isComplete) {
@@ -437,7 +484,6 @@
 
   async function handleEndRound() {
     const { roundId, currentHole, draftScores, roundData } = _state;
-    // Save last hole
     roundData.players.forEach(p => {
       roundData.scores[p].holes[currentHole] = draftScores[p];
     });
@@ -451,7 +497,6 @@
     const pars    = roundData.holePars;
     const players = roundData.players;
 
-    // Determine winner (lowest total)
     let winner = null, bestDiff = Infinity;
     players.forEach(p => {
       const { diff } = totalVsPar(roundData.scores[p]?.holes || [], pars);
@@ -492,7 +537,9 @@
 
     const rows = rounds.map((r, i) => {
       const date = new Date(r.startedAt).toLocaleDateString([], { month:"short", day:"numeric", year:"numeric" });
-      const statusBadge = r.status === "complete" ? `<span class="golf-badge-complete">Complete</span>` : `<span class="golf-badge-active">Active</span>`;
+      const statusBadge = r.status === "complete"
+        ? `<span class="golf-badge-complete">Complete</span>`
+        : `<span class="golf-badge-active">Active</span>`;
       const players = (r.players || []).join(", ");
       return `
         <div class="golf-history-row" data-idx="${i}">
@@ -548,28 +595,20 @@
       return;
     }
 
-    // Total rounds
     const totalRounds = completed.length;
-
-    // Hole-in-ones
     let holeInOnes = [];
-    // Hole averages vs par
-    const holeStats = {}; // holeIndex -> { totalDiff, count }
-    // Player stats
-    const playerStats = {}; // name -> { rounds, totalDiff, wins, holeInOnes }
-    // Best round
+    const holeStats = {};
+    const playerStats = {};
     let bestRound = null, bestDiff = Infinity;
 
     for (const r of completed) {
       const pars = r.holePars || [];
-      const winners = {};
       let roundBest = Infinity;
 
       for (const p of (r.players || [])) {
         const holes = r.scores?.[p]?.holes || [];
         if (!playerStats[p]) playerStats[p] = { rounds: 0, totalDiff: 0, wins: 0, holeInOnes: 0 };
         playerStats[p].rounds++;
-
         const { diff } = totalVsPar(holes, pars);
         playerStats[p].totalDiff += diff;
         if (diff < roundBest) roundBest = diff;
@@ -587,7 +626,6 @@
         });
       }
 
-      // Determine winner(s)
       for (const p of (r.players || [])) {
         const holes = r.scores?.[p]?.holes || [];
         const { diff } = totalVsPar(holes, pars);
@@ -598,13 +636,11 @@
       }
     }
 
-    // Hardest / easiest hole
     const holeEntries = Object.entries(holeStats).map(([hi, s]) => ({ hole: parseInt(hi)+1, avg: s.totalDiff / s.count }));
     holeEntries.sort((a,b) => b.avg - a.avg);
     const hardest = holeEntries[0];
     const easiest = holeEntries[holeEntries.length - 1];
 
-    // Player rows
     const playerRows = Object.entries(playerStats)
       .sort((a,b) => (a[1].totalDiff/a[1].rounds) - (b[1].totalDiff/b[1].rounds))
       .map(([name, s]) => {
@@ -628,26 +664,11 @@
         <div class="golf-header"><button class="golf-back" id="golfBackSt2">← Back</button><h2>📊 Putt Putt Stats</h2></div>
 
         <div class="golf-stat-cards">
-          <div class="golf-stat-card">
-            <div class="golf-stat-num">${totalRounds}</div>
-            <div class="golf-stat-label">Rounds Played</div>
-          </div>
-          <div class="golf-stat-card">
-            <div class="golf-stat-num">${holeInOnes.length}</div>
-            <div class="golf-stat-label">Hole-in-Ones</div>
-          </div>
-          ${hardest ? `<div class="golf-stat-card">
-            <div class="golf-stat-num">Hole ${hardest.hole}</div>
-            <div class="golf-stat-label">Hardest Hole (avg ${hardest.avg > 0 ? '+' : ''}${hardest.avg.toFixed(2)})</div>
-          </div>` : ""}
-          ${easiest ? `<div class="golf-stat-card">
-            <div class="golf-stat-num">Hole ${easiest.hole}</div>
-            <div class="golf-stat-label">Easiest Hole (avg ${easiest.avg > 0 ? '+' : ''}${easiest.avg.toFixed(2)})</div>
-          </div>` : ""}
-          ${bestRound ? `<div class="golf-stat-card">
-            <div class="golf-stat-num ${brVp?.cls}">${brVp?.text}</div>
-            <div class="golf-stat-label">Best Round — ${esc(bestRound.player)} on ${brDate}</div>
-          </div>` : ""}
+          <div class="golf-stat-card"><div class="golf-stat-num">${totalRounds}</div><div class="golf-stat-label">Rounds Played</div></div>
+          <div class="golf-stat-card"><div class="golf-stat-num">${holeInOnes.length}</div><div class="golf-stat-label">Hole-in-Ones</div></div>
+          ${hardest ? `<div class="golf-stat-card"><div class="golf-stat-num">Hole ${hardest.hole}</div><div class="golf-stat-label">Hardest Hole (avg ${hardest.avg > 0 ? '+' : ''}${hardest.avg.toFixed(2)})</div></div>` : ""}
+          ${easiest ? `<div class="golf-stat-card"><div class="golf-stat-num">Hole ${easiest.hole}</div><div class="golf-stat-label">Easiest Hole (avg ${easiest.avg > 0 ? '+' : ''}${easiest.avg.toFixed(2)})</div></div>` : ""}
+          ${bestRound ? `<div class="golf-stat-card"><div class="golf-stat-num ${brVp?.cls}">${brVp?.text}</div><div class="golf-stat-label">Best Round — ${esc(bestRound.player)} on ${brDate}</div></div>` : ""}
         </div>
 
         ${holeInOnes.length ? `
@@ -679,7 +700,6 @@
   function buildScorecardHTML(round) {
     const pars    = round.holePars || [];
     const players = round.players  || [];
-    const n       = pars.length;
     const totalPar = pars.reduce((a,b) => a+b, 0);
 
     const holeCells  = pars.map((_,i) => `<th>${i+1}</th>`).join("");
@@ -696,11 +716,7 @@
         const cls = d < 0 ? "golf-sc-under" : d > 0 ? "golf-sc-over" : "golf-sc-even";
         return `<td class="${cls}">${s}</td>`;
       }).join("");
-      return `<tr>
-        <td class="golf-sc-name">${esc(p)}</td>
-        ${cells}
-        <td class="golf-sc-total ${vp.cls}">${vp.text}</td>
-      </tr>`;
+      return `<tr><td class="golf-sc-name">${esc(p)}</td>${cells}<td class="golf-sc-total ${vp.cls}">${vp.text}</td></tr>`;
     }).join("");
 
     return `
@@ -719,94 +735,26 @@
     `;
   }
 
-  // ─── Admin: Course Manager ────────────────────────────────────────────────
+  // ─── Admin: Course Manager (legacy entry point from shop tab) ─────────────
   async function renderAdminGolf() {
-    const content = document.getElementById("content");
-    if (!content) return;
-
-    const [courses, regulars] = await Promise.all([loadCourses(), loadRegulars()]);
-
-    const courseList = courses.length
-      ? courses.map(c => `<div class="golf-admin-row">${esc(c.name)} (${c.holes} holes, par ${(c.par||[]).reduce((a,b)=>a+b,0)})</div>`).join("")
-      : `<div class="golf-admin-row golf-muted">No courses yet.</div>`;
-
-    const regularList = regulars.length
-      ? regulars.map(r => `
-          <div class="golf-admin-row golf-admin-regular">
-            <span>${esc(r)}</span>
-            <button class="golf-remove-regular" data-name="${esc(r)}">Remove</button>
-          </div>`).join("")
-      : `<div class="golf-admin-row golf-muted">No regulars saved yet.</div>`;
-
-    // Hole par inputs
-    const holeInputs = Array.from({length: 9}, (_,i) => `
-      <div class="golf-hole-input-row">
-        <label class="golf-label">Hole ${i+1} Par</label>
-        <input class="golf-input golf-par-input" type="number" min="1" max="9"
-          data-hole="${i}" value="2" />
-      </div>
-    `).join("");
-
-    content.innerHTML += `
-      <div class="golf-admin-section">
-        <h3 class="golf-section-title">⛳ Add Putt Putt Course</h3>
-        <div class="golf-field">
-          <label class="golf-label">Course Name</label>
-          <input class="golf-input" id="adminCourseName" type="text" maxlength="40" placeholder="e.g. THE Putt Shop" />
-        </div>
-        <div id="adminHoleInputs">${holeInputs}</div>
-        <button class="golf-btn golf-btn-primary" id="adminSaveCourse">Save Course</button>
-
-        <h3 class="golf-section-title" style="margin-top:24px;">📋 Existing Courses</h3>
-        ${courseList}
-
-        <h3 class="golf-section-title" style="margin-top:24px;">👥 Regulars</h3>
-        <div id="adminRegularsList">${regularList}</div>
-      </div>
-    `;
-
-    document.getElementById("adminSaveCourse")?.addEventListener("click", async () => {
-      const name = document.getElementById("adminCourseName")?.value.trim();
-      if (!name) { alert("Enter a course name."); return; }
-      const inputs = [...document.querySelectorAll(".golf-par-input")];
-      const pars = inputs.map(i => Math.max(1, parseInt(i.value, 10) || 2));
-      const btn = document.getElementById("adminSaveCourse");
-      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
-      await adminSaveCourse(name, pars);
-      alert(`Course "${name}" saved!`);
-      renderAdminGolf();
-    });
-
-    document.querySelectorAll(".golf-remove-regular").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const name = btn.dataset.name;
-        if (confirm(`Remove "${name}" from regulars?`)) {
-          await deleteRegular(name);
-          renderAdminGolf();
-        }
-      });
-    });
+    // Now just re-renders the golf home, which includes the admin panel for admin users
+    renderGolfHome();
   }
 
   // ─── Pi Scoreboard: Firebase Listener + TV Overlay ───────────────────────
   let _piUnsubscribe = null;
-  let _piOverlayState = "idle"; // idle | alert | scorecard | complete
 
   function initPiGolfListener() {
     const db = COL();
     if (!db) return;
     if (_piUnsubscribe) _piUnsubscribe();
 
-    // Listen for any active or recently completed round
     _piUnsubscribe = db.collection(ROUNDS_PATH)
       .where("status", "in", ["active", "complete"])
       .orderBy("startedAt", "desc")
       .limit(1)
       .onSnapshot(snap => {
-        if (snap.empty) {
-          hidePiGolfOverlay();
-          return;
-        }
+        if (snap.empty) { hidePiGolfOverlay(); return; }
         const round = { id: snap.docs[0].id, ...snap.docs[0].data() };
         handlePiRoundUpdate(round);
       }, () => {});
@@ -817,16 +765,10 @@
 
   function handlePiRoundUpdate(round) {
     const overlay = document.getElementById("piGolfOverlay");
-    if (!overlay) {
-      buildPiGolfOverlay();
-      return handlePiRoundUpdate(round);
-    }
+    if (!overlay) { buildPiGolfOverlay(); return handlePiRoundUpdate(round); }
 
     const isNew = round.id !== _lastRoundId;
-    if (isNew) {
-      _lastRoundId = round.id;
-      _alertShown  = false;
-    }
+    if (isNew) { _lastRoundId = round.id; _alertShown = false; }
 
     if (!_alertShown && round.status === "active") {
       _alertShown = true;
@@ -835,11 +777,7 @@
       return;
     }
 
-    if (round.status === "complete") {
-      showPiWinner(round);
-      return;
-    }
-
+    if (round.status === "complete") { showPiWinner(round); return; }
     showPiScorecard(round);
   }
 
@@ -910,7 +848,6 @@
   function buildPiScorecardHTML(round, embedded = false) {
     const pars    = round.holePars || [];
     const players = round.players  || [];
-    const n       = pars.length;
     const totalPar = pars.reduce((a,b) => a+b, 0);
 
     const holeCells = pars.map((_,i) => `<th>${i+1}</th>`).join("");
@@ -927,11 +864,7 @@
         const cls = d < 0 ? "pi-sc-under" : d > 0 ? "pi-sc-over" : "pi-sc-even";
         return `<td class="${cls}">${s}</td>`;
       }).join("");
-      return `<tr>
-        <td class="pi-sc-name">${esc(p)}</td>
-        ${cells}
-        <td class="pi-sc-total ${vp.cls}">${vp.text}</td>
-      </tr>`;
+      return `<tr><td class="pi-sc-name">${esc(p)}</td>${cells}<td class="pi-sc-total ${vp.cls}">${vp.text}</td></tr>`;
     }).join("");
 
     const closeBtn = !embedded ? `<button class="pi-golf-close" id="piGolfClose">✕</button>` : "";
@@ -959,15 +892,8 @@
   }
 
   // ─── Entry Points ─────────────────────────────────────────────────────────
-  window.renderGolf      = renderGolfHome;
-  window.renderAdminGolf = renderAdminGolf;
+  window.renderGolf         = renderGolfHome;
+  window.renderAdminGolf    = renderAdminGolf;
   window.initPiGolfListener = initPiGolfListener;
-
-  // Auto-init Pi listener if we're on the Pi scoreboard
-  document.addEventListener("DOMContentLoaded", () => {
-    if (document.getElementById("piScoreboard")) {
-      // Pi will call initPiGolfListener() after Firebase is ready
-    }
-  });
 
 })();
