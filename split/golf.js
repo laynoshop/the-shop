@@ -30,8 +30,9 @@
   }
 
   function totalVsPar(scores, pars) {
-    let played = 0, diff = 0;
-    scores.forEach((s, i) => {
+  let played = 0, diff = 0;
+  const safeScores = Array.isArray(scores) ? scores : Object.values(scores || {});
+  safeScores.forEach((s, i) => {
       if (typeof s === "number" && s > 0) {
         diff += s - (pars[i] || 0);
         played++;
