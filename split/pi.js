@@ -860,7 +860,9 @@
 
     // Sort players by current score (leader first)
     const ranked = players.map(p => {
-      const holes = round.scores?.[p]?.holes || [];
+      const holes = Array.isArray(round.scores?.[p]?.holes)
+  ? round.scores[p].holes
+  : Object.values(round.scores?.[p]?.holes || {});
       const { diff, played } = totalVsPar(holes);
       return { p, holes, diff, played };
     }).sort((a,b) => a.diff - b.diff);
