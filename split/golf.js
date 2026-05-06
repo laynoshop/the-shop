@@ -674,7 +674,14 @@
   // ─── View: Stats ──────────────────────────────────────────────────────────
   async function renderStats() {
     _state.view = "stats";
-    setContent(`<div class="golf-wrap"><div class="golf-notice">Crunching stats…</div></div>`);
+    setContent(`
+      <div class="golf-wrap">
+        <div class="golf-header"><button class="golf-back" id="golfBackStLoading">← Back</button><h2>📊 Putt Putt Stats</h2></div>
+        <div class="golf-notice">Crunching stats…</div>
+      </div>
+    `);
+    document.getElementById("golfBackStLoading")?.addEventListener("click", renderGolfHome);
+
     const rounds = await loadRounds(100);
     const completed = rounds.filter(r => r.status === "complete");
 
