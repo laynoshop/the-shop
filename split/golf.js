@@ -455,6 +455,10 @@
             : `<button class="golf-btn golf-btn-primary" id="golfNextHole">Next Hole →</button>`
           }
         </div>
+
+        <div class="golf-clubhouse-wrap">
+          <button class="golf-btn golf-btn-ghost" id="golfClubhouseBtn">🏠 Hit The Clubhouse</button>
+        </div>
       </div>
     `);
 
@@ -474,6 +478,31 @@
     document.getElementById("golfPrevHole")?.addEventListener("click", saveAndGoHole(currentHole - 1));
     document.getElementById("golfNextHole")?.addEventListener("click", saveAndGoHole(currentHole + 1));
     document.getElementById("golfEndRound")?.addEventListener("click", handleEndRound);
+    document.getElementById("golfClubhouseBtn")?.addEventListener("click", handleClubhouse);
+  }
+
+  // ─── Clubhouse: save current hole & exit to home (round stays active) ─────
+  async function handleClubhouse() {
+    const confirmed = confirm("Save your progress and head to the clubhouse?\n\nYour round will stay active — you can resume it from Prior Rounds.");
+    if (!confirmed) return;
+
+    const btn = document.getElementById("golfClubhouseBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+
+    const { roundId, currentHole, draftScores, roundData } = _state;
+    const totalHoles = roundData.holePars.length;
+
+    // Save current hole scores to Firebase, keep status active
+    roundData.players.forEach(p => {
+      if (!roundData.scores[p]) roundData.scores[p] = { holes: [] };
+      if (!Array.isArray(roundData.scores[p].holes)) {
+        roundData.scores[p].holes = normalizeHoles(roundData.scores[p].holes, totalHoles);
+      }
+      roundData.scores[p].holes[currentHole] = draftScores[p];
+    });
+
+    await submitHoleScores(roundId, currentHole, draftScores, currentHole, false);
+    renderGolfHome();
   }
 
   function updateRunningTotal(playerName) {
