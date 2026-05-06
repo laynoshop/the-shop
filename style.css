@@ -78,7 +78,7 @@ body::before {
   z-index: 0;
 }
 
-/* sweeping “stadium light” */
+/* sweeping "stadium light" */
 #login.loginScreen::after{
   content:"";
   position:absolute;
@@ -107,7 +107,7 @@ body::before {
   z-index: 1;
 }
 
-/* tunnel “hit” on unlock */
+/* tunnel "hit" on unlock */
 .loginUnlocking .days-since{
   animation: tunnelHit 320ms ease-out both;
 }
@@ -150,7 +150,7 @@ body::before {
   min-height: 100vh;
   display: flex;
 
-  /* ✅ FIX: stack “days-since” ABOVE the login card (not side-by-side) */
+  /* ✅ FIX: stack "days-since" ABOVE the login card (not side-by-side) */
   flex-direction: column;
 
   /* ✅ center the whole stack */
@@ -338,7 +338,7 @@ body::before {
   animation: daysFadeIn 500ms ease-out;
 }
 
-/* subtle sweep inside module (keeps it “alive” but not distracting) */
+/* subtle sweep inside module (keeps it "alive" but not distracting) */
 .days-since::after{
   content:"";
   position:absolute;
@@ -428,7 +428,7 @@ body.entryMode::before{
   filter: saturate(1.1);
 }
 
-/* Stop “float scroll” on Entry */
+/* Stop "float scroll" on Entry */
 body.entryMode{
   height: 100%;
   overflow: hidden;
@@ -513,7 +513,7 @@ body.entryMode{
   margin-bottom: 12px;
 }
 
-/* Hide the “Target: …” line without changing JS */
+/* Hide the "Target: …" line without changing JS */
 .countdownSub{ display:none; }
 
 /* ===== Beat-TTUN style layout using your existing 4 cdUnit elements ===== */
@@ -847,7 +847,7 @@ button {
   -webkit-backdrop-filter: blur(8px);
 }
 
-/* Left “accent edge” (defaults to scarlet) */
+/* Left "accent edge" (defaults to scarlet) */
 .game::before{
   content:"";
   position:absolute;
@@ -866,7 +866,7 @@ button {
 .game.statusPre::before{   background: rgba(245,158,11,0.80);  box-shadow: 0 0 16px var(--glowGold); }
 .game.statusFinal::before{ background: rgba(156,163,175,0.60); box-shadow: 0 0 16px var(--glowGray); }
 
-/* Optional: if you later add edge-direction classes, this wins (more “betting” vibe) */
+/* Optional: if you later add edge-direction classes, this wins (more "betting" vibe) */
 .game.edgeHome::before{ background: rgba(34,197,94,0.70); box-shadow: 0 0 18px var(--glowLive); }
 .game.edgeAway::before{ background: rgba(245,158,11,0.75); box-shadow: 0 0 18px var(--glowGold); }
 .game.edgeNone::before{ background: rgba(156,163,175,0.55); box-shadow: 0 0 16px var(--glowGray); }
@@ -920,7 +920,7 @@ button {
   margin-bottom: 10px;
 }
 
-/* Legacy “bubble” lines kept (in case other tabs still use them) */
+/* Legacy "bubble" lines kept (in case other tabs still use them) */
 .gameMetaTopLine {
   margin-top: -4px;
   margin-bottom: 8px;
@@ -1171,7 +1171,7 @@ button {
   z-index: 1000;
 }
 
-/* ✅ safe-area “behind” tabs so it doesn’t inflate the bar */
+/* ✅ safe-area "behind" tabs so it doesn't inflate the bar */
 .tabs::after{
   content:"";
   position:absolute;
@@ -1192,7 +1192,7 @@ button {
   /* underline anchor */
   position: relative;
 
-  /* ✅ fill the tabs bar (don’t re-define height here) */
+  /* ✅ fill the tabs bar (don't re-define height here) */
   height: 100%;
 
   /* ✅ tighter */
@@ -1472,7 +1472,7 @@ button {
   font-size: 15px;
 }
 
-/* ✅ separate safe-area “spacer” below the banner too */
+/* ✅ separate safe-area "spacer" below the banner too */
 .rivalryBanner::after{
   content:"";
   position:absolute;
@@ -1639,7 +1639,7 @@ button {
   white-space: nowrap;
 }
 
-/* Button row becomes “market tiles” */
+/* Button row becomes "market tiles" */
 .gpButtons{
   display:grid;
   grid-template-columns: 1fr 1fr;
@@ -1716,7 +1716,7 @@ button {
 }
 .gpPickLine:first-child{ border-top: none; }
 
-/* Save bar -> “Bet slip” */
+/* Save bar -> "Bet slip" */
 [data-gpsavecount="1"]{
   font-size: 12px;
   font-weight: 900;
@@ -1757,7 +1757,7 @@ button[data-gpsave="1"]{
   -webkit-backdrop-filter: blur(10px);
 }
 
-/* When no pending picks, visually “settled” */
+/* When no pending picks, visually "settled" */
 .game .gpSlipBar.isClean{
   background: rgba(0,0,0,0.18);
   box-shadow: 0 14px 30px rgba(0,0,0,0.40);
@@ -1943,3 +1943,711 @@ button[data-gpsave="1"]{
 .gpEveryoneBody { margin-top: 8px; }
 .gpPickLine { padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.08); }
 .gpPickLine:first-child { border-top: none; }
+
+/* =========================
+   THE PUTT SHOP — Golf Page Styles
+   ========================= */
+
+/* ── Shared vs-par colours ── */
+.vpar-under { color: #4ade80; }
+.vpar-over  { color: #f87171; }
+.vpar-even  { color: rgba(255,255,255,0.75); }
+
+/* ── Page wrapper ── */
+.golf-wrap {
+  padding: 14px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Page header row ── */
+.golf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.golf-header h2 {
+  font-size: 20px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.golf-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.golf-hole-badge {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(187,0,0,0.18);
+  border: 1px solid rgba(187,0,0,0.35);
+  color: #ffd9d9;
+}
+
+/* ── Back button ── */
+.golf-back {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 12px;
+  letter-spacing: 0.2px;
+}
+
+/* ── Buttons (primary / secondary / ghost / danger) ── */
+.golf-btn {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+  transition: transform .14s ease, filter .14s ease, box-shadow .14s ease;
+  text-align: center;
+}
+
+.golf-btn:active {
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(1.08);
+}
+
+.golf-btn-primary {
+  background:
+    radial-gradient(600px 160px at 50% -40px, rgba(187,0,0,0.45), transparent 65%),
+    rgba(187,0,0,0.85);
+  border-color: rgba(187,0,0,0.55);
+  color: #fff;
+  box-shadow:
+    0 16px 36px rgba(187,0,0,0.28),
+    0 14px 26px rgba(0,0,0,0.40);
+}
+
+.golf-btn-secondary {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.90);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+}
+
+.golf-btn-ghost {
+  background: transparent;
+  border-color: rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.75);
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.golf-btn-danger {
+  background: rgba(239,68,68,0.20);
+  border-color: rgba(239,68,68,0.45);
+  color: #fca5a5;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.30);
+}
+
+/* ── Home button group ── */
+.golf-home-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Form fields ── */
+.golf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.golf-label {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+}
+
+.golf-input {
+  width: 100%;
+  font-size: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.golf-input:focus {
+  border-color: rgba(187,0,0,0.50);
+  box-shadow: 0 0 0 3px rgba(187,0,0,0.14);
+}
+
+.golf-select {
+  width: 100%;
+  font-size: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(30,30,30,0.95);
+  color: #fff;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* ── Player list ── */
+.golf-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.golf-player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.golf-player-row .golf-input {
+  flex: 1;
+}
+
+.golf-remove-player {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.30);
+  color: #fca5a5;
+  font-size: 14px;
+  font-weight: 900;
+  padding: 10px 12px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ── Regulars chips ── */
+.golf-regulars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.golf-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.88);
+  letter-spacing: 0.2px;
+  transition: background .14s ease, border-color .14s ease;
+}
+
+.golf-chip:active {
+  background: rgba(187,0,0,0.22);
+  border-color: rgba(187,0,0,0.45);
+}
+
+/* ── Par line above scoring ── */
+.golf-par-line {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+  padding: 8px 0 2px;
+}
+
+/* ── Live scoring rows ── */
+.golf-score-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.golf-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background:
+    radial-gradient(600px 140px at 50% -40px, rgba(255,255,255,0.04), transparent 60%),
+    rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+}
+
+.golf-score-name {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Stepper ── */
+.golf-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.golf-step-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.80);
+  font-size: 16px;
+  font-weight: 900;
+  padding: 10px 14px;
+  line-height: 1;
+  transition: background .12s ease, color .12s ease;
+}
+
+.golf-step-btn:active {
+  background: rgba(187,0,0,0.25);
+  color: #fff;
+}
+
+.golf-step-val {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  min-width: 36px;
+  text-align: center;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Running total (vs par) ── */
+.golf-score-total {
+  font-size: 16px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ── Scoring nav (Prev / Next / End) ── */
+.golf-scoring-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.golf-scoring-nav .golf-btn {
+  flex: 1;
+}
+
+/* ── Winner banner ── */
+.golf-winner-banner {
+  text-align: center;
+  padding: 28px 16px 22px;
+  border-radius: 22px;
+  border: 1px solid rgba(187,0,0,0.35);
+  background:
+    radial-gradient(800px 300px at 50% -20px, rgba(187,0,0,0.35), transparent 60%),
+    rgba(0,0,0,0.30);
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.55),
+    0 0 30px rgba(187,0,0,0.30);
+}
+
+.golf-trophy {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 18px rgba(245,158,11,0.45));
+}
+
+.golf-winner-name {
+  font-size: 26px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 24px rgba(187,0,0,0.35);
+}
+
+.golf-winner-score {
+  font-size: 20px;
+  font-weight: 1000;
+  margin-top: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Scorecard ── */
+.golf-scorecard-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.golf-sc-course {
+  font-size: 15px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  opacity: 0.85;
+  padding: 0 2px;
+}
+
+.golf-sc-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+}
+
+.golf-scorecard {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.golf-scorecard thead tr:first-child th {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  text-align: center;
+}
+
+.golf-scorecard thead tr:first-child th:first-child {
+  text-align: left;
+}
+
+.golf-sc-par-row td {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.50);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: center;
+}
+
+.golf-sc-par-row td:first-child {
+  text-align: left;
+}
+
+.golf-scorecard tbody tr td {
+  padding: 10px 12px;
+  text-align: center;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.golf-scorecard tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.golf-sc-name {
+  text-align: left !important;
+  font-weight: 900;
+  font-size: 14px;
+  color: rgba(255,255,255,0.92);
+}
+
+.golf-sc-par   { color: rgba(255,255,255,0.50); }
+.golf-sc-empty { color: rgba(255,255,255,0.25); }
+.golf-sc-under { color: #4ade80; font-weight: 900; }
+.golf-sc-over  { color: #f87171; font-weight: 900; }
+.golf-sc-even  { color: rgba(255,255,255,0.80); }
+
+.golf-sc-total {
+  font-weight: 1000;
+  font-size: 14px;
+}
+
+/* ── History list ── */
+.golf-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.golf-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.22);
+  cursor: pointer;
+  transition: background .14s ease, border-color .14s ease;
+}
+
+.golf-history-row:active {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.14);
+}
+
+.golf-history-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.golf-history-course {
+  font-size: 16px;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.golf-history-meta {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.golf-history-right {
+  flex-shrink: 0;
+}
+
+.golf-badge-complete {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.28);
+  color: #86efac;
+}
+
+.golf-badge-active {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(245,158,11,0.15);
+  border: 1px solid rgba(245,158,11,0.28);
+  color: #fde68a;
+}
+
+/* ── Stats ── */
+.golf-stat-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.golf-stat-card {
+  padding: 16px 14px;
+  border-radius: 18px;
+  background:
+    radial-gradient(500px 140px at 50% -30px, rgba(187,0,0,0.14), transparent 65%),
+    rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.golf-stat-num {
+  font-size: 26px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  line-height: 1;
+}
+
+.golf-stat-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.3;
+}
+
+/* ── Hole-in-one list ── */
+.golf-hio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.golf-hio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.18);
+}
+
+.golf-hio-player {
+  font-weight: 900;
+  font-size: 14px;
+  flex: 1;
+}
+
+.golf-hio-hole {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fde68a;
+}
+
+.golf-hio-date {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 600;
+}
+
+/* ── Leaderboard table ── */
+.golf-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+}
+
+.golf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.golf-table thead th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.50);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  text-align: left;
+}
+
+.golf-table tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-weight: 700;
+  color: rgba(255,255,255,0.88);
+}
+
+.golf-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Section titles ── */
+.golf-section-title {
+  font-size: 14px;
+  font-weight: 1000;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.60);
+  margin: 0 0 2px;
+}
+
+/* ── Admin section ── */
+.golf-admin-section {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.golf-admin-row {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.80);
+}
+
+.golf-admin-regular {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.golf-hole-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.golf-hole-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.golf-hole-input-row .golf-label {
+  font-size: 11px;
+}
+
+.golf-hole-input-row .golf-input {
+  padding: 8px 10px;
+  font-size: 15px;
+  text-align: center;
+}
+
+/* ── Misc ── */
+.golf-muted {
+  color: rgba(255,255,255,0.45);
+  font-size: 13px;
+}
+
+.golf-notice {
+  text-align: center;
+  padding: 32px 16px;
+  color: rgba(255,255,255,0.55);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.golf-start-round {
+  margin-top: 4px;
+}
