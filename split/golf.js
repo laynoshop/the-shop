@@ -734,7 +734,7 @@
       let roundBest = Infinity;
 
       for (const p of (r.players || [])) {
-        // FIX: normalize before forEach so Firebase objects don't crash
+        // normalize before forEach so Firebase objects don't crash
         const holes = normalizeHoles(r.scores?.[p]?.holes, pars.length);
         if (!playerStats[p]) playerStats[p] = { rounds: 0, totalDiff: 0, wins: 0, holeInOnes: 0 };
         playerStats[p].rounds++;
@@ -756,7 +756,7 @@
       }
 
       for (const p of (r.players || [])) {
-        // FIX: normalize here too for the wins/bestRound pass
+        // normalize here too for the wins/bestRound pass
         const holes = normalizeHoles(r.scores?.[p]?.holes, pars.length);
         const { diff } = totalVsPar(holes, pars);
         if (diff === roundBest) {
@@ -836,7 +836,7 @@
     const parCells   = pars.map(p => `<td class="golf-sc-par">${p}</td>`).join("");
 
     const playerRows = players.map(p => {
-      const holes = round.scores?.[p]?.holes || [];
+      const holes = normalizeHoles(round.scores?.[p]?.holes, pars.length);
       const { diff } = totalVsPar(holes, pars);
       const vp = vsParLabel(diff, 0);
       const cells = pars.map((_,i) => {
@@ -955,7 +955,7 @@
     const players = round.players  || [];
     let winner = null, bestDiff = Infinity;
     players.forEach(p => {
-      const { diff } = totalVsPar(round.scores?.[p]?.holes || [], pars);
+      const { diff } = totalVsPar(normalizeHoles(round.scores?.[p]?.holes, pars.length), pars);
       if (diff < bestDiff) { bestDiff = diff; winner = p; }
     });
     const vp = vsParLabel(bestDiff, 0);
@@ -983,7 +983,7 @@
     const parCells  = pars.map(p => `<td class="pi-sc-par">${p}</td>`).join("");
 
     const playerRows = players.map(p => {
-      const holes = round.scores?.[p]?.holes || [];
+      const holes = normalizeHoles(round.scores?.[p]?.holes, pars.length);
       const { diff, played } = totalVsPar(holes, pars);
       const vp = played > 0 ? vsParLabel(diff, 0) : { text: "—", cls: "" };
       const cells = pars.map((_,i) => {
