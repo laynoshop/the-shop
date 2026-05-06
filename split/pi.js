@@ -133,6 +133,7 @@
     _intervals.forEach(id => clearInterval(id));
     _intervals = [];
     document.removeEventListener("keydown", _handleEsc);
+    if (window._puttPuttUnsub) { window._puttPuttUnsub(); window._puttPuttUnsub = null; }
     const overlay = document.getElementById("piScoreboard");
     if (overlay) { overlay.style.display = "none"; overlay.innerHTML = ""; }
     if (typeof window.showEntryScreen === "function") window.showEntryScreen();
@@ -804,7 +805,7 @@
   }
 
   // ----------------------------------------------------------------
-  // Putt Putt — load active/latest round from Firebase
+  // Putt Putt — real-time Firebase listener
   // ----------------------------------------------------------------
   async function _renderPuttPutt() {
     const el = document.getElementById("piScoresContent");
@@ -818,26 +819,25 @@
     const db = window.firebase && firebase.apps && firebase.apps.length ? firebase.firestore() : null;
     if (!db) { el.innerHTML = `<div class="piPuttNoRound">Firebase not available — open the Shop App to start a round.</div>`; return; }
 
-    try {
-      // Wait up to 6s for Firebase auth to be ready before querying Firestore
-      await new Promise((resolve) => {
-        if (!window.firebase || !firebase.auth) { resolve(); return; }
-        const unsub = firebase.auth().onAuthStateChanged(user => { unsub(); resolve(user); });
-        setTimeout(resolve, 6000);
+    // Wait up to 6s for Firebase auth to be ready before attaching listener
+    await new Promise((resolve) => {
+      if (!window.firebase || !firebase.auth) { resolve(); return; }
+      const unsub = firebase.auth().onAuthStateChanged(user => { unsub(); resolve(user); });
+      setTimeout(resolve, 6000);
+    });
+
+    // Real-time listener — updates scorecard automatically as holes are scored on the phone
+    if (window._puttPuttUnsub) { window._puttPuttUnsub(); window._puttPuttUnsub = null; }
+    window._puttPuttUnsub = db.collection("putt_rounds")
+      .orderBy("startedAt", "desc")
+      .limit(1)
+      .onSnapshot(snap => {
+        if (snap.empty) { el.innerHTML = `<div class="piPuttNoRound">No rounds found. Start one in the Shop App!</div>`; return; }
+        const round = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        el.innerHTML = `<div class="piPuttWrap">${_buildPiPuttScorecardHTML(round)}</div>`;
+      }, err => {
+        el.innerHTML = `<div class="piPuttNoRound">Could not load round data.</div>`;
       });
-
-      const snap = await db.collection("putt_rounds")
-        .orderBy("startedAt", "desc")
-        .limit(1)
-        .get();
-
-      if (snap.empty) { el.innerHTML = `<div class="piPuttNoRound">No rounds found. Start one in the Shop App!</div>`; return; }
-
-      const round = { id: snap.docs[0].id, ...snap.docs[0].data() };
-      el.innerHTML = `<div class="piPuttWrap">${_buildPiPuttScorecardHTML(round)}</div>`;
-    } catch(e) {
-      el.innerHTML = `<div class="piPuttNoRound">Could not load round data.</div>`;
-    }
   }
 
   function _buildPiPuttScorecardHTML(round) {
