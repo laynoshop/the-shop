@@ -18,6 +18,10 @@
   const LEAF_URL   = "https://raw.githubusercontent.com/laynoshop/the-shop/main/buckeye-leaf.png";
   const BLOCK_O    = "https://raw.githubusercontent.com/laynoshop/the-shop/main/buckeye-O.png";
 
+  // Marysville, OH coords for weather
+  const WEATHER_LAT = 40.2365;
+  const WEATHER_LON = -83.3671;
+
   // Shop Teams — the crews teams, matched against ESPN display/short/location names
   const SHOP_TEAMS = [
     "Ohio State Buckeyes",
@@ -37,9 +41,6 @@
   const PLAYOFF_LEAGUES = new Set(["nhl", "nba", "nfl", "mlb"]);
 
   // Per-league lookahead windows for Shop Teams (days ahead to search when no game today)
-  // CFB/NFL: show next weekend's game starting Tuesday morning (lookahead up to 6 days)
-  // NHL/NBA/MLB: 3 days ahead
-  // Others: 3 days ahead
   const LOOKAHEAD_DAYS = {
     cfb:   6,
     nfl:   6,
@@ -48,7 +49,7 @@
     mlb:   3,
     ncaam: 3,
     mls:   3,
-    pga:   0, // PGA handled separately
+    pga:   0,
     ufc:   3,
   };
 
@@ -64,7 +65,6 @@
     { key: "ufc",   label: "🥊 UFC",    url: d => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${d}&limit=50` },
   ];
 
-  // Summary endpoints for odds hydration (keyed by league key)
   const SUMMARY_URLS = {
     cfb:   id => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${id}`,
     nfl:   id => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${id}`,
@@ -77,7 +77,6 @@
     ufc:   id => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/summary?event=${id}`,
   };
 
-  // League badge colors
   const LEAGUE_COLORS = {
     cfb:   "#bb0000",
     nfl:   "#013369",
@@ -91,8 +90,8 @@
   };
 
   let _intervals    = [];
-  let _activeLeague = "shop"; // default to Shop Teams on load
-  let _rightPanel   = "youtube"; // "youtube" | "top25"
+  let _activeLeague = "shop";
+  let _rightPanel   = "youtube";
 
   // ----------------------------------------------------------------
   // Guard
@@ -122,6 +121,8 @@
     _intervals.push(setInterval(_renderScores, REFRESH_SCORES_MS));
     _loadRightPanel();
     _intervals.push(setInterval(_loadRightPanel, REFRESH_NEWS_MS));
+    _loadWeather();
+    _intervals.push(setInterval(_loadWeather, 10 * 60 * 1000));
   }
   window.launchPiScoreboard = launchPiScoreboard;
 
@@ -139,6 +140,55 @@
   window.exitPiScoreboard = exitPiScoreboard;
 
   function _handleEsc(e) { if (e.key === "Escape") exitPiScoreboard(); }
+
+  // ----------------------------------------------------------------
+  // Weather
+  // ----------------------------------------------------------------
+  async function _loadWeather() {
+    const el = document.getElementById("piWeatherWidget");
+    if (!el) return;
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LAT}&longitude=${WEATHER_LON}&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&forecast_days=1&timezone=America%2FNew_York`;
+      const data = await fetch(url).then(r => r.ok ? r.json() : Promise.reject());
+      const cur  = data?.current || {};
+      const day  = data?.daily   || {};
+      const temp    = Math.round(cur.temperature_2m ?? 0);
+      const feels   = Math.round(cur.apparent_temperature ?? temp);
+      const wind    = Math.round(cur.windspeed_10m ?? 0);
+      const code    = Number(cur.weathercode ?? 0);
+      const hiTemp  = Math.round((day.temperature_2m_max || [])[0] ?? temp);
+      const loTemp  = Math.round((day.temperature_2m_min || [])[0] ?? temp);
+      const { emoji, label, bg } = _weatherInfo(code, new Date().getHours());
+      el.innerHTML = `
+        <div class="piWeatherInner" style="background:${bg};">
+          <div class="piWeatherEmoji">${emoji}</div>
+          <div class="piWeatherData">
+            <div class="piWeatherTemp">${temp}°<span class="piWeatherFeels">Feels ${feels}°</span></div>
+            <div class="piWeatherLabel">${label}</div>
+            <div class="piWeatherMeta">Hi ${hiTemp}° · Lo ${loTemp}° · 💨 ${wind} mph</div>
+          </div>
+        </div>`;
+    } catch {
+      el.innerHTML = `<div class="piWeatherInner"><div class="piWeatherEmoji">🌡️</div><div class="piWeatherData"><div class="piWeatherTemp">--°</div><div class="piWeatherLabel">Weather unavailable</div></div></div>`;
+    }
+  }
+
+  function _weatherInfo(code, hour) {
+    const isNight = hour < 6 || hour >= 20;
+    // WMO weather codes → emoji + label + subtle bg tint
+    if (code === 0)                      return { emoji: isNight ? "🌙" : "☀️",  label: isNight ? "Clear Night"    : "Sunny",           bg: isNight ? "rgba(20,10,50,0.45)" : "rgba(255,180,0,0.12)" };
+    if (code === 1)                      return { emoji: isNight ? "🌙" : "🌤️",  label: "Mainly Clear",                                  bg: "rgba(255,180,0,0.09)" };
+    if (code === 2)                      return { emoji: "⛅",                    label: "Partly Cloudy",                                 bg: "rgba(180,180,180,0.1)" };
+    if (code === 3)                      return { emoji: "☁️",                    label: "Overcast",                                      bg: "rgba(120,120,120,0.12)" };
+    if (code >= 45 && code <= 48)        return { emoji: "🌫️",                   label: "Foggy",                                         bg: "rgba(160,160,160,0.15)" };
+    if (code >= 51 && code <= 57)        return { emoji: "🌦️",                   label: "Drizzle",                                       bg: "rgba(80,120,200,0.12)" };
+    if (code >= 61 && code <= 67)        return { emoji: "🌧️",                   label: code >= 65 ? "Heavy Rain"    : "Rain",           bg: "rgba(40,80,180,0.15)" };
+    if (code >= 71 && code <= 77)        return { emoji: "❄️",                   label: code >= 75 ? "Heavy Snow"    : "Snow",           bg: "rgba(180,220,255,0.12)" };
+    if (code >= 80 && code <= 82)        return { emoji: "🌦️",                   label: code === 82 ? "Heavy Showers" : "Rain Showers",  bg: "rgba(40,80,180,0.15)" };
+    if (code >= 85 && code <= 86)        return { emoji: "🌨️",                   label: "Snow Showers",                                  bg: "rgba(180,220,255,0.12)" };
+    if (code >= 95 && code <= 99)        return { emoji: "⛈️",                   label: "Thunderstorm",                                  bg: "rgba(80,0,120,0.18)" };
+    return { emoji: "🌡️", label: "Unknown", bg: "rgba(0,0,0,0.1)" };
+  }
 
   // ----------------------------------------------------------------
   // Shell HTML
@@ -159,7 +209,7 @@
   #piWrap {
     display: grid;
     grid-template-rows: auto auto 1fr auto;
-    grid-template-columns: 1fr 420px;
+    grid-template-columns: 1fr 630px;
     height: 100vh;
     height: 100dvh;
     background: #0d0000;
@@ -182,6 +232,7 @@
   }
   #piWrap > * { position: relative; z-index: 1; }
 
+  /* ---- Header ---- */
   #piHeader {
     grid-column: 1 / -1;
     display: flex;
@@ -213,26 +264,106 @@
     text-shadow: none;
     margin-top: 2px;
   }
-  #piCountdown { display: flex; align-items: center; gap: 4px; }
-  .piCdLabel { font-size: clamp(0.6rem, 1.2vw, 0.8rem); color: #ffccaa; font-weight: 600; letter-spacing: 0.04em; margin-right: 6px; white-space: nowrap; }
-  .piCdBlock { text-align: center; min-width: 38px; }
-  .piCdNum { display: block; font-size: clamp(0.9rem, 2vw, 1.4rem); font-weight: 900; color: #fff; line-height: 1; text-shadow: 0 0 8px rgba(255,150,0,0.6); }
-  .piCdSub { display: block; font-size: 0.5rem; letter-spacing: 0.1em; color: #ffaa88; text-transform: uppercase; }
-  .piCdColon { font-size: clamp(0.9rem, 1.8vw, 1.3rem); color: #ff8844; align-self: flex-start; margin-top: 1px; padding: 0 1px; }
+
+  /* ---- Countdown — sexied up ---- */
+  #piCountdown {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,150,0,0.3);
+    border-radius: 12px;
+    padding: 6px 14px;
+    box-shadow: 0 0 18px rgba(255,100,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .piCdLabel {
+    font-size: clamp(0.85rem, 1.6vw, 1.15rem);
+    color: #ffddaa;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+    white-space: nowrap;
+    text-shadow: 0 0 8px rgba(255,160,0,0.5);
+    text-transform: uppercase;
+  }
+  .piCdBlock { text-align: center; min-width: 48px; }
+  .piCdNum {
+    display: block;
+    font-size: clamp(1.4rem, 3vw, 2.2rem);
+    font-weight: 900;
+    color: #fff;
+    line-height: 1;
+    text-shadow: 0 0 14px rgba(255,120,0,0.8), 0 0 30px rgba(255,80,0,0.4);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .piCdSub {
+    display: block;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    color: #ff9966;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+  .piCdColon {
+    font-size: clamp(1.3rem, 2.5vw, 2rem);
+    color: #ff7733;
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 0 2px;
+    text-shadow: 0 0 10px rgba(255,100,0,0.7);
+    animation: piColonBlink 1s step-start infinite;
+  }
+  @keyframes piColonBlink { 0%,49%{ opacity:1; } 50%,100%{ opacity:0.3; } }
+
+  /* ---- Weather widget ---- */
+  #piWeatherWidget {
+    flex-shrink: 0;
+    min-width: 160px;
+  }
+  .piWeatherInner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 10px;
+    padding: 6px 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(4px);
+  }
+  .piWeatherEmoji { font-size: 2.2rem; line-height: 1; }
+  .piWeatherData { display: flex; flex-direction: column; gap: 1px; }
+  .piWeatherTemp {
+    font-size: clamp(1.1rem, 2vw, 1.5rem);
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 8px rgba(255,200,100,0.5);
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .piWeatherFeels { font-size: 0.7em; color: #ffddaa; font-weight: 600; }
+  .piWeatherLabel { font-size: clamp(0.72rem, 1.2vw, 0.9rem); font-weight: 700; color: #ffeedd; letter-spacing: 0.04em; }
+  .piWeatherMeta  { font-size: clamp(0.62rem, 1vw, 0.75rem); color: #cc9977; letter-spacing: 0.03em; }
+
+  /* ---- Header right cluster ---- */
+  #piHeaderRight { display: flex; align-items: center; gap: 12px; }
   #piCloseBtn {
     background: rgba(0,0,0,0.35);
     border: 1px solid rgba(255,255,255,0.25);
     color: #fff;
     border-radius: 6px;
     padding: 6px 14px;
-    font-size: 0.82rem;
+    font-size: 0.9rem;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.2s;
+    flex-shrink: 0;
   }
   #piCloseBtn:hover { background: rgba(0,0,0,0.6); }
 
+  /* ---- League bar ---- */
   #piLeagueBar {
     grid-column: 1 / -1;
     display: flex;
@@ -250,8 +381,8 @@
     border: 1px solid rgba(255,255,255,0.12);
     color: #ccc;
     border-radius: 20px;
-    padding: 4px 14px;
-    font-size: clamp(0.65rem, 1.3vw, 0.82rem);
+    padding: 6px 20px;
+    font-size: clamp(0.9rem, 1.6vw, 1.2rem);
     font-weight: 700;
     cursor: pointer;
     letter-spacing: 0.05em;
@@ -263,6 +394,7 @@
   .piLeagueBtn.active { background: linear-gradient(135deg, #bb0000, #880000); color: #fff; border-color: #cc0000; box-shadow: 0 0 10px rgba(200,0,0,0.5); }
   .piShopTeamsBtn.active { background: linear-gradient(135deg, #a07800, #7a5500); border-color: #c89a00; box-shadow: 0 0 10px rgba(200,160,0,0.5); }
 
+  /* ---- Scores panel — 2-column grid ---- */
   #piScoresPanel {
     overflow-y: auto;
     padding: 12px 14px;
@@ -273,15 +405,35 @@
   #piScoresPanel::-webkit-scrollbar { width: 4px; }
   #piScoresPanel::-webkit-scrollbar-track { background: #0d0000; }
   #piScoresPanel::-webkit-scrollbar-thumb { background: #440000; border-radius: 2px; }
+  #piScoresContent {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-items: start;
+  }
+  /* Panel head spans full width */
+  .piPanelHeadWrapper { grid-column: 1 / -1; }
 
-  #piRightPanel { display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid rgba(180,0,0,0.2); }
-  #piRightToggleBar { display: flex; gap: 0; background: rgba(0,0,0,0.5); border-bottom: 1px solid rgba(180,0,0,0.25); flex-shrink: 0; }
+  /* ---- Right panel ---- */
+  #piRightPanel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-left: 1px solid rgba(180,0,0,0.2);
+  }
+  #piRightToggleBar {
+    display: flex;
+    gap: 0;
+    background: rgba(0,0,0,0.5);
+    border-bottom: 1px solid rgba(180,0,0,0.25);
+    flex-shrink: 0;
+  }
   .piRightToggleBtn {
     flex: 1;
     background: transparent;
     border: none;
     color: #999;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     padding: 7px 8px;
@@ -292,22 +444,50 @@
   }
   .piRightToggleBtn:hover { color: #fff; background: rgba(180,0,0,0.25); }
   .piRightToggleBtn.active { color: #ff4444; border-bottom-color: #cc0000; background: rgba(180,0,0,0.15); }
-  #piRightContent { flex: 1; overflow: hidden; position: relative; }
-  #piRightContent iframe { width: 100%; height: 100%; border: none; display: block; }
 
-  #piTop25List { padding: 10px 12px; overflow-y: auto; height: 100%; scrollbar-width: thin; scrollbar-color: #330000 #0d0000; }
-  #piTop25List::-webkit-scrollbar { width: 4px; }
-  #piTop25List::-webkit-scrollbar-track { background: #0d0000; }
-  #piTop25List::-webkit-scrollbar-thumb { background: #440000; border-radius: 2px; }
-  .piRankHead { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #bb0000; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid rgba(180,0,0,0.3); }
+  /* Right panel content area — YouTube only in top portion */
+  #piRightContent {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+    position: relative;
+  }
+  #piYoutubeSlot {
+    flex-shrink: 0;
+    width: 100%;
+    /* ~45% of right panel height = top portion only */
+    height: 42%;
+    position: relative;
+    background: #000;
+  }
+  #piYoutubeSlot iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+  #piRightBottom {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #330000 #0d0000;
+  }
+  #piRightBottom::-webkit-scrollbar { width: 4px; }
+  #piRightBottom::-webkit-scrollbar-track { background: #0d0000; }
+  #piRightBottom::-webkit-scrollbar-thumb { background: #440000; border-radius: 2px; }
+
+  /* Top 25 list */
+  #piTop25List { padding: 10px 12px; }
+  .piRankHead { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #bb0000; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid rgba(180,0,0,0.3); }
   .piRankRow { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 5px; margin-bottom: 3px; background: rgba(255,255,255,0.03); }
   .piRankRow:nth-child(odd) { background: rgba(255,255,255,0.05); }
-  .piRankNum { min-width: 22px; font-size: 0.8rem; font-weight: 900; color: #cc0000; text-align: right; }
-  .piRankTeam { flex: 1; font-size: 0.78rem; font-weight: 600; color: #e8e8e8; }
-  .piRankRecord { font-size: 0.68rem; color: #777; }
+  .piRankNum  { min-width: 22px; font-size: 1rem; font-weight: 900; color: #cc0000; text-align: right; }
+  .piRankTeam { flex: 1; font-size: 0.95rem; font-weight: 600; color: #e8e8e8; }
+  .piRankRecord { font-size: 0.82rem; color: #777; }
 
   .piPanelHead {
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -319,62 +499,81 @@
   }
   .piPanelHead.gold { color: #c8a000; border-bottom-color: rgba(200,160,0,0.3); text-shadow: 0 0 6px rgba(200,160,0,0.35); }
 
-  /* ---- Rich score cards ---- */
+  /* ---- Rich score cards — BIG fonts for TV ---- */
   .piShopCard {
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    padding: 9px 11px;
-    margin-bottom: 7px;
+    gap: 6px;
+    padding: 12px 14px;
+    margin-bottom: 0;
     background: rgba(255,255,255,0.04);
-    border-radius: 7px;
-    border-left: 3px solid #555;
+    border-radius: 9px;
+    border-left: 4px solid #555;
     pointer-events: none;
   }
-  .piShopCard.live  { border-left-color: #cc0000; background: rgba(180,0,0,0.09); }
-  .piShopCard.final { border-left-color: #444; }
-  .piShopCard.sched { border-left-color: rgba(0,140,0,0.7); }
+  .piShopCard.live    { border-left-color: #cc0000; background: rgba(180,0,0,0.09); }
+  .piShopCard.final   { border-left-color: #444; }
+  .piShopCard.sched   { border-left-color: rgba(0,140,0,0.7); }
   .piShopCard.upcoming { border-left-color: rgba(0,100,200,0.7); background: rgba(0,60,120,0.07); }
 
   .piShopCardTop { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .piShopLeagueBadge { font-size: 0.58rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 10px; color: #fff; flex-shrink: 0; }
-  .piShopStatusLabel { font-size: 0.68rem; font-weight: 700; color: #777; text-align: right; white-space: nowrap; }
-  .piShopStatusLabel.live { color: #ff4444; }
+  .piShopLeagueBadge {
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 10px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .piShopStatusLabel { font-size: 1rem; font-weight: 700; color: #999; text-align: right; white-space: nowrap; }
+  .piShopStatusLabel.live     { color: #ff4444; }
   .piShopStatusLabel.upcoming { color: #4499ff; }
 
-  .piShopTeamsRow { display: flex; flex-direction: column; gap: 2px; }
-  .piShopTeamLine { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .piShopTeamLineLeft { display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .piShopTeamLogo { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; border-radius: 2px; }
-  .piShopTeamNameFull { font-size: clamp(0.7rem, 1.4vw, 0.86rem); font-weight: 700; color: #eee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .piShopTeamsRow { display: flex; flex-direction: column; gap: 4px; }
+  .piShopTeamLine { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .piShopTeamLineLeft { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .piShopTeamLogo { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; border-radius: 3px; }
+  .piShopTeamNameFull {
+    font-size: clamp(1rem, 1.8vw, 1.35rem);
+    font-weight: 700;
+    color: #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .piShopTeamNameFull.fav { color: #ffcc66; }
-  .piShopTeamRecord { font-size: 0.62rem; color: #666; white-space: nowrap; flex-shrink: 0; }
-  .piShopTeamScore { font-size: clamp(0.8rem, 1.6vw, 1rem); font-weight: 900; color: #fff; min-width: 28px; text-align: right; flex-shrink: 0; }
+  .piShopTeamRecord { font-size: 0.85rem; color: #666; white-space: nowrap; flex-shrink: 0; }
+  .piShopTeamScore {
+    font-size: clamp(1.3rem, 2.5vw, 1.9rem);
+    font-weight: 900;
+    color: #fff;
+    min-width: 42px;
+    text-align: right;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 8px rgba(255,200,0,0.3);
+  }
 
   /* Playoff series badge */
-  .piSeriesLine {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 1px;
-    padding: 2px 4px;
-  }
+  .piSeriesLine { display: flex; align-items: center; gap: 6px; margin-top: 2px; padding: 2px 4px; }
   .piSeriesBadge {
-    font-size: 0.62rem;
+    font-size: 0.88rem;
     font-weight: 800;
     letter-spacing: 0.05em;
     color: #ffcc44;
     background: rgba(200,160,0,0.15);
     border: 1px solid rgba(200,160,0,0.3);
     border-radius: 4px;
-    padding: 1px 6px;
+    padding: 2px 8px;
     white-space: nowrap;
   }
   .piSeriesBadge.tied { color: #aaa; background: rgba(180,180,180,0.1); border-color: rgba(180,180,180,0.2); }
 
   .piShopMeta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
-  .piShopMetaItem { font-size: 0.61rem; color: #666; white-space: nowrap; }
-  .piShopMetaItem.odds { color: #aaa; font-weight: 600; }
+  .piShopMetaItem { font-size: 0.8rem; color: #666; white-space: nowrap; }
+  .piShopMetaItem.odds  { color: #aaa; font-weight: 600; }
   .piShopMetaItem.venue { color: #666; }
 
   /* ---- Bottom banner ---- */
@@ -391,10 +590,10 @@
     flex-wrap: wrap;
     row-gap: 3px;
   }
-  .piBannerChunk { font-size: clamp(0.68rem, 1.3vw, 0.88rem); font-weight: 600; color: #f0e0e0; letter-spacing: 0.02em; white-space: nowrap; }
+  .piBannerChunk { font-size: clamp(0.82rem, 1.4vw, 1rem); font-weight: 600; color: #f0e0e0; letter-spacing: 0.02em; white-space: nowrap; }
   .piBannerChunk strong { color: #ff6644; }
   .piLeafSep { height: 18px; width: auto; object-fit: contain; filter: drop-shadow(0 0 3px rgba(200,50,0,0.6)); flex-shrink: 0; }
-  .piNoGames { color: #444; font-size: 0.85rem; text-align: center; padding: 24px 0; }
+  .piNoGames { color: #444; font-size: 1rem; text-align: center; padding: 24px 0; grid-column: 1 / -1; }
 </style>
 
 <div id="piWrap">
@@ -407,7 +606,7 @@
       </div>
     </div>
     <div id="piCountdown">
-      <span class="piCdLabel">&#x1F3C8; The Game:</span>
+      <span class="piCdLabel">🏈 The Game:</span>
       <div class="piCdBlock"><span class="piCdNum" id="piCdD">--</span><span class="piCdSub">days</span></div>
       <span class="piCdColon">:</span>
       <div class="piCdBlock"><span class="piCdNum" id="piCdH">--</span><span class="piCdSub">hrs</span></div>
@@ -416,13 +615,18 @@
       <span class="piCdColon">:</span>
       <div class="piCdBlock"><span class="piCdNum" id="piCdS">--</span><span class="piCdSub">sec</span></div>
     </div>
-    <button id="piCloseBtn" type="button">&#x2715; Exit</button>
+    <div id="piHeaderRight">
+      <div id="piWeatherWidget"><div class="piWeatherInner"><div class="piWeatherEmoji">🌡️</div><div class="piWeatherData"><div class="piWeatherTemp">--°</div><div class="piWeatherLabel">Loading weather…</div></div></div></div>
+      <button id="piCloseBtn" type="button">&#x2715; Exit</button>
+    </div>
   </div>
 
   <div id="piLeagueBar">${leagueBtns}</div>
 
   <div id="piScoresPanel">
-    <div class="piPanelHead gold" id="piPanelHeadLabel">Shop Teams</div>
+    <div class="piPanelHeadWrapper">
+      <div class="piPanelHead gold" id="piPanelHeadLabel">Shop Teams</div>
+    </div>
     <div id="piScoresContent"><div class="piNoGames">Loading&hellip;</div></div>
   </div>
 
@@ -431,7 +635,10 @@
       <button class="piRightToggleBtn active" data-panel="youtube" type="button">&#x25B6; Natty Replay</button>
       <button class="piRightToggleBtn" data-panel="top25" type="button">&#x1F3C6; CFB Top 25</button>
     </div>
-    <div id="piRightContent"></div>
+    <div id="piRightContent">
+      <div id="piYoutubeSlot"></div>
+      <div id="piRightBottom"></div>
+    </div>
   </div>
 
   <div id="piBanner">
@@ -485,14 +692,22 @@
   }
 
   function _loadRightPanel() {
-    const el = document.getElementById("piRightContent");
-    if (!el) return;
+    const youtubeSlot = document.getElementById("piYoutubeSlot");
+    const bottomSlot  = document.getElementById("piRightBottom");
+    if (!youtubeSlot || !bottomSlot) return;
+
     if (_rightPanel === "youtube") {
-      el.innerHTML = `<iframe
+      // YouTube in top slot only
+      youtubeSlot.style.display = "block";
+      youtubeSlot.innerHTML = `<iframe
         src="https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&modestbranding=1&rel=0"
         allow="autoplay; encrypted-media" allowfullscreen title="OSU Natty Replay"></iframe>`;
+      bottomSlot.innerHTML = ""; // empty space — will circle back
     } else {
-      _renderTop25(el);
+      // Top 25 fills the whole right content area
+      youtubeSlot.style.display = "none";
+      bottomSlot.innerHTML = "";
+      _renderTop25(bottomSlot);
     }
   }
 
@@ -500,22 +715,21 @@
   // Top 25
   // ----------------------------------------------------------------
   function _renderTop25(el) {
-    el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.82rem;padding:16px 0;">Loading rankings&hellip;</div></div>`;
+    el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;padding:16px 0;">Loading rankings&hellip;</div></div>`;
     fetch("https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(data => {
         const ap    = (data?.rankings || []).find(p => String(p?.name || "").toLowerCase().includes("ap")) || (data?.rankings || [])[0];
         const ranks = ap?.ranks || [];
-        const list  = document.getElementById("piTop25List");
-        if (!list) return;
-        if (!ranks.length) { list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.82rem;">Rankings not available.</div>`; return; }
+        const list  = el.querySelector("#piTop25List") || el;
+        if (!ranks.length) { list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;">Rankings not available.</div>`; return; }
         list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div>` +
           ranks.map(r => {
             const name = _applyTTUN(String(r?.team?.name || r?.team?.displayName || "Unknown"));
             return `<div class="piRankRow"><span class="piRankNum">${r.current}</span><span class="piRankTeam">${_esc(name)}</span><span class="piRankRecord">${_esc(String(r?.recordSummary || ""))}</span></div>`;
           }).join("");
       })
-      .catch(() => { const l = document.getElementById("piTop25List"); if (l) l.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.82rem;">Rankings unavailable.</div>`; });
+      .catch(() => { el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;">Rankings unavailable.</div></div>`; });
   }
 
   // ----------------------------------------------------------------
@@ -551,25 +765,18 @@
   }
 
   // ----------------------------------------------------------------
-  // PGA — PGA Tour only, smart date window
-  // Sun after round ends through Wed 11:59pm: show last week's tournament
-  // Thu 00:00 onward: show current week's tournament
+  // PGA
   // ----------------------------------------------------------------
   async function _renderPGA() {
     const el = document.getElementById("piScoresContent");
     if (!el) return;
     el.innerHTML = `<div class="piNoGames">Loading PGA Tour&hellip;</div>`;
 
-    // Determine which date to query:
-    // Day 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
-    // Thu–Sat: show current week → use today's date
-    // Sun–Wed: show last Sunday (previous tournament round) → walk back to last Sunday
     const now     = new Date();
-    const dow     = now.getDay(); // 0=Sun ... 6=Sat
-    const isPostWeek = dow >= 0 && dow <= 3; // Sun(0) Mon(1) Tue(2) Wed(3)
+    const dow     = now.getDay();
+    const isPostWeek = dow >= 0 && dow <= 3;
     let queryDate;
     if (isPostWeek) {
-      // Walk back to last Sunday
       const lastSun = new Date(now);
       lastSun.setDate(now.getDate() - (dow === 0 ? 0 : dow));
       queryDate = _dateStr(lastSun);
@@ -588,7 +795,6 @@
     }
 
     if (!events.length) {
-      // Try current week if last-week query returned nothing
       try {
         const data = await fetch(`https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${_todayStr()}&limit=50`).then(r => r.ok ? r.json() : null);
         if (data) events = (data?.events || []).filter(_isPGATour);
@@ -599,7 +805,6 @@
 
     el.innerHTML = events.map(ev => _buildShopCard("pga", "PGA", ev, null, null)).join("");
 
-    // Odds hydration
     const CONCURRENCY = 4;
     let idx = 0;
     async function worker() {
@@ -622,20 +827,16 @@
     await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
   }
 
-  // Only keep PGA Tour (filter out Champions Tour, Korn Ferry, etc.)
   function _isPGATour(ev) {
-    const name   = String(ev?.league?.name || ev?.league?.abbreviation || ev?.name || "").toLowerCase();
-    const season = String(ev?.season?.type || "");
-    // Accept if name contains "pga tour" but not "champions" or "korn ferry"
+    const name = String(ev?.league?.name || ev?.league?.abbreviation || ev?.name || "").toLowerCase();
     if (name.includes("champions") || name.includes("korn ferry") || name.includes("dp world")) return false;
-    // ESPN's PGA endpoint generally only returns PGA Tour but double-check via league slug
     const slug = String(ev?.league?.slug || "").toLowerCase();
     if (slug && !slug.includes("pga")) return false;
     return true;
   }
 
   // ----------------------------------------------------------------
-  // Standard league scores — rich card format with odds + series hydration
+  // Standard league scores
   // ----------------------------------------------------------------
   async function _renderLeagueScores() {
     const el = document.getElementById("piScoresContent");
@@ -655,7 +856,6 @@
 
     if (!events.length) { el.innerHTML = `<div class="piNoGames">No games today.</div>`; return; }
 
-    // Build cards — series badge populated directly from scoreboard comp object
     el.innerHTML = events.map(ev =>
       _buildShopCard(_activeLeague, league.label.replace(/^\S+\s/, ""), ev, null, null)
     ).join("");
@@ -674,13 +874,11 @@
         try {
           const data = await fetch(SUMMARY_URLS[_activeLeague](eventId)).then(r => r.ok ? r.json() : null);
           if (!data) continue;
-          // Odds
           const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
           if (odds.favored || odds.ou) {
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
           }
-          // Playoff series fallback from summary (fills in if scoreboard comp had no series data)
           if (PLAYOFF_LEAGUES.has(_activeLeague)) {
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) {
@@ -698,7 +896,7 @@
   }
 
   // ----------------------------------------------------------------
-  // Shop Teams — cross-league favorites with lookahead
+  // Shop Teams
   // ----------------------------------------------------------------
   async function _renderShopTeams() {
     const el = document.getElementById("piScoresContent");
@@ -706,12 +904,10 @@
     el.innerHTML = `<div class="piNoGames">Loading Shop Teams&hellip;</div>`;
 
     const now = new Date();
-    // Before 9am show yesterday's results, otherwise today
     const primaryDate = now.getHours() < 9
       ? _dateStr(new Date(now.getTime() - 86400000))
       : _todayStr();
 
-    // Fetch all leagues for primary date
     const results = await Promise.allSettled(
       LEAGUES.map(lg =>
         fetch(lg.url(primaryDate))
@@ -722,7 +918,6 @@
     );
 
     const matched = [];
-    // Track which shop teams already have a game found for today/yesterday
     const teamsFound = new Set();
 
     for (const result of results) {
@@ -731,7 +926,6 @@
       for (const ev of events) {
         if (_eventHasShopTeam(ev)) {
           matched.push({ leagueKey, leagueLabel, ev, upcoming: false });
-          // Mark which shop teams are covered
           const comp = (ev?.competitions || [])[0] || {};
           for (const c of (comp?.competitors || [])) {
             if (_isShopTeam(c?.team)) teamsFound.add(_shopTeamKey(c.team));
@@ -740,17 +934,12 @@
       }
     }
 
-    // For shop teams with no game today, look ahead per-league
     const missingTeams = SHOP_TEAMS_NORM.filter(t => !teamsFound.has(t));
     if (missingTeams.length) {
-      // Group missing teams by which leagues they belong to
-      // We'll fetch upcoming days for each league that has lookahead > 0
       const lookaheadFetches = [];
       for (const lg of LEAGUES) {
         const days = LOOKAHEAD_DAYS[lg.key] || 0;
         if (!days) continue;
-        // Check if any missing team could be in this league
-        // We'll just fetch all days and filter — it's parallel so cost is low
         for (let d = 1; d <= days; d++) {
           const futureDate = _dateStr(new Date(now.getTime() + d * 86400000));
           lookaheadFetches.push(
@@ -763,9 +952,7 @@
       }
 
       const lookaheadResults = await Promise.allSettled(lookaheadFetches);
-
-      // For each missing team, find the soonest upcoming game (avoid duplicates per team)
-      const upcomingByTeam = new Map(); // teamKey -> { leagueKey, leagueLabel, ev, daysAhead }
+      const upcomingByTeam = new Map();
 
       for (const res of lookaheadResults) {
         if (res.status !== "fulfilled") continue;
@@ -775,7 +962,7 @@
           for (const c of (comp?.competitors || [])) {
             if (!_isShopTeam(c?.team)) continue;
             const tKey = _shopTeamKey(c.team);
-            if (teamsFound.has(tKey)) continue; // already has a game today
+            if (teamsFound.has(tKey)) continue;
             const existing = upcomingByTeam.get(tKey);
             if (!existing || daysAhead < existing.daysAhead) {
               upcomingByTeam.set(tKey, { leagueKey, leagueLabel, ev, daysAhead });
@@ -784,7 +971,6 @@
         }
       }
 
-      // Deduplicate: same event might match multiple team keys — add each event once
       const addedEventIds = new Set(matched.map(m => m.ev?.id));
       for (const { leagueKey, leagueLabel, ev, daysAhead } of upcomingByTeam.values()) {
         if (!addedEventIds.has(ev?.id)) {
@@ -799,7 +985,6 @@
       return;
     }
 
-    // Sort: live → today scheduled → final → upcoming future games
     matched.sort((a, b) => {
       const sRank = m => {
         if (m.upcoming) return 3;
@@ -807,19 +992,14 @@
         return s === "in" ? 0 : s === "pre" ? 1 : 2;
       };
       if (sRank(a) !== sRank(b)) return sRank(a) - sRank(b);
-      if (a.upcoming && b.upcoming) {
-        // Sort upcoming by date
-        return new Date(a.ev.date || 0) - new Date(b.ev.date || 0);
-      }
+      if (a.upcoming && b.upcoming) return new Date(a.ev.date || 0) - new Date(b.ev.date || 0);
       return _shopTeamRank(a.ev) - _shopTeamRank(b.ev);
     });
 
-    // Build cards — series badge populated directly from scoreboard comp object
     el.innerHTML = matched.map(({ leagueKey, leagueLabel, ev, upcoming }) =>
       _buildShopCard(leagueKey, leagueLabel, ev, null, null, upcoming)
     ).join("");
 
-    // Hydrate odds + series fallback in background
     const CONCURRENCY = 4;
     let idx = 0;
     async function worker() {
@@ -836,7 +1016,6 @@
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
           }
-          // Playoff series fallback from summary (only fills if scoreboard comp had no series data)
           if (PLAYOFF_LEAGUES.has(leagueKey)) {
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) {
@@ -897,31 +1076,20 @@
   // ----------------------------------------------------------------
   // Playoff series parsing — scoreboard competition object (primary)
   // ----------------------------------------------------------------
-  // ESPN puts series wins on comp.series.competitors[], but those objects
-  // often only have a team ID — not a usable display name. The fix is to
-  // cross-reference by team ID against the game-level comp.competitors[]
-  // which always carries full team name data.
   function _parseSeriesFromComp(comp, leagueKey) {
     if (!comp || !PLAYOFF_LEAGUES.has(leagueKey)) return null;
     try {
       const series = comp?.series;
       if (!series) return null;
-
       const seriesComps = series?.competitors || [];
       if (seriesComps.length < 2) return null;
-
       const w0 = Number(seriesComps[0]?.wins || 0);
       const w1 = Number(seriesComps[1]?.wins || 0);
-
-      // Only render if series has actually started
       if (w0 === 0 && w1 === 0) {
         const title = String(series?.title || series?.summary || "");
         if (title) return { seriesSummary: title };
         return null;
       }
-
-      // Cross-reference series competitor IDs against game-level competitors
-      // to get reliable display names (series objects often lack displayName)
       const gameComps = comp?.competitors || [];
       const _nameForSeriesComp = (sc) => {
         const scId = String(sc?.id || sc?.team?.id || "");
@@ -930,27 +1098,12 @@
             String(gc?.id || gc?.team?.id || "") === scId ||
             String(gc?.team?.id || "") === scId
           );
-          if (match) {
-            return String(
-              match?.team?.shortDisplayName ||
-              match?.team?.displayName ||
-              match?.team?.abbreviation ||
-              ""
-            );
-          }
+          if (match) return String(match?.team?.shortDisplayName || match?.team?.displayName || match?.team?.abbreviation || "");
         }
-        // Fallback: use whatever name is on the series competitor itself
-        return String(
-          sc?.team?.shortDisplayName ||
-          sc?.team?.displayName ||
-          sc?.team?.abbreviation ||
-          ""
-        );
+        return String(sc?.team?.shortDisplayName || sc?.team?.displayName || sc?.team?.abbreviation || "");
       };
-
       const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
       const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
-
       return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
     } catch { return null; }
   }
@@ -958,32 +1111,19 @@
   // ----------------------------------------------------------------
   // Playoff series parsing — summary endpoint (fallback)
   // ----------------------------------------------------------------
-  // Same cross-reference trick: use summary header competitors for names,
-  // but fall back to game comp names if series objects lack them.
   function _parseSeriesFromSummary(data, fallbackComp) {
     try {
       const comp = data?.header?.competitions?.[0] || data?.competitions?.[0];
       if (!comp) return null;
-
-      // Accept any playoff season type (2=postseason, 3=playoffs — varies by sport)
       const seasonType = Number(data?.header?.season?.type || data?.season?.type || 0);
       if (seasonType < 2) return null;
-
       const series = comp?.series;
       if (!series) return null;
-
       const seriesComps = series?.competitors || [];
       if (seriesComps.length < 2) return null;
-
       const w0 = Number(seriesComps[0]?.wins || 0);
       const w1 = Number(seriesComps[1]?.wins || 0);
-
-      // Cross-reference: try summary header comps first, then fallback game comp
-      const gameComps = [
-        ...(comp?.competitors || []),
-        ...((fallbackComp?.competitors) || [])
-      ];
-
+      const gameComps = [...(comp?.competitors || []), ...((fallbackComp?.competitors) || [])];
       const _nameForSeriesComp = (sc) => {
         const scId = String(sc?.id || sc?.team?.id || "");
         if (scId) {
@@ -991,55 +1131,32 @@
             String(gc?.id || gc?.team?.id || "") === scId ||
             String(gc?.team?.id || "") === scId
           );
-          if (match) {
-            return String(
-              match?.team?.shortDisplayName ||
-              match?.team?.displayName ||
-              match?.team?.abbreviation ||
-              ""
-            );
-          }
+          if (match) return String(match?.team?.shortDisplayName || match?.team?.displayName || match?.team?.abbreviation || "");
         }
-        return String(
-          sc?.team?.shortDisplayName ||
-          sc?.team?.displayName ||
-          sc?.team?.abbreviation ||
-          ""
-        );
+        return String(sc?.team?.shortDisplayName || sc?.team?.displayName || sc?.team?.abbreviation || "");
       };
-
       const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
       const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
-
       if (w0 === 0 && w1 === 0) {
-        // Series exists but hasn't started — show title if available
         const title = String(series?.title || series?.summary || "");
         if (title) return { seriesSummary: title };
-        // Fall through to competitor seriesSummary strings
       } else {
         return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
       }
-
-      // Fallback: seriesSummary on competitors
       const competitors = comp?.competitors || [];
       if (competitors.length >= 2) {
         const s0 = String(competitors[0]?.seriesSummary || "");
         if (s0) return { seriesSummary: s0 };
       }
-
       return null;
     } catch { return null; }
   }
 
   function _buildSeriesHTML(series) {
     if (!series) return "";
-    if (series.seriesSummary) {
-      return `<span class="piSeriesBadge">🏆 ${_esc(series.seriesSummary)}</span>`;
-    }
+    if (series.seriesSummary) return `<span class="piSeriesBadge">🏆 ${_esc(series.seriesSummary)}</span>`;
     const { name0, wins0, name1, wins1 } = series;
-    if (wins0 === wins1) {
-      return `<span class="piSeriesBadge tied">🏆 Series Tied ${wins0}-${wins1}</span>`;
-    }
+    if (wins0 === wins1) return `<span class="piSeriesBadge tied">🏆 Series Tied ${wins0}-${wins1}</span>`;
     const leader = wins0 > wins1 ? name0 : name1;
     const lWins  = wins0 > wins1 ? wins0 : wins1;
     const tWins  = wins0 > wins1 ? wins1 : wins0;
@@ -1059,24 +1176,22 @@
       const period     = Number(status?.period || 0);
       const eventId    = String(ev?.id || "");
       const isPlayoff  = PLAYOFF_LEAGUES.has(leagueKey);
-
-      // Period label varies by sport
       const periodLabel = _periodLabel(leagueKey, period);
 
       let cls = upcoming ? "upcoming" : "sched";
       let statusLabel = ev.date ? _fmtTime(ev.date) : "Scheduled";
       if (upcoming) statusLabel = "📆 " + (ev.date ? _fmtGameDate(ev.date) : "Upcoming");
-      if (!upcoming && state === "in")           { cls = "live";  statusLabel = `${periodLabel} ${clock}`; }
+      if (!upcoming && state === "in")             { cls = "live";  statusLabel = `${periodLabel} ${clock}`; }
       if (!upcoming && (state === "post" || done)) { cls = "final"; statusLabel = "Final"; }
 
-      const statusCls = cls === "live" ? " live" : cls === "upcoming" ? " upcoming" : "";
+      const statusCls  = cls === "live" ? " live" : cls === "upcoming" ? " upcoming" : "";
       const badgeColor = LEAGUE_COLORS[leagueKey] || "#555";
 
-      const venue = comp?.venue;
-      const venueName = String(venue?.fullName || venue?.name || "");
-      const city      = String(venue?.address?.city || "");
-      const stateCode = String(venue?.address?.state || "");
-      const venueText = [venueName, [city, stateCode].filter(Boolean).join(", ")].filter(Boolean).join(" — ");
+      const venue      = comp?.venue;
+      const venueName  = String(venue?.fullName || venue?.name || "");
+      const city       = String(venue?.address?.city || "");
+      const stateCode  = String(venue?.address?.state || "");
+      const venueText  = [venueName, [city, stateCode].filter(Boolean).join(", ")].filter(Boolean).join(" — ");
       const gameDateStr = ev.date ? _fmtGameDate(ev.date) : "";
 
       const competitors = comp?.competitors || [];
@@ -1090,7 +1205,7 @@
         const favCls = isFav ? " fav" : "";
         const logoImg = logo
           ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />`
-          : `<span style="width:20px;height:20px;flex-shrink:0;display:inline-block;"></span>`;
+          : `<span style="width:30px;height:30px;flex-shrink:0;display:inline-block;"></span>`;
         return `<div class="piShopTeamLine">
           <div class="piShopTeamLineLeft">
             ${logoImg}
@@ -1103,7 +1218,6 @@
 
       const oddsText = _buildOddsLine(favored || "", ou || "");
 
-      // --- Series badge: parse directly from scoreboard comp (no summary fetch needed) ---
       let seriesHTML = "";
       if (isPlayoff) {
         const seriesFromComp = _parseSeriesFromComp(comp, leagueKey);
@@ -1129,10 +1243,10 @@
 
   function _periodLabel(leagueKey, period) {
     switch (leagueKey) {
-      case "nhl": return `P${period}`;
-      case "mlb": return period <= 9 ? `${period}th` : `${period}th`; // inning handled by clock
+      case "nhl":   return `P${period}`;
+      case "mlb":   return `${period}th`;
       case "nba": case "ncaam": return `Q${period}`;
-      case "cfb": case "nfl": return `Q${period}`;
+      case "cfb": case "nfl":   return `Q${period}`;
       default: return `${period}`;
     }
   }
