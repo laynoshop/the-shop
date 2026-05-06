@@ -1,4 +1,4 @@
-// split/pi.js
+ // split/pi.js
 // Pi Scoreboard — full-screen TV dashboard for the Raspberry Pi.
 // Admin only. Launched from the entry screen via window.launchPiScoreboard().
 
@@ -199,7 +199,7 @@
       ...LEAGUES.map(l =>
         `<button class="piLeagueBtn${l.key === _activeLeague ? " active" : ""}" data-league="${l.key}">${l.label}</button>`
       ),
-      `<button class="piLeagueBtn piPuttPuttBtn${_activeLeague === "puttputt" ? " active" : ""}" data-league="puttputt">⛳ Putt Putt</button>`,
+      `<button class="piLeagueBtn piPuttPuttBtn${_activeLeague === "puttputt" ? " active" : ""}" data-league="puttputt">⛳ Clubhouse</button>`,
     ].join("");
 
     const days = _daysSince(LAST_TTUN_WIN);
