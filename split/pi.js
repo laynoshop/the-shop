@@ -423,11 +423,7 @@
     border-left: 1px solid rgba(180,0,0,0.2);
   }
   #piRightToggleBar {
-    display: flex;
-    gap: 0;
-    background: rgba(0,0,0,0.5);
-    border-bottom: 1px solid rgba(180,0,0,0.25);
-    flex-shrink: 0;
+    display: none;
   }
   .piRightToggleBtn {
     flex: 1;
