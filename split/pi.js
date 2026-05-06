@@ -175,7 +175,6 @@
 
   function _weatherInfo(code, hour) {
     const isNight = hour < 6 || hour >= 20;
-    // WMO weather codes → emoji + label + subtle bg tint
     if (code === 0)                      return { emoji: isNight ? "🌙" : "☀️",  label: isNight ? "Clear Night"    : "Sunny",           bg: isNight ? "rgba(20,10,50,0.45)" : "rgba(255,180,0,0.12)" };
     if (code === 1)                      return { emoji: isNight ? "🌙" : "🌤️",  label: "Mainly Clear",                                  bg: "rgba(255,180,0,0.09)" };
     if (code === 2)                      return { emoji: "⛅",                    label: "Partly Cloudy",                                 bg: "rgba(180,180,180,0.1)" };
@@ -928,7 +927,7 @@
   }
 
   // ----------------------------------------------------------------
-  // Putt Putt — Firebase auth-safe loader
+  // Putt Putt — Firebase auth-safe loader with index fallback
   // ----------------------------------------------------------------
 
   // Wait for Firebase anonymous auth to settle before querying Firestore.
@@ -982,20 +981,45 @@
     const db = window.firebase && firebase.apps && firebase.apps.length ? firebase.firestore() : null;
     if (!db) { el.innerHTML = `<div class="piPuttNoRound">Firebase not available — open the Shop App to start a round.</div>`; return; }
 
+    let round = null;
+
+    // Tier 1: try the indexed orderBy query (fast path)
     try {
       const snap = await db.collection("putt_rounds")
         .orderBy("startedAt", "desc")
         .limit(1)
         .get();
-
-      if (snap.empty) { el.innerHTML = `<div class="piPuttNoRound">No rounds found. Start one in the Shop App!</div>`; return; }
-
-      const round = { id: snap.docs[0].id, ...snap.docs[0].data() };
-      el.innerHTML = `<div class="piPuttWrap">${_buildPiPuttScorecardHTML(round)}</div>`;
-    } catch(e) {
-      console.error("PuttPutt load error:", e);
-      el.innerHTML = `<div class="piPuttNoRound">Could not load round data. (${e?.code || e?.message || "unknown error"})</div>`;
+      if (!snap.empty) {
+        round = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      }
+    } catch (e) {
+      // Tier 2: index missing or query error — fetch unordered and sort client-side
+      console.warn("PuttPutt orderBy failed, falling back to client-side sort:", e?.code || e?.message);
+      try {
+        const snap = await db.collection("putt_rounds").limit(50).get();
+        if (!snap.empty) {
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          // Sort descending by startedAt (supports both number timestamps and Firestore Timestamps)
+          docs.sort((a, b) => {
+            const ta = a.startedAt?.toMillis ? a.startedAt.toMillis() : Number(a.startedAt || 0);
+            const tb = b.startedAt?.toMillis ? b.startedAt.toMillis() : Number(b.startedAt || 0);
+            return tb - ta;
+          });
+          round = docs[0];
+        }
+      } catch (e2) {
+        console.error("PuttPutt fallback load error:", e2);
+        el.innerHTML = `<div class="piPuttNoRound">Could not load round data. (${e2?.code || e2?.message || "unknown error"})</div>`;
+        return;
+      }
     }
+
+    if (!round) {
+      el.innerHTML = `<div class="piPuttNoRound">No rounds found. Start one in the Shop App!</div>`;
+      return;
+    }
+
+    el.innerHTML = `<div class="piPuttWrap">${_buildPiPuttScorecardHTML(round)}</div>`;
   }
 
   function _buildPiPuttScorecardHTML(round) {
