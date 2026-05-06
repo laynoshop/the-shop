@@ -40,18 +40,23 @@
   // Leagues that support playoff series tracking
   const PLAYOFF_LEAGUES = new Set(["nhl", "nba", "nfl", "mlb"]);
 
-  // Per-league lookahead windows for Shop Teams (days ahead to search when no game today)
+  // Per-league lookahead windows for Shop Teams (days ahead to search when no game today).
+  // mls/nfl/cfb use 7 so that from Tuesday onward the full upcoming week is visible.
   const LOOKAHEAD_DAYS = {
-    cfb:   6,
-    nfl:   6,
+    cfb:   7,
+    nfl:   7,
     nhl:   3,
     nba:   3,
     mlb:   3,
     ncaam: 3,
-    mls:   3,
+    mls:   7,
     pga:   0,
     ufc:   3,
   };
+
+  // Leagues that show the "upcoming week" window when it's Tuesday or later.
+  // These are primarily weekend-schedule leagues (MLS, NFL, CFB).
+  const WEEK_PREVIEW_LEAGUES = new Set(["mls", "nfl", "cfb"]);
 
   const LEAGUES = [
     { key: "cfb",   label: "🏈 CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${d}&limit=50` },
@@ -185,551 +190,233 @@
     if (code >= 61 && code <= 67)        return { emoji: "🌧️",                   label: code >= 65 ? "Heavy Rain"    : "Rain",           bg: "rgba(40,80,180,0.15)" };
     if (code >= 71 && code <= 77)        return { emoji: "❄️",                   label: code >= 75 ? "Heavy Snow"    : "Snow",           bg: "rgba(180,220,255,0.12)" };
     if (code >= 80 && code <= 82)        return { emoji: "🌦️",                   label: code === 82 ? "Heavy Showers" : "Rain Showers",  bg: "rgba(40,80,180,0.15)" };
-    if (code >= 85 && code <= 86)        return { emoji: "🌨️",                   label: "Snow Showers",                                  bg: "rgba(180,220,255,0.12)" };
-    if (code >= 95 && code <= 99)        return { emoji: "⛈️",                   label: "Thunderstorm",                                  bg: "rgba(80,0,120,0.18)" };
-    return { emoji: "🌡️", label: "Unknown", bg: "rgba(0,0,0,0.1)" };
+    if (code >= 85 && code <= 86)        return { emoji: "🌨️",                   label: "Snow Showers",                                  bg: "rgba(180,220,255,0.15)" };
+    if (code >= 95 && code <= 99)        return { emoji: "⛈️",                   label: "Thunderstorm",                                  bg: "rgba(60,20,120,0.18)" };
+    return { emoji: "🌡️", label: "Unknown", bg: "rgba(100,100,100,0.1)" };
   }
 
   // ----------------------------------------------------------------
   // Shell HTML
   // ----------------------------------------------------------------
   function buildShell() {
-    const leagueBtns = [
-      `<button class="piLeagueBtn piShopTeamsBtn${_activeLeague === "shop" ? " active" : ""}" data-league="shop">Shop Teams</button>`,
-      ...LEAGUES.map(l =>
-        `<button class="piLeagueBtn${l.key === _activeLeague ? " active" : ""}" data-league="${l.key}">${l.label}</button>`
-      )
-    ].join("");
-
-    const days = _daysSince(LAST_TTUN_WIN);
-    const leaf  = `<img src="${LEAF_URL}" class="piLeafSep" alt="leaf" />`;
+    const leagueBtns = LEAGUES.map(l =>
+      `<button class="piLeagueBtn${_activeLeague === l.key ? " active" : ""}" data-league="${l.key}">${l.label}</button>`
+    ).join("");
 
     return `
 <style>
-  #piWrap {
-    display: grid;
-    grid-template-rows: auto auto 1fr auto;
-    grid-template-columns: 1fr 630px;
-    height: 100vh;
-    height: 100dvh;
-    background: #0d0000;
-    color: #f0e8e8;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    overflow: hidden;
-    position: relative;
+  #piScoreboard * { box-sizing: border-box; margin: 0; padding: 0; }
+  #piScoreboard {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0a0a0a; color: #e8e8e8; display: flex; flex-direction: column;
+    height: 100vh; width: 100vw; overflow: hidden;
   }
-  #piWrap::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 20% 110%, rgba(200,30,0,0.55) 0%, transparent 55%),
-      radial-gradient(ellipse at 80% 110%, rgba(180,60,0,0.45) 0%, transparent 55%),
-      radial-gradient(ellipse at 50% 120%, rgba(255,100,0,0.3) 0%, transparent 50%),
-      linear-gradient(to top, #1a0000 0%, #0d0000 40%, #080000 100%);
-    pointer-events: none;
-    z-index: 0;
-  }
-  #piWrap > * { position: relative; z-index: 1; }
-
-  /* ---- Header ---- */
-  #piHeader {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 18px;
-    background: linear-gradient(90deg, #8b0000 0%, #bb0000 40%, #8b0000 100%);
-    border-bottom: 2px solid #cc0000;
-    box-shadow: 0 2px 16px rgba(200,0,0,0.5);
-    gap: 16px;
-  }
-  #piHeaderLeft { display: flex; align-items: center; gap: 12px; }
-  #piHeaderLeft img { height: 44px; width: 44px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(255,200,0,0.6)); }
-  #piHeaderTitle {
-    font-size: clamp(1rem, 2.5vw, 1.7rem);
-    font-weight: 900;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #fff;
-    text-shadow: 0 0 12px rgba(255,180,0,0.5), 2px 2px 4px rgba(0,0,0,0.8);
-    line-height: 1;
-  }
-  #piHeaderTitle span {
-    display: block;
-    font-size: 0.45em;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    color: #ffddaa;
-    text-shadow: none;
-    margin-top: 2px;
-  }
-
-  /* ---- Countdown — sexied up ---- */
-  #piCountdown {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(0,0,0,0.35);
-    border: 1px solid rgba(255,150,0,0.3);
-    border-radius: 12px;
-    padding: 6px 14px;
-    box-shadow: 0 0 18px rgba(255,100,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06);
-  }
-  .piCdLabel {
-    font-size: clamp(0.85rem, 1.6vw, 1.15rem);
-    color: #ffddaa;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    margin-right: 4px;
-    white-space: nowrap;
-    text-shadow: 0 0 8px rgba(255,160,0,0.5);
-    text-transform: uppercase;
-  }
-  .piCdBlock { text-align: center; min-width: 48px; }
-  .piCdNum {
-    display: block;
-    font-size: clamp(1.4rem, 3vw, 2.2rem);
-    font-weight: 900;
-    color: #fff;
-    line-height: 1;
-    text-shadow: 0 0 14px rgba(255,120,0,0.8), 0 0 30px rgba(255,80,0,0.4);
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-  }
-  .piCdSub {
-    display: block;
-    font-size: 0.62rem;
-    letter-spacing: 0.12em;
-    color: #ff9966;
-    text-transform: uppercase;
-    margin-top: 1px;
-  }
-  .piCdColon {
-    font-size: clamp(1.3rem, 2.5vw, 2rem);
-    color: #ff7733;
-    align-self: flex-start;
-    margin-top: 2px;
-    padding: 0 2px;
-    text-shadow: 0 0 10px rgba(255,100,0,0.7);
-    animation: piColonBlink 1s step-start infinite;
-  }
-  @keyframes piColonBlink { 0%,49%{ opacity:1; } 50%,100%{ opacity:0.3; } }
-
-  /* ---- Weather widget ---- */
-  #piWeatherWidget {
-    flex-shrink: 0;
-    min-width: 160px;
-  }
-  .piWeatherInner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border-radius: 10px;
-    padding: 6px 12px;
-    border: 1px solid rgba(255,255,255,0.12);
-    backdrop-filter: blur(4px);
-  }
-  .piWeatherEmoji { font-size: 2.2rem; line-height: 1; }
-  .piWeatherData { display: flex; flex-direction: column; gap: 1px; }
-  .piWeatherTemp {
-    font-size: clamp(1.1rem, 2vw, 1.5rem);
-    font-weight: 900;
-    color: #fff;
-    text-shadow: 0 0 8px rgba(255,200,100,0.5);
-    line-height: 1;
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-  }
-  .piWeatherFeels { font-size: 0.7em; color: #ffddaa; font-weight: 600; }
-  .piWeatherLabel { font-size: clamp(0.72rem, 1.2vw, 0.9rem); font-weight: 700; color: #ffeedd; letter-spacing: 0.04em; }
-  .piWeatherMeta  { font-size: clamp(0.62rem, 1vw, 0.75rem); color: #cc9977; letter-spacing: 0.03em; }
-
-  /* ---- Header right cluster ---- */
-  #piHeaderRight { display: flex; align-items: center; gap: 12px; }
-  #piCloseBtn {
-    background: rgba(0,0,0,0.35);
-    border: 1px solid rgba(255,255,255,0.25);
-    color: #fff;
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 0.9rem;
-    font-weight: 700;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 0.2s;
+  .piTopBar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 16px; background: #111; border-bottom: 1px solid #222;
     flex-shrink: 0;
   }
-  #piCloseBtn:hover { background: rgba(0,0,0,0.6); }
-
-  /* ---- League bar ---- */
-  #piLeagueBar {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 18px;
-    background: rgba(0,0,0,0.55);
-    border-bottom: 1px solid rgba(180,0,0,0.3);
-    overflow-x: auto;
-    scrollbar-width: none;
+  .piTopBarLeft { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .piTopBarRight { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .piLogo { font-size: 1.2rem; font-weight: 800; color: #fff; white-space: nowrap; }
+  #piWeatherWidget { flex-shrink: 0; }
+  .piWeatherInner { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 8px; }
+  .piWeatherEmoji { font-size: 1.4rem; }
+  .piWeatherData { display: flex; flex-direction: column; }
+  .piWeatherTemp { font-size: 1rem; font-weight: 700; }
+  .piWeatherFeels { font-size: 0.75rem; color: #aaa; margin-left: 6px; font-weight: 400; }
+  .piWeatherLabel { font-size: 0.72rem; color: #bbb; }
+  .piWeatherMeta  { font-size: 0.68rem; color: #888; }
+  .piCloseBtn {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 0.82rem;
   }
-  #piLeagueBar::-webkit-scrollbar { display: none; }
+  .piCloseBtn:hover { background: rgba(255,255,255,0.14); }
+  .piLeagueTabs {
+    display: flex; gap: 6px; padding: 8px 16px;
+    background: #0e0e0e; border-bottom: 1px solid #1e1e1e;
+    flex-shrink: 0; flex-wrap: wrap;
+  }
   .piLeagueBtn {
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: #ccc;
-    border-radius: 20px;
-    padding: 6px 20px;
-    font-size: clamp(0.9rem, 1.6vw, 1.2rem);
-    font-weight: 700;
-    cursor: pointer;
-    letter-spacing: 0.05em;
-    white-space: nowrap;
-    transition: all 0.18s;
-    flex-shrink: 0;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: #ccc; border-radius: 6px; padding: 5px 12px; cursor: pointer;
+    font-size: 0.82rem; transition: background 0.15s, color 0.15s;
   }
-  .piLeagueBtn:hover { background: rgba(180,0,0,0.4); color: #fff; border-color: rgba(200,0,0,0.6); }
-  .piLeagueBtn.active { background: linear-gradient(135deg, #bb0000, #880000); color: #fff; border-color: #cc0000; box-shadow: 0 0 10px rgba(200,0,0,0.5); }
+  .piLeagueBtn:hover  { background: rgba(255,255,255,0.12); color: #fff; }
+  .piLeagueBtn.active { background: #bb0000; border-color: #cc2222; color: #fff; }
   .piShopTeamsBtn.active { background: linear-gradient(135deg, #a07800, #7a5500); border-color: #c89a00; box-shadow: 0 0 10px rgba(200,160,0,0.5); }
+  .piMain { display: flex; flex: 1; overflow: hidden; }
+  .piLeft  { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 0; }
+  .piRight { width: 380px; flex-shrink: 0; border-left: 1px solid #1e1e1e; display: flex; flex-direction: column; overflow: hidden; }
+  .piRightHeader { display: flex; border-bottom: 1px solid #1e1e1e; background: #0e0e0e; flex-shrink: 0; }
+  .piRightTab { flex: 1; padding: 8px; text-align: center; cursor: pointer; font-size: 0.78rem; color: #888; border: none; background: none; }
+  .piRightTab:hover { color: #ccc; }
+  .piRightTab.active { color: #fff; border-bottom: 2px solid #bb0000; }
+  .piRightContent { flex: 1; overflow-y: auto; padding: 12px; }
+  .piNoGames { color: #555; font-size: 0.88rem; padding: 20px; text-align: center; }
 
-  /* ---- Scores panel — 2-column grid ---- */
-  #piScoresPanel {
-    overflow-y: auto;
-    padding: 12px 14px;
-    border-right: 1px solid rgba(180,0,0,0.2);
-    scrollbar-width: thin;
-    scrollbar-color: #330000 #0d0000;
-  }
-  #piScoresPanel::-webkit-scrollbar { width: 4px; }
-  #piScoresPanel::-webkit-scrollbar-track { background: #0d0000; }
-  #piScoresPanel::-webkit-scrollbar-thumb { background: #440000; border-radius: 2px; }
-  #piScoresContent {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    align-items: start;
-  }
-  /* Panel head spans full width */
-  .piPanelHeadWrapper { grid-column: 1 / -1; }
+  /* Countdown */
+  .piCdBlock { display: flex; flex-direction: column; align-items: center; padding: 6px 10px; }
+  .piCdVal  { font-size: 1.5rem; font-weight: 800; line-height: 1; }
+  .piCdLbl  { font-size: 0.6rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .piCdSep  { font-size: 1.4rem; font-weight: 800; padding-bottom: 2px; }
+  #piCdContainer { display: flex; align-items: center; gap: 0; }
+  .piCdTitle { font-size: 0.7rem; color: #bb0000; text-transform: uppercase; letter-spacing: 0.08em; margin-right: 6px; font-weight: 700; }
 
-  /* ---- Right panel ---- */
-  #piRightPanel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border-left: 1px solid rgba(180,0,0,0.2);
-  }
-  #piRightToggleBar {
-    display: flex;
-    gap: 0;
-    background: rgba(0,0,0,0.5);
-    border-bottom: 1px solid rgba(180,0,0,0.25);
-    flex-shrink: 0;
-  }
-  .piRightToggleBtn {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: #999;
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    padding: 7px 8px;
-    cursor: pointer;
-    transition: all 0.18s;
-    text-transform: uppercase;
-    border-bottom: 2px solid transparent;
-  }
-  .piRightToggleBtn:hover { color: #fff; background: rgba(180,0,0,0.25); }
-  .piRightToggleBtn.active { color: #ff4444; border-bottom-color: #cc0000; background: rgba(180,0,0,0.15); }
-
-  /* Right panel content area — YouTube only in top portion */
-  #piRightContent {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    height: 100%;
-    position: relative;
-  }
-  #piYoutubeSlot {
-    flex-shrink: 0;
-    width: 100%;
-    /* ~45% of right panel height = top portion only */
-    height: 42%;
-    position: relative;
-    background: #000;
-  }
-  #piYoutubeSlot iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-    display: block;
-  }
-  #piRightBottom {
-    flex: 1;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #330000 #0d0000;
-  }
-  #piRightBottom::-webkit-scrollbar { width: 4px; }
-  #piRightBottom::-webkit-scrollbar-track { background: #0d0000; }
-  #piRightBottom::-webkit-scrollbar-thumb { background: #440000; border-radius: 2px; }
-
-  /* Top 25 list */
-  #piTop25List { padding: 10px 12px; }
-  .piRankHead { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #bb0000; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid rgba(180,0,0,0.3); }
-  .piRankRow { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 5px; margin-bottom: 3px; background: rgba(255,255,255,0.03); }
-  .piRankRow:nth-child(odd) { background: rgba(255,255,255,0.05); }
-  .piRankNum  { min-width: 22px; font-size: 1rem; font-weight: 900; color: #cc0000; text-align: right; }
-  .piRankTeam { flex: 1; font-size: 0.95rem; font-weight: 600; color: #e8e8e8; }
-  .piRankRecord { font-size: 0.82rem; color: #777; }
-
-  .piPanelHead {
-    font-size: 0.85rem;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #cc0000;
-    margin-bottom: 8px;
-    padding-bottom: 5px;
-    border-bottom: 1px solid rgba(180,0,0,0.3);
-    text-shadow: 0 0 6px rgba(200,0,0,0.4);
-  }
-  .piPanelHead.gold { color: #c8a000; border-bottom-color: rgba(200,160,0,0.3); text-shadow: 0 0 6px rgba(200,160,0,0.35); }
-
-  /* ---- Rich score cards — BIG fonts for TV ---- */
+  /* Shop card */
   .piShopCard {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 12px 14px;
-    margin-bottom: 0;
-    background: rgba(255,255,255,0.04);
-    border-radius: 9px;
-    border-left: 4px solid #555;
-    pointer-events: none;
+    border-left: 3px solid #333; border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 8px;
+    background: rgba(255,255,255,0.03);
+    transition: background 0.2s;
   }
-  .piShopCard.live    { border-left-color: #cc0000; background: rgba(180,0,0,0.09); }
-  .piShopCard.final   { border-left-color: #444; }
-  .piShopCard.sched   { border-left-color: rgba(0,140,0,0.7); }
+  .piShopCard.live   { border-left-color: #22cc44; background: rgba(0,80,0,0.07); }
+  .piShopCard.final  { border-left-color: #555; }
   .piShopCard.upcoming { border-left-color: rgba(0,100,200,0.7); background: rgba(0,60,120,0.07); }
-
-  .piShopCardTop { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .piShopLeagueBadge {
-    font-size: 0.9rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 10px;
-    color: #fff;
-    flex-shrink: 0;
-  }
-  .piShopStatusLabel { font-size: 1rem; font-weight: 700; color: #999; text-align: right; white-space: nowrap; }
-  .piShopStatusLabel.live     { color: #ff4444; }
+  .piShopCardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .piShopLeagueTag { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #888; }
+  .piShopStatusLabel { font-size: 0.72rem; font-weight: 700; }
+  .piShopStatusLabel.live  { color: #22cc44; }
   .piShopStatusLabel.upcoming { color: #4499ff; }
-
+  .piShopStatusLabel.final { color: #777; }
   .piShopTeamsRow { display: flex; flex-direction: column; gap: 4px; }
   .piShopTeamLine { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .piShopTeamLineLeft { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .piShopTeamLogo { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; border-radius: 3px; }
   .piShopTeamNameFull {
-    font-size: clamp(1rem, 1.8vw, 1.35rem);
-    font-weight: 700;
-    color: #eee;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 0.88rem; font-weight: 600; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; max-width: 160px;
   }
   .piShopTeamNameFull.fav { color: #ffcc66; }
   .piShopTeamRecord { font-size: 0.85rem; color: #666; white-space: nowrap; flex-shrink: 0; }
   .piShopTeamScore {
-    font-size: clamp(1.3rem, 2.5vw, 1.9rem);
-    font-weight: 900;
-    color: #fff;
-    min-width: 42px;
-    text-align: right;
-    flex-shrink: 0;
+    font-size: 1.1rem; font-weight: 800; min-width: 34px; text-align: right;
     font-variant-numeric: tabular-nums;
-    text-shadow: 0 0 8px rgba(255,200,0,0.3);
   }
+  .piShopMeta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 0.68rem; color: #666; }
+  .piShopMetaItem { white-space: nowrap; }
+  .piShopMetaItem.odds { color: #aaa; }
+  .piSeriesLine { margin-top: 4px; font-size: 0.72rem; color: #88aacc; }
+  .piSectionHeader { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #aaa; padding: 8px 10px 4px; margin-top: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 
-  /* Playoff series badge */
-  .piSeriesLine { display: flex; align-items: center; gap: 6px; margin-top: 2px; padding: 2px 4px; }
-  .piSeriesBadge {
-    font-size: 0.88rem;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    color: #ffcc44;
-    background: rgba(200,160,0,0.15);
-    border: 1px solid rgba(200,160,0,0.3);
-    border-radius: 4px;
-    padding: 2px 8px;
-    white-space: nowrap;
+  /* News */
+  .piNewsItem { padding: 8px 0; border-bottom: 1px solid #1a1a1a; }
+  .piNewsItem:last-child { border-bottom: none; }
+  .piNewsHeadline { font-size: 0.82rem; font-weight: 600; line-height: 1.35; margin-bottom: 3px; }
+  .piNewsSource   { font-size: 0.68rem; color: #666; }
+
+  /* YouTube */
+  #piYouTubeFrame { width: 100%; height: 100%; border: none; }
+
+  /* Buckeye leaf floaters */
+  @keyframes piLeafFall {
+    0%   { transform: translateY(-60px) rotate(0deg) scale(0.8); opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translateY(100vh) rotate(720deg) scale(1.1); opacity: 0; }
   }
-  .piSeriesBadge.tied { color: #aaa; background: rgba(180,180,180,0.1); border-color: rgba(180,180,180,0.2); }
-
-  .piShopMeta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
-  .piShopMetaItem { font-size: 0.8rem; color: #666; white-space: nowrap; }
-  .piShopMetaItem.odds  { color: #aaa; font-weight: 600; }
-  .piShopMetaItem.venue { color: #666; }
-
-  /* ---- Bottom banner ---- */
-  #piBanner {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 7px 20px;
-    background: linear-gradient(90deg, rgba(100,0,0,0.9) 0%, rgba(30,0,0,0.95) 50%, rgba(100,0,0,0.9) 100%);
-    border-top: 1px solid rgba(180,0,0,0.5);
-    box-shadow: 0 -2px 12px rgba(180,0,0,0.3);
-    flex-wrap: wrap;
-    row-gap: 3px;
-  }
-  .piBannerChunk { font-size: clamp(0.82rem, 1.4vw, 1rem); font-weight: 600; color: #f0e0e0; letter-spacing: 0.02em; white-space: nowrap; }
-  .piBannerChunk strong { color: #ff6644; }
-  .piLeafSep { height: 18px; width: auto; object-fit: contain; filter: drop-shadow(0 0 3px rgba(200,50,0,0.6)); flex-shrink: 0; }
-  .piNoGames { color: #444; font-size: 1rem; text-align: center; padding: 24px 0; grid-column: 1 / -1; }
+  .piLeaf { position: fixed; pointer-events: none; z-index: 10000; animation: piLeafFall linear forwards; }
+  @keyframes piCountdownPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .piCdPulse { animation: piCountdownPulse 1s ease-in-out infinite; }
 </style>
 
-<div id="piWrap">
-  <div id="piHeader">
-    <div id="piHeaderLeft">
-      <img src="${BLOCK_O}" alt="Block O" />
-      <div id="piHeaderTitle">
-        The Shop Scoreboard
-        <span>Scarlet &amp; Gray &bull; Game Day HQ</span>
-      </div>
+<div class="piTopBar">
+  <div class="piTopBarLeft">
+    <span class="piLogo">🏪 The Shop</span>
+    <span id="piCdTitle" class="piCdTitle">THE GAME</span>
+    <div id="piCdContainer">
+      <div class="piCdBlock"><span id="piCdD" class="piCdVal">--</span><span class="piCdLbl">Days</span></div>
+      <span class="piCdSep">:</span>
+      <div class="piCdBlock"><span id="piCdH" class="piCdVal">--</span><span class="piCdLbl">Hrs</span></div>
+      <span class="piCdSep">:</span>
+      <div class="piCdBlock"><span id="piCdM" class="piCdVal">--</span><span class="piCdLbl">Min</span></div>
+      <span class="piCdSep">:</span>
+      <div class="piCdBlock"><span id="piCdS" class="piCdVal">--</span><span class="piCdLbl">Sec</span></div>
     </div>
-    <div id="piCountdown">
-      <span class="piCdLabel">🏈 The Game:</span>
-      <div class="piCdBlock"><span class="piCdNum" id="piCdD">--</span><span class="piCdSub">days</span></div>
-      <span class="piCdColon">:</span>
-      <div class="piCdBlock"><span class="piCdNum" id="piCdH">--</span><span class="piCdSub">hrs</span></div>
-      <span class="piCdColon">:</span>
-      <div class="piCdBlock"><span class="piCdNum" id="piCdM">--</span><span class="piCdSub">min</span></div>
-      <span class="piCdColon">:</span>
-      <div class="piCdBlock"><span class="piCdNum" id="piCdS">--</span><span class="piCdSub">sec</span></div>
-    </div>
-    <div id="piHeaderRight">
-      <div id="piWeatherWidget"><div class="piWeatherInner"><div class="piWeatherEmoji">🌡️</div><div class="piWeatherData"><div class="piWeatherTemp">--°</div><div class="piWeatherLabel">Loading weather…</div></div></div></div>
-      <button id="piCloseBtn" type="button">&#x2715; Exit</button>
-    </div>
+    <div id="piWeatherWidget"></div>
   </div>
-
-  <div id="piLeagueBar">${leagueBtns}</div>
-
-  <div id="piScoresPanel">
-    <div class="piPanelHeadWrapper">
-      <div class="piPanelHead gold" id="piPanelHeadLabel">Shop Teams</div>
-    </div>
-    <div id="piScoresContent"><div class="piNoGames">Loading&hellip;</div></div>
-  </div>
-
-  <div id="piRightPanel">
-    <div id="piRightToggleBar">
-      <button class="piRightToggleBtn active" data-panel="youtube" type="button">&#x25B6; Natty Replay</button>
-      <button class="piRightToggleBtn" data-panel="top25" type="button">&#x1F3C6; CFB Top 25</button>
-    </div>
-    <div id="piRightContent">
-      <div id="piYoutubeSlot"></div>
-      <div id="piRightBottom"></div>
-    </div>
-  </div>
-
-  <div id="piBanner">
-    <span class="piBannerChunk">Our honor defend, so we'll fight to the end for <strong>Ohio</strong></span>
-    ${leaf}
-    <span class="piBannerChunk"><strong>TTUN Sucks</strong> and Are Cheating Bastards</span>
-    ${leaf}
-    <span class="piBannerChunk" id="piBannerDays">${days} days since TTUN has won in The Game</span>
+  <div class="piTopBarRight">
+    <button id="piCloseBtn" class="piCloseBtn">✕ Exit</button>
   </div>
 </div>
-`;
+
+<div class="piLeagueTabs">
+  ${[
+    `<button class="piLeagueBtn piShopTeamsBtn${_activeLeague === "shop" ? " active" : ""}" data-league="shop">Shop Teams</button>`,
+    ...LEAGUES.map(l => `<button class="piLeagueBtn${_activeLeague === l.key ? " active" : ""}" data-league="${l.key}">${l.label}</button>`)
+  ].join("")}
+</div>
+
+<div class="piMain">
+  <div class="piLeft">
+    <div id="piScoresContent"><div class="piNoGames">Loading…</div></div>
+  </div>
+  <div class="piRight">
+    <div class="piRightHeader">
+      <button class="piRightTab${_rightPanel === "youtube" ? " active" : ""}" data-panel="youtube">📺 YouTube</button>
+      <button class="piRightTab${_rightPanel === "news"    ? " active" : ""}" data-panel="news">📰 News</button>
+    </div>
+    <div class="piRightContent" id="piRightContent"></div>
+  </div>
+</div>`;
   }
 
   // ----------------------------------------------------------------
   // League button binding
   // ----------------------------------------------------------------
   function _bindLeagueButtons() {
-    document.querySelectorAll(".piLeagueBtn").forEach(btn => {
+    const overlay = document.getElementById("piScoreboard");
+    if (!overlay) return;
+    overlay.querySelectorAll(".piLeagueBtn").forEach(btn => {
       btn.addEventListener("click", () => {
-        _activeLeague = btn.getAttribute("data-league");
-        document.querySelectorAll(".piLeagueBtn").forEach(b => b.classList.remove("active"));
+        _activeLeague = btn.dataset.league;
+        overlay.querySelectorAll(".piLeagueBtn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
-        const head = document.getElementById("piPanelHeadLabel");
-        if (head) {
-          if (_activeLeague === "shop") {
-            head.textContent = "Shop Teams";
-            head.classList.add("gold");
-          } else {
-            const league = LEAGUES.find(l => l.key === _activeLeague);
-            head.textContent = league ? league.label + " Scores" : "Scores";
-            head.classList.remove("gold");
-          }
-        }
         _renderScores();
       });
     });
   }
 
   // ----------------------------------------------------------------
-  // Right panel
+  // Right panel toggle
   // ----------------------------------------------------------------
   function _bindRightToggle() {
-    document.querySelectorAll(".piRightToggleBtn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        _rightPanel = btn.getAttribute("data-panel");
-        document.querySelectorAll(".piRightToggleBtn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
+    const overlay = document.getElementById("piScoreboard");
+    if (!overlay) return;
+    overlay.querySelectorAll(".piRightTab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        _rightPanel = tab.dataset.panel;
+        overlay.querySelectorAll(".piRightTab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
         _loadRightPanel();
       });
     });
   }
 
-  function _loadRightPanel() {
-    const youtubeSlot = document.getElementById("piYoutubeSlot");
-    const bottomSlot  = document.getElementById("piRightBottom");
-    if (!youtubeSlot || !bottomSlot) return;
-
+  async function _loadRightPanel() {
+    const el = document.getElementById("piRightContent");
+    if (!el) return;
     if (_rightPanel === "youtube") {
-      // YouTube in top slot only
-      youtubeSlot.style.display = "block";
-      youtubeSlot.innerHTML = `<iframe
-        src="https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&modestbranding=1&rel=0"
-        allow="autoplay; encrypted-media" allowfullscreen title="OSU Natty Replay"></iframe>`;
-      bottomSlot.innerHTML = ""; // empty space — will circle back
-    } else {
-      // Top 25 fills the whole right content area
-      youtubeSlot.style.display = "none";
-      bottomSlot.innerHTML = "";
-      _renderTop25(bottomSlot);
+      el.style.padding = "0";
+      el.innerHTML = `<iframe id="piYouTubeFrame" src="https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+      return;
     }
-  }
-
-  // ----------------------------------------------------------------
-  // Top 25
-  // ----------------------------------------------------------------
-  function _renderTop25(el) {
-    el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;padding:16px 0;">Loading rankings&hellip;</div></div>`;
-    fetch("https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings")
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(data => {
-        const ap    = (data?.rankings || []).find(p => String(p?.name || "").toLowerCase().includes("ap")) || (data?.rankings || [])[0];
-        const ranks = ap?.ranks || [];
-        const list  = el.querySelector("#piTop25List") || el;
-        if (!ranks.length) { list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;">Rankings not available.</div>`; return; }
-        list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div>` +
-          ranks.map(r => {
-            const name = _applyTTUN(String(r?.team?.name || r?.team?.displayName || "Unknown"));
-            return `<div class="piRankRow"><span class="piRankNum">${r.current}</span><span class="piRankTeam">${_esc(name)}</span><span class="piRankRecord">${_esc(String(r?.recordSummary || ""))}</span></div>`;
-          }).join("");
-      })
-      .catch(() => { el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;">Rankings unavailable.</div></div>`; });
+    el.style.padding = "12px";
+    el.innerHTML = `<div class="piNoGames">Loading news…</div>`;
+    try {
+      const url = `https://site.api.espn.com/apis/site/v2/sports/news?limit=20`;
+      const data = await fetch(url).then(r => r.ok ? r.json() : Promise.reject());
+      const articles = data?.articles || [];
+      if (!articles.length) { el.innerHTML = `<div class="piNoGames">No news available.</div>`; return; }
+      el.innerHTML = articles.slice(0, 20).map(a => `
+        <div class="piNewsItem">
+          <div class="piNewsHeadline">${_esc(a.headline || a.title || "")}</div>
+          <div class="piNewsSource">${_esc(a.source || a.byline || "ESPN")}</div>
+        </div>
+      `).join("");
+    } catch {
+      el.innerHTML = `<div class="piNoGames">News unavailable.</div>`;
+    }
   }
 
   // ----------------------------------------------------------------
@@ -737,16 +424,31 @@
   // ----------------------------------------------------------------
   function _startCountdown() {
     function tick() {
-      const diff = THE_GAME_DATE.getTime() - Date.now();
-      const d = document.getElementById("piCdD");
-      if (!d) return;
-      if (diff <= 0) { d.textContent = "0"; ["piCdH","piCdM","piCdS"].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = "00"; }); return; }
-      const tot  = Math.floor(diff / 1000);
-      const days = Math.floor(tot / 86400);
-      const hrs  = Math.floor((tot % 86400) / 3600);
-      const mins = Math.floor((tot % 3600) / 60);
-      const secs = tot % 60;
-      d.textContent = String(days);
+      const now  = new Date();
+      const diff = THE_GAME_DATE - now;
+
+      const daysEl = document.getElementById("piCdD");
+      const cdCont = document.getElementById("piCdContainer");
+
+      if (diff <= 0) {
+        // The Game has passed — show days since TTUN last won
+        const since = _daysSince(LAST_TTUN_WIN);
+        if (daysEl) daysEl.textContent = since;
+        const titleEl = document.getElementById("piCdTitle");
+        if (titleEl) titleEl.textContent = "DAYS SINCE TTUN WIN";
+        const hEl = document.getElementById("piCdH"); if (hEl) hEl.closest(".piCdBlock").style.display = "none";
+        const mEl = document.getElementById("piCdM"); if (mEl) mEl.closest(".piCdBlock").style.display = "none";
+        const sEl = document.getElementById("piCdS"); if (sEl) sEl.closest(".piCdBlock").style.display = "none";
+        cdCont.querySelectorAll(".piCdSep").forEach(s => s.style.display = "none");
+        return;
+      }
+
+      const days = Math.floor(diff / 86400000);
+      const hrs  = Math.floor((diff % 86400000) / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+
+      const d = document.getElementById("piCdD"); if (d) d.textContent = String(days);
       const h = document.getElementById("piCdH"); if (h) h.textContent = String(hrs).padStart(2,"0");
       const m = document.getElementById("piCdM"); if (m) m.textContent = String(mins).padStart(2,"0");
       const s = document.getElementById("piCdS"); if (s) s.textContent = String(secs).padStart(2,"0");
@@ -842,9 +544,15 @@
     const el = document.getElementById("piScoresContent");
     if (!el) return;
     const league = LEAGUES.find(l => l.key === _activeLeague) || LEAGUES[0];
-    const date   = _todayStr();
     el.innerHTML = `<div class="piNoGames">Loading&hellip;</div>`;
 
+    // ── MLS: show the full weekend window (Fri–Sun) plus any midweek games ──
+    if (_activeLeague === "mls") {
+      await _renderMLSWeekend(el, league);
+      return;
+    }
+
+    const date   = _todayStr();
     let events = [];
     try {
       const data = await fetch(league.url(date)).then(r => r.ok ? r.json() : Promise.reject(r.status));
@@ -896,6 +604,138 @@
   }
 
   // ----------------------------------------------------------------
+  // MLS — Weekend window + midweek games
+  // Shows Fri/Sat/Sun of the current/nearest weekend.
+  // If midweek games exist in the next 5 days they are appended.
+  // ----------------------------------------------------------------
+  async function _renderMLSWeekend(el, league) {
+    const now  = new Date();
+    const dow  = now.getDay(); // 0=Sun … 6=Sat
+
+    // ── Determine the Fri/Sat/Sun window for this weekend ──
+    // If today is Mon–Thu we look forward to the coming weekend.
+    // If today is Fri/Sat/Sun we show the current weekend.
+    // If today is Sun we also look back to include Fri/Sat (already passed).
+    function offsetDate(base, offsetDays) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + offsetDays);
+      return d;
+    }
+
+    let fridayDate;
+    if (dow === 0)       fridayDate = offsetDate(now, -2); // Sun → prev Fri
+    else if (dow === 1)  fridayDate = offsetDate(now,  4); // Mon → next Fri
+    else if (dow === 2)  fridayDate = offsetDate(now,  3); // Tue → next Fri
+    else if (dow === 3)  fridayDate = offsetDate(now,  2); // Wed → next Fri
+    else if (dow === 4)  fridayDate = offsetDate(now,  1); // Thu → next Fri
+    else if (dow === 5)  fridayDate = offsetDate(now,  0); // Fri → today
+    else                 fridayDate = offsetDate(now, -1); // Sat → prev Fri
+
+    const weekendDates = [
+      _dateStr(fridayDate),
+      _dateStr(offsetDate(fridayDate, 1)),
+      _dateStr(offsetDate(fridayDate, 2)),
+    ];
+
+    // ── Also look for midweek games in the next 5 days (Mon–Thu) ──
+    const midweekDates = [];
+    for (let i = 0; i <= 5; i++) {
+      const d    = offsetDate(now, i);
+      const dDow = d.getDay();
+      const ds   = _dateStr(d);
+      // Mon(1), Tue(2), Wed(3), Thu(4) only; skip if already in weekend window
+      if (dDow >= 1 && dDow <= 4 && !weekendDates.includes(ds)) {
+        midweekDates.push(ds);
+      }
+    }
+
+    const allDates = [...weekendDates, ...midweekDates];
+
+    // Fetch all dates in parallel
+    const fetches = allDates.map(d =>
+      fetch(league.url(d))
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(data => ({ date: d, events: data?.events || [] }))
+        .catch(() => ({ date: d, events: [] }))
+    );
+
+    const results = await Promise.allSettled(fetches);
+
+    // Deduplicate by event ID; preserve date-order
+    const seen    = new Set();
+    const weekend = [];
+    const midweek = [];
+
+    for (const res of results) {
+      if (res.status !== "fulfilled") continue;
+      const { date: ds, events } = res.value;
+      const isMidweek = midweekDates.includes(ds);
+      for (const ev of events) {
+        const id = String(ev?.id || ev?.uid || "");
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        if (isMidweek) midweek.push(ev);
+        else           weekend.push(ev);
+      }
+    }
+
+    // Sort each group: live first, then pre by time, then final
+    function sortGroup(arr) {
+      return arr.sort((a, b) => {
+        const sa = _getState(a), sb = _getState(b);
+        const rank = s => s === "in" ? 0 : s === "pre" ? 1 : 2;
+        if (rank(sa) !== rank(sb)) return rank(sa) - rank(sb);
+        return new Date(a.date || 0) - new Date(b.date || 0);
+      });
+    }
+    sortGroup(weekend);
+    sortGroup(midweek);
+
+    if (!weekend.length && !midweek.length) {
+      el.innerHTML = `<div class="piNoGames">No MLS matches found for this window.</div>`;
+      return;
+    }
+
+    // Build HTML — weekend section, then midweek section if present
+    let html = "";
+    if (weekend.length) {
+      const fri = fridayDate.toLocaleDateString([], { month: "short", day: "numeric" });
+      const sun = offsetDate(fridayDate, 2).toLocaleDateString([], { month: "short", day: "numeric" });
+      html += `<div class="piSectionHeader">⚽ Weekend Matches — ${fri}–${sun}</div>`;
+      html += weekend.map(ev => _buildShopCard("mls", "MLS", ev, null, null)).join("");
+    }
+    if (midweek.length) {
+      html += `<div class="piSectionHeader">⚽ Midweek Matches</div>`;
+      html += midweek.map(ev => _buildShopCard("mls", "MLS", ev, null, null)).join("");
+    }
+
+    el.innerHTML = html;
+
+    // Hydrate odds via summary
+    const allEvents = [...weekend, ...midweek];
+    const CONCURRENCY = 4;
+    let idx = 0;
+    async function worker() {
+      while (idx < allEvents.length) {
+        const i = idx++;
+        const ev = allEvents[i];
+        const eventId = String(ev?.id || "");
+        if (!eventId) continue;
+        try {
+          const data = await fetch(SUMMARY_URLS.mls(eventId)).then(r => r.ok ? r.json() : null);
+          if (!data) continue;
+          const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
+          if (odds.favored || odds.ou) {
+            const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+            if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
+          }
+        } catch {}
+      }
+    }
+    await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
+  }
+
+  // ----------------------------------------------------------------
   // Shop Teams
   // ----------------------------------------------------------------
   async function _renderShopTeams() {
@@ -936,10 +776,18 @@
 
     const missingTeams = SHOP_TEAMS_NORM.filter(t => !teamsFound.has(t));
     if (missingTeams.length) {
+      // From Tuesday onward, WEEK_PREVIEW_LEAGUES (mls/nfl/cfb) get the full
+      // 7-day lookahead so the upcoming weekend's games show on Shop Teams.
+      // Monday and earlier keep a tight 3-day window to avoid showing games
+      // that are too far out.
+      const isTuesdayOrLater = now.getDay() >= 2; // 0=Sun,1=Mon,2=Tue...
+
       const lookaheadFetches = [];
       for (const lg of LEAGUES) {
-        const days = LOOKAHEAD_DAYS[lg.key] || 0;
-        if (!days) continue;
+        const baseDays = LOOKAHEAD_DAYS[lg.key] || 0;
+        if (!baseDays) continue;
+        // For WEEK_PREVIEW_LEAGUES, cap at 3 before Tuesday, use full window from Tue onward
+        const days = (WEEK_PREVIEW_LEAGUES.has(lg.key) && !isTuesdayOrLater) ? Math.min(baseDays, 3) : baseDays;
         for (let d = 1; d <= days; d++) {
           const futureDate = _dateStr(new Date(now.getTime() + d * 86400000));
           lookaheadFetches.push(
@@ -1032,9 +880,6 @@
     await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
   }
 
-  // ----------------------------------------------------------------
-  // Helpers — team matching
-  // ----------------------------------------------------------------
   function _eventHasShopTeam(ev) {
     const comp = (ev?.competitions || [])[0] || {};
     return (comp?.competitors || []).some(c => _isShopTeam(c?.team));
@@ -1042,221 +887,226 @@
 
   function _isShopTeam(team) {
     if (!team) return false;
-    const displayName = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const shortName   = String(team.shortDisplayName || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const combo       = String((team.location || "") + " " + (team.name || "")).trim().toLowerCase().replace(/\s+/g, " ");
-    const name        = String(team.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const display  = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const shortDis = String(team.shortDisplayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const name     = String(team.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const location = String(team.location || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const combo    = location && name ? `${location} ${name}` : "";
     return SHOP_TEAMS_NORM.some(t =>
-      t === displayName || t === shortName || t === combo || t === name ||
-      displayName.includes(t) || t.includes(displayName)
+      t === display || t === shortDis || t === name || t === combo ||
+      (display && display.includes(t)) || (t && t.includes(display))
     );
   }
 
   function _shopTeamKey(team) {
-    return String(team?.displayName || team?.shortDisplayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return String(team?.displayName || team?.name || "").trim().toLowerCase().replace(/\s+/g, " ");
   }
 
   function _shopTeamRank(ev) {
     const comp = (ev?.competitions || [])[0] || {};
-    let best = Infinity;
     for (const c of (comp?.competitors || [])) {
-      const team = c?.team;
-      if (!team) continue;
-      const displayName = String(team.displayName || "").trim().toLowerCase().replace(/\s+/g, " ");
+      const displayName = _shopTeamKey(c?.team);
       const i = SHOP_TEAMS_NORM.findIndex(t => t === displayName || displayName.includes(t) || t.includes(displayName));
-      if (i !== -1 && i < best) best = i;
+      if (i >= 0) return i;
     }
-    return best;
+    return 999;
   }
 
+  // ----------------------------------------------------------------
+  // State helpers
+  // ----------------------------------------------------------------
   function _getState(ev) {
-    return String(ev?.status?.type?.state || "pre");
+    return String(ev?.status?.type?.state || ev?.competitions?.[0]?.status?.type?.state || "unknown");
   }
 
-  // ----------------------------------------------------------------
-  // Playoff series parsing — scoreboard competition object (primary)
-  // ----------------------------------------------------------------
-  function _parseSeriesFromComp(comp, leagueKey) {
-    if (!comp || !PLAYOFF_LEAGUES.has(leagueKey)) return null;
-    try {
-      const series = comp?.series;
-      if (!series) return null;
-      const seriesComps = series?.competitors || [];
-      if (seriesComps.length < 2) return null;
-      const w0 = Number(seriesComps[0]?.wins || 0);
-      const w1 = Number(seriesComps[1]?.wins || 0);
-      if (w0 === 0 && w1 === 0) {
-        const title = String(series?.title || series?.summary || "");
-        if (title) return { seriesSummary: title };
-        return null;
-      }
-      const gameComps = comp?.competitors || [];
-      const _nameForSeriesComp = (sc) => {
-        const scId = String(sc?.id || sc?.team?.id || "");
-        if (scId) {
-          const match = gameComps.find(gc =>
-            String(gc?.id || gc?.team?.id || "") === scId ||
-            String(gc?.team?.id || "") === scId
-          );
-          if (match) return String(match?.team?.shortDisplayName || match?.team?.displayName || match?.team?.abbreviation || "");
-        }
-        return String(sc?.team?.shortDisplayName || sc?.team?.displayName || sc?.team?.abbreviation || "");
-      };
-      const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
-      const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
-      return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
-    } catch { return null; }
+  function _getStatusDetail(ev) {
+    return String(ev?.status?.type?.detail || ev?.competitions?.[0]?.status?.type?.detail || "");
   }
 
-  // ----------------------------------------------------------------
-  // Playoff series parsing — summary endpoint (fallback)
-  // ----------------------------------------------------------------
-  function _parseSeriesFromSummary(data, fallbackComp) {
-    try {
-      const comp = data?.header?.competitions?.[0] || data?.competitions?.[0];
-      if (!comp) return null;
-      const seasonType = Number(data?.header?.season?.type || data?.season?.type || 0);
-      if (seasonType < 2) return null;
-      const series = comp?.series;
-      if (!series) return null;
-      const seriesComps = series?.competitors || [];
-      if (seriesComps.length < 2) return null;
-      const w0 = Number(seriesComps[0]?.wins || 0);
-      const w1 = Number(seriesComps[1]?.wins || 0);
-      const gameComps = [...(comp?.competitors || []), ...((fallbackComp?.competitors) || [])];
-      const _nameForSeriesComp = (sc) => {
-        const scId = String(sc?.id || sc?.team?.id || "");
-        if (scId) {
-          const match = gameComps.find(gc =>
-            String(gc?.id || gc?.team?.id || "") === scId ||
-            String(gc?.team?.id || "") === scId
-          );
-          if (match) return String(match?.team?.shortDisplayName || match?.team?.displayName || match?.team?.abbreviation || "");
-        }
-        return String(sc?.team?.shortDisplayName || sc?.team?.displayName || sc?.team?.abbreviation || "");
-      };
-      const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
-      const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
-      if (w0 === 0 && w1 === 0) {
-        const title = String(series?.title || series?.summary || "");
-        if (title) return { seriesSummary: title };
-      } else {
-        return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
-      }
-      const competitors = comp?.competitors || [];
-      if (competitors.length >= 2) {
-        const s0 = String(competitors[0]?.seriesSummary || "");
-        if (s0) return { seriesSummary: s0 };
-      }
-      return null;
-    } catch { return null; }
-  }
+  function _getPeriodLabel(ev, leagueKey) {
+    const comp = ev?.competitions?.[0] || {};
+    const status = comp?.status || ev?.status || {};
+    const period = Number(status?.period ?? status?.displayClock ?? 0);
+    const clock  = String(status?.displayClock || "");
+    const state  = String(status?.type?.state || "");
+    if (state !== "in") return { periodLabel: "", clock: "" };
 
-  function _buildSeriesHTML(series) {
-    if (!series) return "";
-    if (series.seriesSummary) return `<span class="piSeriesBadge">🏆 ${_esc(series.seriesSummary)}</span>`;
-    const { name0, wins0, name1, wins1 } = series;
-    if (wins0 === wins1) return `<span class="piSeriesBadge tied">🏆 Series Tied ${wins0}-${wins1}</span>`;
-    const leader = wins0 > wins1 ? name0 : name1;
-    const lWins  = wins0 > wins1 ? wins0 : wins1;
-    const tWins  = wins0 > wins1 ? wins1 : wins0;
-    return `<span class="piSeriesBadge">🏆 ${_esc(leader)} leads ${lWins}-${tWins}</span>`;
-  }
-
-  // ----------------------------------------------------------------
-  // Rich card builder
-  // ----------------------------------------------------------------
-  function _buildShopCard(leagueKey, leagueLabel, ev, favored, ou, upcoming) {
-    try {
-      const comp       = (ev?.competitions || [])[0] || {};
-      const status     = ev?.status || {};
-      const state      = String(status?.type?.state || "pre");
-      const done       = !!(status?.type?.completed);
-      const clock      = String(status?.displayClock || "");
-      const period     = Number(status?.period || 0);
-      const eventId    = String(ev?.id || "");
-      const isPlayoff  = PLAYOFF_LEAGUES.has(leagueKey);
-      const periodLabel = _periodLabel(leagueKey, period);
-
-      let cls = upcoming ? "upcoming" : "sched";
-      let statusLabel = ev.date ? _fmtTime(ev.date) : "Scheduled";
-      if (upcoming) statusLabel = "📆 " + (ev.date ? _fmtGameDate(ev.date) : "Upcoming");
-      if (!upcoming && state === "in")             { cls = "live";  statusLabel = `${periodLabel} ${clock}`; }
-      if (!upcoming && (state === "post" || done)) { cls = "final"; statusLabel = "Final"; }
-
-      const statusCls  = cls === "live" ? " live" : cls === "upcoming" ? " upcoming" : "";
-      const badgeColor = LEAGUE_COLORS[leagueKey] || "#555";
-
-      const venue      = comp?.venue;
-      const venueName  = String(venue?.fullName || venue?.name || "");
-      const city       = String(venue?.address?.city || "");
-      const stateCode  = String(venue?.address?.state || "");
-      const venueText  = [venueName, [city, stateCode].filter(Boolean).join(", ")].filter(Boolean).join(" — ");
-      const gameDateStr = ev.date ? _fmtGameDate(ev.date) : "";
-
-      const competitors = comp?.competitors || [];
-      const teamsHTML = competitors.map(c => {
-        const team   = c?.team || {};
-        const isFav  = _isShopTeam(team);
-        const name   = _applyTTUN(String(team.displayName || team.shortDisplayName || team.abbreviation || "TBD"));
-        const logo   = String(team.logo || (Array.isArray(team.logos) ? team.logos[0]?.href : "") || "");
-        const score  = String(c?.score || "");
-        const rec    = _getRecord(c);
-        const favCls = isFav ? " fav" : "";
-        const logoImg = logo
-          ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />`
-          : `<span style="width:30px;height:30px;flex-shrink:0;display:inline-block;"></span>`;
-        return `<div class="piShopTeamLine">
-          <div class="piShopTeamLineLeft">
-            ${logoImg}
-            <span class="piShopTeamNameFull${favCls}">${_esc(name)}</span>
-            ${rec ? `<span class="piShopTeamRecord">${_esc(rec)}</span>` : ""}
-          </div>
-          <span class="piShopTeamScore">${_esc(score)}</span>
-        </div>`;
-      }).join("");
-
-      const oddsText = _buildOddsLine(favored || "", ou || "");
-
-      let seriesHTML = "";
-      if (isPlayoff) {
-        const seriesFromComp = _parseSeriesFromComp(comp, leagueKey);
-        seriesHTML = `<div class="piSeriesLine">${seriesFromComp ? _buildSeriesHTML(seriesFromComp) : ""}</div>`;
-      }
-
-      return `
-<div class="piShopCard ${cls}" data-eventid="${_esc(eventId)}">
-  <div class="piShopCardTop">
-    <span class="piShopLeagueBadge" style="background:${badgeColor};">${_esc(leagueLabel)}</span>
-    <span class="piShopStatusLabel${statusCls}">${_esc(statusLabel)}</span>
-  </div>
-  <div class="piShopTeamsRow">${teamsHTML}</div>
-  ${seriesHTML}
-  <div class="piShopMeta">
-    ${!upcoming && gameDateStr ? `<span class="piShopMetaItem">📅 ${_esc(gameDateStr)}</span>` : ""}
-    ${venueText ? `<span class="piShopMetaItem venue">📍 ${_esc(venueText)}</span>` : ""}
-    <span class="piShopMetaItem odds">${oddsText ? _esc(oddsText) : (state === "pre" || upcoming ? "Fetching lines…" : "")}</span>
-  </div>
-</div>`;
-    } catch { return ""; }
-  }
-
-  function _periodLabel(leagueKey, period) {
-    switch (leagueKey) {
-      case "nhl":   return `P${period}`;
-      case "mlb":   return `${period}th`;
-      case "nba": case "ncaam": return `Q${period}`;
-      case "cfb": case "nfl":   return `Q${period}`;
-      default: return `${period}`;
+    if (leagueKey === "nfl" || leagueKey === "cfb") {
+      const labels = ["1st", "2nd", "3rd", "4th", "OT"];
+      return { periodLabel: labels[Math.min(period - 1, 4)] || `Q${period}`, clock };
     }
+    if (leagueKey === "nba" || leagueKey === "ncaam") {
+      const labels = ["1st", "2nd", "3rd", "4th", "OT"];
+      return { periodLabel: labels[Math.min(period - 1, 4)] || `Q${period}`, clock };
+    }
+    if (leagueKey === "nhl") {
+      const labels = ["1st", "2nd", "3rd", "OT", "SO"];
+      return { periodLabel: labels[Math.min(period - 1, 4)] || `P${period}`, clock };
+    }
+    if (leagueKey === "mlb") {
+      const inning = String(status?.type?.shortDetail || status?.type?.description || "").replace(/^Top |^Bot /, "");
+      const half   = String(status?.type?.shortDetail || "").startsWith("Top") ? "▲" : "▼";
+      return { periodLabel: `${half} ${inning || period}`, clock: "" };
+    }
+    if (leagueKey === "mls") {
+      return { periodLabel: period <= 1 ? "1st Half" : "2nd Half", clock };
+    }
+    return { periodLabel: `P${period}`, clock };
   }
 
+  // ----------------------------------------------------------------
+  // Record helper
+  // ----------------------------------------------------------------
   function _getRecord(competitor) {
     const recs = competitor?.records;
     if (!Array.isArray(recs) || !recs.length) return "";
-    const overall = recs.find(r => String(r?.name || "").toLowerCase() === "overall") ||
-                    recs.find(r => String(r?.type || "").toLowerCase() === "total") ||
-                    recs[0];
+    const overall = recs.find(r => String(r?.name || "").toLowerCase() === "overall") || recs[0];
+    return String(overall?.summary || "").trim();
+  }
+
+  // ----------------------------------------------------------------
+  // Series (playoff) parser
+  // ----------------------------------------------------------------
+  function _parseSeriesFromSummary(data, fallbackComp) {
+    const comp  = data?.header?.competitions?.[0] || fallbackComp || null;
+    const series = comp?.series || data?.series || null;
+    if (!series) return null;
+
+    const competitors = comp?.competitors || [];
+    const away = competitors.find(c => c.homeAway === "away");
+    const home = competitors.find(c => c.homeAway === "home");
+
+    const awayWins = Number(away?.series?.wins ?? series?.competitors?.find(c => c.homeAway === "away")?.wins ?? 0);
+    const homeWins = Number(home?.series?.wins ?? series?.competitors?.find(c => c.homeAway === "home")?.wins ?? 0);
+
+    const awayName = String(away?.team?.abbreviation || away?.team?.shortDisplayName || "Away");
+    const homeName = String(home?.team?.abbreviation || home?.team?.shortDisplayName || "Home");
+
+    const completed = !!series.completed;
+    return { awayName, homeName, awayWins, homeWins, completed };
+  }
+
+  function _buildSeriesHTML({ awayName, homeName, awayWins, homeWins, completed }) {
+    const leader = awayWins > homeWins
+      ? `${awayName} leads ${awayWins}–${homeWins}`
+      : homeWins > awayWins
+        ? `${homeName} leads ${homeWins}–${awayWins}`
+        : `Series tied ${awayWins}–${homeWins}`;
+    return completed ? `Series: ${leader} (Final)` : `Series: ${leader}`;
+  }
+
+  // ----------------------------------------------------------------
+  // Build shop card
+  // ----------------------------------------------------------------
+  function _buildShopCard(leagueKey, leagueLabel, ev, favored, ou, upcoming) {
+    const comp        = (ev?.competitions || [])[0] || {};
+    const state       = _getState(ev);
+    const done        = !!comp?.status?.type?.completed;
+    const { periodLabel, clock } = _getPeriodLabel(ev, leagueKey);
+    const competitors = comp?.competitors || [];
+    const away        = competitors.find(c => c.homeAway === "away") || competitors[0] || {};
+    const home        = competitors.find(c => c.homeAway === "home") || competitors[1] || {};
+
+    const color = LEAGUE_COLORS[leagueKey] || "#555";
+
+    if (leagueKey === "pga") {
+      const athlete = ev?.competitions?.[0]?.competitors?.[0]?.athlete || {};
+      const score   = ev?.competitions?.[0]?.competitors?.[0]?.score || "--";
+      const name    = athlete?.displayName || ev?.name || "Unknown";
+      const logo    = athlete?.headshot?.href || "";
+      return `
+        <div class="piShopCard${state === "in" ? " live" : state === "post" ? " final" : ""}" style="border-left-color:${color}" data-eventid="${_esc(String(ev?.id || ""))}">
+          <div class="piShopCardTop">
+            <span class="piShopLeagueTag">${_esc(leagueLabel)}</span>
+            <span class="piShopStatusLabel${state === "in" ? " live" : ""}">${state === "in" ? `LIVE • ${periodLabel}` : state === "post" ? "Final" : _fmtGameDate(ev?.date)}</span>
+          </div>
+          <div class="piShopTeamsRow">
+            <div class="piShopTeamLine">
+              <div class="piShopTeamLineLeft">
+                ${logo ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />` : ""}
+                <span class="piShopTeamNameFull">${_esc(name)}</span>
+              </div>
+              <span class="piShopTeamScore">${_esc(String(score))}</span>
+            </div>
+          </div>
+          <div class="piShopMeta">
+            <span class="piShopMetaItem">${_esc(ev?.name || "")}</span>
+            <span class="piShopMetaItem odds"></span>
+          </div>
+        </div>`;
+    }
+
+    let cls = upcoming ? "upcoming" : "sched";
+    let statusLabel = state === "pre" ? _fmtTime(ev?.date) : "";
+    if (upcoming) statusLabel = "📆 " + (ev.date ? _fmtGameDate(ev.date) : "Upcoming");
+    if (!upcoming && state === "in")             { cls = "live";  statusLabel = `${periodLabel} ${clock}`; }
+    if (!upcoming && (state === "post" || done)) { cls = "final"; statusLabel = "Final"; }
+
+    const statusCls  = cls === "live" ? " live" : cls === "upcoming" ? " upcoming" : "";
+    const gameDateStr = (!upcoming && state === "pre") ? _fmtGameDate(ev?.date) : "";
+    const oddsText   = favored || ou ? _buildOddsLine(favored, ou) : "";
+    const eventId    = String(ev?.id || "");
+
+    const teamsHTML = [away, home].map((competitor, idx2) => {
+      const team    = competitor?.team || {};
+      const logo    = team?.logos?.[0]?.href || team?.logo || "";
+      const abbrev  = String(team?.abbreviation || "").slice(0, 4);
+      const name    = _applyTTUN(String(team?.displayName || team?.name || (idx2 === 0 ? "Away" : "Home")));
+      const score   = state === "pre" || upcoming ? "" : String(competitor?.score ?? "");
+      const rec     = _getRecord(competitor);
+      const isFav   = _isShopTeam(team);
+      const favCls  = isFav ? " fav" : "";
+      return `<div class="piShopTeamLine">
+        <div class="piShopTeamLineLeft">
+          ${logo
+            ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />`
+            : `<div class="piShopTeamLogo" style="background:#222;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:#888;">${_esc(abbrev)}</div>`}
+          <span class="piShopTeamNameFull${favCls}">${_esc(name)}</span>
+          ${rec ? `<span class="piShopTeamRecord">${_esc(rec)}</span>` : ""}
+        </div>
+        <span class="piShopTeamScore">${_esc(score)}</span>
+      </div>`;
+    }).join("");
+
+    return `
+      <div class="piShopCard ${cls}" style="border-left-color:${color}" data-eventid="${_esc(eventId)}">
+        <div class="piShopCardTop">
+          <span class="piShopLeagueTag">${_esc(leagueLabel)}</span>
+          <span class="piShopStatusLabel${statusCls}">${_esc(statusLabel)}</span>
+        </div>
+        <div class="piShopTeamsRow">${teamsHTML}</div>
+        <div class="piShopMeta">
+          ${!upcoming && gameDateStr ? `<span class="piShopMetaItem">📅 ${_esc(gameDateStr)}</span>` : ""}
+          <span class="piShopMetaItem">${_esc(_buildVenueLine(comp))}</span>
+          <span class="piShopMetaItem odds">${oddsText ? _esc(oddsText) : (state === "pre" || upcoming ? "Fetching lines…" : "")}</span>
+        </div>
+        <div class="piSeriesLine"></div>
+      </div>`;
+  }
+
+  // ----------------------------------------------------------------
+  // Venue
+  // ----------------------------------------------------------------
+  function _buildVenueLine(comp) {
+    const v = comp?.venue || null;
+    if (!v) return "";
+    const name = String(v?.fullName || v?.name || "").trim();
+    const city  = String(v?.address?.city || "").trim();
+    const state = String(v?.address?.state || "").trim();
+    const loc   = city && state ? `${city}, ${state}` : city || state;
+    return [name, loc].filter(Boolean).join(" – ");
+  }
+
+  // ----------------------------------------------------------------
+  // Record helper (scoreboard competitor)
+  // ----------------------------------------------------------------
+  function _getOverallRecord(competitor) {
+    const recs = competitor?.records;
+    if (!Array.isArray(recs) || !recs.length) return "";
+    const overall =
+      recs.find(r => String(r?.name || "").toLowerCase() === "overall") ||
+      recs.find(r => String(r?.type || "").toLowerCase() === "total") ||
+      recs[0];
     return String(overall?.summary || "").trim();
   }
 
