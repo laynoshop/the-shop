@@ -15,6 +15,20 @@
   const ROUNDS_PATH   = "putt_rounds";
   const MAX_PLAYERS   = 10;
 
+  // Top 10 OWGR pros — used as rotating placeholder examples
+  const PRO_PLACEHOLDERS = [
+    "Scottie Scheffler",
+    "Rory McIlroy",
+    "Xander Schauffele",
+    "Collin Morikawa",
+    "Tommy Fleetwood",
+    "Ludvig Åberg",
+    "Russell Henley",
+    "Cameron Young",
+    "Si Woo Kim",
+    "Shane Lowry",
+  ];
+
   // ─── Helpers ─────────────────────────────────────────────────────────────
   function esc(s) {
     return String(s || "")
@@ -306,7 +320,8 @@
     `);
 
     document.getElementById("golfBackHome")?.addEventListener("click", renderGolfHome);
-    document.getElementById("golfAddPlayer")?.addEventListener("click", addPlayerRow);
+    // FIX: wrap in arrow function so the click event is never passed as prefill
+    document.getElementById("golfAddPlayer")?.addEventListener("click", () => addPlayerRow());
     document.getElementById("golfConfirmStart")?.addEventListener("click", confirmStartRound);
     document.querySelectorAll(".golf-chip").forEach(btn => {
       btn.addEventListener("click", () => addPlayerByName(btn.dataset.name));
@@ -320,11 +335,12 @@
     if (!list) return;
     const count = list.querySelectorAll(".golf-player-row").length;
     if (count >= MAX_PLAYERS) return;
+    const pro = PRO_PLACEHOLDERS[count % PRO_PLACEHOLDERS.length];
     const row = document.createElement("div");
     row.className = "golf-player-row";
     row.innerHTML = `
       <input class="golf-input golf-player-input" type="text"
-        placeholder="Player ${count + 1} name"
+        placeholder="ex: ${esc(pro)}"
         maxlength="20" value="${esc(prefill)}" />
       <button class="golf-remove-player" aria-label="Remove">✕</button>
     `;
