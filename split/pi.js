@@ -537,8 +537,8 @@
   .piShopTeamLineLeft { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .piShopTeamLogo { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; border-radius: 3px; }
   .piShopTeamNameFull {
-    font-size: clamp(1rem, 1.8vw, 1.35rem);
-    font-weight: 700;
+    font-size: clamp(1.25rem, 2.2vw, 1.65rem);
+    font-weight: 800;
     color: #eee;
     white-space: nowrap;
     overflow: hidden;
@@ -547,7 +547,7 @@
   .piShopTeamNameFull.fav { color: #ffcc66; }
   .piShopTeamRecord { font-size: 0.85rem; color: #666; white-space: nowrap; flex-shrink: 0; }
   .piShopTeamScore {
-    font-size: clamp(1.3rem, 2.5vw, 1.9rem);
+    font-size: clamp(1.6rem, 3vw, 2.4rem);
     font-weight: 900;
     color: #fff;
     min-width: 42px;
@@ -604,17 +604,17 @@
   /* ---- Pi Putt Putt Scorecard (in scores panel) ---- */
   .piPuttWrap { grid-column: 1 / -1; padding: 4px 0; }
   .piPuttHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .piPuttCourseName { font-size: clamp(1.1rem, 2vw, 1.5rem); font-weight: 900; color: #fff; text-shadow: 0 0 8px rgba(0,200,80,0.4); }
+  .piPuttCourseName { font-size: clamp(1.4rem, 2.5vw, 1.9rem); font-weight: 900; color: #fff; text-shadow: 0 0 8px rgba(0,200,80,0.4); }
   .piPuttStatus { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 3px 12px; border-radius: 12px; }
   .piPuttStatus.live { background: rgba(200,0,0,0.4); color: #ff6644; border: 1px solid rgba(220,0,0,0.5); }
   .piPuttStatus.final { background: rgba(0,120,50,0.35); color: #7dffb3; border: 1px solid rgba(0,180,80,0.4); }
   .piPuttScTableWrap { overflow-x: auto; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,160,60,0.2); }
   .piPuttScorecard { width: 100%; border-collapse: collapse; }
-  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(0.95rem, 1.6vw, 1.25rem); font-variant-numeric: tabular-nums; }
+  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(1.1rem, 1.9vw, 1.5rem); font-variant-numeric: tabular-nums; }
   .piPuttScorecard thead th { font-size: clamp(0.8rem, 1.2vw, 1rem); font-weight: 800; letter-spacing: 0.08em; color: #aaa; background: rgba(0,0,0,0.25); border-bottom: 2px solid rgba(0,160,60,0.3); }
-  .piPuttScorecard .piPuttNameCol { text-align: left; padding-left: 14px; font-weight: 800; font-size: clamp(1rem, 1.8vw, 1.35rem); color: #f0f0f0; min-width: 100px; }
+  .piPuttScorecard .piPuttNameCol { text-align: left; padding-left: 14px; font-weight: 800; font-size: clamp(1.25rem, 2.2vw, 1.6rem); color: #f0f0f0; min-width: 100px; }
   .piPuttScorecard .piPuttParRow td { color: #888; font-size: clamp(0.8rem, 1.2vw, 1rem); background: rgba(0,0,0,0.15); font-weight: 600; }
-  .piPuttScorecard .piPuttTotalCol { font-weight: 900; font-size: clamp(1.05rem, 1.8vw, 1.4rem); }
+  .piPuttScorecard .piPuttTotalCol { font-weight: 900; font-size: clamp(1.25rem, 2.2vw, 1.65rem); }
   .piPuttScorecard .pi-sc-under { color: #4fffaa; font-weight: 800; text-shadow: 0 0 8px rgba(0,255,150,0.4); }
   .piPuttScorecard .pi-sc-over  { color: #ff7766; font-weight: 800; }
   .piPuttScorecard .pi-sc-even  { color: #fff; font-weight: 700; }
@@ -1046,7 +1046,7 @@
   async function _renderShopTeams() {
     const el = document.getElementById("piScoresContent");
     if (!el) return;
-    el.innerHTML = `<div class="piNoGames">Loading Shop Teams&hellip;</div>`;
+    el.innerHTML = `<div class="piNoGames">Loading Shop Teams…</div>`;
 
     const now = new Date();
     const primaryDate = now.getHours() < 9
@@ -1388,82 +1388,121 @@
 
   function _periodLabel(leagueKey, period) {
     switch (leagueKey) {
-      case "nhl":   return `P${period}`;
-      case "mlb":   return `${period}th`;
-      case "nba": case "ncaam": return `Q${period}`;
-      case "cfb": case "nfl":   return `Q${period}`;
-      default: return `${period}`;
+      case "nfl": case "cfb": {
+        if (period === 1) return "1st Q";
+        if (period === 2) return "2nd Q";
+        if (period === 3) return "3rd Q";
+        if (period === 4) return "4th Q";
+        if (period >= 5) return "OT";
+        return "";
+      }
+      case "nba": case "ncaam": {
+        if (period === 1) return "1st Q";
+        if (period === 2) return "2nd Q";
+        if (period === 3) return "3rd Q";
+        if (period === 4) return "4th Q";
+        if (period >= 5) return "OT";
+        return "";
+      }
+      case "mlb": return period ? `${period}${_ordSuffix(period)}` : "";
+      case "nhl": {
+        if (period === 1) return "1st P";
+        if (period === 2) return "2nd P";
+        if (period === 3) return "3rd P";
+        if (period >= 4) return "OT";
+        return "";
+      }
+      case "mls": case "ncaaw": {
+        if (period === 1) return "1st H";
+        if (period === 2) return "2nd H";
+        if (period >= 3) return "ET";
+        return "";
+      }
+      default: return period ? `P${period}` : "";
     }
   }
 
-  function _getRecord(competitor) {
-    const recs = competitor?.records;
-    if (!Array.isArray(recs) || !recs.length) return "";
-    const overall = recs.find(r => String(r?.name || "").toLowerCase() === "overall") ||
-                    recs.find(r => String(r?.type || "").toLowerCase() === "total") ||
-                    recs[0];
-    return String(overall?.summary || "").trim();
+  function _ordSuffix(n) {
+    const s = ["th","st","nd","rd"];
+    const v = n % 100;
+    return s[(v-20)%10] || s[v] || s[0];
   }
 
   // ----------------------------------------------------------------
   // Odds parsing
   // ----------------------------------------------------------------
   function _parseOddsFromSummary(data, fallbackComp) {
-    const pcArr = data?.pickcenter;
-    if (Array.isArray(pcArr) && pcArr.length) {
-      const comp = data?.header?.competitions?.[0] || fallbackComp || null;
-      const competitors = comp?.competitors || [];
-      const home = competitors.find(t => t.homeAway === "home");
-      const away = competitors.find(t => t.homeAway === "away");
-      const homeName = String(home?.team?.displayName || home?.team?.shortDisplayName || "Home");
-      const awayName = String(away?.team?.displayName || away?.team?.shortDisplayName || "Away");
-      const parsed = _parsePickcenter(pcArr[0], homeName, awayName);
-      if (parsed.favored || parsed.ou) return parsed;
-    }
-    const o = Array.isArray(data?.odds) ? data.odds[0] : null;
-    if (o) return {
-      favored: String(o.details || o.displayValue || "").replace(/^(Line|Spread|Odds):\s*/i, "").trim(),
-      ou: String(o.overUnder ?? o.total ?? "").trim()
-    };
-    return { favored: "", ou: "" };
-  }
-
-  function _parsePickcenter(pc, homeName, awayName) {
-    if (!pc) return { favored: "", ou: "" };
-    const ou      = String(pc.overUnder ?? pc.total ?? pc.overunder ?? "").trim();
-    const details = String(pc.details || pc.displayValue || "").replace(/^(Line|Spread|Odds):\s*/i, "").trim();
-    if (details) return { favored: details, ou };
-    const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
-    if (!Number.isFinite(spreadNum)) return { favored: "", ou };
-    const homeFav = !!pc.homeTeamOdds?.favorite;
-    const awayFav = !!pc.awayTeamOdds?.favorite;
-    const favoredTeam = homeFav ? homeName : awayFav ? awayName : (spreadNum < 0 ? homeName : awayName);
-    const abs = Math.abs(spreadNum);
-    return { favored: `${favoredTeam} -${abs % 1 === 0 ? abs.toFixed(0) : abs}`, ou };
+    try {
+      const comp = data?.header?.competitions?.[0] || data?.competitions?.[0] || fallbackComp || {};
+      const odds = comp?.odds?.[0] || comp?.pickcenter?.[0] || {};
+      const favored = String(odds?.details || odds?.overUnder?.details || "");
+      const ou      = odds?.overUnder != null ? String(odds.overUnder) : "";
+      return { favored, ou };
+    } catch { return { favored: "", ou: "" }; }
   }
 
   function _buildOddsLine(favored, ou) {
-    const hasFav = favored && favored !== "-";
-    const hasOu  = ou && ou !== "-";
-    if (!hasFav && !hasOu) return "";
-    if (hasFav && hasOu)  return `Favored: ${favored} • O/U: ${ou}`;
-    if (hasFav)            return `Favored: ${favored}`;
-    return `O/U: ${ou}`;
+    const parts = [];
+    if (favored) parts.push(favored);
+    if (ou)      parts.push(`O/U ${ou}`);
+    return parts.join(" · ");
   }
 
   // ----------------------------------------------------------------
-  // Date helpers
+  // Helpers
   // ----------------------------------------------------------------
-  function _daysSince(d) {
-    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const today = new Date(); const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    return Math.max(0, Math.floor((t - start) / 86400000));
+  function _getRecord(competitor) {
+    try {
+      const stats = competitor?.statistics || competitor?.records || [];
+      if (Array.isArray(stats)) {
+        const overall = stats.find(s => (s?.name || s?.type || "").toLowerCase().includes("overall") || (s?.name || "").toLowerCase() === "record");
+        if (overall) return String(overall.displayValue || overall.summary || "");
+        if (stats[0]) return String(stats[0].displayValue || stats[0].summary || "");
+      }
+      return String(competitor?.record?.displayValue || competitor?.record?.summary || "");
+    } catch { return ""; }
   }
+
+  function _applyTTUN(str) {
+    return str
+      .replace(/\bMichigan\b/g, "TTUN")
+      .replace(/\bWolverines\b/g, "Cheaters")
+      .replace(/\bU of M\b/gi, "TTUN")
+      .replace(/\bU-M\b/gi, "TTUN");
+  }
+
   function _todayStr() { return _dateStr(new Date()); }
-  function _dateStr(d) { return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; }
-  function _fmtTime(iso) { try { return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch { return ""; } }
-  function _fmtGameDate(iso) { try { return new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }); } catch { return ""; } }
-  function _applyTTUN(s) { return String(s || "").replace(/Michigan\s+Wolverines/gi, "TTUN").replace(/\bMichigan\b/gi, "TTUN"); }
-  function _esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function _dateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}${m}${day}`;
+  }
+
+  function _fmtTime(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+    } catch { return ""; }
+  }
+
+  function _fmtGameDate(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
+    } catch { return ""; }
+  }
+
+  function _daysSince(date) {
+    return Math.floor((Date.now() - date.getTime()) / 86400000);
+  }
+
+  function _esc(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
 })();
