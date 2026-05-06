@@ -133,10 +133,14 @@ window.replaceMichiganText = replaceMichiganText;
     if (app) app.style.display = "none";
     if (entry) entry.style.display = "flex";
 
-    // Hide Shop door if not admin
+    // Show/hide admin-only entry buttons based on role
     const role = getRole();
+
     const shopDoor = document.querySelector('.doorBtn[data-go="shop"]');
     if (shopDoor) shopDoor.style.display = (role === "admin") ? "" : "none";
+
+    const piBtn = document.getElementById("piScoreboardBtn");
+    if (piBtn) piBtn.style.display = (role === "admin") ? "" : "none";
 
     updateRivalryBanner();
 
@@ -145,9 +149,20 @@ window.replaceMichiganText = replaceMichiganText;
       document.querySelectorAll(".doorBtn").forEach(btn => {
         btn.addEventListener("click", () => {
           const tab = btn.getAttribute("data-go");
-          enterAppToTab(tab);
+          if (tab) enterAppToTab(tab);
         });
       });
+
+      // Pi Scoreboard button — launches Pi overlay, does NOT enter normal app
+      const piScoreboardBtn = document.getElementById("piScoreboardBtn");
+      if (piScoreboardBtn) {
+        piScoreboardBtn.addEventListener("click", () => {
+          if (typeof window.launchPiScoreboard === "function") {
+            window.launchPiScoreboard();
+          }
+        });
+      }
+
       showEntryScreen._bound = true;
     }
   }
@@ -288,7 +303,7 @@ window.replaceMichiganText = replaceMichiganText;
   window.__APP_LOADING = true;
 
   try {
-    if (btn) btn.textContent = "Loading…";
+    if (btn) btn.textContent = "Loading\u2026";
 
     // If firebase isn't ready yet, exit cleanly and release the guard
     if (typeof window.ensureFirebaseChatReady !== "function" || !window.firebase) {
