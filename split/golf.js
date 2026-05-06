@@ -30,9 +30,9 @@
   }
 
   function totalVsPar(scores, pars) {
-  let played = 0, diff = 0;
-  const safeScores = Array.isArray(scores) ? scores : Object.values(scores || {});
-  safeScores.forEach((s, i) => {
+    let played = 0, diff = 0;
+    const safeScores = Array.isArray(scores) ? scores : Object.values(scores || {});
+    safeScores.forEach((s, i) => {
       if (typeof s === "number" && s > 0) {
         diff += s - (pars[i] || 0);
         played++;
@@ -89,6 +89,12 @@
     const db = COL();
     if (!db || !name) return;
     await db.collection(REGULARS_PATH).doc(name.trim()).delete();
+  }
+
+  async function deleteRound(roundId) {
+    const db = COL();
+    if (!db || !roundId) return;
+    await db.collection(ROUNDS_PATH).doc(roundId).delete();
   }
 
   async function createRound(courseId, courseName, holePars, playerNames) {
@@ -571,13 +577,58 @@
   function renderRoundDetail(round) {
     _state.view = "roundDetail";
     _state.viewingRound = round;
+
+    const isActive = round.status === "active";
+
+    const resumeBtn = isActive
+      ? `<button class="golf-btn golf-btn-primary" id="golfResumeBtn" style="margin-top:16px;">▶ Resume Round</button>`
+      : "";
+
+    const deleteBtn = isAdmin()
+      ? `<button class="golf-btn golf-btn-danger" id="golfDeleteRoundBtn" style="margin-top:12px;">🗑 Delete Round</button>`
+      : "";
+
     setContent(`
       <div class="golf-wrap">
         <div class="golf-header"><button class="golf-back" id="golfBackRD">← Back</button><h2>${esc(round.courseName)}</h2></div>
         ${buildScorecardHTML(round)}
+        ${resumeBtn}
+        ${deleteBtn}
       </div>
     `);
+
     document.getElementById("golfBackRD")?.addEventListener("click", renderHistory);
+
+    if (isActive) {
+      document.getElementById("golfResumeBtn")?.addEventListener("click", () => {
+        const holePars = round.holePars || [];
+        _state.roundId       = round.id;
+        _state.playerNames   = round.players || [];
+        _state.currentHole   = typeof round.currentHole === "number" ? round.currentHole : 0;
+        _state.roundData     = {
+          courseId:    round.courseId,
+          courseName:  round.courseName,
+          holePars,
+          players:     round.players || [],
+          scores:      round.scores  || {},
+          status:      "active",
+          currentHole: _state.currentHole,
+          totalHoles:  holePars.length,
+        };
+        renderScoring();
+      });
+    }
+
+    if (isAdmin()) {
+      document.getElementById("golfDeleteRoundBtn")?.addEventListener("click", async () => {
+        const label = `${round.courseName} (${new Date(round.startedAt).toLocaleDateString([], { month:"short", day:"numeric", year:"numeric" })})`;
+        if (!confirm(`Delete round: ${label}?\n\nThis cannot be undone.`)) return;
+        const btn = document.getElementById("golfDeleteRoundBtn");
+        if (btn) { btn.disabled = true; btn.textContent = "Deleting…"; }
+        await deleteRound(round.id);
+        renderHistory();
+      });
+    }
   }
 
   // ─── View: Stats ──────────────────────────────────────────────────────────
@@ -724,10 +775,10 @@
       <div class="golf-scorecard-wrap">
         <div class="golf-sc-course">${esc(round.courseName)}</div>
         <div class="golf-sc-scroll">
-          <table class="golf-scorecard">
+          <table class="golf-scorecard" style="font-size:12px;">
             <thead>
-              <tr><th>Player</th>${holeCells}<th>Total</th></tr>
-              <tr class="golf-sc-par-row"><td>Par</td>${parCells}<td class="golf-sc-par">${totalPar}</td></tr>
+              <tr><th style="padding:4px 5px;">Player</th>${holeCells}<th style="padding:4px 5px;">Total</th></tr>
+              <tr class="golf-sc-par-row"><td style="padding:3px 5px;">Par</td>${parCells}<td class="golf-sc-par" style="padding:3px 5px;">${totalPar}</td></tr>
             </thead>
             <tbody>${playerRows}</tbody>
           </table>
