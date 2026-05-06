@@ -34,15 +34,15 @@
   const SHOP_TEAMS_NORM = SHOP_TEAMS.map(s => s.trim().toLowerCase().replace(/\s+/g, " "));
 
   const LEAGUES = [
-    { key: "cfb",   label: "CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${d}&limit=50` },
-    { key: "nfl",   label: "NFL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${d}&limit=50` },
-    { key: "nba",   label: "NBA",    url: d => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=50` },
-    { key: "mlb",   label: "MLB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${d}&limit=50` },
-    { key: "nhl",   label: "NHL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${d}&limit=50` },
-    { key: "ncaam", label: "NCAAB",  url: d => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${d}&groups=50&limit=100` },
-    { key: "mls",   label: "MLS",    url: d => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${d}&limit=50` },
-    { key: "pga",   label: "PGA",    url: d => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${d}&limit=50` },
-    { key: "ufc",   label: "UFC",    url: d => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${d}&limit=50` },
+    { key: "cfb",   label: "🏈 CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${d}&limit=50` },
+    { key: "nfl",   label: "🏈 NFL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${d}&limit=50` },
+    { key: "nba",   label: "🏀 NBA",    url: d => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=50` },
+    { key: "mlb",   label: "⚾ MLB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${d}&limit=50` },
+    { key: "nhl",   label: "🏒 NHL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${d}&limit=50` },
+    { key: "ncaam", label: "🏀 NCAAB",  url: d => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${d}&groups=50&limit=100` },
+    { key: "mls",   label: "⚽ MLS",    url: d => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${d}&limit=50` },
+    { key: "pga",   label: "⛳ PGA",    url: d => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${d}&limit=50` },
+    { key: "ufc",   label: "🥊 UFC",    url: d => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${d}&limit=50` },
   ];
 
   // Summary endpoints for odds hydration (keyed by league key)
@@ -72,7 +72,7 @@
   };
 
   let _intervals    = [];
-  let _activeLeague = "cfb";
+  let _activeLeague = "shop"; // default to Shop Teams on load
   let _rightPanel   = "youtube"; // "youtube" | "top25"
 
   // ----------------------------------------------------------------
@@ -125,11 +125,12 @@
   // Shell HTML
   // ----------------------------------------------------------------
   function buildShell() {
+    // Shop Teams first, then leagues, no emoji on Shop Teams pill
     const leagueBtns = [
+      `<button class="piLeagueBtn piShopTeamsBtn${_activeLeague === "shop" ? " active" : ""}" data-league="shop">Shop Teams</button>`,
       ...LEAGUES.map(l =>
         `<button class="piLeagueBtn${l.key === _activeLeague ? " active" : ""}" data-league="${l.key}">${l.label}</button>`
-      ),
-      `<button class="piLeagueBtn piShopTeamsBtn" data-league="shop">🏠 Shop Teams</button>`
+      )
     ].join("");
 
     const days = _daysSince(LAST_TTUN_WIN);
@@ -421,31 +422,7 @@
     text-shadow: 0 0 6px rgba(200,160,0,0.35);
   }
 
-  /* ---- Score cards ---- */
-  .piGame {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 7px 10px;
-    margin-bottom: 5px;
-    background: rgba(255,255,255,0.04);
-    border-radius: 6px;
-    border-left: 3px solid #333;
-    transition: border-color 0.2s;
-    pointer-events: none; /* read-only — no click interaction */
-  }
-  .piGame.live   { border-left-color: #cc0000; background: rgba(180,0,0,0.08); }
-  .piGame.final  { border-left-color: #444; }
-  .piGame.sched  { border-left-color: rgba(0,120,0,0.6); }
-  .piGameTeams   { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-  .piTeamRow     { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .piTeamName    { font-size: clamp(0.68rem, 1.4vw, 0.88rem); font-weight: 600; color: #e8e8e8; }
-  .piTeamScore   { font-size: clamp(0.72rem, 1.5vw, 0.95rem); font-weight: 900; color: #fff; }
-  .piGameStatus  { font-size: 0.68rem; color: #777; text-align: right; min-width: 52px; padding-left: 8px; }
-  .piGameStatus.live { color: #ff4444; font-weight: 800; }
-  .piNoGames { color: #444; font-size: 0.85rem; text-align: center; padding: 24px 0; }
-
-  /* ---- Shop Teams cards (richer) ---- */
+  /* ---- Rich score cards (used for ALL leagues + Shop Teams) ---- */
   .piShopCard {
     display: flex;
     flex-direction: column;
@@ -610,7 +587,7 @@
 
   <!-- Scores panel (left) -->
   <div id="piScoresPanel">
-    <div class="piPanelHead" id="piPanelHeadLabel">Scores</div>
+    <div class="piPanelHead gold" id="piPanelHeadLabel">Shop Teams</div>
     <div id="piScoresContent"><div class="piNoGames">Loading&hellip;</div></div>
   </div>
 
@@ -649,7 +626,7 @@
         const head = document.getElementById("piPanelHeadLabel");
         if (head) {
           if (_activeLeague === "shop") {
-            head.textContent = "🏠 Shop Teams";
+            head.textContent = "Shop Teams";
             head.classList.add("gold");
           } else {
             const league = LEAGUES.find(l => l.key === _activeLeague);
@@ -757,22 +734,62 @@
   }
 
   // ----------------------------------------------------------------
-  // Standard league scores (unchanged logic)
+  // Standard league scores — now uses rich card format with odds hydration
   // ----------------------------------------------------------------
-  function _renderLeagueScores() {
+  async function _renderLeagueScores() {
     const el = document.getElementById("piScoresContent");
     if (!el) return;
     const league = LEAGUES.find(l => l.key === _activeLeague) || LEAGUES[0];
     const date   = _todayStr();
-    fetch(league.url(date))
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(data => {
-        const events = data?.events || [];
-        if (!events.length) { el.innerHTML = `<div class="piNoGames">No games today.</div>`; return; }
-        el.innerHTML = events.map(ev => _buildGameCard(ev)).join("");
-        try { if (typeof window.replaceMichiganText === "function") window.replaceMichiganText(el); } catch {}
-      })
-      .catch(() => { el.innerHTML = `<div class="piNoGames">Scores unavailable.</div>`; });
+
+    el.innerHTML = `<div class="piNoGames">Loading&hellip;</div>`;
+
+    let events = [];
+    try {
+      const data = await fetch(league.url(date)).then(r => r.ok ? r.json() : Promise.reject(r.status));
+      events = data?.events || [];
+    } catch {
+      el.innerHTML = `<div class="piNoGames">Scores unavailable.</div>`;
+      return;
+    }
+
+    if (!events.length) {
+      el.innerHTML = `<div class="piNoGames">No games today.</div>`;
+      return;
+    }
+
+    // Render all cards immediately (no odds yet)
+    el.innerHTML = events.map(ev =>
+      _buildShopCard(_activeLeague, league.label.replace(/^\S+\s/, ""), ev, null, null)
+    ).join("");
+
+    try { if (typeof window.replaceMichiganText === "function") window.replaceMichiganText(el); } catch {}
+
+    // Hydrate odds in background — up to 4 concurrent summary fetches
+    if (!SUMMARY_URLS[_activeLeague]) return;
+    const CONCURRENCY = 4;
+    let idx = 0;
+    async function worker() {
+      while (idx < events.length) {
+        const i = idx++;
+        const ev = events[i];
+        const eventId = String(ev?.id || "");
+        if (!eventId) continue;
+        try {
+          const data = await fetch(SUMMARY_URLS[_activeLeague](eventId)).then(r => r.ok ? r.json() : null);
+          if (!data) continue;
+          const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
+          if (odds.favored || odds.ou) {
+            const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+            if (card) {
+              const oddsEl = card.querySelector(".piShopMetaItem.odds");
+              if (oddsEl) oddsEl.textContent = _buildOddsLine(odds.favored, odds.ou);
+            }
+          }
+        } catch {}
+      }
+    }
+    await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
   }
 
   // ----------------------------------------------------------------
@@ -794,8 +811,8 @@
       LEAGUES.map(lg =>
         fetch(lg.url(displayDate))
           .then(r => r.ok ? r.json() : Promise.reject(r.status))
-          .then(data => ({ leagueKey: lg.key, leagueLabel: lg.label, events: data?.events || [] }))
-          .catch(() => ({ leagueKey: lg.key, leagueLabel: lg.label, events: [] }))
+          .then(data => ({ leagueKey: lg.key, leagueLabel: lg.label.replace(/^\S+\s/, ""), events: data?.events || [] }))
+          .catch(() => ({ leagueKey: lg.key, leagueLabel: lg.label.replace(/^\S+\s/, ""), events: [] }))
       )
     );
 
@@ -822,7 +839,6 @@
       const stateB = _getState(b.ev);
       const sRank = s => s === "in" ? 0 : s === "pre" ? 1 : 2;
       if (sRank(stateA) !== sRank(stateB)) return sRank(stateA) - sRank(stateB);
-      // Within same state group, sort by best shop team rank
       return _shopTeamRank(a.ev) - _shopTeamRank(b.ev);
     });
 
@@ -845,7 +861,6 @@
           if (!data) continue;
           const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
           if (odds.favored || odds.ou) {
-            // Patch just the odds element in the already-rendered card
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) {
               const oddsEl = card.querySelector(".piShopMetaItem.odds");
@@ -896,6 +911,9 @@
     return String(ev?.status?.type?.state || "pre");
   }
 
+  // ----------------------------------------------------------------
+  // Rich card builder — used for BOTH Shop Teams view AND all league views
+  // ----------------------------------------------------------------
   function _buildShopCard(leagueKey, leagueLabel, ev, favored, ou) {
     try {
       const comp       = (ev?.competitions || [])[0] || {};
@@ -976,7 +994,6 @@
   // Odds parsing from summary endpoint
   // ----------------------------------------------------------------
   function _parseOddsFromSummary(data, fallbackComp) {
-    // Try pickcenter array first
     const pcArr = data?.pickcenter;
     if (Array.isArray(pcArr) && pcArr.length) {
       const comp = data?.header?.competitions?.[0] || fallbackComp || null;
@@ -988,7 +1005,6 @@
       const parsed = _parsePickcenter(pcArr[0], homeName, awayName);
       if (parsed.favored || parsed.ou) return parsed;
     }
-    // Try odds array
     const oddsArr = data?.odds;
     const o = Array.isArray(oddsArr) ? oddsArr[0] : null;
     if (o) {
@@ -1021,35 +1037,6 @@
     if (hasFav && hasOu) return `Favored: ${favored} • O/U: ${ou}`;
     if (hasFav) return `Favored: ${favored}`;
     return `O/U: ${ou}`;
-  }
-
-  // ----------------------------------------------------------------
-  // Standard game card (unchanged)
-  // ----------------------------------------------------------------
-  function _buildGameCard(ev) {
-    try {
-      const comp   = (ev.competitions || [])[0] || {};
-      const status = ev.status || {};
-      const state  = (status.type || {}).state || "pre";
-      const done   = (status.type || {}).completed || false;
-      const clock  = status.displayClock || "";
-      const period = status.period || 0;
-
-      let cls = "sched", label = ev.date ? _fmtTime(ev.date) : "Scheduled";
-      if (state === "in")          { cls = "live";  label = `Q${period} ${clock}`; }
-      if (state === "post" || done) { cls = "final"; label = "Final"; }
-
-      const teams = (comp.competitors || []).map(c => ({
-        name:  _applyTTUN(String((c.team || {}).abbreviation || (c.team || {}).shortDisplayName || "TBD")),
-        score: c.score || ""
-      }));
-
-      const rows = teams.map(t =>
-        `<div class="piTeamRow"><span class="piTeamName">${_esc(t.name)}</span><span class="piTeamScore">${_esc(t.score)}</span></div>`
-      ).join("");
-
-      return `<div class="piGame ${cls}"><div class="piGameTeams">${rows}</div><div class="piGameStatus ${cls === 'live' ? 'live' : ''}">${label}</div></div>`;
-    } catch { return ""; }
   }
 
   // ----------------------------------------------------------------
