@@ -686,7 +686,7 @@
             if (card) {
               const s = card.querySelector(".piSeriesLine");
               if (s && !s.innerHTML.trim()) {
-                const series = _parseSeriesFromSummary(data);
+                const series = _parseSeriesFromSummary(data, ev?.competitions?.[0]);
                 if (series) s.innerHTML = _buildSeriesHTML(series);
               }
             }
@@ -842,7 +842,7 @@
             if (card) {
               const s = card.querySelector(".piSeriesLine");
               if (s && !s.innerHTML.trim()) {
-                const series = _parseSeriesFromSummary(data);
+                const series = _parseSeriesFromSummary(data, ev?.competitions?.[0]);
                 if (series) s.innerHTML = _buildSeriesHTML(series);
               }
             }
@@ -897,54 +897,70 @@
   // ----------------------------------------------------------------
   // Playoff series parsing — scoreboard competition object (primary)
   // ----------------------------------------------------------------
-  // ESPN puts series wins directly on the scoreboard competition object
-  // under comp.series.competitors[]. This is the most reliable source
-  // since it's always present during playoffs without a summary fetch.
+  // ESPN puts series wins on comp.series.competitors[], but those objects
+  // often only have a team ID — not a usable display name. The fix is to
+  // cross-reference by team ID against the game-level comp.competitors[]
+  // which always carries full team name data.
   function _parseSeriesFromComp(comp, leagueKey) {
     if (!comp || !PLAYOFF_LEAGUES.has(leagueKey)) return null;
     try {
-      // Season type 3 = playoffs for NHL/NBA/MLB/NFL
-      const seasonType = Number(comp?.season?.type || 0);
-      // Also check the event-level season type via the notes or status
-      // Some leagues put it in the competition notes
-      const notes = comp?.notes || [];
-      const isPlayoffNote = notes.some(n =>
-        /playoff|round|series/i.test(String(n?.headline || n?.text || ""))
-      );
-
       const series = comp?.series;
       if (!series) return null;
 
-      const competitors = series?.competitors || [];
-      if (competitors.length >= 2) {
-        const w0 = Number(competitors[0]?.wins || 0);
-        const w1 = Number(competitors[1]?.wins || 0);
-        const n0 = String(competitors[0]?.team?.shortDisplayName || competitors[0]?.team?.displayName || "Team A");
-        const n1 = String(competitors[1]?.team?.shortDisplayName || competitors[1]?.team?.displayName || "Team B");
-        // Only return if there are actually wins recorded (i.e., series has started)
-        if (w0 > 0 || w1 > 0) {
-          return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
-        }
-        // Series exists but 0-0 — still show it if we have a title
+      const seriesComps = series?.competitors || [];
+      if (seriesComps.length < 2) return null;
+
+      const w0 = Number(seriesComps[0]?.wins || 0);
+      const w1 = Number(seriesComps[1]?.wins || 0);
+
+      // Only render if series has actually started
+      if (w0 === 0 && w1 === 0) {
         const title = String(series?.title || series?.summary || "");
         if (title) return { seriesSummary: title };
+        return null;
       }
 
-      // Fallback: check competitor seriesSummary strings
-      const compArr = comp?.competitors || [];
-      if (compArr.length >= 2) {
-        const s0 = String(compArr[0]?.seriesSummary || "");
-        if (s0) return { seriesSummary: s0 };
-      }
+      // Cross-reference series competitor IDs against game-level competitors
+      // to get reliable display names (series objects often lack displayName)
+      const gameComps = comp?.competitors || [];
+      const _nameForSeriesComp = (sc) => {
+        const scId = String(sc?.id || sc?.team?.id || "");
+        if (scId) {
+          const match = gameComps.find(gc =>
+            String(gc?.id || gc?.team?.id || "") === scId ||
+            String(gc?.team?.id || "") === scId
+          );
+          if (match) {
+            return String(
+              match?.team?.shortDisplayName ||
+              match?.team?.displayName ||
+              match?.team?.abbreviation ||
+              ""
+            );
+          }
+        }
+        // Fallback: use whatever name is on the series competitor itself
+        return String(
+          sc?.team?.shortDisplayName ||
+          sc?.team?.displayName ||
+          sc?.team?.abbreviation ||
+          ""
+        );
+      };
 
-      return null;
+      const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
+      const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
+
+      return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
     } catch { return null; }
   }
 
   // ----------------------------------------------------------------
   // Playoff series parsing — summary endpoint (fallback)
   // ----------------------------------------------------------------
-  function _parseSeriesFromSummary(data) {
+  // Same cross-reference trick: use summary header competitors for names,
+  // but fall back to game comp names if series objects lack them.
+  function _parseSeriesFromSummary(data, fallbackComp) {
     try {
       const comp = data?.header?.competitions?.[0] || data?.competitions?.[0];
       if (!comp) return null;
@@ -954,15 +970,54 @@
       if (seasonType < 2) return null;
 
       const series = comp?.series;
-      if (series) {
-        const wins = series?.competitors || [];
-        if (wins.length >= 2) {
-          const w0 = Number(wins[0]?.wins || 0);
-          const w1 = Number(wins[1]?.wins || 0);
-          const n0 = String(wins[0]?.team?.shortDisplayName || wins[0]?.team?.displayName || "Team A");
-          const n1 = String(wins[1]?.team?.shortDisplayName || wins[1]?.team?.displayName || "Team B");
-          return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
+      if (!series) return null;
+
+      const seriesComps = series?.competitors || [];
+      if (seriesComps.length < 2) return null;
+
+      const w0 = Number(seriesComps[0]?.wins || 0);
+      const w1 = Number(seriesComps[1]?.wins || 0);
+
+      // Cross-reference: try summary header comps first, then fallback game comp
+      const gameComps = [
+        ...(comp?.competitors || []),
+        ...((fallbackComp?.competitors) || [])
+      ];
+
+      const _nameForSeriesComp = (sc) => {
+        const scId = String(sc?.id || sc?.team?.id || "");
+        if (scId) {
+          const match = gameComps.find(gc =>
+            String(gc?.id || gc?.team?.id || "") === scId ||
+            String(gc?.team?.id || "") === scId
+          );
+          if (match) {
+            return String(
+              match?.team?.shortDisplayName ||
+              match?.team?.displayName ||
+              match?.team?.abbreviation ||
+              ""
+            );
+          }
         }
+        return String(
+          sc?.team?.shortDisplayName ||
+          sc?.team?.displayName ||
+          sc?.team?.abbreviation ||
+          ""
+        );
+      };
+
+      const n0 = _nameForSeriesComp(seriesComps[0]) || "Team A";
+      const n1 = _nameForSeriesComp(seriesComps[1]) || "Team B";
+
+      if (w0 === 0 && w1 === 0) {
+        // Series exists but hasn't started — show title if available
+        const title = String(series?.title || series?.summary || "");
+        if (title) return { seriesSummary: title };
+        // Fall through to competitor seriesSummary strings
+      } else {
+        return { name0: _applyTTUN(n0), wins0: w0, name1: _applyTTUN(n1), wins1: w1 };
       }
 
       // Fallback: seriesSummary on competitors
