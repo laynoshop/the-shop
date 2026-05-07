@@ -611,7 +611,7 @@
   .piPuttStatus.final { background: rgba(0,120,50,0.35); color: #7dffb3; border: 1px solid rgba(0,180,80,0.4); }
   .piPuttScTableWrap { overflow-x: auto; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,160,60,0.2); }
   .piPuttScorecard { width: 100%; border-collapse: collapse; }
-  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(2.4rem, 3.8vw, 3rem); font-variant-numeric: tabular-nums; }
+  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 8px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(2.4rem, 3.8vw, 3rem); font-variant-numeric: tabular-nums; }
   .piPuttScorecard thead th { font-size: clamp(2rem, 3vw, 2.5rem); font-weight: 800; letter-spacing: 0.08em; color: #aaa; background: rgba(0,0,0,0.25); border-bottom: 2px solid rgba(0,160,60,0.3); }
   .piPuttScorecard .piPuttNameCol { text-align: left; padding-left: 14px; font-weight: 800; font-size: clamp(2.6rem, 4vw, 3.2rem); color: #f0f0f0; min-width: 100px; }
   .piPuttScorecard .piPuttParRow td { color: #888; font-size: clamp(2rem, 3vw, 2.5rem); background: rgba(0,0,0,0.15); font-weight: 600; }
@@ -905,7 +905,7 @@
       <div class="piPuttScTableWrap">
         <table class="piPuttScorecard">
           <thead>
-            <tr><th class="piPuttNameCol">Player</th>${holeCells}<th>Total</th></tr>
+            <tr><th class="piPuttNameCol"></th>${holeCells}<th>Total</th></tr>
             <tr class="piPuttParRow"><td>Par</td>${parCells}<td>${totalPar}</td></tr>
           </thead>
           <tbody>${playerRows}</tbody>
