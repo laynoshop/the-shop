@@ -73,6 +73,15 @@
     return (typeof window.getRole === "function" ? window.getRole() : "") === "admin";
   }
 
+  // Convert a YYYY-MM-DD date string to a local-time timestamp (not UTC).
+  // new Date("2026-05-07") parses as UTC midnight, which is the previous day
+  // in any negative-offset timezone (e.g. US Eastern). This fixes that.
+  function localDateStringToTimestamp(dateStr) {
+    if (!dateStr) return Date.now();
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0).getTime(); // noon local time
+  }
+
   // ─── State ───────────────────────────────────────────────────────────────
   let _state = {
     view: "home",
@@ -186,7 +195,10 @@
     playerNames.forEach(p => {
       scores[p] = { holes: scoresMap[p] || new Array(holePars.length).fill(null) };
     });
-    const ts = roundDate ? new Date(roundDate).getTime() : Date.now();
+    // Use localDateStringToTimestamp so "2026-05-07" stays May 7 in any timezone,
+    // instead of new Date("2026-05-07") which parses as UTC midnight and shifts
+    // the date back one day for US timezones.
+    const ts = localDateStringToTimestamp(roundDate);
     await db.collection(ROUNDS_PATH).doc(roundId).set({
       courseId,
       courseName,
@@ -875,7 +887,7 @@
     }
 
     const courseOpts = courses.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
 
     const regularsChips = regulars.length
       ? `<div class="golf-field">
