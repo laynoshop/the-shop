@@ -1,6 +1,6 @@
  // split/pi.js
 // Pi Scoreboard — full-screen TV dashboard for the Raspberry Pi.
-// Admin only. Launched from the entry screen via window.launchPiScoreboard().
+// Admin only. Launched from the entry screen via window.launchPiScoreboard()
 
 (function () {
   "use strict";
@@ -1135,7 +1135,60 @@
     const holeCount = pars.length;
     const subline = `${holeCount}-Hole Round · Par ${totalPar}`;
 
+    // ----------------------------------------------------------------
+    // Squeeze styles for 8+ players
+    // When >7 players, scale down fonts and row padding proportionally
+    // so the full table + leader bar fit within the same pixel budget
+    // as a 7-player round. Scale factor: 7 / playerCount, floored at 0.55.
+    // ----------------------------------------------------------------
+    const playerCount = ranked.length;
+    let squeezeStyle = "";
+    if (playerCount > 7) {
+      const scale = Math.max(0.55, 7 / playerCount);
+      // Base sizes (px) for 7-player layout:
+      //   thead hole numbers : 2.2rem  → use scale * 2.2
+      //   thead name col     : 1.6rem  → use scale * 1.6
+      //   par row cells      : 2.0rem  → use scale * 2.0
+      //   par row name       : 1.7rem  → use scale * 1.7
+      //   tbody td           : 2.8rem  → use scale * 2.8
+      //   tbody name col     : 3.0rem  → use scale * 3.0
+      //   tbody total col    : 2.8rem  → use scale * 2.8
+      //   tbody td padding   : 9px     → use scale * 9
+      //   thead th padding   : 10px/8px→ use scale * 10 / scale * 8
+      //   par row padding    : 6px     → use scale * 6
+      const r = (base, unit = "rem") => `${(scale * base).toFixed(3)}${unit}`;
+      const px = base => `${Math.round(scale * base)}px`;
+      squeezeStyle = `
+        <style>
+          .piPuttScorecard thead tr:first-child th {
+            font-size: ${r(2.2)};
+            padding: ${px(10)} ${px(6)} ${px(8)};
+          }
+          .piPuttScorecard thead tr:first-child th.piPuttNameCol {
+            font-size: ${r(1.6)};
+          }
+          .piPuttScorecard .piPuttParRow td {
+            font-size: ${r(2.0)};
+            padding: ${px(6)} ${px(6)};
+          }
+          .piPuttScorecard .piPuttParRow td:first-child {
+            font-size: ${r(1.7)};
+          }
+          .piPuttScorecard tbody td {
+            font-size: ${r(2.8)};
+            padding: ${px(9)} ${px(4)};
+          }
+          .piPuttScorecard .piPuttNameCol {
+            font-size: ${r(3.0)};
+          }
+          .piPuttScorecard .piPuttTotalCol {
+            font-size: ${r(2.8)};
+          }
+        </style>`;
+    }
+
     return `
+      ${squeezeStyle}
       <div class="piPuttHeader">
         <span class="piPuttFlagEmoji">⛳</span>
         <div class="piPuttHeaderText">
