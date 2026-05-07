@@ -611,12 +611,12 @@
   .piPuttStatus.final { background: rgba(0,120,50,0.35); color: #7dffb3; border: 1px solid rgba(0,180,80,0.4); }
   .piPuttScTableWrap { overflow-x: auto; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,160,60,0.2); }
   .piPuttScorecard { width: 100%; border-collapse: collapse; }
-  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(1.2rem, 2.1vw, 1.65rem); font-variant-numeric: tabular-nums; }
-  .piPuttScorecard thead th { font-size: clamp(1rem, 1.5vw, 1.25rem); font-weight: 800; letter-spacing: 0.08em; color: #aaa; background: rgba(0,0,0,0.25); border-bottom: 2px solid rgba(0,160,60,0.3); }
-  .piPuttScorecard .piPuttNameCol { text-align: left; padding-left: 14px; font-weight: 800; font-size: clamp(1.25rem, 2.2vw, 1.6rem); color: #f0f0f0; min-width: 100px; }
-  .piPuttScorecard .piPuttParRow td { color: #888; font-size: clamp(1rem, 1.5vw, 1.25rem); background: rgba(0,0,0,0.15); font-weight: 600; }
+  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(2.4rem, 3.8vw, 3rem); font-variant-numeric: tabular-nums; }
+  .piPuttScorecard thead th { font-size: clamp(2rem, 3vw, 2.5rem); font-weight: 800; letter-spacing: 0.08em; color: #aaa; background: rgba(0,0,0,0.25); border-bottom: 2px solid rgba(0,160,60,0.3); }
+  .piPuttScorecard .piPuttNameCol { text-align: left; padding-left: 14px; font-weight: 800; font-size: clamp(2.6rem, 4vw, 3.2rem); color: #f0f0f0; min-width: 100px; }
+  .piPuttScorecard .piPuttParRow td { color: #888; font-size: clamp(2rem, 3vw, 2.5rem); background: rgba(0,0,0,0.15); font-weight: 600; }
   .piPuttScorecard .piPuttParRow td:first-child { text-align: left; padding-left: 14px; }
-  .piPuttScorecard .piPuttTotalCol { font-weight: 900; font-size: clamp(1.25rem, 2.2vw, 1.65rem); }
+  .piPuttScorecard .piPuttTotalCol { font-weight: 900; font-size: clamp(2.4rem, 3.8vw, 3rem); }
   .piPuttScorecard .pi-sc-under { color: #4fffaa; font-weight: 800; text-shadow: 0 0 8px rgba(0,255,150,0.4); }
   .piPuttScorecard .pi-sc-over  { color: #ff7766; font-weight: 800; }
   .piPuttScorecard .pi-sc-even  { color: #fff; font-weight: 700; }
