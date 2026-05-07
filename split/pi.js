@@ -602,28 +602,264 @@
   .piPuttPuttBtn:hover { background: rgba(0,160,80,0.45); color: #fff; border-color: rgba(0,220,120,0.7); }
   .piPuttPuttBtn.active { background: linear-gradient(135deg, #007a3a, #005528); color: #fff; border-color: #00cc66; box-shadow: 0 0 12px rgba(0,200,80,0.55); }
 
-  /* ---- Pi Putt Putt Scorecard (in scores panel) ---- */
+  /* ================================================================
+     Pi Putt Putt Scorecard — BROADCAST REDESIGN
+     ================================================================ */
   .piPuttWrap { grid-column: 1 / -1; padding: 4px 0; }
-  .piPuttHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  .piPuttCourseName { font-size: clamp(1.4rem, 2.5vw, 1.9rem); font-weight: 900; color: #fff; text-shadow: 0 0 8px rgba(0,200,80,0.4); }
-  .piPuttStatus { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; padding: 3px 12px; border-radius: 12px; }
-  .piPuttStatus.live { background: rgba(200,0,0,0.4); color: #ff6644; border: 1px solid rgba(220,0,0,0.5); }
-  .piPuttStatus.final { background: rgba(0,120,50,0.35); color: #7dffb3; border: 1px solid rgba(0,180,80,0.4); }
-  .piPuttScTableWrap { overflow-x: auto; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,160,60,0.2); }
+
+  /* --- Header --- */
+  .piPuttHeader {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+    padding: 14px 18px;
+    background: linear-gradient(135deg, rgba(0,60,25,0.85) 0%, rgba(0,30,12,0.95) 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(0,200,80,0.25);
+    box-shadow: 0 0 28px rgba(0,180,70,0.15), inset 0 1px 0 rgba(0,255,120,0.08);
+    position: relative;
+    overflow: hidden;
+  }
+  .piPuttHeader::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 0% 50%, rgba(0,200,80,0.12) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .piPuttFlagEmoji {
+    font-size: clamp(2.2rem, 3.5vw, 3rem);
+    line-height: 1;
+    filter: drop-shadow(0 0 10px rgba(0,255,100,0.5));
+    flex-shrink: 0;
+    position: relative;
+  }
+  .piPuttHeaderText {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+    position: relative;
+  }
+  .piPuttCourseName {
+    font-size: clamp(1.6rem, 2.8vw, 2.2rem);
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-shadow: 0 0 16px rgba(0,255,120,0.45), 0 2px 4px rgba(0,0,0,0.8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1;
+  }
+  .piPuttSubline {
+    font-size: clamp(0.72rem, 1.1vw, 0.88rem);
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(0,220,100,0.7);
+  }
+
+  /* LIVE pill — animated pulse */
+  .piPuttStatus {
+    font-size: clamp(0.78rem, 1.2vw, 0.95rem);
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 5px 16px;
+    border-radius: 99px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .piPuttStatus.live {
+    background: linear-gradient(135deg, #cc0000, #990000);
+    color: #fff;
+    border: 1px solid rgba(255,80,80,0.5);
+    box-shadow: 0 0 18px rgba(200,0,0,0.6), inset 0 1px 0 rgba(255,150,150,0.15);
+    animation: piPuttLivePulse 2s ease-in-out infinite;
+  }
+  .piPuttStatus.live::before {
+    content: "●";
+    margin-right: 6px;
+    font-size: 0.65em;
+    animation: piPuttDotBlink 1s step-start infinite;
+  }
+  .piPuttStatus.final {
+    background: linear-gradient(135deg, rgba(0,140,55,0.6), rgba(0,80,30,0.8));
+    color: #7dffb3;
+    border: 1px solid rgba(0,200,80,0.45);
+    box-shadow: 0 0 14px rgba(0,180,70,0.3);
+  }
+  @keyframes piPuttLivePulse {
+    0%,100% { box-shadow: 0 0 18px rgba(200,0,0,0.6), inset 0 1px 0 rgba(255,150,150,0.15); }
+    50%      { box-shadow: 0 0 32px rgba(255,40,40,0.9), inset 0 1px 0 rgba(255,150,150,0.15); }
+  }
+  @keyframes piPuttDotBlink { 0%,49%{ opacity:1; } 50%,100%{ opacity:0; } }
+
+  /* --- Table wrapper --- */
+  .piPuttScTableWrap {
+    overflow-x: auto;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(0,180,70,0.3);
+    box-shadow: 0 0 24px rgba(0,160,60,0.12), inset 0 1px 0 rgba(0,255,120,0.05);
+  }
+
+  /* --- Scorecard table --- */
   .piPuttScorecard { width: 100%; border-collapse: collapse; }
-  .piPuttScorecard th, .piPuttScorecard td { text-align: center; padding: 8px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: clamp(2.4rem, 3.8vw, 3rem); font-variant-numeric: tabular-nums; }
-  .piPuttScorecard thead th { font-size: clamp(2rem, 3vw, 2.5rem); font-weight: 800; letter-spacing: 0.08em; color: #aaa; background: rgba(0,0,0,0.25); border-bottom: 2px solid rgba(0,160,60,0.3); }
-  .piPuttScorecard .piPuttNameCol { text-align: left; padding-left: 14px; font-weight: 800; font-size: clamp(2.6rem, 4vw, 3.2rem); color: #f0f0f0; min-width: 100px; }
-  .piPuttScorecard .piPuttParRow td { color: #888; font-size: clamp(2rem, 3vw, 2.5rem); background: rgba(0,0,0,0.15); font-weight: 600; }
-  .piPuttScorecard .piPuttParRow td:first-child { text-align: left; padding-left: 14px; }
-  .piPuttScorecard .piPuttTotalCol { font-weight: 900; font-size: clamp(2.4rem, 3.8vw, 3rem); }
-  .piPuttScorecard .pi-sc-under { color: #4fffaa; font-weight: 800; text-shadow: 0 0 8px rgba(0,255,150,0.4); }
-  .piPuttScorecard .pi-sc-over  { color: #ff7766; font-weight: 800; }
-  .piPuttScorecard .pi-sc-even  { color: #fff; font-weight: 700; }
-  .piPuttScorecard .pi-sc-empty { color: #444; }
-  .piPuttScorecard tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-  .piPuttScorecard tbody tr:hover { background: rgba(0,160,60,0.07); }
-  .piPuttLeader { margin-top: 10px; padding: 10px 16px; background: rgba(0,120,50,0.25); border: 1px solid rgba(0,200,80,0.3); border-radius: 8px; font-size: clamp(0.95rem, 1.6vw, 1.2rem); font-weight: 800; color: #7dffb3; text-align: center; letter-spacing: 0.04em; text-shadow: 0 0 8px rgba(0,255,140,0.3); }
+
+  /* Column header row (hole numbers) */
+  .piPuttScorecard thead tr:first-child th {
+    text-align: center;
+    padding: 10px 6px 8px;
+    font-size: clamp(1.6rem, 2.6vw, 2.2rem);
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: rgba(0,220,100,0.7);
+    background: linear-gradient(180deg, rgba(0,60,25,0.9) 0%, rgba(0,40,15,0.95) 100%);
+    border-bottom: 2px solid rgba(0,180,70,0.4);
+    font-variant-numeric: tabular-nums;
+  }
+  .piPuttScorecard thead tr:first-child th.piPuttNameCol {
+    text-align: left;
+    padding-left: 16px;
+    color: rgba(255,255,255,0.35);
+    font-size: clamp(1.2rem, 1.8vw, 1.6rem);
+    letter-spacing: 0.1em;
+  }
+  /* "Total" header — gold accent */
+  .piPuttScorecard thead tr:first-child th:last-child {
+    color: #d4a800;
+    text-shadow: 0 0 10px rgba(210,170,0,0.5);
+  }
+
+  /* Par row */
+  .piPuttScorecard .piPuttParRow td {
+    text-align: center;
+    padding: 6px 6px;
+    font-size: clamp(1.6rem, 2.5vw, 2rem);
+    font-weight: 600;
+    color: rgba(255,255,255,0.28);
+    background: rgba(0,0,0,0.2);
+    border-bottom: 1px solid rgba(0,160,60,0.18);
+    font-variant-numeric: tabular-nums;
+  }
+  .piPuttScorecard .piPuttParRow td:first-child {
+    text-align: left;
+    padding-left: 16px;
+    font-size: clamp(1.4rem, 2vw, 1.7rem);
+    color: rgba(0,200,80,0.45);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Player rows */
+  .piPuttScorecard tbody tr {
+    transition: background 0.15s;
+  }
+  .piPuttScorecard tbody tr:nth-child(odd)  { background: rgba(255,255,255,0.022); }
+  .piPuttScorecard tbody tr:nth-child(even) { background: rgba(0,0,0,0.15); }
+  .piPuttScorecard tbody tr:first-child { background: rgba(0,160,60,0.07); }
+
+  .piPuttScorecard tbody td {
+    text-align: center;
+    padding: 9px 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: clamp(2.2rem, 3.4vw, 2.8rem);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  /* Player name cell */
+  .piPuttScorecard .piPuttNameCol {
+    text-align: left;
+    padding-left: 16px;
+    font-weight: 900;
+    font-size: clamp(2.4rem, 3.6vw, 3rem);
+    color: #f0f0f0;
+    min-width: 110px;
+    letter-spacing: -0.01em;
+  }
+  /* Leader row — name gets a gold shimmer */
+  .piPuttScorecard tbody tr:first-child .piPuttNameCol {
+    color: #ffe066;
+    text-shadow: 0 0 12px rgba(255,200,0,0.4);
+  }
+
+  /* Total column */
+  .piPuttScorecard .piPuttTotalCol {
+    font-weight: 900;
+    font-size: clamp(2.2rem, 3.4vw, 2.8rem);
+    border-left: 1px solid rgba(0,180,70,0.2);
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  /* Score chips — the core upgrade */
+  .piPuttScorecard .pi-sc-under {
+    color: #1aff88;
+    font-weight: 900;
+    text-shadow: 0 0 12px rgba(0,255,140,0.55), 0 0 28px rgba(0,200,100,0.3);
+    position: relative;
+  }
+  .piPuttScorecard .pi-sc-over {
+    color: #ff6655;
+    font-weight: 900;
+    text-shadow: 0 0 10px rgba(255,80,60,0.5);
+  }
+  .piPuttScorecard .pi-sc-even {
+    color: #d0d0d0;
+    font-weight: 700;
+  }
+  .piPuttScorecard .pi-sc-empty {
+    color: rgba(255,255,255,0.12);
+    font-size: 0.6em;
+  }
+
+  /* Total column inherits score color + extra weight */
+  .piPuttScorecard .piPuttTotalCol.pi-sc-under {
+    color: #1aff88;
+    text-shadow: 0 0 18px rgba(0,255,140,0.7), 0 0 40px rgba(0,200,100,0.35);
+  }
+  .piPuttScorecard .piPuttTotalCol.pi-sc-over {
+    color: #ff6655;
+    text-shadow: 0 0 14px rgba(255,80,60,0.6);
+  }
+
+  /* --- Leader chyron bar --- */
+  .piPuttLeader {
+    margin-top: 12px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: clamp(1rem, 1.7vw, 1.3rem);
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 0.04em;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(0,200,80,0.4);
+    background: linear-gradient(135deg, rgba(0,100,40,0.7) 0%, rgba(0,60,20,0.9) 50%, rgba(0,100,40,0.7) 100%);
+    box-shadow: 0 0 24px rgba(0,180,70,0.3), inset 0 1px 0 rgba(0,255,120,0.1);
+    text-shadow: 0 0 12px rgba(0,255,140,0.4);
+  }
+  .piPuttLeader::after {
+    content: "";
+    position: absolute;
+    top: 0; left: -60%;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
+    animation: piChyronShimmer 3.5s ease-in-out infinite;
+  }
+  @keyframes piChyronShimmer {
+    0%   { left: -60%; }
+    100% { left: 130%; }
+  }
+
   .piPuttNoRound { grid-column: 1 / -1; text-align: center; padding: 32px 16px; color: #555; font-size: 1rem; }
 </style>
 
@@ -883,7 +1119,7 @@
         const cls = d < 0 ? "pi-sc-under" : d > 0 ? "pi-sc-over" : "pi-sc-even";
         return `<td class="${cls}">${s}</td>`;
       }).join("");
-      return `<tr><td class="piPuttNameCol piPuttScorecard">${_esc(p)}</td>${cells}<td class="piPuttTotalCol ${vp.cls}">${vp.text}</td></tr>`;
+      return `<tr><td class="piPuttNameCol">${_esc(p)}</td>${cells}<td class="piPuttTotalCol ${vp.cls}">${vp.text}</td></tr>`;
     }).join("");
 
     // Leader line
@@ -892,14 +1128,20 @@
     if (leader && leader.played > 0) {
       const vp = vpLabel(leader.diff);
       leaderText = isLive
-        ? `🏌️ Leading: ${_esc(leader.p)} (${vp.text}) · Hole ${round.currentHole + 1} of ${pars.length}`
-        : `🏆 Winner: ${_esc(leader.p)} (${vp.text})`;
+        ? `🏌️ Leading: ${_esc(leader.p)} &nbsp;·&nbsp; <span style="color:#1aff88;text-shadow:0 0 10px rgba(0,255,140,0.5);">${vp.text}</span> &nbsp;·&nbsp; Hole ${round.currentHole + 1} of ${pars.length}`
+        : `🏆 Winner: ${_esc(leader.p)} &nbsp;·&nbsp; <span style="color:#1aff88;text-shadow:0 0 10px rgba(0,255,140,0.5);">${vp.text}</span>`;
     }
+
+    const holeCount = pars.length;
+    const subline = `${holeCount}-Hole Round · Par ${totalPar}`;
 
     return `
       <div class="piPuttHeader">
-        <span style="font-size:1.8rem;">⛳</span>
-        <span class="piPuttCourseName">${_esc(round.courseName || "Putt Putt")}</span>
+        <span class="piPuttFlagEmoji">⛳</span>
+        <div class="piPuttHeaderText">
+          <span class="piPuttCourseName">${_esc(round.courseName || "Putt Putt")}</span>
+          <span class="piPuttSubline">${subline}</span>
+        </div>
         <span class="piPuttStatus ${isLive ? "live" : "final"}">${isLive ? "LIVE" : "FINAL"}</span>
       </div>
       <div class="piPuttScTableWrap">
