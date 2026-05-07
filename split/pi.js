@@ -737,11 +737,14 @@
     if (!youtubeSlot || !bottomSlot) return;
 
     if (_rightPanel === "youtube") {
-      // YouTube in top slot only
+      // YouTube in top slot only — only inject if iframe isn't already there
+      // (prevents the 5-min news refresh timer from restarting the video)
       youtubeSlot.style.display = "block";
-      youtubeSlot.innerHTML = `<iframe
-        src="https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&modestbranding=1&rel=0"
-        allow="autoplay; encrypted-media" allowfullscreen title="OSU Natty Replay"></iframe>`;
+      if (!youtubeSlot.querySelector("iframe")) {
+        youtubeSlot.innerHTML = `<iframe
+          src="https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&modestbranding=1&rel=0"
+          allow="autoplay; encrypted-media" allowfullscreen title="OSU Natty Replay"></iframe>`;
+      }
       bottomSlot.innerHTML = ""; // empty space — will circle back
     } else {
       // Top 25 fills the whole right content area
@@ -1305,143 +1308,22 @@
     if (series.seriesSummary) return `<span class="piSeriesBadge">🏆 ${_esc(series.seriesSummary)}</span>`;
     const { name0, wins0, name1, wins1 } = series;
     if (wins0 === wins1) return `<span class="piSeriesBadge tied">🏆 Series Tied ${wins0}-${wins1}</span>`;
-    const leader = wins0 > wins1 ? name0 : name1;
-    const lWins  = wins0 > wins1 ? wins0 : wins1;
-    const tWins  = wins0 > wins1 ? wins1 : wins0;
-    return `<span class="piSeriesBadge">🏆 ${_esc(leader)} leads ${lWins}-${tWins}</span>`;
+    const leader = wins0 > wins1 ? `${_esc(name0)} leads ${wins0}-${wins1}` : `${_esc(name1)} leads ${wins1}-${wins0}`;
+    return `<span class="piSeriesBadge">🏆 ${leader}</span>`;
   }
 
   // ----------------------------------------------------------------
-  // Rich card builder
-  // ----------------------------------------------------------------
-  function _buildShopCard(leagueKey, leagueLabel, ev, favored, ou, upcoming) {
-    try {
-      const comp       = (ev?.competitions || [])[0] || {};
-      const status     = ev?.status || {};
-      const state      = String(status?.type?.state || "pre");
-      const done       = !!(status?.type?.completed);
-      const clock      = String(status?.displayClock || "");
-      const period     = Number(status?.period || 0);
-      const eventId    = String(ev?.id || "");
-      const isPlayoff  = PLAYOFF_LEAGUES.has(leagueKey);
-      const periodLabel = _periodLabel(leagueKey, period);
-
-      let cls = upcoming ? "upcoming" : "sched";
-      let statusLabel = ev.date ? _fmtTime(ev.date) : "Scheduled";
-      if (upcoming) statusLabel = "📆 " + (ev.date ? _fmtGameDate(ev.date) : "Upcoming");
-      if (!upcoming && state === "in")             { cls = "live";  statusLabel = `${periodLabel} ${clock}`; }
-      if (!upcoming && (state === "post" || done)) { cls = "final"; statusLabel = "Final"; }
-
-      const statusCls  = cls === "live" ? " live" : cls === "upcoming" ? " upcoming" : "";
-      const badgeColor = LEAGUE_COLORS[leagueKey] || "#555";
-
-      const venue      = comp?.venue;
-      const venueName  = String(venue?.fullName || venue?.name || "");
-      const city       = String(venue?.address?.city || "");
-      const stateCode  = String(venue?.address?.state || "");
-      const venueText  = [venueName, [city, stateCode].filter(Boolean).join(", ")].filter(Boolean).join(" — ");
-      const gameDateStr = ev.date ? _fmtGameDate(ev.date) : "";
-
-      const competitors = comp?.competitors || [];
-      const teamsHTML = competitors.map(c => {
-        const team   = c?.team || {};
-        const isFav  = _isShopTeam(team);
-        const name   = _applyTTUN(String(team.displayName || team.shortDisplayName || team.abbreviation || "TBD"));
-        const logo   = String(team.logo || (Array.isArray(team.logos) ? team.logos[0]?.href : "") || "");
-        const score  = String(c?.score || "");
-        const rec    = _getRecord(c);
-        const favCls = isFav ? " fav" : "";
-        const logoImg = logo
-          ? `<img src="${_esc(logo)}" class="piShopTeamLogo" alt="" loading="lazy" />`
-          : `<span style="width:30px;height:30px;flex-shrink:0;display:inline-block;"></span>`;
-        return `<div class="piShopTeamLine">
-          <div class="piShopTeamLineLeft">
-            ${logoImg}
-            <span class="piShopTeamNameFull${favCls}">${_esc(name)}</span>
-            ${rec ? `<span class="piShopTeamRecord">${_esc(rec)}</span>` : ""}
-          </div>
-          <span class="piShopTeamScore">${_esc(score)}</span>
-        </div>`;
-      }).join("");
-
-      const oddsText = _buildOddsLine(favored || "", ou || "");
-
-      let seriesHTML = "";
-      if (isPlayoff) {
-        const seriesFromComp = _parseSeriesFromComp(comp, leagueKey);
-        seriesHTML = `<div class="piSeriesLine">${seriesFromComp ? _buildSeriesHTML(seriesFromComp) : ""}</div>`;
-      }
-
-      return `
-<div class="piShopCard ${cls}" data-eventid="${_esc(eventId)}">
-  <div class="piShopCardTop">
-    <span class="piShopLeagueBadge" style="background:${badgeColor};">${_esc(leagueLabel)}</span>
-    <span class="piShopStatusLabel${statusCls}">${_esc(statusLabel)}</span>
-  </div>
-  <div class="piShopTeamsRow">${teamsHTML}</div>
-  ${seriesHTML}
-  <div class="piShopMeta">
-    ${!upcoming && gameDateStr ? `<span class="piShopMetaItem">📅 ${_esc(gameDateStr)}</span>` : ""}
-    ${venueText ? `<span class="piShopMetaItem venue">📍 ${_esc(venueText)}</span>` : ""}
-    <span class="piShopMetaItem odds">${oddsText ? _esc(oddsText) : (state === "pre" || upcoming ? "Fetching lines…" : "")}</span>
-  </div>
-</div>`;
-    } catch { return ""; }
-  }
-
-  function _periodLabel(leagueKey, period) {
-    switch (leagueKey) {
-      case "nfl": case "cfb": {
-        if (period === 1) return "1st Q";
-        if (period === 2) return "2nd Q";
-        if (period === 3) return "3rd Q";
-        if (period === 4) return "4th Q";
-        if (period >= 5) return "OT";
-        return "";
-      }
-      case "nba": case "ncaam": {
-        if (period === 1) return "1st Q";
-        if (period === 2) return "2nd Q";
-        if (period === 3) return "3rd Q";
-        if (period === 4) return "4th Q";
-        if (period >= 5) return "OT";
-        return "";
-      }
-      case "mlb": return period ? `${period}${_ordSuffix(period)}` : "";
-      case "nhl": {
-        if (period === 1) return "1st P";
-        if (period === 2) return "2nd P";
-        if (period === 3) return "3rd P";
-        if (period >= 4) return "OT";
-        return "";
-      }
-      case "mls": case "ncaaw": {
-        if (period === 1) return "1st H";
-        if (period === 2) return "2nd H";
-        if (period >= 3) return "ET";
-        return "";
-      }
-      default: return period ? `P${period}` : "";
-    }
-  }
-
-  function _ordSuffix(n) {
-    const s = ["th","st","nd","rd"];
-    const v = n % 100;
-    return s[(v-20)%10] || s[v] || s[0];
-  }
-
-  // ----------------------------------------------------------------
-  // Odds parsing
+  // Odds helpers
   // ----------------------------------------------------------------
   function _parseOddsFromSummary(data, fallbackComp) {
     try {
       const comp = data?.header?.competitions?.[0] || data?.competitions?.[0] || fallbackComp || {};
-      const odds = comp?.odds?.[0] || comp?.pickcenter?.[0] || {};
-      const favored = String(odds?.details || odds?.overUnder?.details || "");
+      const odds = comp?.odds?.[0] || comp?.situation?.lastPlay?.probability || null;
+      if (!odds) return {};
+      const favored = String(odds?.details || odds?.spread || "").trim();
       const ou      = odds?.overUnder != null ? String(odds.overUnder) : "";
-      return { favored, ou };
-    } catch { return { favored: "", ou: "" }; }
+      return { favored: favored || null, ou: ou || null };
+    } catch { return {}; }
   }
 
   function _buildOddsLine(favored, ou) {
@@ -1452,48 +1334,101 @@
   }
 
   // ----------------------------------------------------------------
-  // Helpers
+  // Score card builder
   // ----------------------------------------------------------------
-  function _getRecord(competitor) {
-    try {
-      const stats = competitor?.statistics || competitor?.records || [];
-      if (Array.isArray(stats)) {
-        const overall = stats.find(s => (s?.name || s?.type || "").toLowerCase().includes("overall") || (s?.name || "").toLowerCase() === "record");
-        if (overall) return String(overall.displayValue || overall.summary || "");
-        if (stats[0]) return String(stats[0].displayValue || stats[0].summary || "");
-      }
-      return String(competitor?.record?.displayValue || competitor?.record?.summary || "");
-    } catch { return ""; }
+  function _buildShopCard(leagueKey, leagueLabel, ev, seriesOverride, oddsOverride, upcoming = false) {
+    const comp       = (ev?.competitions || [])[0] || {};
+    const competitors = comp?.competitors || [];
+    const state      = _getState(ev);
+    const statusDetail = String(ev?.status?.type?.detail || ev?.status?.type?.shortDetail || "");
+    const statusName   = String(ev?.status?.type?.name || "").toLowerCase();
+
+    let cardClass = "piShopCard";
+    let statusClass = "";
+    let statusText = "";
+
+    if (upcoming) {
+      cardClass += " upcoming";
+      statusClass = "upcoming";
+      const evDate = new Date(ev?.date || "");
+      const now = new Date();
+      const diffDays = Math.round((evDate - now) / 86400000);
+      statusText = diffDays <= 0 ? "Today" : diffDays === 1 ? "Tomorrow" : `In ${diffDays} days`;
+    } else if (state === "in" || statusName.includes("in_progress") || statusName === "in") {
+      cardClass += " live";
+      statusClass = "live";
+      statusText = statusDetail || "LIVE";
+    } else if (state === "post" || statusName.includes("final") || statusName === "post") {
+      cardClass += " final";
+      statusText = statusDetail || "Final";
+    } else {
+      cardClass += " sched";
+      const evDate = new Date(ev?.date || "");
+      statusText = evDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    const color = LEAGUE_COLORS[leagueKey] || "#555";
+
+    const teamsHTML = competitors.map(c => {
+      const team     = c?.team || {};
+      const isFav    = _isShopTeam(team);
+      const logoUrl  = team?.logo || "";
+      const nameRaw  = String(team?.displayName || team?.shortDisplayName || team?.name || "TBD");
+      const name     = _applyTTUN(nameRaw);
+      const score    = c?.score != null ? String(c.score) : (upcoming ? "" : "--");
+      const record   = String(c?.records?.[0]?.summary || "");
+      const logoHTML = logoUrl ? `<img class="piShopTeamLogo" src="${_esc(logoUrl)}" alt="${_esc(name)}" loading="lazy" />` : "";
+      return `
+        <div class="piShopTeamLine">
+          <div class="piShopTeamLineLeft">
+            ${logoHTML}
+            <span class="piShopTeamNameFull${isFav ? " fav" : ""}">${_esc(name)}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${record ? `<span class="piShopTeamRecord">${_esc(record)}</span>` : ""}
+            ${score !== "" ? `<span class="piShopTeamScore">${_esc(score)}</span>` : ""}
+          </div>
+        </div>`;
+    }).join("");
+
+    // Series
+    const seriesFromComp = _parseSeriesFromComp(comp, leagueKey);
+    const series = seriesOverride || seriesFromComp;
+    const seriesHTML = series ? `<div class="piSeriesLine">${_buildSeriesHTML(series)}</div>` : `<div class="piSeriesLine"></div>`;
+
+    // Odds / venue meta
+    const venue    = String(comp?.venue?.fullName || comp?.venue?.shortName || "");
+    const oddsLine = oddsOverride ? _buildOddsLine(oddsOverride.favored, oddsOverride.ou) : "";
+    const metaHTML = (venue || oddsLine) ? `
+      <div class="piShopMeta">
+        ${oddsLine ? `<span class="piShopMetaItem odds">${_esc(oddsLine)}</span>` : ""}
+        ${venue    ? `<span class="piShopMetaItem venue">📍 ${_esc(venue)}</span>` : ""}
+      </div>` : "";
+
+    return `
+      <div class="${cardClass}" data-eventid="${_esc(String(ev?.id || ""))}">
+        <div class="piShopCardTop">
+          <span class="piShopLeagueBadge" style="background:${color};">${_esc(leagueLabel)}</span>
+          <span class="piShopStatusLabel ${statusClass}">${_esc(statusText)}</span>
+        </div>
+        <div class="piShopTeamsRow">${teamsHTML}</div>
+        ${seriesHTML}
+        ${metaHTML}
+      </div>`;
   }
 
-  function _applyTTUN(str) {
-    return str
-      .replace(/\bMichigan\b/g, "TTUN")
-      .replace(/\bWolverines\b/g, "Cheaters")
-      .replace(/\bU of M\b/gi, "TTUN")
-      .replace(/\bU-M\b/gi, "TTUN");
+  // ----------------------------------------------------------------
+  // Utilities
+  // ----------------------------------------------------------------
+  function _todayStr() {
+    return _dateStr(new Date());
   }
 
-  function _todayStr() { return _dateStr(new Date()); }
   function _dateStr(d) {
     const y = d.getFullYear();
-    const m = String(d.getMonth()+1).padStart(2,"0");
-    const day = String(d.getDate()).padStart(2,"0");
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${y}${m}${day}`;
-  }
-
-  function _fmtTime(iso) {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
-    } catch { return ""; }
-  }
-
-  function _fmtGameDate(iso) {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
-    } catch { return ""; }
   }
 
   function _daysSince(date) {
@@ -1506,6 +1441,12 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function _applyTTUN(name) {
+    return name
+      .replace(/\bMichigan\b/g, "TTUN")
+      .replace(/\bWolverines\b/g, "Cheating Bastards");
   }
 
 })();
