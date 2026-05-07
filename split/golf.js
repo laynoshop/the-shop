@@ -176,6 +176,33 @@
     });
   }
 
+  // ─── Firebase helper: Save a manually-entered completed round ────────────
+  async function saveManualRound(courseId, courseName, holePars, playerNames, scoresMap, roundDate) {
+    const db = COL();
+    if (!db) return null;
+    const roundId = generateRoundId();
+    // Build scores in the same shape as a live round
+    const scores = {};
+    playerNames.forEach(p => {
+      scores[p] = { holes: scoresMap[p] || new Array(holePars.length).fill(null) };
+    });
+    const ts = roundDate ? new Date(roundDate).getTime() : Date.now();
+    await db.collection(ROUNDS_PATH).doc(roundId).set({
+      courseId,
+      courseName,
+      holePars,
+      players: playerNames,
+      scores,
+      status: "complete",
+      currentHole: holePars.length - 1,
+      totalHoles: holePars.length,
+      startedAt: ts,
+      completedAt: ts,
+      manualEntry: true,
+    });
+    return roundId;
+  }
+
   // ─── Render: Main Shell ───────────────────────────────────────────────────
   function getContent() { return document.getElementById("content"); }
   function setContent(html) { const c = getContent(); if (c) c.innerHTML = html; }
@@ -240,6 +267,7 @@
           <button class="golf-btn golf-btn-primary" id="golfStartBtn">🏌️ Start a Round</button>
           <button class="golf-btn golf-btn-secondary" id="golfHistoryBtn">📋 Prior Rounds</button>
           <button class="golf-btn golf-btn-secondary" id="golfStatsBtn">📊 Putt Putt Stats</button>
+          ${isAdmin() ? `<button class="golf-btn golf-btn-secondary" id="golfManualEntryBtn">📝 Manually Add Round</button>` : ""}
         </div>
         ${adminHTML}
       </div>
@@ -248,6 +276,7 @@
     document.getElementById("golfStartBtn")?.addEventListener("click", () => renderSetup());
     document.getElementById("golfHistoryBtn")?.addEventListener("click", () => renderHistory());
     document.getElementById("golfStatsBtn")?.addEventListener("click", () => renderStats());
+    document.getElementById("golfManualEntryBtn")?.addEventListener("click", () => renderManualEntry());
 
     // Admin bindings
     if (isAdmin()) {
@@ -824,6 +853,203 @@
       </div>
     `);
     document.getElementById("golfBackSt2")?.addEventListener("click", renderGolfHome);
+  }
+
+  // ─── View: Manual Entry (Admin Only) ─────────────────────────────────────
+  async function renderManualEntry() {
+    if (!isAdmin()) return;
+    _state.view = "manualEntry";
+    setContent(`<div class="golf-wrap"><div class="golf-notice">Loading…</div></div>`);
+
+    const [courses, regulars] = await Promise.all([loadCourses(), loadRegulars()]);
+    _state.courses  = courses;
+    _state.regulars = regulars;
+
+    if (!courses.length) {
+      setContent(`<div class="golf-wrap">
+        <div class="golf-header"><button class="golf-back" id="golfBackME">← Back</button><h2>📝 Manually Add Round</h2></div>
+        <div class="golf-notice">No courses yet — add a course first.</div>
+      </div>`);
+      document.getElementById("golfBackME")?.addEventListener("click", renderGolfHome);
+      return;
+    }
+
+    const courseOpts = courses.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const regularsChips = regulars.length
+      ? `<div class="golf-field">
+           <label class="golf-label">Regulars — tap to add</label>
+           <div class="golf-regulars" id="meRegulars">
+             ${regulars.map(r => `<button class="golf-chip me-regular-chip" data-name="${esc(r)}">${esc(r)}</button>`).join("")}
+           </div>
+         </div>`
+      : "";
+
+    setContent(`
+      <div class="golf-wrap">
+        <div class="golf-header">
+          <button class="golf-back" id="golfBackME2">← Back</button>
+          <h2>📝 Manually Add Round</h2>
+        </div>
+
+        <div class="golf-field">
+          <label class="golf-label">Course</label>
+          <select id="meCourseSelect" class="golf-select">${courseOpts}</select>
+        </div>
+
+        <div class="golf-field">
+          <label class="golf-label">Date</label>
+          <input class="golf-input" id="meDate" type="date" value="${todayStr}" />
+        </div>
+
+        <div class="golf-field">
+          <label class="golf-label">Players <span class="golf-muted">(max ${MAX_PLAYERS})</span></label>
+          <div id="mePlayerList" class="golf-player-list"></div>
+          <button class="golf-btn golf-btn-ghost" id="meAddPlayer">+ Add Player</button>
+        </div>
+
+        ${regularsChips}
+
+        <button class="golf-btn golf-btn-primary" id="meBuildScorecard" style="margin-top:8px;">Next: Enter Scores →</button>
+      </div>
+    `);
+
+    document.getElementById("golfBackME2")?.addEventListener("click", renderGolfHome);
+    document.getElementById("meAddPlayer")?.addEventListener("click", () => meAddPlayerRow());
+    document.getElementById("meBuildScorecard")?.addEventListener("click", meBuildScorecard);
+    document.querySelectorAll(".me-regular-chip").forEach(btn => {
+      btn.addEventListener("click", () => meAddPlayerByName(btn.dataset.name));
+    });
+
+    meAddPlayerRow();
+  }
+
+  function meAddPlayerRow(prefill = "") {
+    const list = document.getElementById("mePlayerList");
+    if (!list) return;
+    const count = list.querySelectorAll(".me-player-row").length;
+    if (count >= MAX_PLAYERS) return;
+    const pro = PRO_PLACEHOLDERS[count % PRO_PLACEHOLDERS.length];
+    const row = document.createElement("div");
+    row.className = "golf-player-row me-player-row";
+    row.innerHTML = `
+      <input class="golf-input me-player-input" type="text"
+        placeholder="ex: ${esc(pro)}" maxlength="20" value="${esc(prefill)}" />
+      <button class="golf-remove-player" aria-label="Remove">✕</button>
+    `;
+    row.querySelector(".golf-remove-player").addEventListener("click", () => row.remove());
+    list.appendChild(row);
+  }
+
+  function meAddPlayerByName(name) {
+    const list = document.getElementById("mePlayerList");
+    if (!list) return;
+    const empties = [...list.querySelectorAll(".me-player-input")].filter(i => !i.value.trim());
+    if (empties.length) { empties[0].value = name; return; }
+    meAddPlayerRow(name);
+  }
+
+  function meBuildScorecard() {
+    const courseId = document.getElementById("meCourseSelect")?.value;
+    const course = _state.courses.find(c => c.id === courseId);
+    if (!course) { alert("Select a course."); return; }
+
+    const dateVal = document.getElementById("meDate")?.value;
+    if (!dateVal) { alert("Enter a date."); return; }
+
+    const inputs = [...document.querySelectorAll(".me-player-input")];
+    const names = inputs.map(i => i.value.trim()).filter(Boolean);
+    if (!names.length) { alert("Add at least 1 player."); return; }
+    const unique = [...new Set(names)];
+    if (unique.length !== names.length) { alert("Player names must be unique."); return; }
+
+    // Render the score-entry grid
+    const pars = course.par;
+    const totalPar = pars.reduce((a, b) => a + b, 0);
+
+    const headerCells = pars.map((_, i) => `<th style="min-width:36px;">H${i+1}</th>`).join("");
+    const parCells    = pars.map(p => `<td class="golf-sc-par">${p}</td>`).join("");
+
+    const playerInputRows = unique.map(p => {
+      const cells = pars.map((par, i) => `
+        <td>
+          <input class="golf-input me-score-input"
+            type="number" min="1" max="20"
+            data-player="${esc(p)}" data-hole="${i}"
+            value="${par}"
+            style="width:36px;padding:4px;text-align:center;" />
+        </td>
+      `).join("");
+      return `<tr><td class="golf-sc-name" style="white-space:nowrap;padding-right:8px;">${esc(p)}</td>${cells}</tr>`;
+    }).join("");
+
+    setContent(`
+      <div class="golf-wrap">
+        <div class="golf-header">
+          <button class="golf-back" id="golfBackMEScores">← Back</button>
+          <h2>📝 Enter Scores</h2>
+        </div>
+        <div class="golf-notice" style="margin-bottom:12px;">${esc(course.name)} · ${dateVal}</div>
+
+        <div class="golf-scorecard-wrap">
+          <div class="golf-sc-scroll">
+            <table class="golf-scorecard" style="font-size:13px;">
+              <thead>
+                <tr><th style="padding:4px 6px;">Player</th>${headerCells}</tr>
+                <tr class="golf-sc-par-row"><td style="padding:3px 6px;">Par</td>${parCells}</tr>
+              </thead>
+              <tbody>${playerInputRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <button class="golf-btn golf-btn-primary" id="meSaveRound" style="margin-top:20px;">💾 Save Round</button>
+      </div>
+    `);
+
+    document.getElementById("golfBackMEScores")?.addEventListener("click", () => renderManualEntry());
+
+    document.getElementById("meSaveRound")?.addEventListener("click", async () => {
+      // Collect scores
+      const scoresMap = {};
+      unique.forEach(p => { scoresMap[p] = new Array(pars.length).fill(null); });
+
+      const scoreInputs = [...document.querySelectorAll(".me-score-input")];
+      scoreInputs.forEach(input => {
+        const p = input.dataset.player;
+        const hi = parseInt(input.dataset.hole, 10);
+        const val = parseInt(input.value, 10);
+        if (scoresMap[p] && !isNaN(val) && val > 0) {
+          scoresMap[p][hi] = val;
+        }
+      });
+
+      // Validate — every hole must have a score
+      for (const p of unique) {
+        for (let i = 0; i < pars.length; i++) {
+          if (!scoresMap[p][i]) {
+            alert(`Missing score for ${p} on Hole ${i + 1}.`);
+            return;
+          }
+        }
+      }
+
+      const btn = document.getElementById("meSaveRound");
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+
+      // Auto-add new names to regulars
+      const known = new Set(_state.regulars);
+      for (const n of unique) {
+        if (!known.has(n)) await saveRegular(n);
+      }
+
+      const roundId = await saveManualRound(courseId, course.name, pars, unique, scoresMap, dateVal);
+      if (!roundId) { alert("Failed to save round. Check Firebase."); if (btn) { btn.disabled = false; btn.textContent = "💾 Save Round"; } return; }
+
+      alert("Round saved! It will appear in Prior Rounds and Stats.");
+      renderGolfHome();
+    });
   }
 
   // ─── Shared: Scorecard HTML ───────────────────────────────────────────────
