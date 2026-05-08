@@ -733,4 +733,1426 @@
       const comp = summaryData?.header?.competitions?.[0] || fallbackComp || null;
       const competitors = comp?.competitors || [];
       const home = competitors.find(t => t.homeAway === "home");
-      const away = competitors.find(t => t.h
+      const away = competitors.find(t => t.homeAway === "away");
+
+      const homeName = getSafeTeamNameForOdds(home?.team, "Home");
+      const awayName = getSafeTeamNameForOdds(away?.team, "Away");
+
+      const parsed = parseOddsFromPickcenter(pcArr[0], homeName, awayName);
+      if (parsed.favored || parsed.ou) return parsed;
+    }
+
+    const sc0 = summaryData?.header?.competitions?.[0] || fallbackComp || null;
+    const pc2 = firstPickcenterFromCompetition(sc0);
+    if (pc2) {
+      const competitors = sc0?.competitors || [];
+      const home = competitors.find(t => t.homeAway === "home");
+      const away = competitors.find(t => t.homeAway === "away");
+
+      const homeName = getSafeTeamNameForOdds(home?.team, "Home");
+      const awayName = getSafeTeamNameForOdds(away?.team, "Away");
+
+      const parsed = parseOddsFromPickcenter(pc2, homeName, awayName);
+      if (parsed.favored || parsed.ou) return parsed;
+    }
+
+    const o2 = firstOddsFromCompetition(sc0);
+    if (o2 && (o2.details || o2.overUnder !== undefined || o2.total !== undefined)) {
+      return {
+        favored: cleanFavoredText(o2.details || o2.displayValue || ""),
+        ou: normalizeNumberString(o2.overUnder ?? o2.total ?? "")
+      };
+    }
+
+    const oTop = Array.isArray(summaryData?.odds) ? summaryData.odds[0] : null;
+    if (oTop && (oTop.details || oTop.overUnder !== undefined || oTop.total !== undefined)) {
+      return {
+        favored: cleanFavoredText(oTop.details || oTop.displayValue || ""),
+        ou: normalizeNumberString(oTop.overUnder ?? oTop.total ?? "")
+      };
+    }
+
+    return { favored: "", ou: "" };
+  }
+
+  function parseOddsFromScoreboardCompetition(competition) {
+    const o1 = firstOddsFromCompetition(competition);
+    if (o1 && (o1.details || o1.overUnder !== undefined || o1.total !== undefined)) {
+      return {
+        favored: cleanFavoredText(o1.details || o1.displayValue || ""),
+        ou: normalizeNumberString(o1.overUnder ?? o1.total ?? "")
+      };
+    }
+
+    const pc = firstPickcenterFromCompetition(competition);
+    if (pc) {
+      const competitors = competition?.competitors || [];
+      const home = competitors.find(t => t.homeAway === "home");
+      const away = competitors.find(t => t.homeAway === "away");
+
+      const homeName = getSafeTeamNameForOdds(home?.team, "Home");
+      const awayName = getSafeTeamNameForOdds(away?.team, "Away");
+
+      const parsed = parseOddsFromPickcenter(pc, homeName, awayName);
+      if (parsed.favored || parsed.ou) return parsed;
+    }
+
+    return { favored: "", ou: "" };
+  }
+
+  function buildOddsLine(favored, ou) {
+    const hasFav = favored && favored !== "-" && favored !== "";
+    const hasOu = ou && ou !== "-" && ou !== "";
+    if (!hasFav && !hasOu) return "";
+    if (hasFav && hasOu) return `Favored: ${favored} • O/U: ${ou}`;
+    if (hasFav) return `Favored: ${favored}`;
+    if (hasOu) return `O/U: ${ou}`;
+    return "";
+  }
+
+  // Odds cache + concurrency
+  const ODDS_CONCURRENCY_LIMIT = 6;
+  const ODDS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+  const ODDS_STORAGE_PREFIX = "theShopOddsCache_v1";
+  const oddsCache = new Map();
+  const oddsInFlight = new Map();
+  let oddsCacheSaveTimer = null;
+
+  function oddsCacheKey(leagueKey, dateYYYYMMDD, eventId) {
+    return `${leagueKey}|${dateYYYYMMDD}|${eventId}`;
+  }
+  function storageKeyForOdds(leagueKey, dateYYYYMMDD) {
+    return `${ODDS_STORAGE_PREFIX}_${leagueKey}_${dateYYYYMMDD}`;
+  }
+  function loadOddsCacheFromSession(leagueKey, dateYYYYMMDD) {
+    try {
+      const key = storageKeyForOdds(leagueKey, dateYYYYMMDD);
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+
+      const now = Date.now();
+      for (const [eventId, val] of Object.entries(parsed)) {
+        const ts = Number(val?.ts || 0);
+        if (!Number.isFinite(ts) || (now - ts) > ODDS_CACHE_TTL_MS) continue;
+        const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, eventId);
+        oddsCache.set(ck, { favored: val.favored || "", ou: val.ou || "", ts });
+      }
+    } catch {}
+  }
+  function saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD) {
+    if (oddsCacheSaveTimer) return;
+    oddsCacheSaveTimer = setTimeout(() => {
+      oddsCacheSaveTimer = null;
+      try {
+        const key = storageKeyForOdds(leagueKey, dateYYYYMMDD);
+        const obj = {};
+        for (const [ck, val] of oddsCache.entries()) {
+          const [lk, dk, eventId] = String(ck).split("|");
+          if (lk !== leagueKey || dk !== dateYYYYMMDD) continue;
+          obj[eventId] = { favored: val.favored || "", ou: val.ou || "", ts: val.ts || Date.now() };
+        }
+        sessionStorage.setItem(key, JSON.stringify(obj));
+      } catch {}
+    }, 400);
+  }
+
+  function getOddsLineElByEventId(eventId) {
+    const card = document.querySelector(`.game[data-eventid="${CSS.escape(String(eventId))}"]`);
+    if (!card) return null;
+    return card.querySelector(".gameMetaOddsLine") || card.querySelector(".gameMetaOddsPlain");
+  }
+  function applyOddsToDom(eventId, favored, ou) {
+    const el = getOddsLineElByEventId(eventId);
+    if (!el) return;
+    const text = buildOddsLine(favored, ou);
+    if (el.textContent !== text) el.textContent = text;
+  }
+
+  function withLangRegion(url) {
+    try {
+      const u = new URL(url);
+      if (!u.searchParams.has("lang")) u.searchParams.set("lang", "en");
+      if (!u.searchParams.has("region")) u.searchParams.set("region", "us");
+      return u.toString();
+    } catch {
+      return url;
+    }
+  }
+  async function fetchJsonNoStore(url) {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
+  async function fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, eventId, fallbackCompetition) {
+    if (!league?.summaryEndpoint || !eventId) return { favored: "", ou: "" };
+
+    const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, eventId);
+    const cached = oddsCache.get(ck);
+    const now = Date.now();
+    if (cached && (now - (cached.ts || 0)) <= ODDS_CACHE_TTL_MS) {
+      return { favored: cached.favored || "", ou: cached.ou || "" };
+    }
+
+    if (oddsInFlight.has(ck)) return oddsInFlight.get(ck);
+
+    const p = (async () => {
+      const base = league.summaryEndpoint(eventId);
+      const urls = [
+        withLangRegion(base),
+        withLangRegion(base.replace("?event=", "?eventId=")),
+        withLangRegion(base.replace("summary?event=", "summary?eventId=")),
+        base
+      ];
+
+      for (const url of urls) {
+        try {
+          const data = await fetchJsonNoStore(url);
+          const parsed = parseOddsFromSummary(data, fallbackCompetition);
+          if (parsed.favored || parsed.ou) {
+            oddsCache.set(ck, { favored: parsed.favored || "", ou: parsed.ou || "", ts: Date.now() });
+            saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
+            return parsed;
+          }
+        } catch {}
+      }
+
+      const empty = { favored: "", ou: "" };
+      oddsCache.set(ck, { favored: "", ou: "", ts: Date.now() });
+      saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
+      return empty;
+    })();
+
+    oddsInFlight.set(ck, p);
+    try { return await p; }
+    finally { oddsInFlight.delete(ck); }
+  }
+
+  async function runWithConcurrency(items, limit, worker) {
+    let i = 0;
+    const runners = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+      while (i < items.length) {
+        const idx = i++;
+        await worker(items[idx], idx);
+      }
+    });
+    await Promise.all(runners);
+  }
+
+  async function hydrateAllOdds(events, league, leagueKey, dateYYYYMMDD) {
+    loadOddsCacheFromSession(leagueKey, dateYYYYMMDD);
+
+    const jobs = (events || [])
+      .map(e => ({ eventId: String(e?.id || ""), competition: e?.competitions?.[0] || null }))
+      .filter(j => j.eventId);
+
+    for (const job of jobs) {
+      const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
+      const cached = oddsCache.get(ck);
+      if (cached && (Date.now() - (cached.ts || 0)) <= ODDS_CACHE_TTL_MS) {
+        applyOddsToDom(job.eventId, cached.favored, cached.ou);
+        continue;
+      }
+
+      const fromScoreboard = parseOddsFromScoreboardCompetition(job.competition);
+      if (fromScoreboard.favored || fromScoreboard.ou) {
+        oddsCache.set(ck, { favored: fromScoreboard.favored || "", ou: fromScoreboard.ou || "", ts: Date.now() });
+        saveOddsCacheToSessionThrottled(leagueKey, dateYYYYMMDD);
+        applyOddsToDom(job.eventId, fromScoreboard.favored, fromScoreboard.ou);
+      }
+    }
+
+    const needsFetch = jobs.filter(job => {
+      const ck = oddsCacheKey(leagueKey, dateYYYYMMDD, job.eventId);
+      const val = oddsCache.get(ck);
+      return !(val && (val.favored || val.ou));
+    });
+
+    await runWithConcurrency(needsFetch, ODDS_CONCURRENCY_LIMIT, async (job) => {
+      const parsed = await fetchOddsFromSummary(league, leagueKey, dateYYYYMMDD, job.eventId, job.competition);
+      applyOddsToDom(job.eventId, parsed.favored, parsed.ou);
+    });
+  }
+
+  // ---------- AI Insight ----------
+  const AI_CACHE_TTL_MS = 30 * 60 * 1000;
+  const AI_SESSION_KEY = "theShopAiInsightCache_v1";
+  let aiInsightCache = {};
+
+  (function loadAiCache(){
+    try {
+      const raw = sessionStorage.getItem(AI_SESSION_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") aiInsightCache = parsed;
+    } catch {}
+  })();
+
+  function saveAiCache(){
+    try { sessionStorage.setItem(AI_SESSION_KEY, JSON.stringify(aiInsightCache)); } catch {}
+  }
+  function isAiCacheFresh(entry){
+    if (!entry) return false;
+    const ts = Number(entry.ts || 0);
+    if (!Number.isFinite(ts)) return false;
+    return (Date.now() - ts) <= AI_CACHE_TTL_MS;
+  }
+
+  function generateAIInsight({ favoredText, ouText, state }) {
+    let confidence = 5;
+    let edge = "Stay Away";
+    let lean = "";
+
+    if (state === "in") confidence += 0.5;
+
+    if (favoredText && favoredText.includes("-")) {
+      const parts = favoredText.split("-");
+      const team = parts[0].trim();
+      const spread = parseFloat(parts[1]);
+      if (!isNaN(spread)) {
+        confidence += spread < 4 ? 1.2 : 0.4;
+        edge = `${team} -${spread}`;
+      }
+    }
+
+    if (ouText) {
+      const total = parseFloat(ouText);
+      if (!isNaN(total)) {
+        confidence += total > 145 ? 0.5 : 0.2;
+        lean = total > 145 ? `Under ${total}` : `Under ${total}`;
+      }
+    }
+
+    confidence = Math.max(1, Math.min(10, confidence));
+    return { edge, lean, confidence: confidence.toFixed(1) };
+  }
+
+  async function fetchAIInsight(payload) {
+    const key = [
+      payload.league || "",
+      payload.date || "",
+      payload.eventId || "",
+      payload.home || "",
+      payload.away || "",
+      payload.spread || "",
+      payload.total || ""
+    ].join("|");
+
+    const cached = aiInsightCache[key];
+    if (isAiCacheFresh(cached)) return cached;
+
+    const g = generateAIInsight({
+      favoredText: payload.spread || "",
+      ouText: payload.total || "",
+      state: "pre"
+    });
+
+    const stored = { edge: g.edge, lean: g.lean, confidence: g.confidence, ts: Date.now() };
+    aiInsightCache[key] = stored;
+    saveAiCache();
+    return stored;
+  }
+
+  // ---------- ESPN fetch with fallbacks ----------
+  function removeDatesParam(url) {
+    return url
+      .replace(/\?dates=\d{8}&/i, "?")
+      .replace(/\?dates=\d{8}$/i, "")
+      .replace(/&dates=\d{8}&/i, "&")
+      .replace(/&dates=\d{8}$/i, "");
+  }
+
+  async function fetchScoreboardWithFallbacks(league, yyyymmdd) {
+    const baseUrl = league.endpoint(yyyymmdd);
+
+    const yyyy = Number(yyyymmdd.slice(0, 4));
+    const mm = Number(yyyymmdd.slice(4, 6));
+    const dd = Number(yyyymmdd.slice(6, 8));
+    const baseDate = new Date(yyyy, mm - 1, dd);
+
+    const yesterday = new Date(baseDate.getTime() - 86400000);
+    const tomorrow = new Date(baseDate.getTime() + 86400000);
+    const yDate = formatDateYYYYMMDD(yesterday);
+    const tDate = formatDateYYYYMMDD(tomorrow);
+
+    const isNcaam = league.key === "ncaam";
+
+    function addOrReplaceParam(url, key, value) {
+      try {
+        const u = new URL(url);
+        u.searchParams.set(key, value);
+        return u.toString();
+      } catch {
+        const hasQ = url.includes("?");
+        const sep = hasQ ? "&" : "?";
+        return `${url}${sep}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+      }
+    }
+
+    function eventLocalYYYYMMDD(ev) {
+      const comp = ev?.competitions?.[0];
+      const iso = ev?.date || comp?.date || "";
+      const d = new Date(iso);
+      if (!iso || isNaN(d.getTime())) return "";
+      return formatDateYYYYMMDD(d);
+    }
+
+    function hasAnyScheduledPreGames(events) {
+      for (const ev of (events || [])) {
+        const comp = ev?.competitions?.[0];
+        const state = comp?.status?.type?.state || "";
+        if (String(state).toLowerCase() === "pre") return true;
+      }
+      return false;
+    }
+
+    async function fetchEvents(url) {
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const events = Array.isArray(data?.events) ? data.events : [];
+      return { data, events };
+    }
+
+    try {
+      const urlToday = addOrReplaceParam(baseUrl, "limit", "1000");
+      const urlY = addOrReplaceParam(league.endpoint(yDate), "limit", "1000");
+      const urlT = addOrReplaceParam(league.endpoint(tDate), "limit", "1000");
+
+      const results = await Promise.allSettled([
+        fetchEvents(urlToday),
+        fetchEvents(urlY),
+        fetchEvents(urlT),
+      ]);
+
+      const firstFulfilled = results.find(r => r.status === "fulfilled");
+      const baseData = firstFulfilled && firstFulfilled.status === "fulfilled"
+        ? firstFulfilled.value.data
+        : { events: [] };
+
+      const combined = [];
+      const seen = new Set();
+
+      for (const r of results) {
+        if (r.status !== "fulfilled") continue;
+        for (const ev of (r.value.events || [])) {
+          const id = String(ev?.id || "");
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          combined.push(ev);
+        }
+      }
+
+      const filtered = combined.filter(ev => eventLocalYYYYMMDD(ev) === yyyymmdd);
+
+      if (filtered.length > 0) {
+        return {
+          data: { ...(baseData || {}), events: filtered },
+          events: filtered,
+          used: "normalized-day",
+          url: urlToday
+        };
+      }
+    } catch {}
+
+    const baseLimit500 = addOrReplaceParam(baseUrl, "limit", "500");
+    const baseLimit1000 = addOrReplaceParam(baseUrl, "limit", "1000");
+
+    const attempts = [
+      { label: "selectedDate", url: baseUrl },
+      { label: "selectedDate-limit-500", url: baseLimit500 },
+      { label: "selectedDate-limit-1000", url: baseLimit1000 },
+
+      ...(isNcaam ? [
+        { label: "ncaam-noGroups", url: baseUrl.replace(/&groups=50/i, "") },
+        { label: "ncaam-noGroups-limit-1000", url: addOrReplaceParam(baseUrl.replace(/&groups=50/i, ""), "limit", "1000") },
+      ] : []),
+
+      { label: "noDate", url: removeDatesParam(baseUrl) },
+      { label: "yesterday", url: addOrReplaceParam(league.endpoint(yDate), "limit", "1000") },
+      { label: "tomorrow", url: addOrReplaceParam(league.endpoint(tDate), "limit", "1000") }
+    ];
+
+    let lastError = null;
+    let firstNonEmpty = null;
+
+    for (const a of attempts) {
+      try {
+        const resp = await fetch(a.url, { cache: "no-store" });
+        if (!resp.ok) { lastError = new Error(`HTTP ${resp.status}`); continue; }
+
+        const data = await resp.json();
+        const events = Array.isArray(data?.events) ? data.events : [];
+        if (events.length === 0) continue;
+
+        if (!firstNonEmpty) firstNonEmpty = { data, events, used: a.label, url: a.url };
+
+        if (isNcaam && hasAnyScheduledPreGames(events)) return { data, events, used: a.label, url: a.url };
+        if (!isNcaam) return { data, events, used: a.label, url: a.url };
+
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (firstNonEmpty) return firstNonEmpty;
+    return { data: { events: [] }, events: [], used: "none", url: "", error: lastError };
+  }
+
+  // ---------- UI helpers ----------
+  function statusClassFromState(state) {
+    if (state === "in") return "status-live";
+    if (state === "post") return "status-final";
+    if (state === "pre") return "status-up";
+    return "status-other";
+  }
+  function statusLabelFromState(state, detail) {
+    if (state === "in") return `LIVE • ${detail}`;
+    if (state === "post") return `FINAL`;
+    if (state === "pre") return `${detail}`;
+    return detail || "STATUS";
+  }
+
+  // =========================
+  // Part 1: Premium header builder
+  // =========================
+  function buildHeaderHTML(selectedKey, rightLabel, confSelectHTML) {
+    return `
+      <div class="header scoresHeader">
+
+        <div class="scoresHeaderTop">
+          <div class="scoresHeaderBrand">
+            <span class="scoresHeaderTitle">Scores</span>
+            <span class="badge">The Shop</span>
+          </div>
+          <div class="scoresHeaderActions">
+            <button
+              class="scoresActionBtn"
+              onclick="loadScores(true)"
+              aria-label="Refresh scores"
+              title="Refresh"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>Refresh</span>
+            </button>
+            <button
+              class="scoresActionBtn scoresActionBtnLogout"
+              onclick="logout()"
+              aria-label="Log out"
+              title="Log Out"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="scoresControlRow">
+          <div class="scoresControlLeft">
+            ${buildLeagueSelectHTML(selectedKey)}
+            ${buildCalendarButtonHTML()}
+          </div>
+          <div class="scoresMetaLabel">${rightLabel}</div>
+        </div>
+
+        ${confSelectHTML ? `
+          <div class="scoresControlRow scoresConfRow">
+            <div class="scoresControlLeft">
+              ${confSelectHTML}
+            </div>
+            <div></div>
+          </div>
+        ` : ``}
+
+      </div>
+    `;
+  }
+
+  // ---------- The actual Scores loader ----------
+  async function loadScores(showLoading) {
+    const content = document.getElementById("content");
+    if (!content) return;
+
+    const selectedDate = getSavedDateYYYYMMDD();
+    const prettyDate = yyyymmddToPretty(selectedDate);
+    const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+    const selectedKey = getSavedLeagueKey();
+    const league = getLeagueByKey(selectedKey);
+
+    // ---------- UFC ----------
+    if (selectedKey === "ufc") {
+      const selectedDate2 = getSavedDateYYYYMMDD();
+      const prettyDate2 = yyyymmddToPretty(selectedDate2);
+      const updatedTime2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+      content.innerHTML = `
+        ${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}
+        ${buildLoadingState("Loading UFC…")}
+      `;
+
+      const ufcHTML = await renderUFCScoreboard({ dateYYYYMMDD: selectedDate2 });
+
+      content.innerHTML = `${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}${ufcHTML}`;
+      return;
+    }
+
+    // ---------- PGA (Golf) ----------
+    if (selectedKey === "pga") {
+      const selectedDate = getSavedDateYYYYMMDD();
+      const prettyDate = yyyymmddToPretty(selectedDate);
+      const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+      content.innerHTML = `
+        ${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}
+        ${buildLoadingState("Loading PGA…")}
+      `;
+
+      const pgaHTML = await renderPGAScoreboard({ dateYYYYMMDD: selectedDate });
+
+      content.innerHTML = `${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}${pgaHTML}`;
+      return;
+    }
+
+    if (showLoading) {
+      content.innerHTML = `
+        ${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Loading…`, "")}
+        ${buildLoadingState("Grabbing games…")}
+      `;
+    }
+
+    try {
+      const result = await fetchScoreboardWithFallbacks(league, selectedDate);
+      let events = result.events || [];
+
+      const isCollege = isCollegeLeagueKey(selectedKey);
+
+      // Build conference dropdown (college only)
+      let confSelectHTML = "";
+      if (isCollege) {
+        const cached = loadConfCache(selectedKey, selectedDate);
+        const cachedMap = cached?.teamIdToConf || {};
+        const confsFromCache = buildConferenceListFromMap(cachedMap);
+
+        const confsFromScoreboard = events.length ? buildConferenceListFromEvents(events) : [];
+        const confs = confsFromCache.length ? confsFromCache : confsFromScoreboard;
+
+        const savedConf = getSavedConferenceFilter(selectedKey);
+        const loading = !confs.length;
+        confSelectHTML = buildConferenceSelectHTML(confs, savedConf, loading);
+      } else {
+        saveConferenceFilter(selectedKey, "");
+      }
+
+      content.innerHTML = buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Updated ${updatedTime}`, confSelectHTML);
+
+      if (!events.length) {
+        content.innerHTML += buildOffseasonState(result.used);
+        return;
+      }
+
+      // Apply conference filter:
+      const savedConf = isCollege ? getSavedConferenceFilter(selectedKey) : "";
+      const savedConfNorm = savedConf ? norm(savedConf) : "";
+      const cached = isCollege ? loadConfCache(selectedKey, selectedDate) : null;
+      const cachedMap = cached?.teamIdToConf || null;
+
+      let deferredConfFilter = false;
+      if (isCollege && savedConfNorm) {
+        if (cachedMap && Object.keys(cachedMap).length) {
+          events = filterEventsByConferenceUsingMap(events, savedConfNorm, cachedMap);
+        } else {
+          deferredConfFilter = true;
+        }
+      }
+
+      // Favorites-first sort (still shows ALL games)
+      events = [...events].sort((a, b) => {
+        const ca = a?.competitions?.[0];
+        const cb = b?.competitions?.[0];
+
+        const ra = favoriteRankForEvent(ca);
+        const rb = favoriteRankForEvent(cb);
+
+        const aFav = Number.isFinite(ra) ? ra : Infinity;
+        const bFav = Number.isFinite(rb) ? rb : Infinity;
+        if (aFav !== bFav) return aFav - bFav;
+
+        const sa = a?.status?.type?.state || "unknown";
+        const sb = b?.status?.type?.state || "unknown";
+        const sr = stateRank(sa) - stateRank(sb);
+        if (sr !== 0) return sr;
+
+        const ta = getStartTimeMs(a, ca);
+        const tb = getStartTimeMs(b, cb);
+        if (ta !== tb) return ta - tb;
+
+        const ida = String(a?.id || a?.uid || a?.name || "");
+        const idb = String(b?.id || b?.uid || b?.name || "");
+        return ida.localeCompare(idb);
+      });
+
+      if (!events.length && !deferredConfFilter) {
+        content.innerHTML += buildNoConfMatchState();
+        return;
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "grid";
+
+      for (const event of events) {
+        const competition = event?.competitions?.[0];
+        if (!competition) continue;
+
+        const home = competition.competitors.find(t => t.homeAway === "home");
+        const away = competition.competitors.find(t => t.homeAway === "away");
+
+        const state = event?.status?.type?.state || "unknown";
+        const detail = event?.status?.type?.detail || "Status unavailable";
+        const pillClass = statusClassFromState(state);
+        const pillText = statusLabelFromState(state, detail);
+
+        const homeScore = home?.score ? parseInt(home.score, 10) : (state === "pre" ? "" : "0");
+        const awayScore = away?.score ? parseInt(away.score, 10) : (state === "pre" ? "" : "0");
+
+        const homeTeam = home?.team || null;
+        const awayTeam = away?.team || null;
+
+        const homeBaseName = getTeamDisplayNameUI(homeTeam);
+        const awayBaseName = getTeamDisplayNameUI(awayTeam);
+
+        const homeName = teamDisplayNameWithRank(homeBaseName, home, selectedKey);
+        const awayName = teamDisplayNameWithRank(awayBaseName, away, selectedKey);
+
+        const homeLogo = getTeamLogoUrl(homeTeam);
+        const awayLogo = getTeamLogoUrl(awayTeam);
+
+        const homeAbbrev = escapeHtml(getTeamAbbrevUI(homeTeam)).slice(0, 4);
+        const awayAbbrev = escapeHtml(getTeamAbbrevUI(awayTeam)).slice(0, 4);
+
+        const venueLine = buildVenueLine(competition);
+
+        const initialOdds = parseOddsFromScoreboardCompetition(competition);
+        const initialOddsText = buildOddsLine(initialOdds.favored, initialOdds.ou);
+
+        const eventId = String(event?.id || "");
+
+        const card = document.createElement("div");
+        card.className = "game";
+
+        if (state === "in") card.classList.add("statusLive");
+        else if (state === "pre") card.classList.add("statusPre");
+        else if (state === "post") card.classList.add("statusFinal");
+        if (!initialOdds?.favored && !initialOdds?.ou) card.classList.add("edgeNone");
+
+        if (eventId) card.setAttribute("data-eventid", eventId);
+
+        card.innerHTML = `
+  <div class="gameHeader">
+    <div class="statusPill ${pillClass}">${escapeHtml(pillText)}</div>
+  </div>
+
+  <div class="gameMetaTopPlain" aria-label="Venue">
+    ${escapeHtml(venueLine)}
+  </div>
+
+  ${initialOddsText ? `
+    <div class="gameMetaOddsPlain" aria-label="Betting line">
+      ${escapeHtml(initialOddsText)}
+    </div>
+  ` : ""}
+
+  <div class="teamRow">
+    <div class="teamLeft">
+      <div class="teamLine">
+        ${
+          awayLogo
+            ? `<img class="teamLogo" src="${awayLogo}" alt="${escapeHtml(awayName)} logo" loading="lazy" decoding="async" />`
+            : `<div class="teamLogoFallback">${awayAbbrev || "—"}</div>`
+        }
+        <div class="teamText">
+          <div class="teamName">${escapeHtml(awayName)}</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_away">${escapeHtml(metaLineWithConference("Away", away, selectedKey))}</div>
+        </div>
+      </div>
+    </div>
+    <div class="score">${awayScore}</div>
+  </div>
+
+  <div class="teamRow">
+    <div class="teamLeft">
+      <div class="teamLine">
+        ${
+          homeLogo
+            ? `<img class="teamLogo" src="${homeLogo}" alt="${escapeHtml(homeName)} logo" loading="lazy" decoding="async" />`
+            : `<div class="teamLogoFallback">${homeAbbrev || "—"}</div>`
+        }
+        <div class="teamText">
+          <div class="teamName">${escapeHtml(homeName)}</div>
+          <div class="teamMeta" data-teammeta="${escapeHtml(eventId)}_home">${escapeHtml(metaLineWithConference("Home", home, selectedKey))}</div>
+        </div>
+      </div>
+    </div>
+    <div class="score">${homeScore}</div>
+  </div>
+`;
+
+        grid.appendChild(card);
+      }
+
+      content.appendChild(grid);
+
+      // ----- Conference hydration (college only) -----
+      if (isCollege) {
+        const cached2 = loadConfCache(selectedKey, selectedDate);
+        const teamIdToConf = { ...(cached2?.teamIdToConf || {}) };
+
+        const jobs = (result.events || [])
+          .map(ev => String(ev?.id || ""))
+          .filter(Boolean);
+
+        const LIMIT = 5;
+        let j = 0;
+
+        async function worker() {
+          while (j < jobs.length) {
+            const eventId = jobs[j++];
+
+            const map = await fetchConferenceMapFromSummary(league, eventId);
+
+            let changed = false;
+            for (const [teamId, conf] of Object.entries(map || {})) {
+              if (teamId && conf && teamIdToConf[teamId] !== conf) {
+                teamIdToConf[teamId] = conf;
+                changed = true;
+              }
+            }
+
+            // Apply to DOM for this event (home/away)
+            const ev = (result.events || []).find(e => String(e?.id || "") === eventId);
+            const comp = ev?.competitions?.[0];
+            const competitors = comp?.competitors || [];
+            const home = competitors.find(t => t.homeAway === "home");
+            const away = competitors.find(t => t.homeAway === "away");
+
+            const homeId = String(home?.team?.id || "");
+            const awayId = String(away?.team?.id || "");
+
+            const homeConf = homeId ? (teamIdToConf[homeId] || "") : "";
+            const awayConf = awayId ? (teamIdToConf[awayId] || "") : "";
+
+            const homeRec = getOverallRecordFromCompetitor(home);
+            const awayRec = getOverallRecordFromCompetitor(away);
+
+            applyConferenceMetaToDom(eventId, "home", homeConf, homeRec);
+            applyConferenceMetaToDom(eventId, "away", awayConf, awayRec);
+
+            if (changed) {
+              const confs = buildConferenceListFromMap(teamIdToConf);
+              if (confs.length) updateConferenceSelectOptions(confs, selectedKey);
+            }
+          }
+        }
+
+        await Promise.all(new Array(Math.min(LIMIT, jobs.length)).fill(0).map(worker));
+        saveConfCache(selectedKey, selectedDate, teamIdToConf);
+
+        // If a conference is selected and we had no cache earlier, re-render ONCE to apply filter accurately.
+        if (deferredConfFilter && savedConfNorm) {
+          const guardKey = `__confRerender_${selectedKey}_${selectedDate}_${savedConfNorm}`;
+          if (!window[guardKey]) {
+            window[guardKey] = true;
+            if (typeof window.showTab === "function") window.showTab(window.__activeTab || "scores");
+            else window.loadScores(true);
+            return;
+          }
+        }
+      }
+
+      hydrateAllOdds(events, league, selectedKey, selectedDate);
+
+    } catch (error) {
+      content.innerHTML = `
+        ${buildErrorHeader(getSavedLeagueKey())}
+        ${buildErrorState()}
+      `;
+    }
+  }
+
+  // =========================
+  // Part 1: State templates
+  // =========================
+
+  function buildLoadingState(message) {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon scoresStateIconSpin">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">${escapeHtml(message || "Loading…")}</div>
+      </div>
+    `;
+  }
+
+  function buildOffseasonState(usedLabel) {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">No games found for this league or date.</div>
+        <div class="scoresStateSubtext">Likely offseason — try a different date or league.</div>
+        ${usedLabel ? `<div class="scoresStateMeta">ESPN fallback: ${escapeHtml(usedLabel)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function buildNoConfMatchState() {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">No games match this conference filter.</div>
+        <div class="scoresStateSubtext">Try switching to "All Conferences".</div>
+      </div>
+    `;
+  }
+
+  function buildErrorHeader(currentKey) {
+    return `
+      <div class="header scoresHeader">
+        <div class="scoresHeaderTop">
+          <div class="scoresHeaderBrand">
+            <span class="scoresHeaderTitle">Scores</span>
+            <span class="badge">The Shop</span>
+          </div>
+          <div class="scoresHeaderActions">
+            <button class="scoresActionBtn" onclick="loadScores(true)" aria-label="Retry">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>Retry</span>
+            </button>
+            <button class="scoresActionBtn scoresActionBtnLogout" onclick="logout()" aria-label="Log out">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+        <div class="scoresControlRow">
+          <div class="scoresControlLeft">
+            ${buildLeagueSelectHTML(currentKey)}
+            ${buildCalendarButtonHTML()}
+          </div>
+          <div class="scoresMetaLabel">Error</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildErrorState() {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">Couldn't load scores right now.</div>
+        <div class="scoresStateSubtext">Hit Retry or check your connection.</div>
+      </div>
+    `;
+  }
+
+  // =========================
+  // PGA (Golf) — Active Tournament Leaderboard
+  // =========================
+  async function renderPGAScoreboard({ dateYYYYMMDD }) {
+    const esc = (s) => {
+      if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
+      return String(s ?? "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    };
+
+    const fmtToPar = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return { text: "E", cls: "pgaEven" };
+      if (s === "0" || s.toLowerCase() === "e" || s.toLowerCase() === "even") return { text: "E", cls: "pgaEven" };
+      if (s.startsWith("-")) return { text: s, cls: "pgaUnder" };
+      if (s.startsWith("+")) return { text: s, cls: "pgaOver" };
+      const n = Number(s);
+      if (Number.isFinite(n)) {
+        if (n === 0) return { text: "E", cls: "pgaEven" };
+        if (n < 0) return { text: String(n), cls: "pgaUnder" };
+        return { text: `+${n}`, cls: "pgaOver" };
+      }
+      return { text: s, cls: "pgaEven" };
+    };
+
+    const fmtToday = (v) => {
+      const s = String(v ?? "").trim();
+      if (!s) return "";
+      if (s === "0" || s.toLowerCase() === "e") return "E";
+      if (s.startsWith("-") || s.startsWith("+")) return s;
+      const n = Number(s);
+      if (Number.isFinite(n)) return n > 0 ? `+${n}` : String(n);
+      return s;
+    };
+
+    const pickFirst = (...vals) => {
+      for (const v of vals) {
+        if (v == null) continue;
+        const s = String(v).trim();
+        if (s) return s;
+      }
+      return "";
+    };
+
+    // Convert "E", "-15", "+3", "0" -> number for tie math
+    const toParNumber = (raw) => {
+      const s = String(raw ?? "").trim();
+      if (!s) return NaN;
+      const low = s.toLowerCase();
+      if (low === "e" || low === "even") return 0;
+      if (s === "0") return 0;
+      // allow "5" meaning +5
+      const n = Number(s);
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const url = `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
+    let j = null;
+
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error("ESPN fetch failed");
+      j = await r.json();
+    } catch (e) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GOLF (PGA)</div>
+          </div>
+          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">Couldn't load PGA</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
+        </div>
+      `;
+    }
+
+    const events =
+      (Array.isArray(j?.events) && j.events) ||
+      (Array.isArray(j?.leagues?.[0]?.events) && j.leagues[0].events) ||
+      [];
+
+    const ev = events[0] || null;
+
+    if (!ev) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">GOLF (PGA)</div>
+          </div>
+          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">No PGA event found</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">Nothing scheduled for this date.</div>
+        </div>
+      `;
+    }
+
+    const comp =
+      (Array.isArray(ev?.competitions) && ev.competitions[0]) ||
+      (Array.isArray(ev?.competitions?.competitions) && ev.competitions.competitions[0]) ||
+      (Array.isArray(ev?.competitions?.[0]?.competitions) && ev.competitions[0].competitions[0]) ||
+      (Array.isArray(ev?.competitions) ? ev.competitions[0] : null) ||
+      null;
+
+    const tournamentName = pickFirst(ev?.name, ev?.shortName, ev?.season?.name, "PGA Tournament");
+    const venueName = pickFirst(comp?.venue?.fullName, comp?.venue?.name, ev?.venues?.[0]?.fullName, "");
+    const statusDetail = pickFirst(comp?.status?.type?.shortDetail, comp?.status?.type?.detail, ev?.status?.type?.shortDetail, "");
+
+    const competitors =
+      (Array.isArray(comp?.competitors) && comp.competitors) ||
+      (Array.isArray(ev?.competitors) && ev.competitors) ||
+      [];
+
+    // Normalize leaderboard rows
+    const rows = competitors.map((c, idx) => {
+      const athleteName =
+        pickFirst(c?.athlete?.displayName, c?.athlete?.shortName, c?.athlete?.fullName, c?.name, "Player");
+
+      function extractPosText(cc) {
+        const direct = pickFirst(
+          cc?.place,
+          cc?.position?.displayName,
+          cc?.position?.name,
+          cc?.position,
+          cc?.standing?.position?.displayName,
+          cc?.standing?.position,
+          cc?.rank,
+          cc?.seed,
+          ""
+        );
+
+        const stats = Array.isArray(cc?.statistics) ? cc.statistics : [];
+        for (const s of stats) {
+          const n = String(s?.name || s?.abbreviation || "").toLowerCase();
+          if (n === "pos" || n === "position" || n === "place") {
+            const v = pickFirst(s?.displayValue, s?.value, s?.summary, "");
+            if (v) return v;
+          }
+        }
+
+        return direct;
+      }
+
+      const posTextRaw = String(extractPosText(c) || "").trim();
+
+      const totalToParRaw =
+        pickFirst(c?.score?.displayValue, c?.score, c?.toPar, c?.summary?.toPar, "");
+
+      const todayRaw =
+        pickFirst(
+          c?.linescores?.[0]?.displayValue,
+          c?.linescores?.[0]?.value,
+          c?.scorecard?.[0]?.displayValue,
+          c?.today,
+          c?.rounds?.[0]?.scoreToPar?.displayValue,
+          ""
+        );
+
+      const thru =
+        pickFirst(
+          c?.status?.type?.shortDetail,
+          c?.status?.displayValue,
+          c?.status?.type?.detail,
+          c?.status?.type?.state,
+          c?.thru,
+          ""
+        );
+
+      const totalFmt = fmtToPar(totalToParRaw);
+      const todayFmt = fmtToday(todayRaw);
+
+      // numeric sort position if possible (T1 -> 1)
+      const posNum = (() => {
+        const m = posTextRaw.match(/(\d+)/);
+        if (m) return Number(m[1]);
+        return idx + 1;
+      })();
+
+      const posText = posTextRaw || String(idx + 1);
+
+      const totalNum = toParNumber(totalFmt.text);
+
+      return {
+        athleteName,
+        pos: posText,        // raw (fallback)
+        posNum,              // raw-ish
+        totalText: totalFmt.text,
+        totalCls: totalFmt.cls,
+        totalNum,            // numeric for ties
+        todayText: todayFmt,
+        thru: String(thru || ""),
+        __hasRealPos: !!posTextRaw,
+        posDisplay: posText  // will be replaced below
+      };
+    });
+
+    const hasAnyRealPos = rows.some(r => r.__hasRealPos);
+
+    if (hasAnyRealPos) {
+      rows.sort((a, b) => {
+        if (a.posNum !== b.posNum) return a.posNum - b.posNum;
+        return a.athleteName.localeCompare(b.athleteName);
+      });
+    }
+
+    (function applyTiePositions(arr) {
+      let prevTotal = null;
+      let currentRank = 1;
+
+      for (let i = 0; i < arr.length; i++) {
+        const r = arr[i];
+
+        if (!Number.isFinite(r.totalNum)) {
+          r.posDisplay = r.pos;
+          continue;
+        }
+
+        if (i === 0) {
+          currentRank = 1;
+        } else {
+          if (r.totalNum !== prevTotal) currentRank = i + 1;
+        }
+
+        const next = arr[i + 1];
+        const nextTotal = next && Number.isFinite(next.totalNum) ? next.totalNum : null;
+
+        const isTiedWithPrev = (i > 0 && r.totalNum === prevTotal);
+        const isTiedWithNext = (nextTotal !== null && r.totalNum === nextTotal);
+        const isTie = isTiedWithPrev || isTiedWithNext;
+
+        r.posDisplay = isTie ? `T${currentRank}` : String(currentRank);
+        r.posNum = currentRank;
+
+        prevTotal = r.totalNum;
+      }
+    })(rows);
+
+    const topN = rows.slice(0, 20);
+
+    const body = topN.map((r) => {
+      const isLeader = (r.posNum === 1);
+      return `
+        <div style="
+          display:flex;
+          align-items:center;
+          gap:10px;
+          padding:10px 12px;
+          border-radius:16px;
+          background:${isLeader ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"};
+          border:1px solid ${isLeader ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"};
+        ">
+          <div style="flex:0 0 40px; font-weight:1000; text-align:center;">
+            ${esc(r.posDisplay || "")}
+          </div>
+
+          <div style="flex:1; min-width:0;">
+            <div style="
+              font-weight:${isLeader ? "1000" : "900"};
+              white-space:nowrap;
+              overflow:hidden;
+              text-overflow:ellipsis;
+            ">${esc(r.athleteName)}</div>
+          </div>
+
+          <div class="${esc(r.totalCls)}" style="flex:0 0 56px; text-align:right; font-weight:1000;">
+            ${esc(r.totalText)}
+          </div>
+
+          <div style="flex:0 0 52px; text-align:right; font-weight:900; opacity:0.92;">
+            ${esc(r.todayText || "—")}
+          </div>
+
+          <div style="flex:0 0 56px; text-align:right; font-weight:900; opacity:0.85;">
+            ${esc(r.thru || "—")}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">GOLF (PGA)</div>
+        </div>
+
+        <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+          ${esc(tournamentName)}
+        </div>
+
+        <div class="muted" style="margin-top:6px; font-weight:850;">
+          ${esc(statusDetail || "Leaderboard")} ${venueName ? `• ${esc(venueName)}` : ""}
+        </div>
+
+        <div style="
+          margin-top:12px;
+          display:flex;
+          gap:10px;
+          align-items:center;
+          justify-content:space-between;
+          padding:10px 12px;
+          border-radius:16px;
+          background:rgba(255,255,255,0.04);
+          border:1px solid rgba(255,255,255,0.06);
+          font-weight:950;
+        ">
+          <div style="flex:0 0 40px; text-align:center;">POS</div>
+          <div style="flex:1;">PLAYER</div>
+          <div style="flex:0 0 56px; text-align:right;">TOT</div>
+          <div style="flex:0 0 52px; text-align:right;">TOD</div>
+          <div style="flex:0 0 56px; text-align:right;">THRU</div>
+        </div>
+
+        <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+          ${body || `<div class="muted" style="margin-top:10px; font-weight:800;">No leaderboard data.</div>`}
+        </div>
+
+        <style>
+          .pgaUnder { color: rgba(120,255,190,0.95); }
+          .pgaOver  { color: rgba(255,140,140,0.95); }
+          .pgaEven  { color: rgba(255,255,255,0.92); }
+        </style>
+      </div>
+    `;
+  }
+
+  // =========================
+  // UFC — Fight Card (renders ALL bouts from event.competitions[])
+  // =========================
+  async function renderUFCScoreboard({ dateYYYYMMDD }) {
+    const esc = (s) => escapeHtml(String(s ?? ""));
+
+    const url = `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
+
+    let data = null;
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      data = await r.json();
+    } catch (e) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">UFC</div>
+          </div>
+          <div class="gameMetaTopPlain" style="margin-top:8px; font-weight:900;">Couldn't load UFC</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
+        </div>
+      `;
+    }
+
+    const events = Array.isArray(data?.events) ? data.events : [];
+    if (!events.length) {
+      return `<div class="notice">No UFC fights found for this date.</div>`;
+    }
+
+    // ESPN UFC scoreboard typically returns ONE event (the card) with many competitions (bouts)
+    const cardEvent = events[0] || null;
+    const competitions = Array.isArray(cardEvent?.competitions) ? cardEvent.competitions : [];
+
+    // Venue/Location (best-effort)
+    const anyComp = competitions[0] || cardEvent?.competitions?.[0] || null;
+    const venueObj = anyComp?.venue || null;
+
+    const venueName = venueObj?.fullName || venueObj?.name || "";
+    const loc = (() => {
+      const city = venueObj?.address?.city || venueObj?.city || "";
+      const state = venueObj?.address?.state || venueObj?.state || "";
+      const country = venueObj?.address?.country || venueObj?.country || "";
+      if (city && state) return `${city}, ${state}`;
+      return city || state || country || "";
+    })();
+
+    const headerCard = `
+      <div class="game">
+        <div class="gameHeader">
+          <div class="statusPill status-other">UFC</div>
+        </div>
+        <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+          ${esc(cardEvent?.name || cardEvent?.shortName || "UFC Fight Card")}
+        </div>
+        <div class="muted" style="margin-top:6px; font-weight:850;">
+          ${esc([venueName, loc].filter(Boolean).join(" • ") || "—")}
+        </div>
+      </div>
+    `;
+
+    if (!competitions.length) {
+      return `
+        <div class="grid">
+          ${headerCard}
+          <div class="notice">No bout list available yet (ESPN hasn't published the full card).</div>
+        </div>
+      `;
+    }
+
+    const row = (fighter, score) => {
+      const ab = (fighter.name || "").split(" ").map(w => w[0]).join("").slice(0, 3).toUpperCase();
+      return `
+        <div class="teamRow">
+          <div class="teamLeft">
+            <div class="teamLine">
+              ${
+                fighter.logo
+                  ? `<img class="teamLogo" src="${esc(fighter.logo)}" alt="${esc(fighter.name)}" loading="lazy" decoding="async" />`
+                  : `<div class="teamLogoFallback">${esc(ab || "—")}</div>`
+              }
+              <div class="teamText">
+                <div class="teamName">${esc(fighter.name)}</div>
+                <div class="teamMeta">${esc(fighter.record || "")}</div>
+              </div>
+            </div>
+          </div>
+          <div class="score">${esc(score || "")}</div>
+        </div>
+      `;
+    };
+
+    const fightsHTML = competitions.map((comp) => {
+      const state = String(comp?.status?.type?.state || "").toLowerCase() || "unknown";
+      const detail =
+        comp?.status?.type?.detail ||
+        comp?.status?.type?.shortDetail ||
+        "Status unavailable";
+
+      const pillClass = statusClassFromState(state);
+      const pillText = statusLabelFromState(state, detail);
+
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const home = competitors.find(c => c?.homeAway === "home") || competitors[0] || null;
+      const away = competitors.find(c => c?.homeAway === "away") || competitors[1] || null;
+
+      const f1 = away ? buildFighter(away) : { name: "Fighter", logo: "", record: "" };
+      const f2 = home ? buildFighter(home) : { name: "Fighter", logo: "", record: "" };
+
+      const bout =
+        comp?.type?.text ||
+        comp?.type?.abbreviation ||
+        comp?.notes?.[0]?.headline ||
+        comp?.title ||
+        "";
+
+      const f1Score = away?.score ? String(away.score) : "";
+      const f2Score = home?.score ? String(home.score) : "";
+
+      const showScores = (state !== "pre") && (f1Score || f2Score);
+
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill ${pillClass}">${esc(pillText)}</div>
+          </div>
+
+          ${bout ? `<div class="gameMetaTopPlain" aria-label="Bout">${esc(bout)}</div>` : ``}
+
+          ${row(f1, showScores ? f1Score : "")}
+          ${row(f2, showScores ? f2Score : "")}
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="grid">
+        ${headerCard}
+        ${fightsHTML}
+      </div>
+    `;
+  }
+
+  // ---------- Exports ----------
+  window.loadScores = loadScores;
+
+})();
