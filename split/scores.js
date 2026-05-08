@@ -1,1 +1,1 @@
-SCORES_CONTENT
+scores_content
