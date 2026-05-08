@@ -2651,3 +2651,233 @@ button[data-gpsave="1"]{
 .golf-start-round {
   margin-top: 4px;
 }
+
+/* =========================
+   SCORES HEADER — Sexy Upgrade
+   ========================= */
+
+/* Outer wrapper: dark glass panel with scarlet bloom */
+.scoresHeader {
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+
+  background:
+    radial-gradient(900px 280px at 50% -60px, rgba(187,0,0,0.20), transparent 65%),
+    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.00) 100%),
+    rgba(14,14,14,0.94);
+
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.05),
+    0 8px 28px rgba(0,0,0,0.45);
+
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* ── Top row: brand left, actions right ── */
+.scoresHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* ── Brand cluster ── */
+.scoresHeaderBrand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scoresHeaderTitle {
+  font-size: 20px;
+  font-weight: 1000;
+  letter-spacing: -0.3px;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 0 22px rgba(187,0,0,0.30);
+}
+
+/* ── Action buttons cluster ── */
+.scoresHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Shared action button shell */
+.scoresActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  padding: 7px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.88);
+  line-height: 1;
+
+  box-shadow: 0 6px 16px rgba(0,0,0,0.28);
+  transition: background 150ms ease, border-color 150ms ease, transform 120ms ease, box-shadow 150ms ease;
+}
+
+.scoresActionBtn:active {
+  transform: translateY(1px) scale(0.98);
+  background: rgba(255,255,255,0.10);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.28);
+}
+
+/* Log Out variant: subtle scarlet tint */
+.scoresActionBtnLogout {
+  border-color: rgba(187,0,0,0.28);
+  background: rgba(187,0,0,0.10);
+  color: rgba(255,210,210,0.90);
+}
+
+.scoresActionBtnLogout:active {
+  background: rgba(187,0,0,0.18);
+  border-color: rgba(187,0,0,0.45);
+}
+
+/* ── Control row (league select + date + meta label) ── */
+.scoresControlRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scoresControlLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Meta label (date + "Updated 9:51 PM") */
+.scoresMetaLabel {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.50);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Conference filter row (college leagues only) ── */
+.scoresConfRow {
+  margin-top: 8px;
+}
+
+/* ── League + conference selects inside header ── */
+.scoresHeader .leagueSelect {
+  flex: 1;
+  min-width: 0;
+  max-width: 200px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 7px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.13);
+  background: rgba(255,255,255,0.07);
+  color: #fff;
+  outline: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.22);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.scoresHeader .leagueSelect:focus {
+  border-color: rgba(187,0,0,0.45);
+  background: rgba(255,255,255,0.09);
+}
+
+/* ── Calendar date button inside header ── */
+.scoresHeader .iconBtn {
+  padding: 7px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.13);
+  background: rgba(255,255,255,0.07);
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.22);
+  transition: background 150ms ease, border-color 150ms ease;
+  flex-shrink: 0;
+}
+
+.scoresHeader .iconBtn:active {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.22);
+}
+
+/* =========================
+   SCORES STATE SCREENS
+   (loading, offseason, no-conf-match, error)
+   ========================= */
+
+.scoresStateWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px 56px;
+  gap: 10px;
+}
+
+.scoresStateIcon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.65);
+  margin-bottom: 4px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.30);
+}
+
+.scoresStateText {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.88);
+}
+
+.scoresStateSubtext {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.48);
+  max-width: 280px;
+}
+
+.scoresStateMeta {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.28);
+  margin-top: 4px;
+}
+
+/* Spinning loader icon */
+@keyframes scoresSpinIcon {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.scoresStateIconSpin svg {
+  animation: scoresSpinIcon 900ms linear infinite;
+}
