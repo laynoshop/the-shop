@@ -34,7 +34,7 @@
   const LEAGUES = [
     {
       key: "ncaam",
-      name: "Men’s College Basketball",
+      name: "Men's College Basketball",
       endpoint: (date) =>
         `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`,
       summaryEndpoint: (eventId) =>
@@ -1215,6 +1215,67 @@
     return detail || "STATUS";
   }
 
+  // =========================
+  // Part 1: Premium header builder
+  // =========================
+  function buildHeaderHTML(selectedKey, rightLabel, confSelectHTML) {
+    return `
+      <div class="header scoresHeader">
+
+        <div class="scoresHeaderTop">
+          <div class="scoresHeaderBrand">
+            <span class="scoresHeaderTitle">Scores</span>
+            <span class="badge">The Shop</span>
+          </div>
+          <div class="scoresHeaderActions">
+            <button
+              class="scoresActionBtn"
+              onclick="loadScores(true)"
+              aria-label="Refresh scores"
+              title="Refresh"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>Refresh</span>
+            </button>
+            <button
+              class="scoresActionBtn scoresActionBtnLogout"
+              onclick="logout()"
+              aria-label="Log out"
+              title="Log Out"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="scoresControlRow">
+          <div class="scoresControlLeft">
+            ${buildLeagueSelectHTML(selectedKey)}
+            ${buildCalendarButtonHTML()}
+          </div>
+          <div class="scoresMetaLabel">${rightLabel}</div>
+        </div>
+
+        ${confSelectHTML ? `
+          <div class="scoresControlRow scoresConfRow">
+            <div class="scoresControlLeft">
+              ${confSelectHTML}
+            </div>
+            <div></div>
+          </div>
+        ` : ``}
+
+      </div>
+    `;
+  }
+
   // ---------- The actual Scores loader ----------
   async function loadScores(showLoading) {
     const content = document.getElementById("content");
@@ -1227,39 +1288,6 @@
     const selectedKey = getSavedLeagueKey();
     const league = getLeagueByKey(selectedKey);
 
-    const headerHTML = (rightLabel, confSelectHTML) => `
-      <div class="header">
-        <div class="headerTop">
-          <div class="brand">
-            <h2 style="margin:0;">Scores</h2>
-            <span class="badge">The Shop</span>
-          </div>
-
-          <div class="headerActions">
-            <button class="smallBtn" onclick="loadScores(true)">Refresh</button>
-            <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
-          </div>
-        </div>
-
-        <div class="subline">
-          <div class="sublineLeft">
-            ${buildLeagueSelectHTML(selectedKey)}
-            ${buildCalendarButtonHTML()}
-          </div>
-          <div>${rightLabel}</div>
-        </div>
-
-        ${confSelectHTML ? `
-          <div class="subline" style="margin-top:8px;">
-            <div class="sublineLeft">
-              ${confSelectHTML}
-            </div>
-            <div></div>
-          </div>
-        ` : ``}
-      </div>
-    `;
-
     // ---------- UFC ----------
     if (selectedKey === "ufc") {
       const selectedDate2 = getSavedDateYYYYMMDD();
@@ -1267,13 +1295,13 @@
       const updatedTime2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
       content.innerHTML = `
-        ${headerHTML(`${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}
-        <div class="notice">Loading UFC…</div>
+        ${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}
+        ${buildLoadingState("Loading UFC…")}
       `;
 
       const ufcHTML = await renderUFCScoreboard({ dateYYYYMMDD: selectedDate2 });
 
-      content.innerHTML = `${headerHTML(`${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}${ufcHTML}`;
+      content.innerHTML = `${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate2)} • Updated ${updatedTime2}`, "")}${ufcHTML}`;
       return;
     }
 
@@ -1283,24 +1311,21 @@
       const prettyDate = yyyymmddToPretty(selectedDate);
       const updatedTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-      // show header + loading
       content.innerHTML = `
-        ${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}
-        <div class="notice">Loading PGA…</div>
+        ${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}
+        ${buildLoadingState("Loading PGA…")}
       `;
 
-      // render leaderboard
       const pgaHTML = await renderPGAScoreboard({ dateYYYYMMDD: selectedDate });
 
-      // keep the same header
-      content.innerHTML = `${headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}${pgaHTML}`;
+      content.innerHTML = `${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Updated ${updatedTime}`, "")}${pgaHTML}`;
       return;
     }
 
     if (showLoading) {
       content.innerHTML = `
-        ${headerHTML(`${escapeHtml(prettyDate)} • Loading…`, "")}
-        <div class="notice">Grabbing games…</div>
+        ${buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Loading…`, "")}
+        ${buildLoadingState("Grabbing games…")}
       `;
     }
 
@@ -1321,23 +1346,16 @@
         const confs = confsFromCache.length ? confsFromCache : confsFromScoreboard;
 
         const savedConf = getSavedConferenceFilter(selectedKey);
-        const loading = !confs.length; // show "Loading conferences…" until summaries fill in
+        const loading = !confs.length;
         confSelectHTML = buildConferenceSelectHTML(confs, savedConf, loading);
       } else {
         saveConferenceFilter(selectedKey, "");
       }
 
-      content.innerHTML = headerHTML(`${escapeHtml(prettyDate)} • Updated ${updatedTime}`, confSelectHTML);
+      content.innerHTML = buildHeaderHTML(selectedKey, `${escapeHtml(prettyDate)} • Updated ${updatedTime}`, confSelectHTML);
 
       if (!events.length) {
-        content.innerHTML += `
-          <div class="notice">
-            No games found for this league/date (likely offseason).
-            <div style="margin-top:8px; opacity:0.6; font-size:12px;">
-              (Tried ESPN fallbacks: ${escapeHtml(result.used)})
-            </div>
-          </div>
-        `;
+        content.innerHTML += buildOffseasonState(result.used);
         return;
       }
 
@@ -1383,14 +1401,7 @@
       });
 
       if (!events.length && !deferredConfFilter) {
-        content.innerHTML += `
-          <div class="notice">
-            No games match this conference filter.
-            <div style="margin-top:8px; opacity:0.6; font-size:12px;">
-              Try “All Conferences”.
-            </div>
-          </div>
-        `;
+        content.innerHTML += buildNoConfMatchState();
         return;
       }
 
@@ -1570,28 +1581,107 @@
 
     } catch (error) {
       content.innerHTML = `
-        <div class="header">
-          <div class="headerTop">
-            <div class="brand">
-              <h2 style="margin:0;">Scores</h2>
-              <span class="badge">The Shop</span>
-            </div>
-            <div class="headerActions">
-              <button class="smallBtn" onclick="loadScores(true)">Retry</button>
-              <button class="smallBtn logoutBtn" onclick="logout()">Log Out</button>
-            </div>
-          </div>
-          <div class="subline">
-            <div class="sublineLeft">
-              ${buildLeagueSelectHTML(getSavedLeagueKey())}
-              ${buildCalendarButtonHTML()}
-            </div>
-            <div>Error</div>
-          </div>
-        </div>
-        <div class="notice">Couldn’t load scores right now.</div>
+        ${buildErrorHeader(getSavedLeagueKey())}
+        ${buildErrorState()}
       `;
     }
+  }
+
+  // =========================
+  // Part 1: State templates
+  // =========================
+
+  function buildLoadingState(message) {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon scoresStateIconSpin">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">${escapeHtml(message || "Loading…")}</div>
+      </div>
+    `;
+  }
+
+  function buildOffseasonState(usedLabel) {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">No games found for this league or date.</div>
+        <div class="scoresStateSubtext">Likely offseason — try a different date or league.</div>
+        ${usedLabel ? `<div class="scoresStateMeta">ESPN fallback: ${escapeHtml(usedLabel)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function buildNoConfMatchState() {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">No games match this conference filter.</div>
+        <div class="scoresStateSubtext">Try switching to "All Conferences".</div>
+      </div>
+    `;
+  }
+
+  function buildErrorHeader(currentKey) {
+    return `
+      <div class="header scoresHeader">
+        <div class="scoresHeaderTop">
+          <div class="scoresHeaderBrand">
+            <span class="scoresHeaderTitle">Scores</span>
+            <span class="badge">The Shop</span>
+          </div>
+          <div class="scoresHeaderActions">
+            <button class="scoresActionBtn" onclick="loadScores(true)" aria-label="Retry">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>Retry</span>
+            </button>
+            <button class="scoresActionBtn scoresActionBtnLogout" onclick="logout()" aria-label="Log out">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+        <div class="scoresControlRow">
+          <div class="scoresControlLeft">
+            ${buildLeagueSelectHTML(currentKey)}
+            ${buildCalendarButtonHTML()}
+          </div>
+          <div class="scoresMetaLabel">Error</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildErrorState() {
+    return `
+      <div class="scoresStateWrap">
+        <div class="scoresStateIcon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div class="scoresStateText">Couldn't load scores right now.</div>
+        <div class="scoresStateSubtext">Hit Retry or check your connection.</div>
+      </div>
+    `;
   }
 
   // =========================
@@ -1666,7 +1756,7 @@
           <div class="gameHeader">
             <div class="statusPill status-other">GOLF (PGA)</div>
           </div>
-          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">Couldn’t load PGA</div>
+          <div class="gameMetaTopLine" style="margin-top:8px; font-weight:900;">Couldn't load PGA</div>
           <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
         </div>
       `;
@@ -1920,151 +2010,147 @@
   }
 
   // =========================
-  // UFC — Fight Card
+  // UFC — Fight Card (renders ALL bouts from event.competitions[])
   // =========================
-// =========================
-// UFC — Fight Card (renders ALL bouts from event.competitions[])
-// =========================
-async function renderUFCScoreboard({ dateYYYYMMDD }) {
-  const esc = (s) => escapeHtml(String(s ?? ""));
+  async function renderUFCScoreboard({ dateYYYYMMDD }) {
+    const esc = (s) => escapeHtml(String(s ?? ""));
 
-  const url = `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${encodeURIComponent(dateYYYYMMDD || "")}`;
 
-  let data = null;
-  try {
-    const r = await fetch(url, { cache: "no-store" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    data = await r.json();
-  } catch (e) {
-    return `
+    let data = null;
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      data = await r.json();
+    } catch (e) {
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill status-other">UFC</div>
+          </div>
+          <div class="gameMetaTopPlain" style="margin-top:8px; font-weight:900;">Couldn't load UFC</div>
+          <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
+        </div>
+      `;
+    }
+
+    const events = Array.isArray(data?.events) ? data.events : [];
+    if (!events.length) {
+      return `<div class="notice">No UFC fights found for this date.</div>`;
+    }
+
+    // ESPN UFC scoreboard typically returns ONE event (the card) with many competitions (bouts)
+    const cardEvent = events[0] || null;
+    const competitions = Array.isArray(cardEvent?.competitions) ? cardEvent.competitions : [];
+
+    // Venue/Location (best-effort)
+    const anyComp = competitions[0] || cardEvent?.competitions?.[0] || null;
+    const venueObj = anyComp?.venue || null;
+
+    const venueName = venueObj?.fullName || venueObj?.name || "";
+    const loc = (() => {
+      const city = venueObj?.address?.city || venueObj?.city || "";
+      const state = venueObj?.address?.state || venueObj?.state || "";
+      const country = venueObj?.address?.country || venueObj?.country || "";
+      if (city && state) return `${city}, ${state}`;
+      return city || state || country || "";
+    })();
+
+    const headerCard = `
       <div class="game">
         <div class="gameHeader">
           <div class="statusPill status-other">UFC</div>
         </div>
-        <div class="gameMetaTopPlain" style="margin-top:8px; font-weight:900;">Couldn’t load UFC</div>
-        <div class="muted" style="margin-top:8px; font-weight:800;">Try Refresh.</div>
+        <div style="margin-top:10px; font-weight:1000; font-size:20px;">
+          ${esc(cardEvent?.name || cardEvent?.shortName || "UFC Fight Card")}
+        </div>
+        <div class="muted" style="margin-top:6px; font-weight:850;">
+          ${esc([venueName, loc].filter(Boolean).join(" • ") || "—")}
+        </div>
       </div>
     `;
-  }
 
-  const events = Array.isArray(data?.events) ? data.events : [];
-  if (!events.length) {
-    return `<div class="notice">No UFC fights found for this date.</div>`;
-  }
+    if (!competitions.length) {
+      return `
+        <div class="grid">
+          ${headerCard}
+          <div class="notice">No bout list available yet (ESPN hasn't published the full card).</div>
+        </div>
+      `;
+    }
 
-  // ESPN UFC scoreboard typically returns ONE event (the card) with many competitions (bouts)
-  const cardEvent = events[0] || null;
-  const competitions = Array.isArray(cardEvent?.competitions) ? cardEvent.competitions : [];
+    const row = (fighter, score) => {
+      const ab = (fighter.name || "").split(" ").map(w => w[0]).join("").slice(0, 3).toUpperCase();
+      return `
+        <div class="teamRow">
+          <div class="teamLeft">
+            <div class="teamLine">
+              ${
+                fighter.logo
+                  ? `<img class="teamLogo" src="${esc(fighter.logo)}" alt="${esc(fighter.name)}" loading="lazy" decoding="async" />`
+                  : `<div class="teamLogoFallback">${esc(ab || "—")}</div>`
+              }
+              <div class="teamText">
+                <div class="teamName">${esc(fighter.name)}</div>
+                <div class="teamMeta">${esc(fighter.record || "")}</div>
+              </div>
+            </div>
+          </div>
+          <div class="score">${esc(score || "")}</div>
+        </div>
+      `;
+    };
 
-  // Venue/Location (best-effort)
-  const anyComp = competitions[0] || cardEvent?.competitions?.[0] || null;
-  const venueObj = anyComp?.venue || null;
+    const fightsHTML = competitions.map((comp) => {
+      const state = String(comp?.status?.type?.state || "").toLowerCase() || "unknown";
+      const detail =
+        comp?.status?.type?.detail ||
+        comp?.status?.type?.shortDetail ||
+        "Status unavailable";
 
-  const venueName = venueObj?.fullName || venueObj?.name || "";
-  const loc = (() => {
-    const city = venueObj?.address?.city || venueObj?.city || "";
-    const state = venueObj?.address?.state || venueObj?.state || "";
-    const country = venueObj?.address?.country || venueObj?.country || "";
-    if (city && state) return `${city}, ${state}`;
-    return city || state || country || "";
-  })();
+      const pillClass = statusClassFromState(state);
+      const pillText = statusLabelFromState(state, detail);
 
-  const headerCard = `
-    <div class="game">
-      <div class="gameHeader">
-        <div class="statusPill status-other">UFC</div>
-      </div>
-      <div style="margin-top:10px; font-weight:1000; font-size:20px;">
-        ${esc(cardEvent?.name || cardEvent?.shortName || "UFC Fight Card")}
-      </div>
-      <div class="muted" style="margin-top:6px; font-weight:850;">
-        ${esc([venueName, loc].filter(Boolean).join(" • ") || "—")}
-      </div>
-    </div>
-  `;
+      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const home = competitors.find(c => c?.homeAway === "home") || competitors[0] || null;
+      const away = competitors.find(c => c?.homeAway === "away") || competitors[1] || null;
 
-  if (!competitions.length) {
-    // Fallback: if ESPN ever sends fights as events, at least show something
+      const f1 = away ? buildFighter(away) : { name: "Fighter", logo: "", record: "" };
+      const f2 = home ? buildFighter(home) : { name: "Fighter", logo: "", record: "" };
+
+      const bout =
+        comp?.type?.text ||
+        comp?.type?.abbreviation ||
+        comp?.notes?.[0]?.headline ||
+        comp?.title ||
+        "";
+
+      const f1Score = away?.score ? String(away.score) : "";
+      const f2Score = home?.score ? String(home.score) : "";
+
+      const showScores = (state !== "pre") && (f1Score || f2Score);
+
+      return `
+        <div class="game">
+          <div class="gameHeader">
+            <div class="statusPill ${pillClass}">${esc(pillText)}</div>
+          </div>
+
+          ${bout ? `<div class="gameMetaTopPlain" aria-label="Bout">${esc(bout)}</div>` : ``}
+
+          ${row(f1, showScores ? f1Score : "")}
+          ${row(f2, showScores ? f2Score : "")}
+        </div>
+      `;
+    }).join("");
+
     return `
       <div class="grid">
         ${headerCard}
-        <div class="notice">No bout list available yet (ESPN hasn’t published the full card).</div>
+        ${fightsHTML}
       </div>
     `;
   }
-
-  const row = (fighter, score) => {
-    const ab = (fighter.name || "").split(" ").map(w => w[0]).join("").slice(0, 3).toUpperCase();
-    return `
-      <div class="teamRow">
-        <div class="teamLeft">
-          <div class="teamLine">
-            ${
-              fighter.logo
-                ? `<img class="teamLogo" src="${esc(fighter.logo)}" alt="${esc(fighter.name)}" loading="lazy" decoding="async" />`
-                : `<div class="teamLogoFallback">${esc(ab || "—")}</div>`
-            }
-            <div class="teamText">
-              <div class="teamName">${esc(fighter.name)}</div>
-              <div class="teamMeta">${esc(fighter.record || "")}</div>
-            </div>
-          </div>
-        </div>
-        <div class="score">${esc(score || "")}</div>
-      </div>
-    `;
-  };
-
-  const fightsHTML = competitions.map((comp) => {
-    const state = String(comp?.status?.type?.state || "").toLowerCase() || "unknown";
-    const detail =
-      comp?.status?.type?.detail ||
-      comp?.status?.type?.shortDetail ||
-      "Status unavailable";
-
-    const pillClass = statusClassFromState(state);
-    const pillText = statusLabelFromState(state, detail);
-
-    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-    const home = competitors.find(c => c?.homeAway === "home") || competitors[0] || null;
-    const away = competitors.find(c => c?.homeAway === "away") || competitors[1] || null;
-
-    const f1 = away ? buildFighter(away) : { name: "Fighter", logo: "", record: "" };
-    const f2 = home ? buildFighter(home) : { name: "Fighter", logo: "", record: "" };
-
-    const bout =
-      comp?.type?.text ||
-      comp?.type?.abbreviation ||
-      comp?.notes?.[0]?.headline ||
-      comp?.title ||
-      "";
-
-    const f1Score = away?.score ? String(away.score) : "";
-    const f2Score = home?.score ? String(home.score) : "";
-
-    const showScores = (state !== "pre") && (f1Score || f2Score);
-
-    return `
-      <div class="game">
-        <div class="gameHeader">
-          <div class="statusPill ${pillClass}">${esc(pillText)}</div>
-        </div>
-
-        ${bout ? `<div class="gameMetaTopPlain" aria-label="Bout">${esc(bout)}</div>` : ``}
-
-        ${row(f1, showScores ? f1Score : "")}
-        ${row(f2, showScores ? f2Score : "")}
-      </div>
-    `;
-  }).join("");
-
-  return `
-    <div class="grid">
-      ${headerCard}
-      ${fightsHTML}
-    </div>
-  `;
-}
 
   // ---------- Exports ----------
   window.loadScores = loadScores;
