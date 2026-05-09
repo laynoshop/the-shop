@@ -5,12 +5,276 @@
    ========================= */
 
 (function ScoresRenderModule () {
-  // Ensure data module is loaded
   if (!window.__SD) {
     console.error("[scores-render] window.__SD not found — load scores-data.js first.");
     return;
   }
   const SD = window.__SD;
+
+  // ─── Inject mobile scorecard styles ───────────────────────────────────────
+  (function injectStyles() {
+    if (document.getElementById("__scoresRenderStyles")) return;
+    const style = document.createElement("style");
+    style.id = "__scoresRenderStyles";
+    style.textContent = `
+
+/* ── Scores container ── */
+.scoresContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 80px;
+}
+
+/* ── Score card shell ── */
+.scoreCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  border-left: 4px solid #555;
+  overflow: hidden;
+  box-shadow:
+    0 4px 16px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* League color accent edge — injected via inline style on .scoreCard */
+.scoreCard[data-league-color] {
+  border-left-color: attr(data-league-color color, #555);
+}
+
+/* Live card: subtle red wash */
+.scoreCard.cardLive {
+  background: rgba(200,0,0,0.07);
+}
+
+/* Fav card: subtle gold shimmer */
+.scoreCard.favCard {
+  border-left-color: #c89a00 !important;
+  background: rgba(200,160,0,0.07);
+  box-shadow:
+    0 4px 20px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(200,160,0,0.18),
+    inset 0 1px 0 rgba(255,220,100,0.08);
+}
+
+/* ── Card header (status + odds) ── */
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── Status labels ── */
+.statusLive {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ff4444;
+}
+.statusLive::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff3333;
+  box-shadow: 0 0 6px rgba(255,50,50,0.9);
+  animation: scLivePulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes scLivePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+.statusFinal {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+}
+
+.statusPre {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.65);
+}
+
+/* ── Odds line ── */
+.oddsLine {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.45);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 48%;
+}
+
+/* ── Series badge (playoffs) ── */
+.seriesBadge {
+  margin: 6px 12px 0;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #ffcc44;
+  background: rgba(200,160,0,0.14);
+  border: 1px solid rgba(200,160,0,0.28);
+  border-radius: 6px;
+  padding: 2px 8px;
+  align-self: flex-start;
+}
+
+/* ── Matchup rows wrapper ── */
+.matchup {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px 10px;
+  gap: 2px;
+}
+
+/* ── Individual team row ── */
+.teamRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  min-height: 44px;
+  border-radius: 8px;
+  transition: background 150ms ease;
+}
+
+/* Favorite team highlight */
+.teamRow.favTeam .teamName {
+  color: #ffcc66;
+  text-shadow: 0 0 10px rgba(255,200,80,0.35);
+}
+
+/* ── Logo ── */
+.teamLogo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 3px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.teamLogoPlaceholder {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.7);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+/* ── Team info (name + meta) ── */
+.teamInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.teamName {
+  font-size: 16px;
+  font-weight: 800;
+  color: #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+  letter-spacing: 0.1px;
+}
+
+.teamMeta {
+  font-size: 11px;
+  color: rgba(255,255,255,0.42);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+/* ── Score ── */
+.score {
+  font-size: 26px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.88);
+  min-width: 38px;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255,200,0,0.2);
+}
+
+.score.winner {
+  color: #fff;
+  text-shadow:
+    0 0 12px rgba(255,220,80,0.55),
+    0 0 28px rgba(255,160,0,0.25);
+}
+
+.score.loser {
+  color: rgba(255,255,255,0.3);
+  text-shadow: none;
+}
+
+/* ── Venue line ── */
+.venueLine {
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.28);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+.venueLine::before { content: "📍 "; }
+
+/* ── Empty state ── */
+.emptyState {
+  padding: 48px 24px;
+  text-align: center;
+  color: rgba(255,255,255,0.38);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+    `;
+    document.head.appendChild(style);
+  })();
 
   // ─── Live ticker ──────────────────────────────────────────────────────────
   let liveInterval = null;
@@ -36,7 +300,6 @@
         const data = await SD.fetchJsonNoStore(url);
         const events = data?.events || [];
         renderScoreCards(events, leagueKey, dateYYYYMMDD, true);
-        const ms = getLiveRefreshMs(events);
         if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
         startLiveTicker(league, leagueKey, dateYYYYMMDD);
       } catch {}
@@ -60,16 +323,15 @@
   }
 
   function buildScoreCardHTML(ev, leagueKey) {
-    const comp = ev?.competitions?.[0];
+    const comp        = ev?.competitions?.[0];
     const competitors = comp?.competitors || [];
-    const status = comp?.status;
-    const stateStr = String(status?.type?.state || "").toLowerCase();
+    const status      = comp?.status;
+    const stateStr    = String(status?.type?.state || "").toLowerCase();
     const displayClock = String(status?.displayClock || "").trim();
-    const period = Number(status?.period || 0);
+    const period      = Number(status?.period || 0);
     const statusDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
     const isLive = stateStr === "in";
     const isPost = stateStr === "post";
-    const isPre = stateStr === "pre";
 
     const home = competitors.find(c => String(c?.homeAway || "") === "home");
     const away = competitors.find(c => String(c?.homeAway || "") === "away");
@@ -106,6 +368,10 @@
     const eventId = String(ev?.id || "");
     const venueLine = SD.buildVenueLine(comp);
 
+    // League accent color
+    const leagueColor = SD.LEAGUE_COLORS[leagueKey] || "#555";
+
+    // Series badge (playoffs)
     const isPlayoff = SD.PLAYOFF_LEAGUES.has(leagueKey);
     const seriesStatus = isPlayoff ? (comp?.series?.summary || comp?.series?.title || "") : "";
     const seriesBadge = seriesStatus
@@ -116,30 +382,27 @@
     let statusLine = "";
     if (isLive) {
       let periodLabel = "";
-      if (leagueKey === "nba" || leagueKey === "ncaam") periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period - 2}OT`);
-      else if (leagueKey === "nhl") periodLabel = period <= 3 ? ["1st", "2nd", "3rd"][period - 1] || `P${period}` : "OT";
-      else if (leagueKey === "nfl" || leagueKey === "cfb") periodLabel = ["1st", "2nd", "3rd", "4th"][period - 1] || `Q${period}`;
+      if      (leagueKey === "nba"  || leagueKey === "ncaam") periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period - 2}OT`);
+      else if (leagueKey === "nhl") periodLabel = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
+      else if (leagueKey === "nfl"  || leagueKey === "cfb")   periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
       else if (leagueKey === "mlb") periodLabel = `Inn ${period}`;
       else periodLabel = period ? `P${period}` : "";
-      statusLine = `<div class="statusLive">🔴 LIVE${periodLabel ? " · " + periodLabel : ""}${displayClock ? " · " + displayClock : ""}</div>`;
+      const clockPart = displayClock ? ` · ${displayClock}` : "";
+      statusLine = `<div class="statusLive">LIVE${periodLabel ? " · " + periodLabel : ""}${clockPart}</div>`;
     } else if (isPost) {
       statusLine = `<div class="statusFinal">Final${statusDetail && statusDetail.toLowerCase() !== "final" ? " · " + statusDetail : ""}</div>`;
     } else {
-      // Pre-game: show tip/start time
       const gameDate = comp?.date || ev?.date || "";
       let timeStr = "";
       if (gameDate) {
-        try {
-          const d = new Date(gameDate);
-          timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        } catch {}
+        try { timeStr = new Date(gameDate).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch {}
       }
       statusLine = `<div class="statusPre">${SD.escapeHtml(timeStr || statusDetail || "Scheduled")}</div>`;
     }
 
     function logoImg(url, abbr) {
-      if (!url) return `<div class="teamLogoPlaceholder">${SD.escapeHtml(abbr.slice(0, 3))}</div>`;
-      return `<img class="teamLogo" src="${SD.escapeHtml(url)}" alt="${SD.escapeHtml(abbr)}" loading="lazy" width="36" height="36" />`;
+      if (!url) return `<div class="teamLogoPlaceholder">${SD.escapeHtml(abbr.slice(0,3))}</div>`;
+      return `<img class="teamLogo" src="${SD.escapeHtml(url)}" alt="${SD.escapeHtml(abbr)}" loading="lazy" width="40" height="40" />`;
     }
 
     function scoreSpan(score, isWinner, isPostGame) {
@@ -153,11 +416,15 @@
     const homeMetaInit = SD.metaLineWithConference("home", homeConf, homeRecord);
     const awayMetaInit = SD.metaLineWithConference("away", awayConf, awayRecord);
 
-    // Odds placeholder (populated async)
     const oddsPlaceholder = `<div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>`;
 
+    // Card classes
+    let cardClasses = "scoreCard";
+    if (isFavHome || isFavAway) cardClasses += " favCard";
+    if (isLive) cardClasses += " cardLive";
+
     return `
-<div class="scoreCard${isFavHome || isFavAway ? " favCard" : ""}" data-eventid="${SD.escapeHtml(eventId)}">
+<div class="${cardClasses}" data-eventid="${SD.escapeHtml(eventId)}" style="border-left-color:${SD.escapeHtml(leagueColor)}">
   ${seriesBadge}
   <div class="cardHeader">
     ${statusLine}
@@ -181,7 +448,7 @@
       ${scoreSpan(homeScore, homeWinner, isPost)}
     </div>
   </div>
-  ${venueLine ? `<div class="venueLine">${venueLine}</div>` : ""}
+  ${venueLine ? `<div class="venueLine">${SD.escapeHtml(venueLine)}</div>` : ""}
 </div>`;
   }
 
@@ -196,7 +463,6 @@
     }
 
     if (isRefresh) {
-      // Targeted DOM updates only
       for (const ev of sorted) {
         const id = String(ev?.id || "");
         if (!id) continue;
@@ -210,10 +476,15 @@
         const competitors = comp?.competitors || [];
         const home = competitors.find(c => String(c?.homeAway || "") === "home");
         const away = competitors.find(c => String(c?.homeAway || "") === "away");
+
+        // Toggle live class
+        card.classList.toggle("cardLive", isLive);
+
         // Update scores
         const scoreEls = card.querySelectorAll(".score");
         if (scoreEls[0]) scoreEls[0].textContent = String(away?.score ?? "");
         if (scoreEls[1]) scoreEls[1].textContent = String(home?.score ?? "");
+
         // Update winner classes
         if (isPost) {
           const awayWinner = String(away?.winner || "") === "true";
@@ -221,6 +492,7 @@
           if (scoreEls[0]) { scoreEls[0].classList.toggle("winner", awayWinner); scoreEls[0].classList.toggle("loser", !awayWinner); }
           if (scoreEls[1]) { scoreEls[1].classList.toggle("winner", homeWinner); scoreEls[1].classList.toggle("loser", !homeWinner); }
         }
+
         // Update status line
         const statusEl = card.querySelector(".statusLive, .statusFinal, .statusPre");
         if (statusEl) {
@@ -228,13 +500,13 @@
           const period = Number(status?.period || 0);
           if (isLive) {
             let periodLabel = "";
-            if (leagueKey === "nba" || leagueKey === "ncaam") periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period - 2}OT`);
-            else if (leagueKey === "nhl") periodLabel = period <= 3 ? ["1st", "2nd", "3rd"][period - 1] || `P${period}` : "OT";
-            else if (leagueKey === "nfl" || leagueKey === "cfb") periodLabel = ["1st", "2nd", "3rd", "4th"][period - 1] || `Q${period}`;
+            if      (leagueKey === "nba"  || leagueKey === "ncaam") periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period - 2}OT`);
+            else if (leagueKey === "nhl") periodLabel = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
+            else if (leagueKey === "nfl"  || leagueKey === "cfb")   periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
             else if (leagueKey === "mlb") periodLabel = `Inn ${period}`;
             else periodLabel = period ? `P${period}` : "";
             statusEl.className = "statusLive";
-            statusEl.textContent = `🔴 LIVE${periodLabel ? " · " + periodLabel : ""}${displayClock ? " · " + displayClock : ""}`;
+            statusEl.textContent = `LIVE${periodLabel ? " · " + periodLabel : ""}${displayClock ? " · " + displayClock : ""}`;
           } else if (isPost) {
             const detail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
             statusEl.className = "statusFinal";
@@ -261,10 +533,8 @@
       }
       if (Object.keys(teamIdToConf).length) SD.saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf);
     }
-    // Update conference select
     const confs = SD.buildConferenceListFromMap(teamIdToConf);
     if (confs.length) SD.updateConferenceSelectOptions(confs, leagueKey);
-    // Apply to DOM
     for (const ev of (events || [])) {
       const id = String(ev?.id || "");
       const comp = ev?.competitions?.[0];
@@ -283,21 +553,18 @@
   window.loadScores = async function (forceRefresh) {
     stopLiveTicker();
 
-    const leagueKey = SD.getSavedLeagueKey();
+    const leagueKey    = SD.getSavedLeagueKey();
     const dateYYYYMMDD = SD.getSavedDateYYYYMMDD();
-    const renderKey = `${leagueKey}_${dateYYYYMMDD}`;
-    const isRefresh = !forceRefresh && lastRenderedKey === renderKey;
-    lastRenderedKey = renderKey;
+    const renderKey    = `${leagueKey}_${dateYYYYMMDD}`;
+    const isRefresh    = !forceRefresh && lastRenderedKey === renderKey;
+    lastRenderedKey    = renderKey;
 
     const league = SD.getLeagueByKey(leagueKey);
-    const color = SD.LEAGUE_COLORS[leagueKey] || "#444";
+    const color  = SD.LEAGUE_COLORS[leagueKey] || "#444";
 
-    // Build toolbar
-    const isCollege = SD.isCollegeLeagueKey(leagueKey);
-    const savedConf = SD.getSavedConferenceFilter(leagueKey);
-    const confSelectHTML = isCollege
-      ? SD.buildConferenceSelectHTML([], savedConf, true)
-      : "";
+    const isCollege   = SD.isCollegeLeagueKey(leagueKey);
+    const savedConf   = SD.getSavedConferenceFilter(leagueKey);
+    const confSelectHTML = isCollege ? SD.buildConferenceSelectHTML([], savedConf, true) : "";
 
     const toolbarHTML = `
       <div class="scoresToolbar" style="--league-color:${color}">
@@ -314,19 +581,17 @@
     const content = document.getElementById("content");
     if (content) content.innerHTML = toolbarHTML;
 
-    // Fetch events
     let events = [];
     try {
-      const url = SD.withLangRegion(league.endpoint(dateYYYYMMDD));
+      const url  = SD.withLangRegion(league.endpoint(dateYYYYMMDD));
       const data = await SD.fetchJsonNoStore(url);
       events = data?.events || [];
-    } catch (err) {
+    } catch {
       const container = document.getElementById("scoresContainer");
       if (container) container.innerHTML = `<div class="emptyState">Failed to load scores. Check your connection.</div>`;
       return;
     }
 
-    // Conference filter
     let filteredEvents = events;
     if (isCollege) {
       const confFilterNorm = SD.norm(savedConf);
@@ -335,12 +600,11 @@
         const teamIdToConf = cached ? cached.teamIdToConf : {};
         filteredEvents = SD.filterEventsByConferenceUsingMap(events, confFilterNorm, teamIdToConf);
       }
-      // Async: hydrate conf metadata & update select options
       hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events).then(map => {
         if (map && savedConf) {
-          const confFilterNorm2 = SD.norm(savedConf);
-          if (confFilterNorm2) {
-            const reFiltered = SD.filterEventsByConferenceUsingMap(events, confFilterNorm2, map);
+          const norm2 = SD.norm(savedConf);
+          if (norm2) {
+            const reFiltered = SD.filterEventsByConferenceUsingMap(events, norm2, map);
             renderScoreCards(reFiltered, leagueKey, dateYYYYMMDD, false);
           }
         }
@@ -349,17 +613,11 @@
 
     renderScoreCards(filteredEvents, leagueKey, dateYYYYMMDD, false);
 
-    // Odds hydration (async, no-wait)
-    SD.loadOddsCacheFromSession
-      ? SD._oddsCache  // already loaded; skip re-init
-      : null;
     SD.hydrateAllOdds(league, leagueKey, dateYYYYMMDD, filteredEvents).catch(() => {});
 
-    // Start live ticker
     startLiveTicker(league, leagueKey, dateYYYYMMDD);
   };
 
-  // Expose stop for tab cleanup
   window.__stopScoresTicker = stopLiveTicker;
 
 })();
