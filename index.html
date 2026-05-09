@@ -136,7 +136,10 @@
   <script src="split/boot.js" defer onerror="__splitFail('split/boot.js')"></script>
   <script src="split/shared.js" defer onerror="__splitFail('split/shared.js')"></script>
 
-  <script src="split/scores.js" defer onerror="__splitFail('split/scores.js')"></script>
+  <!-- scores: data first, render second -->
+  <script src="split/scores-data.js" defer onerror="__splitFail('split/scores-data.js')"></script>
+  <script src="split/scores-render.js" defer onerror="__splitFail('split/scores-render.js')"></script>
+
   <script src="split/news.js" defer onerror="__splitFail('split/news.js')"></script>
   <script src="split/beat.js" defer onerror="__splitFail('split/beat.js')"></script>
   <script src="split/shop.js" defer onerror="__splitFail('split/shop.js')"></script>
