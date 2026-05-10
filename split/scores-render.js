@@ -11,7 +11,7 @@
   }
   const SD = window.__SD;
 
-  // ─── Inject styles ───────────────────────────────────────────────────────
+  // ─── Inject styles ────────────────────────────────────────────
   (function injectStyles() {
     if (document.getElementById("__scoresRenderStyles")) return;
     const style = document.createElement("style");
@@ -361,7 +361,7 @@
     document.head.appendChild(style);
   })();
 
-  // ─── League pill labels ──────────────────────────────────────────────
+  // ─── League pill labels ──────────────────────────────────────
   const LEAGUE_LABELS = {
     ncaam: "\uD83C\uDFC0 NCAAB",
     cfb:   "\uD83C\uDFC8 CFB",
@@ -374,7 +374,7 @@
     ufc:   "\uD83E\uDD4A UFC",
   };
 
-  // ─── Date helpers ────────────────────────────────────────────
+  // ─── Date helpers ──────────────────────────────────────────────
   function formatDateNav(yyyymmdd) {
     try {
       const y = parseInt(yyyymmdd.slice(0,4), 10);
@@ -433,7 +433,7 @@
 </div>`;
   }
 
-  // ─── Bind pill tab clicks ───────────────────────────────────────────────
+  // ─── Bind pill tab clicks ─────────────────────────────────────────────
   function bindLeaguePills() {
     const row = document.getElementById("scoresLeagueRow");
     if (!row) return;
@@ -442,13 +442,13 @@
       if (!pill) return;
       const key = pill.dataset.league;
       if (!key) return;
-      SD.saveLeagueKey(key);
+      SD.setSavedLeagueKey(key);
       pill.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
       window.loadScores(true);
     });
   }
 
-  // ─── Bind date navigator ─────────────────────────────────────────────
+  // ─── Bind date navigator ──────────────────────────────────────────────
   function bindDateNav() {
     const prev   = document.getElementById("scoresDatePrev");
     const next   = document.getElementById("scoresDateNext");
@@ -457,7 +457,7 @@
     const picker = document.getElementById("scoresDatePicker");
 
     function applyDate(yyyymmdd) {
-      SD.saveDateYYYYMMDD(yyyymmdd);
+      SD.setSavedDateYYYYMMDD(yyyymmdd);
       if (text)   text.textContent = formatDateNav(yyyymmdd);
       if (picker) picker.value     = toInputValue(yyyymmdd);
       window.loadScores(true);
@@ -471,7 +471,7 @@
     });
   }
 
-  // ─── Live ticker ─────────────────────────────────────────────────────────
+  // ─── Live ticker ───────────────────────────────────────────────────
   let liveInterval = null;
   let lastRenderedKey = null;
 
@@ -493,14 +493,14 @@
     }, getLiveRefreshMs([]));
   }
 
-  // ─── MLB inning label ───────────────────────────────────────────────────
+  // ─── MLB inning label ───────────────────────────────────────────────
   function mlbInningLabel(period, situation) {
     const suffix = ["1st","2nd","3rd"][period-1] || `${period}th`;
     const isTop = situation?.isTopHalfInning !== false;
     return `${isTop ? "Top" : "Bot"} ${suffix}`;
   }
 
-  // ─── Score card rendering ──────────────────────────────────────────────────
+  // ─── Score card rendering ─────────────────────────────────────────────────
   function sortEvents(events) {
     return [...(events || [])].sort((a, b) => {
       const favA = SD.favoriteRankForEvent(a), favB = SD.favoriteRankForEvent(b);
@@ -769,9 +769,9 @@
     return teamIdToConf;
   }
 
-  // ════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   //  PGA LEADERBOARD
-  // ════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
 
   function weatherIcon(condition) {
     const c = String(condition || "").toLowerCase();
@@ -987,9 +987,9 @@
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
   //  MAIN LOAD
-  // ════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
 
   window.loadScores = async function (forceRefresh) {
     stopLiveTicker();
