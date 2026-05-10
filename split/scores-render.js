@@ -1,1 +1,1002 @@
-$(cat /tmp/scores-render-fixed.js)
+/* =========================
+   SCORES RENDER
+   UI rendering, live‑update loop, modal, sorting.
+   Depends on window.__SD (scores-data.js)
+   ========================= */
+
+(function ScoresRenderModule () {
+  if (!window.__SD) {
+    console.error("[scores-render] window.__SD not found — load scores-data.js first.");
+    return;
+  }
+  const SD = window.__SD;
+
+  // ─── Inject styles ───────────────────────────────────────────────────────
+  (function injectStyles() {
+    if (document.getElementById("__scoresRenderStyles")) return;
+    const style = document.createElement("style");
+    style.id = "__scoresRenderStyles";
+    style.textContent = `
+
+/* ── Scores page header ── */
+.scoresPageHeader {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(13,10,10,0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 10px 14px 0;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+}
+.scoresPageHeader::after {
+  content: "";
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  margin-top: 10px;
+  background: var(--scores-header-accent, rgba(187,0,0,0.8));
+  box-shadow: 0 0 10px var(--scores-header-accent, rgba(187,0,0,0.6));
+  opacity: 0.85;
+}
+.scoresHeaderTop { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.scoresHeaderTitle { font-size: 20px; font-weight: 900; color: #fff; letter-spacing: 0.02em; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scoresHeaderTitle span { display: block; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+.scoresLeagueRow { display: flex; align-items: center; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 2px; }
+.scoresLeagueRow::-webkit-scrollbar { display: none; }
+.scoresPageHeader .leagueSelect { display: none; }
+.scoresLeaguePill {
+  flex-shrink: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.05em;
+  padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); cursor: pointer;
+  white-space: nowrap; transition: background 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  -webkit-tap-highlight-color: transparent; min-height: 32px; display: flex; align-items: center;
+}
+.scoresLeaguePill:active { opacity: 0.7; }
+.scoresLeaguePill.active {
+  background: var(--scores-header-accent, rgba(187,0,0,0.75));
+  border-color: var(--scores-header-accent, rgba(187,0,0,0.6));
+  color: #fff; box-shadow: 0 0 12px var(--scores-header-accent, rgba(187,0,0,0.4));
+}
+
+/* ── Date navigator ── */
+.scoresDateNav { display: flex; align-items: center; justify-content: center; gap: 0; padding: 10px 16px 6px; }
+.scoresDateNavBtn {
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px; color: rgba(255,255,255,0.7); font-size: 18px; line-height: 1;
+  cursor: pointer; flex-shrink: 0; -webkit-tap-highlight-color: transparent;
+  transition: background 140ms ease, color 140ms ease; user-select: none;
+}
+.scoresDateNavBtn:active { background: rgba(255,255,255,0.13); color: #fff; }
+.scoresDateNavLabel {
+  flex: 1; text-align: center; font-size: 15px; font-weight: 800; color: #fff;
+  letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 0 6px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  line-height: 36px; user-select: none; position: relative;
+}
+.scoresDateNavLabel:active { opacity: 0.7; }
+.scoresDateNavLabel input[type="date"] {
+  position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%;
+  cursor: pointer; border: none; background: transparent; padding: 0; margin: 0;
+  font-size: 16px; -webkit-appearance: none;
+}
+
+/* ── Scores container ── */
+.scoresContainer { display: flex; flex-direction: column; gap: 10px; padding: 4px 12px 80px; }
+
+/* ── Score card shell ── */
+.scoreCard {
+  position: relative; display: flex; flex-direction: column; gap: 0;
+  background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px; border-left: 4px solid #555; overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.scoreCard.cardLive { background: rgba(200,0,0,0.07); }
+.scoreCard.favCard {
+  border-left-color: #c89a00 !important; background: rgba(200,160,0,0.07);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(200,160,0,0.18), inset 0 1px 0 rgba(255,220,100,0.08);
+}
+.cardHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px 6px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.statusLive { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #ff4444; }
+.statusLive::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: #ff3333; box-shadow: 0 0 6px rgba(255,50,50,0.9);
+  animation: scLivePulse 1.2s ease-in-out infinite; flex-shrink: 0;
+}
+@keyframes scLivePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
+.statusFinal { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
+.statusPre { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.65); }
+.oddsLine { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48%; }
+.seriesBadge { margin: 6px 12px 0; display: inline-flex; align-items: center; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: #ffcc44; background: rgba(200,160,0,0.14); border: 1px solid rgba(200,160,0,0.28); border-radius: 6px; padding: 2px 8px; align-self: flex-start; }
+.matchup { display: flex; flex-direction: column; padding: 6px 12px 10px; gap: 2px; }
+.teamRow { display: flex; align-items: center; gap: 10px; padding: 6px 0; min-height: 44px; border-radius: 8px; transition: background 150ms ease; }
+.teamRow.favTeam .teamName { color: #ffcc66; text-shadow: 0 0 10px rgba(255,200,80,0.35); }
+.teamLogo { width: 40px; height: 40px; object-fit: contain; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); padding: 3px; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+.teamLogoPlaceholder { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); color: rgba(255,255,255,0.7); font-size: 11px; font-weight: 800; letter-spacing: 0.3px; flex-shrink: 0; }
+.teamInfo { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.teamName { font-size: 16px; font-weight: 800; color: #eee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15; letter-spacing: 0.1px; }
+.teamMeta { font-size: 11px; color: rgba(255,255,255,0.42); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.score { font-size: 26px; font-weight: 900; color: rgba(255,255,255,0.88); min-width: 38px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; line-height: 1; text-shadow: 0 0 10px rgba(255,200,0,0.2); }
+.score.winner { color: #fff; text-shadow: 0 0 12px rgba(255,220,80,0.55), 0 0 28px rgba(255,160,0,0.25); }
+.score.loser { color: rgba(255,255,255,0.3); text-shadow: none; }
+.venueLine { padding: 0 12px 8px; font-size: 11px; color: rgba(255,255,255,0.28); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.venueLine::before { content: "\uD83D\uDCCD "; }
+.emptyState { padding: 48px 24px; text-align: center; color: rgba(255,255,255,0.38); font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
+
+/* ════════════════════════════════
+   PGA LEADERBOARD
+   ════════════════════════════════ */
+
+/* Hero banner */
+.pgaHero {
+  margin: 0 12px 14px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(135deg,
+    rgba(20,60,22,0.95) 0%,
+    rgba(10,38,12,0.98) 60%,
+    rgba(5,20,8,1) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
+  padding: 18px 18px 16px;
+  position: relative;
+}
+.pgaHero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 80% 20%, rgba(100,200,80,0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+.pgaTournamentName {
+  font-size: 19px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  margin-bottom: 3px;
+}
+.pgaVenue {
+  font-size: 12px;
+  color: rgba(255,255,255,0.52);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pgaVenue::before { content: "\uD83D\uDCCD"; font-size: 11px; }
+
+/* Status pill */
+.pgaStatusRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.pgaStatusPill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px;
+}
+.pgaStatusPill.live {
+  background: rgba(255,50,50,0.18); border: 1px solid rgba(255,50,50,0.4); color: #ff5555;
+}
+.pgaStatusPill.live::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: #ff4444;
+  box-shadow: 0 0 6px rgba(255,50,50,0.9); animation: scLivePulse 1.2s ease-in-out infinite; flex-shrink: 0;
+}
+.pgaStatusPill.final {
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.55);
+}
+.pgaStatusPill.pre {
+  background: rgba(80,180,80,0.12); border: 1px solid rgba(80,180,80,0.3); color: rgba(140,220,140,0.9);
+}
+
+/* Round completed badge */
+.pgaRoundBadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(255,215,50,0.1); border: 1px solid rgba(255,215,50,0.25); color: rgba(255,215,100,0.85);
+}
+
+/* Weather strip */
+.pgaWeather {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-top: 4px;
+}
+.pgaWeatherIcon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+.pgaWeatherDetails { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.pgaWeatherCondition { font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.88); line-height: 1.2; }
+.pgaWeatherTemps { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; letter-spacing: 0.03em; }
+.pgaWeatherWind { font-size: 11px; color: rgba(255,255,255,0.45); font-weight: 600; }
+
+/* Round pills */
+.pgaRoundPills { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 12px 8px; }
+.pgaRoundPills::-webkit-scrollbar { display: none; }
+.pgaRoundPill {
+  flex-shrink: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.05em;
+  padding: 5px 13px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background 150ms ease, color 150ms ease;
+}
+.pgaRoundPill:active { opacity: 0.7; }
+.pgaRoundPill.active {
+  background: rgba(61,122,64,0.7); border-color: rgba(100,200,80,0.4);
+  color: #aee8a0; box-shadow: 0 0 10px rgba(80,200,60,0.25);
+}
+
+/* Leaderboard table */
+.pgaLeaderboard {
+  margin: 0 12px 80px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+}
+.pgaLeaderRow {
+  display: grid;
+  grid-template-columns: 28px 1fr 52px 52px;
+  align-items: center;
+  gap: 0;
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: background 120ms ease;
+  min-height: 48px;
+}
+.pgaLeaderRow:last-child { border-bottom: none; }
+.pgaLeaderRow:active { background: rgba(255,255,255,0.05); }
+.pgaLeaderRow.top3 { background: rgba(255,210,50,0.05); }
+.pgaLeaderRow.top3:active { background: rgba(255,210,50,0.1); }
+
+/* Header row */
+.pgaLeaderHeaderRow {
+  display: grid;
+  grid-template-columns: 28px 1fr 52px 52px;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+}
+.pgaLeaderHeaderCell {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+}
+.pgaLeaderHeaderCell.right { text-align: right; }
+
+/* Rank cell */
+.pgaRank {
+  font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.35);
+  font-variant-numeric: tabular-nums; text-align: center; line-height: 1;
+}
+.pgaRank.gold { color: #ffd040; text-shadow: 0 0 8px rgba(255,200,0,0.5); }
+.pgaRank.silver { color: #c0c8d8; }
+.pgaRank.bronze { color: #cd8860; }
+
+/* Player info */
+.pgaPlayerInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-left: 2px; }
+.pgaPlayerName { font-size: 15px; font-weight: 800; color: #eee; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pgaPlayerMeta { font-size: 11px; color: rgba(255,255,255,0.38); font-weight: 600; letter-spacing: 0.02em; }
+
+/* Score columns */
+.pgaScoreTotal {
+  font-size: 18px; font-weight: 900; color: rgba(255,255,255,0.88);
+  font-variant-numeric: tabular-nums; text-align: right; line-height: 1;
+}
+.pgaScoreTotal.under { color: #6edb64; text-shadow: 0 0 8px rgba(80,220,60,0.4); }
+.pgaScoreTotal.over { color: #ff7070; }
+.pgaScoreTotal.even { color: rgba(255,255,255,0.88); }
+
+.pgaScoreToday {
+  font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.45);
+  font-variant-numeric: tabular-nums; text-align: right; line-height: 1; padding-right: 2px;
+}
+.pgaScoreToday.under { color: #6edb64; }
+.pgaScoreToday.over { color: #ff7070; }
+
+/* Missed cut / WD rows */
+.pgaLeaderRow.cut { opacity: 0.38; }
+
+/* Cut divider */
+.pgaCutDivider {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+}
+.pgaCutDividerLabel {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: rgba(255,255,255,0.28); white-space: nowrap;
+}
+.pgaCutDividerLine { flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+
+    `;
+    document.head.appendChild(style);
+  })();
+
+  // ─── League pill labels ──────────────────────────────────────────────────
+  const LEAGUE_LABELS = {
+    ncaam: "\uD83C\uDFC0 NCAAB",
+    cfb:   "\uD83C\uDFC8 CFB",
+    nba:   "\uD83C\uDFC0 NBA",
+    nhl:   "\uD83C\uDFD2 NHL",
+    mls:   "\u26BD MLS",
+    nfl:   "\uD83C\uDFC8 NFL",
+    mlb:   "\u26BE MLB",
+    pga:   "\u26F3 PGA",
+    ufc:   "\uD83E\uDD4A UFC",
+  };
+
+  // ─── Date helpers ────────────────────────────────────────────────────────
+  function formatDateNav(yyyymmdd) {
+    try {
+      const y = parseInt(yyyymmdd.slice(0,4), 10);
+      const m = parseInt(yyyymmdd.slice(4,6), 10) - 1;
+      const d = parseInt(yyyymmdd.slice(6,8), 10);
+      return new Date(y, m, d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    } catch { return yyyymmdd; }
+  }
+  function toInputValue(yyyymmdd) {
+    return `${yyyymmdd.slice(0,4)}-${yyyymmdd.slice(4,6)}-${yyyymmdd.slice(6,8)}`;
+  }
+  function fromInputValue(val) { return val.replace(/-/g, ""); }
+  function shiftDate(yyyymmdd, deltaDays) {
+    try {
+      const y = parseInt(yyyymmdd.slice(0,4), 10);
+      const m = parseInt(yyyymmdd.slice(4,6), 10) - 1;
+      const d = parseInt(yyyymmdd.slice(6,8), 10);
+      const dt = new Date(y, m, d);
+      dt.setDate(dt.getDate() + deltaDays);
+      return `${dt.getFullYear()}${String(dt.getMonth()+1).padStart(2,"0")}${String(dt.getDate()).padStart(2,"0")}`;
+    } catch { return yyyymmdd; }
+  }
+  function todayYYYYMMDD() {
+    if (SD.todayYYYYMMDD) return SD.todayYYYYMMDD();
+    const n = new Date();
+    return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,"0")}${String(n.getDate()).padStart(2,"0")}`;
+  }
+
+  // ─── Build header HTML ───────────────────────────────────────────────────
+  function buildHeaderHTML(leagueKey, color) {
+    const leagueLabel = LEAGUE_LABELS[leagueKey] || leagueKey.toUpperCase();
+    const pillsHTML = (SD.LEAGUES || []).map(l => {
+      const isActive = l.key === leagueKey;
+      return `<button class="scoresLeaguePill${isActive ? " active" : ""}" data-league="${SD.escapeHtml(l.key)}" type="button">${SD.escapeHtml(LEAGUE_LABELS[l.key] || l.key.toUpperCase())}</button>`;
+    }).join("");
+    return `
+<div class="scoresPageHeader" style="--scores-header-accent:${SD.escapeHtml(color)}">
+  <div class="scoresHeaderTop">
+    <div class="scoresHeaderTitle">${SD.escapeHtml(leagueLabel)}<span>Scores</span></div>
+  </div>
+  <div class="scoresLeagueRow" id="scoresLeagueRow">${pillsHTML}</div>
+</div>`;
+  }
+
+  // ─── Build date navigator HTML ───────────────────────────────────────────
+  function buildDateNavHTML(dateYYYYMMDD) {
+    const inputVal = toInputValue(dateYYYYMMDD);
+    return `
+<div class="scoresDateNav" id="scoresDateNav">
+  <button class="scoresDateNavBtn" id="scoresDatePrev" type="button" aria-label="Previous day">&#8249;</button>
+  <div class="scoresDateNavLabel" id="scoresDateNavLabel">
+    <span id="scoresDateNavText">${SD.escapeHtml(formatDateNav(dateYYYYMMDD))}</span>
+    <input type="date" id="scoresDatePicker" value="${SD.escapeHtml(inputVal)}" aria-label="Jump to date" tabindex="-1" />
+  </div>
+  <button class="scoresDateNavBtn" id="scoresDateNext" type="button" aria-label="Next day">&#8250;</button>
+</div>`;
+  }
+
+  // ─── Bind pill tab clicks ────────────────────────────────────────────────
+  function bindLeaguePills() {
+    const row = document.getElementById("scoresLeagueRow");
+    if (!row) return;
+    row.addEventListener("click", e => {
+      const pill = e.target.closest(".scoresLeaguePill");
+      if (!pill) return;
+      const key = pill.dataset.league;
+      if (!key) return;
+      SD.saveLeagueKey(key);
+      pill.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      window.loadScores(true);
+    });
+  }
+
+  // ─── Bind date navigator ─────────────────────────────────────────────────
+  function bindDateNav() {
+    const prev   = document.getElementById("scoresDatePrev");
+    const next   = document.getElementById("scoresDateNext");
+    const label  = document.getElementById("scoresDateNavLabel");
+    const text   = document.getElementById("scoresDateNavText");
+    const picker = document.getElementById("scoresDatePicker");
+
+    function applyDate(yyyymmdd) {
+      SD.saveDateYYYYMMDD(yyyymmdd);
+      if (text)   text.textContent = formatDateNav(yyyymmdd);
+      if (picker) picker.value     = toInputValue(yyyymmdd);
+      window.loadScores(true);
+    }
+    if (prev) prev.addEventListener("click", () => applyDate(shiftDate(SD.getSavedDateYYYYMMDD(), -1)));
+    if (next) next.addEventListener("click", () => applyDate(shiftDate(SD.getSavedDateYYYYMMDD(), +1)));
+    if (picker) picker.addEventListener("change", e => { const v = e.target.value; if (v) applyDate(fromInputValue(v)); });
+    if (label) label.addEventListener("click", e => {
+      if (e.target === picker) return;
+      if (picker) picker.showPicker ? picker.showPicker() : picker.click();
+    });
+  }
+
+  // ─── Live ticker ─────────────────────────────────────────────────────────
+  let liveInterval = null;
+  let lastRenderedKey = null;
+
+  function getLiveRefreshMs(events) {
+    const hasLive = (events || []).some(ev => String(ev?.competitions?.[0]?.status?.type?.state || "").toLowerCase() === "in");
+    return hasLive ? 22000 : 120000;
+  }
+  function stopLiveTicker() { if (liveInterval) { clearInterval(liveInterval); liveInterval = null; } }
+  function startLiveTicker(league, leagueKey, dateYYYYMMDD) {
+    stopLiveTicker();
+    liveInterval = setInterval(async () => {
+      try {
+        const data = await SD.fetchJsonNoStore(SD.withLangRegion(league.endpoint(dateYYYYMMDD)));
+        const events = data?.events || [];
+        renderScoreCards(events, leagueKey, dateYYYYMMDD, true);
+        if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
+        startLiveTicker(league, leagueKey, dateYYYYMMDD);
+      } catch {}
+    }, getLiveRefreshMs([]));
+  }
+
+  // ─── MLB inning label helper ──────────────────────────────────────────────
+  // Returns "Top 8th", "Bot 3rd", etc. No clock shown for MLB.
+  function mlbInningLabel(period, situation) {
+    const n = Number(period || 0);
+    if (!n) return "";
+    const suffix = n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
+    const isTop = situation?.isTopHalfInning !== false;
+    return `${isTop ? "Top" : "Bot"} ${suffix}`;
+  }
+
+  // ─── Score card rendering ─────────────────────────────────────────────────
+  function sortEvents(events) {
+    return [...(events || [])].sort((a, b) => {
+      const favA = SD.favoriteRankForEvent(a), favB = SD.favoriteRankForEvent(b);
+      const aIsFav = favA < Infinity, bIsFav = favB < Infinity;
+      if (aIsFav !== bIsFav) return aIsFav ? -1 : 1;
+      const stA = SD.stateRank(a?.competitions?.[0]?.status), stB = SD.stateRank(b?.competitions?.[0]?.status);
+      if (stA !== stB) return stA - stB;
+      if (aIsFav && bIsFav && favA !== favB) return favA - favB;
+      return SD.getStartTimeMs(a) - SD.getStartTimeMs(b);
+    });
+  }
+
+  function buildScoreCardHTML(ev, leagueKey) {
+    const comp         = ev?.competitions?.[0];
+    const competitors  = comp?.competitors || [];
+    const status       = comp?.status;
+    const situation    = comp?.situation || null;
+    const stateStr     = String(status?.type?.state || "").toLowerCase();
+    const displayClock = String(status?.displayClock || "").trim();
+    const period       = Number(status?.period || 0);
+    const statusDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
+    const isLive = stateStr === "in";
+    const isPost = stateStr === "post";
+    const isMLB  = leagueKey === "mlb";
+
+    // ── Always: away on top, home on bottom ──
+    const home = competitors.find(c => String(c?.homeAway || "") === "home") || competitors[1] || {};
+    const away = competitors.find(c => String(c?.homeAway || "") === "away") || competitors[0] || {};
+    const homeTeam = home?.team || {};
+    const awayTeam = away?.team || {};
+
+    const homeName = SD.getTeamDisplayNameUI(homeTeam);
+    const awayName = SD.getTeamDisplayNameUI(awayTeam);
+    const homeAbbr = SD.getTeamAbbrevUI(homeTeam);
+    const awayAbbr = SD.getTeamAbbrevUI(awayTeam);
+    const homeRank = Number(home?.curatedRank?.current || home?.rank || 0);
+    const awayRank = Number(away?.curatedRank?.current || away?.rank || 0);
+    const homeScore = String(home?.score ?? "");
+    const awayScore = String(away?.score ?? "");
+    const homeWinner = isPost && String(home?.winner || "") === "true";
+    const awayWinner = isPost && String(away?.winner || "") === "true";
+    const homeLogoUrl = SD.getTeamLogoUrl(homeTeam);
+    const awayLogoUrl = SD.getTeamLogoUrl(awayTeam);
+    const isFavHome = SD.isFavoriteTeam(homeTeam);
+    const isFavAway = SD.isFavoriteTeam(awayTeam);
+    const eventId  = String(ev?.id || "");
+    const venueLine = SD.buildVenueLine(comp);
+    const leagueColor = SD.LEAGUE_COLORS[leagueKey] || "#555";
+    const isPlayoff = SD.PLAYOFF_LEAGUES.has(leagueKey);
+    const seriesStatus = isPlayoff ? (comp?.series?.summary || comp?.series?.title || "") : "";
+    const seriesBadge  = seriesStatus ? `<div class="seriesBadge">${SD.escapeHtml(seriesStatus)}</div>` : "";
+
+    // ── Status line ──
+    // MLB never shows a game clock — only inning label.
+    let statusLine = "";
+    if (isLive) {
+      let periodLabel = "";
+      if      (isMLB)                                            periodLabel = mlbInningLabel(period, situation);
+      else if (leagueKey === "nba"  || leagueKey === "ncaam")   periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
+      else if (leagueKey === "nhl")                              periodLabel = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
+      else if (leagueKey === "nfl"  || leagueKey === "cfb")     periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
+      else periodLabel = period ? `P${period}` : "";
+      // MLB has no clock; all other sports append displayClock if present
+      const clockPart = (!isMLB && displayClock) ? ` \u00b7 ${displayClock}` : "";
+      statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 " + periodLabel : ""}${clockPart}</div>`;
+    } else if (isPost) {
+      statusLine = `<div class="statusFinal">Final${statusDetail && statusDetail.toLowerCase() !== "final" ? " \u00b7 " + statusDetail : ""}</div>`;
+    } else {
+      const gameDate = comp?.date || ev?.date || "";
+      let timeStr = "";
+      if (gameDate) { try { timeStr = new Date(gameDate).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch {} }
+      statusLine = `<div class="statusPre">${SD.escapeHtml(timeStr || statusDetail || "Scheduled")}</div>`;
+    }
+
+    function logoImg(url, abbr) {
+      if (!url) return `<div class="teamLogoPlaceholder">${SD.escapeHtml(abbr.slice(0,3))}</div>`;
+      return `<img class="teamLogo" src="${SD.escapeHtml(url)}" alt="${SD.escapeHtml(abbr)}" loading="lazy" width="40" height="40" />`;
+    }
+    function scoreSpan(score, isWinner, isPostGame) {
+      const cls = isPostGame ? (isWinner ? "score winner" : "score loser") : "score";
+      return `<span class="${cls}">${SD.escapeHtml(score || "")}</span>`;
+    }
+
+    const oddsPlaceholder = `<div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>`;
+    let cardClasses = "scoreCard";
+    if (isFavHome || isFavAway) cardClasses += " favCard";
+    if (isLive) cardClasses += " cardLive";
+
+    return `
+<div class="${cardClasses}" data-eventid="${SD.escapeHtml(eventId)}" style="border-left-color:${SD.escapeHtml(leagueColor)}">
+  ${seriesBadge}
+  <div class="cardHeader">${statusLine}${oddsPlaceholder}</div>
+  <div class="matchup">
+    <div class="teamRow away${isFavAway ? " favTeam" : ""}">
+      ${logoImg(awayLogoUrl, awayAbbr)}
+      <div class="teamInfo">
+        <div class="teamName">${SD.escapeHtml(SD.teamDisplayNameWithRank(awayRank, awayName))}</div>
+        <div class="teamMeta" data-teammeta="${SD.escapeHtml(eventId)}_away">${SD.escapeHtml(SD.metaLineWithConference("away", SD.getConferenceNameFromCompetitor(away), SD.getOverallRecordFromCompetitor(away)))}</div>
+      </div>
+      ${scoreSpan(awayScore, awayWinner, isPost)}
+    </div>
+    <div class="teamRow home${isFavHome ? " favTeam" : ""}">
+      ${logoImg(homeLogoUrl, homeAbbr)}
+      <div class="teamInfo">
+        <div class="teamName">${SD.escapeHtml(SD.teamDisplayNameWithRank(homeRank, homeName))}</div>
+        <div class="teamMeta" data-teammeta="${SD.escapeHtml(eventId)}_home">${SD.escapeHtml(SD.metaLineWithConference("home", SD.getConferenceNameFromCompetitor(home), SD.getOverallRecordFromCompetitor(home)))}</div>
+      </div>
+      ${scoreSpan(homeScore, homeWinner, isPost)}
+    </div>
+  </div>
+  ${venueLine ? `<div class="venueLine">${venueLine}</div>` : ""}
+</div>`;
+  }
+
+  function renderScoreCards(events, leagueKey, dateYYYYMMDD, isRefresh) {
+    const container = document.getElementById("scoresContainer");
+    if (!container) return;
+    const sorted = sortEvents(events);
+    if (!sorted.length) {
+      container.innerHTML = `<div class="emptyState">No games found for this date.</div>`;
+      return;
+    }
+    const isMLB = leagueKey === "mlb";
+    if (isRefresh) {
+      for (const ev of sorted) {
+        const id = String(ev?.id || "");
+        if (!id) continue;
+        const card = container.querySelector(`[data-eventid="${CSS.escape(id)}"]`);
+        if (!card) continue;
+        const comp = ev?.competitions?.[0];
+        const status = comp?.status;
+        const situation = comp?.situation || null;
+        const stateStr = String(status?.type?.state || "").toLowerCase();
+        const isLive = stateStr === "in", isPost = stateStr === "post";
+        const competitors = comp?.competitors || [];
+        const home = competitors.find(c => String(c?.homeAway || "") === "home") || competitors[1] || {};
+        const away = competitors.find(c => String(c?.homeAway || "") === "away") || competitors[0] || {};
+        card.classList.toggle("cardLive", isLive);
+        const scoreEls = card.querySelectorAll(".score");
+        if (scoreEls[0]) scoreEls[0].textContent = String(away?.score ?? "");
+        if (scoreEls[1]) scoreEls[1].textContent = String(home?.score ?? "");
+        if (isPost) {
+          const aw = String(away?.winner || "") === "true", hw = String(home?.winner || "") === "true";
+          if (scoreEls[0]) { scoreEls[0].classList.toggle("winner", aw); scoreEls[0].classList.toggle("loser", !aw); }
+          if (scoreEls[1]) { scoreEls[1].classList.toggle("winner", hw); scoreEls[1].classList.toggle("loser", !hw); }
+        }
+        const statusEl = card.querySelector(".statusLive, .statusFinal, .statusPre");
+        if (statusEl && (isLive || isPost)) {
+          const displayClock = String(status?.displayClock || "").trim();
+          const period = Number(status?.period || 0);
+          if (isLive) {
+            let pl = "";
+            if      (isMLB)                                            pl = mlbInningLabel(period, situation);
+            else if (leagueKey === "nba"  || leagueKey === "ncaam")   pl = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
+            else if (leagueKey === "nhl")                              pl = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
+            else if (leagueKey === "nfl"  || leagueKey === "cfb")     pl = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
+            else pl = period ? `P${period}` : "";
+            const clockPart = (!isMLB && displayClock) ? " \u00b7 " + displayClock : "";
+            statusEl.className = "statusLive";
+            statusEl.textContent = `LIVE${pl ? " \u00b7 "+pl : ""}${clockPart}`;
+          } else if (isPost) {
+            const detail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
+            statusEl.className = "statusFinal";
+            statusEl.textContent = `Final${detail && detail.toLowerCase() !== "final" ? " \u00b7 "+detail : ""}`;
+          }
+        }
+      }
+      return;
+    }
+    container.innerHTML = sorted.map(ev => buildScoreCardHTML(ev, leagueKey)).join("");
+  }
+
+  // ─── Conference hydration ─────────────────────────────────────────────────
+  async function hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events) {
+    if (!SD.isCollegeLeagueKey(leagueKey)) return;
+    const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
+    let teamIdToConf = cached ? cached.teamIdToConf : {};
+    if (!cached) {
+      const sampleIds = (events || []).slice(0, 8).map(ev => String(ev?.id || "")).filter(Boolean);
+      for (const eid of sampleIds) {
+        const partialMap = await SD.fetchConferenceMapFromSummary(league, eid);
+        Object.assign(teamIdToConf, partialMap);
+      }
+      if (Object.keys(teamIdToConf).length) SD.saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf);
+    }
+    for (const ev of (events || [])) {
+      const id = String(ev?.id || "");
+      const comp = ev?.competitions?.[0];
+      for (const c of (comp?.competitors || [])) {
+        const teamId = String(c?.team?.id || "");
+        const conf = teamIdToConf[teamId] || SD.getConferenceNameFromCompetitor(c) || "";
+        SD.applyConferenceMetaToDom(id, String(c?.homeAway || ""), conf, SD.getOverallRecordFromCompetitor(c));
+      }
+    }
+    return teamIdToConf;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  PGA LEADERBOARD
+  // ════════════════════════════════════════════════════════════════════════
+
+  function weatherIcon(condition) {
+    const c = String(condition || "").toLowerCase();
+    if (c.includes("thunder") || c.includes("storm")) return "\u26C8\uFE0F";
+    if (c.includes("rain") || c.includes("shower") || c.includes("drizzle")) return "\uD83C\uDF27\uFE0F";
+    if (c.includes("snow")) return "\u2744\uFE0F";
+    if (c.includes("fog") || c.includes("mist")) return "\uD83C\uDF2B\uFE0F";
+    if (c.includes("partly") || c.includes("partial") || c.includes("cloud")) return "\u26C5";
+    if (c.includes("overcast")) return "\u2601\uFE0F";
+    if (c.includes("clear") || c.includes("sunny") || c.includes("fair")) return "\u2600\uFE0F";
+    if (c.includes("wind")) return "\uD83D\uDCA8";
+    return "\uD83C\uDF24\uFE0F";
+  }
+
+  function formatToPar(val) {
+    const n = Number(val);
+    if (!Number.isFinite(n)) return String(val || "");
+    if (n === 0) return "E";
+    return n > 0 ? `+${n}` : String(n);
+  }
+  function toParClass(val) {
+    const n = Number(val);
+    if (!Number.isFinite(n)) return "";
+    if (n < 0) return "under";
+    if (n > 0) return "over";
+    return "even";
+  }
+
+  function rankMedalClass(pos) {
+    if (pos === 1) return "gold";
+    if (pos === 2) return "silver";
+    if (pos === 3) return "bronze";
+    return "";
+  }
+
+  // ── PGA round label ───────────────────────────────────────────────────────
+  // Builds a human label like "Round 3 Complete" or "Round 2 In Progress"
+  // from ESPN status data. ESPN uses status.period for the current round number.
+  function pgaRoundLabel(status, isLive, isPost) {
+    // Try to get the round number. ESPN puts it in status.period for golf.
+    const period = Number(status?.period || 0);
+    // Also try status.type.shortDetail which sometimes has "Round 3" or "Final Round"
+    const shortDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
+
+    let roundNum = period;
+    // If shortDetail has a round number, prefer it
+    const detailMatch = shortDetail.match(/round\s*(\d)/i);
+    if (detailMatch) roundNum = Number(detailMatch[1]);
+
+    if (!roundNum) return shortDetail || "";
+
+    const ordinals = ["1st", "2nd", "3rd", "4th"];
+    const roundOrd = ordinals[roundNum - 1] || `R${roundNum}`;
+
+    if (isLive)      return `${roundOrd} Round · In Progress`;
+    if (isPost)      return `${roundOrd} Round · Complete`;
+    // Pre-round: "3rd Round" upcoming
+    return `${roundOrd} Round`;
+  }
+
+  // ── Parse ESPN PGA scoreboard events into a tidy competitor list ──────────
+  function parsePGACompetitors(events) {
+    const competitors = [];
+    for (const ev of (events || [])) {
+      const comp = ev?.competitions?.[0];
+      for (const c of (comp?.competitors || [])) {
+        const status = String(c?.status?.type?.state || c?.status || "").toLowerCase();
+        const isCut = status === "cut" || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("cut");
+        const isWD  = status === "wd"  || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("wd");
+        competitors.push({
+          id:         String(c?.athlete?.id || c?.id || ""),
+          name:       String(c?.athlete?.displayName || c?.athlete?.fullName || ""),
+          country:    String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
+          toPar:      c?.score ?? c?.statistics?.find?.(s => s.name === "scoreToPar")?.displayValue ?? null,
+          todayScore: c?.linescores?.slice(-1)?.[0]?.displayValue ?? c?.statistics?.find?.(s => s.name === "scoreToday")?.displayValue ?? null,
+          // ESPN sortOrder is a float like 1.0, 2.0, 3.0 — use it as the real position
+          position:   Number(c?.sortOrder ?? c?.status?.position?.id ?? 999),
+          displayPos: String(c?.status?.position?.displayName || c?.status?.type?.shortDetail || ""),
+          thru:       String(c?.statistics?.find?.(s => s.name === "thru")?.displayValue || c?.status?.type?.shortDetail || ""),
+          isCut,
+          isWD,
+          rounds:     (c?.linescores || []).map(l => l.displayValue),
+        });
+      }
+    }
+    competitors.sort((a, b) => {
+      if (a.isCut !== b.isCut) return a.isCut ? 1 : -1;
+      if (a.isWD  !== b.isWD)  return a.isWD  ? 1 : -1;
+      return a.position - b.position;
+    });
+    return competitors;
+  }
+
+  // ── Tied rank display ─────────────────────────────────────────────────────
+  // Groups competitors by their ESPN sortOrder position.
+  // First person in each group shows the rank number; tied players show blank.
+  // The NEXT distinct rank number is the count of all players above (e.g. if
+  // 4 people tie for 2nd the next visible rank shown is 6, not 5).
+  function buildTiedRankDisplays(players) {
+    const rankDisplays = [];
+    // Group by exact position value
+    const seen = new Map(); // position -> first index where it appeared
+    for (let i = 0; i < players.length; i++) {
+      const pos = players[i].position;
+      if (!seen.has(pos)) {
+        seen.set(pos, i);
+        rankDisplays.push(String(Math.round(pos)));
+      } else {
+        rankDisplays.push(""); // tied — blank
+      }
+    }
+    return rankDisplays;
+  }
+
+  async function fetchPGAWeather(lat, lon) {
+    if (!lat || !lon) return null;
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`;
+      const data = await SD.fetchJsonNoStore(url);
+      const hi  = Math.round(data?.daily?.temperature_2m_max?.[0] ?? 0);
+      const lo  = Math.round(data?.daily?.temperature_2m_min?.[0] ?? 0);
+      const wmo = Number(data?.daily?.weathercode?.[0] ?? 0);
+      const cond = wmoToCondition(wmo);
+      return { hi, lo, condition: cond, icon: weatherIcon(cond) };
+    } catch { return null; }
+  }
+
+  function wmoToCondition(code) {
+    if (code === 0) return "Clear";
+    if (code === 1) return "Mostly Clear";
+    if (code === 2) return "Partly Cloudy";
+    if (code === 3) return "Overcast";
+    if ([45,48].includes(code)) return "Foggy";
+    if ([51,53,55].includes(code)) return "Drizzle";
+    if ([61,63,65].includes(code)) return "Rain";
+    if ([71,73,75].includes(code)) return "Snow";
+    if ([80,81,82].includes(code)) return "Rain Showers";
+    if ([95,96,99].includes(code)) return "Thunderstorm";
+    return "Partly Cloudy";
+  }
+
+  async function geocodeVenue(city, stateOrCountry) {
+    if (!city) return null;
+    try {
+      const q = encodeURIComponent(`${city}${stateOrCountry ? ", " + stateOrCountry : ""}`);
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=1&language=en&format=json`;
+      const data = await SD.fetchJsonNoStore(url);
+      const r = data?.results?.[0];
+      if (!r) return null;
+      return { lat: r.latitude, lon: r.longitude };
+    } catch { return null; }
+  }
+
+  async function renderPGALeaderboard(events, league, leagueKey, dateYYYYMMDD) {
+    const container = document.getElementById("scoresContainer");
+    if (!container) return;
+
+    // ── Tournament meta ──
+    const firstEv   = events?.[0];
+    const comp       = firstEv?.competitions?.[0];
+    const tournName  = String(firstEv?.name || firstEv?.shortName || comp?.name || "PGA Tour");
+    const venue      = comp?.venue;
+    const venueCity  = String(venue?.address?.city  || "").trim();
+    const venueState = String(venue?.address?.state || venue?.address?.country || "").trim();
+    const venueDisplay = [venueCity, venueState].filter(Boolean).join(", ");
+    const lat = venue?.address?.latitude  || null;
+    const lon = venue?.address?.longitude || null;
+
+    // ── Status ──
+    const status   = comp?.status;
+    const stateStr = String(status?.type?.state || "").toLowerCase();
+    const isLive   = stateStr === "in";
+    const isPost   = stateStr === "post";
+    const stDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
+
+    // ── Round label ──
+    const roundLabel = pgaRoundLabel(status, isLive, isPost);
+
+    // ── Competitors ──
+    const competitors = parsePGACompetitors(events);
+    const top20       = competitors.filter(c => !c.isCut && !c.isWD).slice(0, 20);
+    const cutPlayers  = competitors.filter(c => c.isCut || c.isWD).slice(0, 5);
+
+    // ── Tied rank displays — keyed by actual ESPN position, not array index ──
+    const rankDisplays = buildTiedRankDisplays(top20);
+
+    // ── Status pill ──
+    let statusPillHTML = "";
+    if (isLive) {
+      statusPillHTML = `<div class="pgaStatusPill live">Live${stDetail ? " \u00b7 " + stDetail : ""}</div>`;
+    } else if (isPost) {
+      statusPillHTML = `<div class="pgaStatusPill final">Final</div>`;
+    } else {
+      statusPillHTML = `<div class="pgaStatusPill pre">${SD.escapeHtml(stDetail || "Upcoming")}</div>`;
+    }
+
+    // ── Round badge (only show if we have a meaningful label) ──
+    const roundBadgeHTML = roundLabel
+      ? `<div class="pgaRoundBadge">\u26F3 ${SD.escapeHtml(roundLabel)}</div>`
+      : "";
+
+    // ── Render hero immediately ──
+    container.innerHTML = `
+<div class="pgaHero">
+  <div class="pgaTournamentName">${SD.escapeHtml(tournName)}</div>
+  ${venueDisplay ? `<div class="pgaVenue">${SD.escapeHtml(venueDisplay)}</div>` : ""}
+  <div class="pgaStatusRow">
+    ${statusPillHTML}
+    ${roundBadgeHTML}
+  </div>
+  <div id="pgaWeatherSlot"></div>
+</div>
+<div class="pgaLeaderboard">
+  <div class="pgaLeaderHeaderRow">
+    <div class="pgaLeaderHeaderCell">#</div>
+    <div class="pgaLeaderHeaderCell">Player</div>
+    <div class="pgaLeaderHeaderCell right">Today</div>
+    <div class="pgaLeaderHeaderCell right">Total</div>
+  </div>
+  ${top20.map((p, i) => {
+    const rankTxt  = rankDisplays[i];
+    // Medal class only on the first player at each top-3 position
+    const posNum   = Math.round(p.position);
+    const rMedal   = rankTxt ? rankMedalClass(posNum) : "";
+    const totalCls = toParClass(p.toPar);
+    const todayCls = toParClass(p.todayScore);
+    const isT3     = posNum <= 3 && !!rankTxt; // only highlight the first at that position
+    return `
+<div class="pgaLeaderRow${isT3 ? " top3" : ""}">
+  <div class="pgaRank${rMedal ? " " + rMedal : ""}">${SD.escapeHtml(rankTxt || "")}</div>
+  <div class="pgaPlayerInfo">
+    <div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div>
+    <div class="pgaPlayerMeta">${SD.escapeHtml([p.country, p.thru ? (isLive ? "Thru " + p.thru : p.thru) : ""].filter(Boolean).join(" \u00b7 "))}</div>
+  </div>
+  <div class="pgaScoreToday${todayCls ? " " + todayCls : ""}">${SD.escapeHtml(formatToPar(p.todayScore))}</div>
+  <div class="pgaScoreTotal${totalCls ? " " + totalCls : ""}">${SD.escapeHtml(formatToPar(p.toPar))}</div>
+</div>`;
+  }).join("")}
+  ${cutPlayers.length ? `
+  <div class="pgaCutDivider"><div class="pgaCutDividerLine"></div><div class="pgaCutDividerLabel">Missed Cut / WD</div><div class="pgaCutDividerLine"></div></div>
+  ${cutPlayers.map(p => `
+<div class="pgaLeaderRow cut">
+  <div class="pgaRank"></div>
+  <div class="pgaPlayerInfo"><div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div><div class="pgaPlayerMeta">${SD.escapeHtml(p.country)}</div></div>
+  <div class="pgaScoreToday"></div>
+  <div class="pgaScoreTotal">${SD.escapeHtml(p.isWD ? "WD" : "CUT")}</div>
+</div>`).join("")}
+  ` : ""}
+</div>`;
+
+    // ── Weather: async inject ──
+    (async () => {
+      try {
+        let coords = (lat && lon) ? { lat, lon } : await geocodeVenue(venueCity, venueState);
+        if (!coords) return;
+        const wx = await fetchPGAWeather(coords.lat, coords.lon);
+        if (!wx) return;
+        const slot = document.getElementById("pgaWeatherSlot");
+        if (!slot) return;
+        slot.innerHTML = `
+<div class="pgaWeather">
+  <div class="pgaWeatherIcon">${wx.icon}</div>
+  <div class="pgaWeatherDetails">
+    <div class="pgaWeatherCondition">${SD.escapeHtml(wx.condition)}</div>
+    <div class="pgaWeatherTemps">H: ${wx.hi}\u00b0 &nbsp;L: ${wx.lo}\u00b0</div>
+  </div>
+</div>`;
+      } catch {}
+    })();
+  }
+
+  // ─── Main load function ───────────────────────────────────────────────────
+  window.loadScores = async function (forceRefresh) {
+    stopLiveTicker();
+    const leagueKey    = SD.getSavedLeagueKey();
+    const dateYYYYMMDD = SD.getSavedDateYYYYMMDD();
+    const renderKey    = `${leagueKey}_${dateYYYYMMDD}`;
+    const isRefresh    = !forceRefresh && lastRenderedKey === renderKey;
+    lastRenderedKey    = renderKey;
+    const league = SD.getLeagueByKey(leagueKey);
+    const color  = SD.LEAGUE_COLORS[leagueKey] || "#bb0000";
+    const isPGA  = leagueKey === "pga";
+    const isCollege = SD.isCollegeLeagueKey(leagueKey);
+
+    const content = document.getElementById("content");
+    if (content) content.innerHTML = `
+      ${buildHeaderHTML(leagueKey, color)}
+      ${buildDateNavHTML(dateYYYYMMDD)}
+      <div id="scoresContainer" class="scoresContainer"></div>
+    `;
+
+    bindLeaguePills();
+    bindDateNav();
+
+    const activePill = document.querySelector(".scoresLeaguePill.active");
+    if (activePill) activePill.scrollIntoView({ behavior: "instant", block: "nearest", inline: "center" });
+
+    let events = [];
+    let usedDate = dateYYYYMMDD;
+    try {
+      const url  = SD.withLangRegion(league.endpoint(dateYYYYMMDD));
+      const data = await SD.fetchJsonNoStore(url);
+      events = data?.events || [];
+
+      if (isPGA && !events.length) {
+        const yesterday = shiftDate(dateYYYYMMDD, -1);
+        const data2 = await SD.fetchJsonNoStore(SD.withLangRegion(league.endpoint(yesterday)));
+        const yEvents = data2?.events || [];
+        if (yEvents.length) { events = yEvents; usedDate = yesterday; }
+      }
+    } catch {
+      const c = document.getElementById("scoresContainer");
+      if (c) c.innerHTML = `<div class="emptyState">Failed to load scores. Check your connection.</div>`;
+      return;
+    }
+
+    if (!events.length) {
+      const c = document.getElementById("scoresContainer");
+      if (c) c.innerHTML = `<div class="emptyState">No games found for this date.</div>`;
+      return;
+    }
+
+    if (isPGA) {
+      await renderPGALeaderboard(events, league, leagueKey, usedDate);
+      return;
+    }
+
+    renderScoreCards(events, leagueKey, dateYYYYMMDD, false);
+    if (isCollege) hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events).catch(() => {});
+    SD.hydrateAllOdds(league, leagueKey, dateYYYYMMDD, events).catch(() => {});
+    startLiveTicker(league, leagueKey, dateYYYYMMDD);
+  };
+
+  window.__stopScoresTicker = stopLiveTicker;
+
+})();
