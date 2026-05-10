@@ -514,9 +514,6 @@
     const seriesStatus = isPlayoff ? (comp?.series?.summary || comp?.series?.title || "") : "";
     const seriesBadge  = seriesStatus ? `<div class="seriesBadge">${SD.escapeHtml(seriesStatus)}</div>` : "";
 
-    // ── Status line ──
-    // MLB never shows a game clock — only inning label.
-    // Pre-game MLB: only show start time from the event date, never statusDetail (which can be "0:00").
     let statusLine = "";
     if (isLive) {
       let periodLabel = "";
@@ -528,17 +525,12 @@
       const clockPart = (!isMLB && displayClock) ? ` \u00b7 ${displayClock}` : "";
       statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 " + periodLabel : ""}${clockPart}</div>`;
     } else if (isPost) {
-      // MLB post-game: show "Final" + any extra detail (e.g. "F/10" for extra innings)
-      // but never show a raw clock string like "0:00"
       let finalDetail = "";
       if (statusDetail && statusDetail.toLowerCase() !== "final") {
-        // Skip anything that looks like a clock (digits:digits)
         if (!/^\d+:\d+$/.test(statusDetail)) finalDetail = statusDetail;
       }
       statusLine = `<div class="statusFinal">Final${finalDetail ? " \u00b7 " + finalDetail : ""}</div>`;
     } else {
-      // Pre-game: show start time from the event date
-      // For MLB, never fall back to statusDetail (it can be "0:00")
       const gameDate = comp?.date || ev?.date || "";
       let timeStr = "";
       if (gameDate) { try { timeStr = new Date(gameDate).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch {} }
@@ -689,8 +681,9 @@
   }
 
   function formatToPar(val) {
+    // val is a raw numeric score like -14, 0, +3
     const n = Number(val);
-    if (!Number.isFinite(n)) return String(val || "");
+    if (!Number.isFinite(n)) return String(val ?? "");
     if (n === 0) return "E";
     return n > 0 ? `+${n}` : String(n);
   }
@@ -728,77 +721,63 @@
     return `${roundOrd} Round`;
   }
 
-  // ── Parse ESPN PGA scoreboard events into a tidy competitor list ──────────
+  // ── Parse ESPN PGA scoreboard competitors
+  // ESPN PGA structure (verified against live API):
+  //   competitor.order        — leaderboard position (1-based integer)
+  //   competitor.athlete      — { fullName, displayName, shortName, flag: { alt } }
+  //   competitor.score        — total to-par as a number (e.g. -14, 0, 3)
+  //   competitor.linescores   — array of round objects { period, displayValue, value }
+  //                             period 1 = R1, period 2 = R2, etc.
+  //                             last entry with a real period = current/most-recent round
+  // There is NO competitor.status, .statistics, .curatedRank, or .position on this endpoint.
   function parsePGACompetitors(events) {
     const competitors = [];
     for (const ev of (events || [])) {
       const comp = ev?.competitions?.[0];
       for (const c of (comp?.competitors || [])) {
-        const rawStatus   = String(c?.status?.type?.state || c?.status || "").toLowerCase();
-        const shortDetail = String(c?.status?.type?.shortDetail || "").trim();
-        const isCut = rawStatus === "cut" || shortDetail.toLowerCase().includes("cut");
-        const isWD  = rawStatus === "wd"  || shortDetail.toLowerCase().includes("wd");
+        const athlete = c?.athlete || {};
+        const name = String(athlete.displayName || athlete.fullName || athlete.shortName || "").trim();
+        if (!name) continue;
 
-        // ESPN's human-readable position display — "1", "T6", "T12", etc.
-        const displayPos = String(
-          c?.status?.position?.displayName ||
-          c?.curatedRank?.displayName ||
-          c?.position?.displayName ||
-          c?.place ||
-          ""
-        ).trim();
+        const country = String(athlete?.flag?.alt || athlete?.country?.abbreviation || "").trim();
 
-        // Numeric position for sorting — parse from displayPos ("T6" → 6) or explicit field
-        let numericPosition = Number(
-          c?.status?.position?.id ??
-          c?.curatedRank?.current ??
-          c?.position?.id ??
-          c?.place
-        );
-        if (!Number.isFinite(numericPosition) || numericPosition <= 0) {
-          const m = displayPos.match(/\d+/);
-          numericPosition = m ? Number(m[0]) : Infinity;
+        // Total score is competitor.score — a raw number (negative = under par)
+        const toPar = (c?.score !== undefined && c?.score !== null && c?.score !== "")
+          ? Number(c.score)
+          : null;
+
+        // Linescores: each entry has period (round number) and displayValue
+        // Filter to entries that have a real period number
+        const linescores = (c?.linescores || []).filter(l => l?.period > 0 && l?.displayValue !== undefined);
+
+        // Today's round = highest period number with a score
+        let todayScore = null;
+        if (linescores.length > 0) {
+          const sorted = [...linescores].sort((a, b) => Number(b.period) - Number(a.period));
+          todayScore = sorted[0]?.displayValue ?? null;
+          if (todayScore !== null) todayScore = Number(todayScore);
         }
 
+        // Position from competitor.order (1-based rank on leaderboard)
+        const position = Number(c?.order ?? Infinity);
+
         competitors.push({
-          id:         String(c?.athlete?.id || c?.id || ""),
-          name:       String(c?.athlete?.displayName || c?.athlete?.fullName || ""),
-          country:    String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
-          toPar:      c?.score ?? c?.statistics?.find?.(s => s.name === "scoreToPar")?.displayValue ?? null,
-          todayScore: c?.linescores?.slice(-1)?.[0]?.displayValue ?? c?.statistics?.find?.(s => s.name === "scoreToday")?.displayValue ?? null,
-          position:   numericPosition,
-          displayPos,
-          thru:       String(c?.statistics?.find?.(s => s.name === "thru")?.displayValue || shortDetail || ""),
-          isCut,
-          isWD,
-          rounds:     (c?.linescores || []).map(l => l.displayValue),
+          name,
+          country,
+          toPar:      Number.isFinite(toPar) ? toPar : null,
+          todayScore: Number.isFinite(todayScore) ? todayScore : null,
+          position:   Number.isFinite(position) ? position : Infinity,
+          rounds:     linescores.map(l => l.displayValue),
+          isCut:      false,
+          isWD:       false,
         });
       }
     }
 
-    competitors.sort((a, b) => {
-      if (a.isCut !== b.isCut) return a.isCut ? 1 : -1;
-      if (a.isWD  !== b.isWD)  return a.isWD  ? 1 : -1;
-      if (a.position !== b.position) return a.position - b.position;
-      // Secondary sort: toPar (lower is better)
-      const aPar = Number(a.toPar), bPar = Number(b.toPar);
-      if (Number.isFinite(aPar) && Number.isFinite(bPar) && aPar !== bPar) return aPar - bPar;
-      return a.name.localeCompare(b.name);
-    });
+    // Sort by position (order field is already the correct leaderboard rank)
+    competitors.sort((a, b) => a.position - b.position);
 
     return competitors;
-  }
-
-  // ── PGA rank display ──────────────────────────────────────────────────────
-  // Use ESPN's own displayPos directly ("1", "T6", "T12").
-  // Only fall back to numeric if displayPos is missing.
-  function buildTiedRankDisplays(players) {
-    return players.map(p => {
-      const raw = String(p?.displayPos || "").trim();
-      if (raw) return raw;
-      if (Number.isFinite(p?.position) && p.position !== Infinity) return String(Math.round(p.position));
-      return "";
-    });
   }
 
   async function fetchPGAWeather(lat, lon) {
@@ -862,11 +841,28 @@
 
     const roundLabel = pgaRoundLabel(status, isLive, isPost);
 
+    // Parse all competitors across all events for this tournament
     const competitors = parsePGACompetitors(events);
     const top20       = competitors.filter(c => !c.isCut && !c.isWD).slice(0, 20);
-    const cutPlayers  = competitors.filter(c => c.isCut || c.isWD).slice(0, 5);
 
-    const rankDisplays = buildTiedRankDisplays(top20);
+    // Determine rank display: if consecutive players share the same toPar, they're tied
+    function buildRankDisplay(players) {
+      return players.map((p, i) => {
+        if (!Number.isFinite(p.toPar)) return String(p.position || i + 1);
+        // Check if prev player has same toPar → tied
+        const prevSame = i > 0 && players[i-1].toPar === p.toPar;
+        // Check if next player has same toPar → tied
+        const nextSame = i < players.length - 1 && players[i+1].toPar === p.toPar;
+        if (prevSame || nextSame) {
+          // Find the first index with this toPar score
+          const firstIdx = players.findIndex(pp => pp.toPar === p.toPar);
+          return `T${firstIdx + 1}`;
+        }
+        return String(i + 1);
+      });
+    }
+
+    const rankDisplays = buildRankDisplay(top20);
 
     let statusPillHTML = "";
     if (isLive) {
@@ -900,36 +896,24 @@
   </div>
   ${top20.map((p, i) => {
     const rankTxt  = rankDisplays[i];
-    // Numeric position from displayPos for medal logic ("T3" → 3, "1" → 1)
-    const posNum   = (() => {
-      const m = rankTxt.match(/\d+/);
-      return m ? Number(m[0]) : (Number.isFinite(p.position) ? Math.round(p.position) : 999);
-    })();
+    const posNum   = (() => { const m = String(rankTxt).match(/\d+/); return m ? Number(m[0]) : i + 1; })();
     const rMedal   = posNum <= 3 ? rankMedalClass(posNum) : "";
-    const totalCls = toParClass(p.toPar);
-    const todayCls = toParClass(p.todayScore);
+    const totalCls = p.toPar !== null ? toParClass(p.toPar) : "";
+    const todayCls = p.todayScore !== null ? toParClass(p.todayScore) : "";
     const isT3     = posNum <= 3;
+    const totalDisp = p.toPar !== null ? formatToPar(p.toPar) : "-";
+    const todayDisp = p.todayScore !== null ? formatToPar(p.todayScore) : "-";
     return `
 <div class="pgaLeaderRow${isT3 ? " top3" : ""}">
-  <div class="pgaRank${rMedal ? " " + rMedal : ""}">${SD.escapeHtml(rankTxt || "")}</div>
+  <div class="pgaRank${rMedal ? " " + rMedal : ""}">${SD.escapeHtml(rankTxt)}</div>
   <div class="pgaPlayerInfo">
     <div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div>
-    <div class="pgaPlayerMeta">${SD.escapeHtml([p.country, p.thru ? (isLive ? "Thru " + p.thru : p.thru) : ""].filter(Boolean).join(" \u00b7 "))}</div>
+    <div class="pgaPlayerMeta">${SD.escapeHtml([p.country].filter(Boolean).join(" \u00b7 "))}</div>
   </div>
-  <div class="pgaScoreToday${todayCls ? " " + todayCls : ""}">${SD.escapeHtml(formatToPar(p.todayScore))}</div>
-  <div class="pgaScoreTotal${totalCls ? " " + totalCls : ""}">${SD.escapeHtml(formatToPar(p.toPar))}</div>
+  <div class="pgaScoreToday${todayCls ? " " + todayCls : ""}">${SD.escapeHtml(todayDisp)}</div>
+  <div class="pgaScoreTotal${totalCls ? " " + totalCls : ""}">${SD.escapeHtml(totalDisp)}</div>
 </div>`;
   }).join("")}
-  ${cutPlayers.length ? `
-  <div class="pgaCutDivider"><div class="pgaCutDividerLine"></div><div class="pgaCutDividerLabel">Missed Cut / WD</div><div class="pgaCutDividerLine"></div></div>
-  ${cutPlayers.map(p => `
-<div class="pgaLeaderRow cut">
-  <div class="pgaRank"></div>
-  <div class="pgaPlayerInfo"><div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div><div class="pgaPlayerMeta">${SD.escapeHtml(p.country)}</div></div>
-  <div class="pgaScoreToday"></div>
-  <div class="pgaScoreTotal">${SD.escapeHtml(p.isWD ? "WD" : "CUT")}</div>
-</div>`).join("")}
-  ` : ""}
 </div>`;
 
     // ── Weather: async inject ──
