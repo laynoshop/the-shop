@@ -11,7 +11,7 @@
   }
   const SD = window.__SD;
 
-  // ─── Inject styles ───────────────────────────────────────────────────────
+  // ─── Inject styles ────────────────────────────────────────────
   (function injectStyles() {
     if (document.getElementById("__scoresRenderStyles")) return;
     const style = document.createElement("style");
@@ -131,7 +131,7 @@
 
 /* Hero banner */
 .pgaHero {
-  margin: 0 12px 14px;
+  margin: 0 0 14px;
   border-radius: 18px;
   overflow: hidden;
   background: linear-gradient(135deg,
@@ -191,15 +191,23 @@
   background: rgba(80,180,80,0.12); border: 1px solid rgba(80,180,80,0.3); color: rgba(140,220,140,0.9);
 }
 
-/* Weather strip */
+/* Round completed badge */
+.pgaRoundBadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+  background: rgba(255,215,50,0.1); border: 1px solid rgba(255,215,50,0.25); color: rgba(255,215,100,0.85);
+  padding: 4px 10px; border-radius: 999px;
+}
+
+/* Weather widget */
 .pgaWeather {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 10px;
-  padding: 8px 12px;
   margin-top: 4px;
 }
 .pgaWeatherIcon { font-size: 22px; line-height: 1; flex-shrink: 0; }
@@ -212,8 +220,8 @@
 .pgaRoundPills { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 12px 8px; }
 .pgaRoundPills::-webkit-scrollbar { display: none; }
 .pgaRoundPill {
-  flex-shrink: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.05em;
-  padding: 5px 13px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.10);
+  flex-shrink: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.05em;
+  padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
   transition: background 150ms ease, color 150ms ease;
@@ -221,26 +229,26 @@
 .pgaRoundPill:active { opacity: 0.7; }
 .pgaRoundPill.active {
   background: rgba(61,122,64,0.7); border-color: rgba(100,200,80,0.4);
-  color: #aee8a0; box-shadow: 0 0 10px rgba(80,200,60,0.25);
+  color: #fff; box-shadow: 0 0 10px rgba(80,200,60,0.25);
 }
 
 /* Leaderboard table */
 .pgaLeaderboard {
-  margin: 0 12px 80px;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.025);
 }
 .pgaLeaderRow {
   display: grid;
-  grid-template-columns: 28px 1fr 52px 52px;
+  grid-template-columns: 36px 1fr 52px 52px;
   align-items: center;
-  gap: 0;
-  padding: 11px 12px;
+  padding: 10px 12px;
+  gap: 6px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition: background 120ms ease;
-  min-height: 48px;
 }
 .pgaLeaderRow:last-child { border-bottom: none; }
 .pgaLeaderRow:active { background: rgba(255,255,255,0.05); }
@@ -250,47 +258,46 @@
 /* Header row */
 .pgaLeaderHeaderRow {
   display: grid;
-  grid-template-columns: 28px 1fr 52px 52px;
-  align-items: center;
+  grid-template-columns: 36px 1fr 52px 52px;
   padding: 7px 12px;
+  gap: 6px;
   border-bottom: 1px solid rgba(255,255,255,0.10);
   background: rgba(255,255,255,0.04);
 }
 .pgaLeaderHeaderCell {
-  font-size: 10px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
   color: rgba(255,255,255,0.35);
 }
 .pgaLeaderHeaderCell.right { text-align: right; }
 
-/* Rank cell */
+/* Rank number */
 .pgaRank {
-  font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.35);
-  font-variant-numeric: tabular-nums; text-align: center; line-height: 1;
+  font-size: 13px; font-weight: 900; color: rgba(255,255,255,0.45);
+  text-align: center; letter-spacing: 0.02em;
 }
 .pgaRank.gold { color: #ffd040; text-shadow: 0 0 8px rgba(255,200,0,0.5); }
 .pgaRank.silver { color: #c0c8d8; }
 .pgaRank.bronze { color: #cd8860; }
 
-/* Player info */
+/* Player name + country */
 .pgaPlayerInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-left: 2px; }
 .pgaPlayerName { font-size: 15px; font-weight: 800; color: #eee; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pgaPlayerMeta { font-size: 11px; color: rgba(255,255,255,0.38); font-weight: 600; letter-spacing: 0.02em; }
 
 /* Score columns */
 .pgaScoreTotal {
-  font-size: 18px; font-weight: 900; color: rgba(255,255,255,0.88);
-  font-variant-numeric: tabular-nums; text-align: right; line-height: 1;
+  font-size: 17px; font-weight: 900; text-align: right;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.3px;
+  color: rgba(255,255,255,0.8);
 }
-.pgaScoreTotal.under { color: #6edb64; text-shadow: 0 0 8px rgba(80,220,60,0.4); }
-.pgaScoreTotal.over { color: #ff7070; }
-.pgaScoreTotal.even { color: rgba(255,255,255,0.88); }
-
 .pgaScoreToday {
-  font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.45);
-  font-variant-numeric: tabular-nums; text-align: right; line-height: 1; padding-right: 2px;
+  font-size: 14px; font-weight: 700; text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.5);
 }
-.pgaScoreToday.under { color: #6edb64; }
-.pgaScoreToday.over { color: #ff7070; }
+.pgaScoreTotal.under, .pgaScoreToday.under { color: #6edb64; }
+.pgaScoreTotal.over,  .pgaScoreToday.over  { color: #ff7070; }
+.pgaScoreTotal.even,  .pgaScoreToday.even  { color: rgba(255,255,255,0.7); }
 
 /* Missed cut / WD rows */
 .pgaLeaderRow.cut { opacity: 0.38; }
@@ -313,7 +320,7 @@
     document.head.appendChild(style);
   })();
 
-  // ─── League pill labels ──────────────────────────────────────────────────
+  // ─── League pill labels ──────────────────────────────────────────
   const LEAGUE_LABELS = {
     ncaam: "\uD83C\uDFC0 NCAAB",
     cfb:   "\uD83C\uDFC8 CFB",
@@ -326,7 +333,7 @@
     ufc:   "\uD83E\uDD4A UFC",
   };
 
-  // ─── Date helpers ────────────────────────────────────────────────────────
+  // ─── Date helpers ────────────────────────────────────────────
   function formatDateNav(yyyymmdd) {
     try {
       const y = parseInt(yyyymmdd.slice(0,4), 10);
@@ -355,7 +362,7 @@
     return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,"0")}${String(n.getDate()).padStart(2,"0")}`;
   }
 
-  // ─── Build header HTML ───────────────────────────────────────────────────
+  // ─── Build header HTML ─────────────────────────────────────────
   function buildHeaderHTML(leagueKey, color) {
     const leagueLabel = LEAGUE_LABELS[leagueKey] || leagueKey.toUpperCase();
     const pillsHTML = (SD.LEAGUES || []).map(l => {
@@ -371,7 +378,7 @@
 </div>`;
   }
 
-  // ─── Build date navigator HTML ───────────────────────────────────────────
+  // ─── Build date navigator HTML ───────────────────────────────────
   function buildDateNavHTML(dateYYYYMMDD) {
     const inputVal = toInputValue(dateYYYYMMDD);
     return `
@@ -385,7 +392,7 @@
 </div>`;
   }
 
-  // ─── Bind pill tab clicks ────────────────────────────────────────────────
+  // ─── Bind pill tab clicks ─────────────────────────────────────────
   function bindLeaguePills() {
     const row = document.getElementById("scoresLeagueRow");
     if (!row) return;
@@ -400,7 +407,7 @@
     });
   }
 
-  // ─── Bind date navigator ─────────────────────────────────────────────────
+  // ─── Bind date navigator ─────────────────────────────────────────
   function bindDateNav() {
     const prev   = document.getElementById("scoresDatePrev");
     const next   = document.getElementById("scoresDateNext");
@@ -423,7 +430,7 @@
     });
   }
 
-  // ─── Live ticker ─────────────────────────────────────────────────────────
+  // ─── Live ticker ───────────────────────────────────────────────────
   let liveInterval = null;
   let lastRenderedKey = null;
 
@@ -446,17 +453,15 @@
   }
 
   // ─── MLB inning label helper ──────────────────────────────────────────────
-  // Returns "Top 8th", "Bottom 3rd", etc.
   function mlbInningLabel(period, situation) {
     const n = Number(period || 0);
     if (!n) return "";
     const suffix = n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
-    // ESPN situation: isTopHalfInning true = top, false/absent = bottom
     const isTop = situation?.isTopHalfInning !== false;
     return `${isTop ? "Top" : "Bot"} ${suffix}`;
   }
 
-  // ─── Score card rendering ─────────────────────────────────────────────────
+  // ─── Score card rendering ───────────────────────────────────────────────
   function sortEvents(events) {
     return [...(events || [])].sort((a, b) => {
       const favA = SD.favoriteRankForEvent(a), favB = SD.favoriteRankForEvent(b);
@@ -480,8 +485,8 @@
     const statusDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
     const isLive = stateStr === "in";
     const isPost = stateStr === "post";
+    const isMLB  = leagueKey === "mlb";
 
-    // ── Always: away on top, home on bottom ──
     const home = competitors.find(c => String(c?.homeAway || "") === "home") || competitors[1] || {};
     const away = competitors.find(c => String(c?.homeAway || "") === "away") || competitors[0] || {};
     const homeTeam = home?.team || {};
@@ -508,19 +513,20 @@
     const seriesStatus = isPlayoff ? (comp?.series?.summary || comp?.series?.title || "") : "";
     const seriesBadge  = seriesStatus ? `<div class="seriesBadge">${SD.escapeHtml(seriesStatus)}</div>` : "";
 
-    // ── Status line ──
     let statusLine = "";
     if (isLive) {
       let periodLabel = "";
-      if      (leagueKey === "mlb")                              periodLabel = mlbInningLabel(period, situation);
+      if      (isMLB)                                            periodLabel = mlbInningLabel(period, situation);
       else if (leagueKey === "nba"  || leagueKey === "ncaam")   periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
       else if (leagueKey === "nhl")                              periodLabel = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
       else if (leagueKey === "nfl"  || leagueKey === "cfb")     periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
       else periodLabel = period ? `P${period}` : "";
-      const clockPart = displayClock ? ` \u00b7 ${displayClock}` : "";
-      statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 " + periodLabel : ""}${clockPart}</div>`;
+      const clockPart = (!isMLB && displayClock) ? " \u00b7 " + displayClock : "";
+      statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 "+periodLabel : ""}${clockPart}</div>`;
     } else if (isPost) {
-      statusLine = `<div class="statusFinal">Final${statusDetail && statusDetail.toLowerCase() !== "final" ? " \u00b7 " + statusDetail : ""}</div>`;
+      let finalDetail = "";
+      if (statusDetail && statusDetail.toLowerCase() !== "final" && !/^\d+:\d+$/.test(statusDetail)) finalDetail = statusDetail;
+      statusLine = `<div class="statusFinal">Final${finalDetail ? " \u00b7 "+finalDetail : ""}</div>`;
     } else {
       const gameDate = comp?.date || ev?.date || "";
       let timeStr = "";
@@ -528,16 +534,18 @@
       statusLine = `<div class="statusPre">${SD.escapeHtml(timeStr || statusDetail || "Scheduled")}</div>`;
     }
 
+    const homeRankPrefix = homeRank > 0 && homeRank <= 25 ? `#${homeRank} ` : "";
+    const awayRankPrefix = awayRank > 0 && awayRank <= 25 ? `#${awayRank} ` : "";
+
     function logoImg(url, abbr) {
       if (!url) return `<div class="teamLogoPlaceholder">${SD.escapeHtml(abbr.slice(0,3))}</div>`;
       return `<img class="teamLogo" src="${SD.escapeHtml(url)}" alt="${SD.escapeHtml(abbr)}" loading="lazy" width="40" height="40" />`;
     }
-    function scoreSpan(score, isWinner, isPostGame) {
-      const cls = isPostGame ? (isWinner ? "score winner" : "score loser") : "score";
-      return `<span class="${cls}">${SD.escapeHtml(score || "")}</span>`;
+    function scoreSpan(sc, isWinner, isPostGame) {
+      if (!isPostGame) return `<span class="score">${SD.escapeHtml(sc)}</span>`;
+      return `<span class="score ${isWinner ? "winner" : "loser"}">${SD.escapeHtml(sc)}</span>`;
     }
 
-    const oddsPlaceholder = `<div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>`;
     let cardClasses = "scoreCard";
     if (isFavHome || isFavAway) cardClasses += " favCard";
     if (isLive) cardClasses += " cardLive";
@@ -545,12 +553,15 @@
     return `
 <div class="${cardClasses}" data-eventid="${SD.escapeHtml(eventId)}" style="border-left-color:${SD.escapeHtml(leagueColor)}">
   ${seriesBadge}
-  <div class="cardHeader">${statusLine}${oddsPlaceholder}</div>
+  <div class="cardHeader">
+    ${statusLine}
+    <div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>
+  </div>
   <div class="matchup">
     <div class="teamRow away${isFavAway ? " favTeam" : ""}">
       ${logoImg(awayLogoUrl, awayAbbr)}
       <div class="teamInfo">
-        <div class="teamName">${SD.escapeHtml(SD.teamDisplayNameWithRank(awayRank, awayName))}</div>
+        <div class="teamName">${SD.escapeHtml(awayRankPrefix + awayName)}</div>
         <div class="teamMeta" data-teammeta="${SD.escapeHtml(eventId)}_away">${SD.escapeHtml(SD.metaLineWithConference("away", SD.getConferenceNameFromCompetitor(away), SD.getOverallRecordFromCompetitor(away)))}</div>
       </div>
       ${scoreSpan(awayScore, awayWinner, isPost)}
@@ -558,13 +569,13 @@
     <div class="teamRow home${isFavHome ? " favTeam" : ""}">
       ${logoImg(homeLogoUrl, homeAbbr)}
       <div class="teamInfo">
-        <div class="teamName">${SD.escapeHtml(SD.teamDisplayNameWithRank(homeRank, homeName))}</div>
+        <div class="teamName">${SD.escapeHtml(homeRankPrefix + homeName)}</div>
         <div class="teamMeta" data-teammeta="${SD.escapeHtml(eventId)}_home">${SD.escapeHtml(SD.metaLineWithConference("home", SD.getConferenceNameFromCompetitor(home), SD.getOverallRecordFromCompetitor(home)))}</div>
       </div>
       ${scoreSpan(homeScore, homeWinner, isPost)}
     </div>
   </div>
-  ${venueLine ? `<div class="venueLine">${venueLine}</div>` : ""}
+  ${venueLine ? `<div class="venueLine">${SD.escapeHtml(venueLine)}</div>` : ""}
 </div>`;
   }
 
@@ -586,6 +597,7 @@
         const status = comp?.status;
         const situation = comp?.situation || null;
         const stateStr = String(status?.type?.state || "").toLowerCase();
+        const isMLB = leagueKey === "mlb";
         const isLive = stateStr === "in", isPost = stateStr === "post";
         const competitors = comp?.competitors || [];
         const home = competitors.find(c => String(c?.homeAway || "") === "home") || competitors[1] || {};
@@ -605,17 +617,20 @@
           const period = Number(status?.period || 0);
           if (isLive) {
             let pl = "";
-            if      (leagueKey === "mlb")                              pl = mlbInningLabel(period, situation);
+            if      (isMLB)                                            pl = mlbInningLabel(period, situation);
             else if (leagueKey === "nba"  || leagueKey === "ncaam")   pl = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
             else if (leagueKey === "nhl")                              pl = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
             else if (leagueKey === "nfl"  || leagueKey === "cfb")     pl = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
             else pl = period ? `P${period}` : "";
+            const clockPart = (!isMLB && displayClock) ? " \u00b7 " + displayClock : "";
             statusEl.className = "statusLive";
-            statusEl.textContent = `LIVE${pl ? " \u00b7 "+pl : ""}${displayClock ? " \u00b7 "+displayClock : ""}`;
+            statusEl.textContent = `LIVE${pl ? " \u00b7 "+pl : ""}${clockPart}`;
           } else if (isPost) {
             const detail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
+            let finalDetail = "";
+            if (detail && detail.toLowerCase() !== "final" && !/^\d+:\d+$/.test(detail)) finalDetail = detail;
             statusEl.className = "statusFinal";
-            statusEl.textContent = `Final${detail && detail.toLowerCase() !== "final" ? " \u00b7 "+detail : ""}`;
+            statusEl.textContent = `Final${finalDetail ? " \u00b7 "+finalDetail : ""}`;
           }
         }
       }
@@ -624,7 +639,7 @@
     container.innerHTML = sorted.map(ev => buildScoreCardHTML(ev, leagueKey)).join("");
   }
 
-  // ─── Conference hydration ─────────────────────────────────────────────────
+  // ─── Conference hydration ───────────────────────────────────────────────
   async function hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events) {
     if (!SD.isCollegeLeagueKey(leagueKey)) return;
     const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
@@ -649,11 +664,10 @@
     return teamIdToConf;
   }
 
-  // ════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
   //  PGA LEADERBOARD
-  // ════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════
 
-  // Weather icon based on ESPN condition string
   function weatherIcon(condition) {
     const c = String(condition || "").toLowerCase();
     if (c.includes("thunder") || c.includes("storm")) return "\u26C8\uFE0F";
@@ -667,10 +681,9 @@
     return "\uD83C\uDF24\uFE0F";
   }
 
-  // Format score relative to par: E, -5, +2
   function formatToPar(val) {
     const n = Number(val);
-    if (!Number.isFinite(n)) return String(val || "");
+    if (!Number.isFinite(n)) return String(val ?? "");
     if (n === 0) return "E";
     return n > 0 ? `+${n}` : String(n);
   }
@@ -682,46 +695,62 @@
     return "even";
   }
 
-  // Rank medal class
-  function rankClass(pos) {
+  function rankMedalClass(pos) {
     if (pos === 1) return "gold";
     if (pos === 2) return "silver";
     if (pos === 3) return "bronze";
     return "";
   }
 
-  // Parse ESPN PGA scoreboard events into a tidy competitor list
+  function pgaRoundLabel(status, isLive, isPost) {
+    const period = Number(status?.period || 0);
+    const shortDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
+    let roundNum = period;
+    const detailMatch = shortDetail.match(/round\s*(\d)/i);
+    if (detailMatch) roundNum = Number(detailMatch[1]);
+    if (!roundNum) return shortDetail || "";
+    const ordinals = ["1st", "2nd", "3rd", "4th"];
+    const roundOrd = ordinals[roundNum - 1] || `R${roundNum}`;
+    if (isLive) return `${roundOrd} Round \u00b7 In Progress`;
+    if (isPost) return `${roundOrd} Round \u00b7 Complete`;
+    return `${roundOrd} Round`;
+  }
+
   function parsePGACompetitors(events) {
-    // ESPN PGA: competitors live on the event itself, not competitions[]
+    // Only use the FIRST event — the main PGA tournament for the week.
+    // Ignores secondary simultaneous events (e.g. opposite-field events).
+    const ev   = (events || [])[0];
+    const comp = ev?.competitions?.[0];
     const competitors = [];
-    for (const ev of (events || [])) {
-      const comp = ev?.competitions?.[0];
-      for (const c of (comp?.competitors || [])) {
-        const status = String(c?.status?.type?.state || c?.status || "").toLowerCase();
-        const isCut = status === "cut" || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("cut");
-        const isWD  = status === "wd"  || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("wd");
-        const posRaw = c?.linescores ? null : null; // we use sortOrder for position
-        competitors.push({
-          id:          String(c?.athlete?.id || c?.id || ""),
-          name:        String(c?.athlete?.displayName || c?.athlete?.fullName || ""),
-          country:     String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
-          toPar:       c?.score ?? c?.statistics?.find?.(s => s.name === "scoreToPar")?.displayValue ?? null,
-          todayScore:  c?.linescores?.slice(-1)?.[0]?.displayValue ?? c?.statistics?.find?.(s => s.name === "scoreToday")?.displayValue ?? null,
-          position:    Number(c?.sortOrder ?? c?.status?.position?.id ?? 999),
-          displayPos:  String(c?.status?.position?.displayName || c?.status?.type?.shortDetail || ""),
-          thru:        String(c?.statistics?.find?.(s => s.name === "thru")?.displayValue || c?.status?.type?.shortDetail || ""),
-          isCut,
-          isWD,
-          rounds:      (c?.linescores || []).map(l => l.displayValue),
-        });
-      }
+    for (const c of (comp?.competitors || [])) {
+      const name = String(c?.athlete?.displayName || c?.athlete?.fullName || "").trim();
+      if (!name) continue;
+      // position: c.order is the leaderboard rank (1-based integer)
+      const position = Number(c?.order ?? 999);
+      // toPar: c.score is a string like "-14", "0", "3"
+      const toParNum = (c?.score !== undefined && c?.score !== null && c?.score !== "")
+        ? Number(c.score) : null;
+      // todayScore: last linescore with a non-null displayValue
+      const validLS = (c?.linescores || []).filter(
+        l => l?.period > 0 && l?.displayValue !== null && l?.displayValue !== undefined && l?.displayValue !== ""
+      );
+      const todayRaw = validLS.length > 0
+        ? validLS.sort((a, b) => Number(b.period) - Number(a.period))[0]?.displayValue
+        : null;
+      const todayNum = (todayRaw !== null && todayRaw !== undefined) ? Number(todayRaw) : null;
+      competitors.push({
+        id:         String(c?.athlete?.id || c?.id || ""),
+        name,
+        country:    String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
+        toPar:      Number.isFinite(toParNum)  ? toParNum  : null,
+        todayScore: Number.isFinite(todayNum)  ? todayNum  : null,
+        position:   Number.isFinite(position)  ? position  : 999,
+        isCut:      false,
+        isWD:       false,
+        rounds:     validLS.sort((a,b) => a.period - b.period).map(l => l.displayValue),
+      });
     }
-    // Sort by position, cut/WD last
-    competitors.sort((a, b) => {
-      if (a.isCut !== b.isCut) return a.isCut ? 1 : -1;
-      if (a.isWD  !== b.isWD)  return a.isWD  ? 1 : -1;
-      return a.position - b.position;
-    });
+    competitors.sort((a, b) => a.position - b.position);
     return competitors;
   }
 
@@ -734,7 +763,6 @@
       const hi  = Math.round(data?.daily?.temperature_2m_max?.[0] ?? 0);
       const lo  = Math.round(data?.daily?.temperature_2m_min?.[0] ?? 0);
       const wmo = Number(data?.daily?.weathercode?.[0] ?? 0);
-      // WMO codes → readable condition
       const cond = wmoToCondition(wmo);
       return { hi, lo, condition: cond, icon: weatherIcon(cond) };
     } catch { return null; }
@@ -754,7 +782,6 @@
     return "Partly Cloudy";
   }
 
-  // Try to geocode the venue city/state to get lat/lon
   async function geocodeVenue(city, stateOrCountry) {
     if (!city) return null;
     try {
@@ -771,12 +798,11 @@
     const container = document.getElementById("scoresContainer");
     if (!container) return;
 
-    // ── Pull tournament meta from first event ──
     const firstEv   = events?.[0];
     const comp       = firstEv?.competitions?.[0];
     const tournName  = String(
       firstEv?.name || firstEv?.shortName ||
-      comp?.name    || "PGA Tour"
+      comp?.name || "PGA Tour"
     );
     const venue      = comp?.venue;
     const venueCity  = String(venue?.address?.city  || "").trim();
@@ -785,43 +811,18 @@
     const lat = venue?.address?.latitude  || null;
     const lon = venue?.address?.longitude || null;
 
-    // ── Status ──
     const status   = comp?.status;
     const stateStr = String(status?.type?.state || "").toLowerCase();
     const isLive   = stateStr === "in";
     const isPost   = stateStr === "post";
     const stDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
 
-    // ── "Show results the day after" logic ──
-    // If isPost and the user is viewing the day AFTER the tournament ended,
-    // we also show the final board — we just skip loading for tomorrow+.
-    // (No extra logic needed here; the date picker drives date; ESPN keeps
-    //  yesterday's data accessible, so we just render whatever comes back.)
+    const roundLabel = pgaRoundLabel(status, isLive, isPost);
 
-    // ── Competitors ──
     const competitors = parsePGACompetitors(events);
     const top20       = competitors.filter(c => !c.isCut && !c.isWD).slice(0, 20);
     const cutPlayers  = competitors.filter(c => c.isCut || c.isWD).slice(0, 5);
 
-    // ── Tied rank display ──
-    // Only show the rank number for the first player at each position;
-    // subsequent tied players get a blank rank cell.
-    let lastPos = null;
-    let lastPosCount = 0;
-    const rankDisplays = top20.map((p, i) => {
-      const actualPos = i + 1; // visual rank 1..20
-      // Use position from data if clean, else sequential
-      const pos = p.position < 900 ? p.position : actualPos;
-      if (pos === lastPos) {
-        lastPosCount++;
-        return "";
-      }
-      lastPos = pos;
-      lastPosCount = 1;
-      return String(pos);
-    });
-
-    // ── Status pill ──
     let statusPillHTML = "";
     if (isLive) {
       statusPillHTML = `<div class="pgaStatusPill live">Live${stDetail ? " \u00b7 " + stDetail : ""}</div>`;
@@ -831,12 +832,20 @@
       statusPillHTML = `<div class="pgaStatusPill pre">${SD.escapeHtml(stDetail || "Upcoming")}</div>`;
     }
 
-    // ── Render hero immediately (weather loads async) ──
+    const roundBadgeHTML = roundLabel
+      ? `<div class="pgaRoundBadge">\u26F3 ${SD.escapeHtml(roundLabel)}</div>`
+      : "";
+
+    const rankDisplays = top20.map((p, i) => String(i + 1));
+
     container.innerHTML = `
 <div class="pgaHero">
   <div class="pgaTournamentName">${SD.escapeHtml(tournName)}</div>
   ${venueDisplay ? `<div class="pgaVenue">${SD.escapeHtml(venueDisplay)}</div>` : ""}
-  <div class="pgaStatusRow">${statusPillHTML}</div>
+  <div class="pgaStatusRow">
+    ${statusPillHTML}
+    ${roundBadgeHTML}
+  </div>
   <div id="pgaWeatherSlot"></div>
 </div>
 <div class="pgaLeaderboard">
@@ -847,35 +856,28 @@
     <div class="pgaLeaderHeaderCell right">Total</div>
   </div>
   ${top20.map((p, i) => {
-    const rankTxt   = rankDisplays[i];
-    const rClass    = rankTxt ? rankClass(p.position < 900 ? p.position : i+1) : "";
-    const totalCls  = toParClass(p.toPar);
-    const todayCls  = toParClass(p.todayScore);
-    const isT3      = (p.position < 900 ? p.position : i+1) <= 3;
+    const rankTxt  = rankDisplays[i];
+    const posNum   = i + 1;
+    const rMedal   = posNum <= 3 ? rankMedalClass(posNum) : "";
+    const totalCls = p.toPar !== null ? toParClass(p.toPar) : "";
+    const todayCls = p.todayScore !== null ? toParClass(p.todayScore) : "";
+    const isT3     = posNum <= 3;
+    const totalDisp = p.toPar !== null ? formatToPar(p.toPar) : "-";
+    const todayDisp = p.todayScore !== null ? formatToPar(p.todayScore) : "-";
     return `
 <div class="pgaLeaderRow${isT3 ? " top3" : ""}">
-  <div class="pgaRank${rClass ? " " + rClass : ""}">${SD.escapeHtml(rankTxt || "")}</div>
+  <div class="pgaRank${rMedal ? " " + rMedal : ""}">${SD.escapeHtml(rankTxt)}</div>
   <div class="pgaPlayerInfo">
     <div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div>
-    <div class="pgaPlayerMeta">${SD.escapeHtml([p.country, p.thru ? (isLive ? "Thru " + p.thru : p.thru) : ""].filter(Boolean).join(" \u00b7 "))}</div>
+    <div class="pgaPlayerMeta">${SD.escapeHtml([p.country].filter(Boolean).join(" \u00b7 "))}</div>
   </div>
-  <div class="pgaScoreToday${todayCls ? " " + todayCls : ""}">${SD.escapeHtml(formatToPar(p.todayScore))}</div>
-  <div class="pgaScoreTotal${totalCls ? " " + totalCls : ""}">${SD.escapeHtml(formatToPar(p.toPar))}</div>
+  <div class="pgaScoreToday${todayCls ? " " + todayCls : ""}">${SD.escapeHtml(todayDisp)}</div>
+  <div class="pgaScoreTotal${totalCls ? " " + totalCls : ""}">${SD.escapeHtml(totalDisp)}</div>
 </div>`;
   }).join("")}
-  ${cutPlayers.length ? `
-  <div class="pgaCutDivider"><div class="pgaCutDividerLine"></div><div class="pgaCutDividerLabel">Missed Cut / WD</div><div class="pgaCutDividerLine"></div></div>
-  ${cutPlayers.map(p => `
-<div class="pgaLeaderRow cut">
-  <div class="pgaRank"></div>
-  <div class="pgaPlayerInfo"><div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div><div class="pgaPlayerMeta">${SD.escapeHtml(p.country)}</div></div>
-  <div class="pgaScoreToday"></div>
-  <div class="pgaScoreTotal">${SD.escapeHtml(p.isWD ? "WD" : "CUT")}</div>
-</div>`).join("")}
-  ` : ""}
 </div>`;
 
-    // ── Weather: geocode then fetch (async, injects into slot) ──
+    // \u2500\u2500 Weather: async inject \u2500\u2500
     (async () => {
       try {
         let coords = (lat && lon) ? { lat, lon } : await geocodeVenue(venueCity, venueState);
@@ -896,32 +898,7 @@
     })();
   }
 
-  // ─── Conference hydration ─────────────────────────────────────────────────
-  async function hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events) {
-    if (!SD.isCollegeLeagueKey(leagueKey)) return;
-    const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
-    let teamIdToConf = cached ? cached.teamIdToConf : {};
-    if (!cached) {
-      const sampleIds = (events || []).slice(0, 8).map(ev => String(ev?.id || "")).filter(Boolean);
-      for (const eid of sampleIds) {
-        const partialMap = await SD.fetchConferenceMapFromSummary(league, eid);
-        Object.assign(teamIdToConf, partialMap);
-      }
-      if (Object.keys(teamIdToConf).length) SD.saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf);
-    }
-    for (const ev of (events || [])) {
-      const id = String(ev?.id || "");
-      const comp = ev?.competitions?.[0];
-      for (const c of (comp?.competitors || [])) {
-        const teamId = String(c?.team?.id || "");
-        const conf = teamIdToConf[teamId] || SD.getConferenceNameFromCompetitor(c) || "";
-        SD.applyConferenceMetaToDom(id, String(c?.homeAway || ""), conf, SD.getOverallRecordFromCompetitor(c));
-      }
-    }
-    return teamIdToConf;
-  }
-
-  // ─── Main load function ───────────────────────────────────────────────────
+  // ─── Main load function ───────────────────────────────────────────────
   window.loadScores = async function (forceRefresh) {
     stopLiveTicker();
     const leagueKey    = SD.getSavedLeagueKey();
@@ -947,7 +924,6 @@
     const activePill = document.querySelector(".scoresLeaguePill.active");
     if (activePill) activePill.scrollIntoView({ behavior: "instant", block: "nearest", inline: "center" });
 
-    // ── For PGA: if today has no games, try yesterday automatically ──
     let events = [];
     let usedDate = dateYYYYMMDD;
     try {
@@ -956,7 +932,6 @@
       events = data?.events || [];
 
       if (isPGA && !events.length) {
-        // Try yesterday — covers the "Monday morning after Sunday final" case
         const yesterday = shiftDate(dateYYYYMMDD, -1);
         const data2 = await SD.fetchJsonNoStore(SD.withLangRegion(league.endpoint(yesterday)));
         const yEvents = data2?.events || [];
