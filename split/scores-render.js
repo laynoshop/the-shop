@@ -382,6 +382,19 @@
     ufc:   "\uD83E\uDD4A UFC",
   };
 
+  // ─── League pill row scroll memory ────────────────────────────
+  let leagueRowScrollLeft = 0;
+
+  function saveLeagueRowScroll() {
+    const row = document.getElementById("scoresLeagueRow");
+    if (row) leagueRowScrollLeft = row.scrollLeft || 0;
+  }
+
+  function restoreLeagueRowScroll() {
+    const row = document.getElementById("scoresLeagueRow");
+    if (row) row.scrollLeft = leagueRowScrollLeft;
+  }
+
   // ─── Date helpers ──────────────────────────────────────────────
   function formatDateNav(yyyymmdd) {
     try {
@@ -445,13 +458,20 @@
   function bindLeaguePills() {
     const row = document.getElementById("scoresLeagueRow");
     if (!row) return;
+
+    // Track scroll position passively as the user scrolls
+    row.addEventListener("scroll", () => {
+      leagueRowScrollLeft = row.scrollLeft || 0;
+    }, { passive: true });
+
     row.addEventListener("click", e => {
       const pill = e.target.closest(".scoresLeaguePill");
       if (!pill) return;
       const key = pill.dataset.league;
       if (!key) return;
+      // Save current scroll position before the header is rebuilt
+      saveLeagueRowScroll();
       SD.setSavedLeagueKey(key);
-      pill.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
       window.loadScores(true);
     });
   }
@@ -1022,6 +1042,8 @@
 
     bindLeaguePills();
     bindDateNav();
+    // Restore the pill row scroll position so it stays where the user left it
+    restoreLeagueRowScroll();
 
     const container = document.getElementById("scoresContainer");
 
