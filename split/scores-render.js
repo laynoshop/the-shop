@@ -29,7 +29,6 @@
   border-bottom: 1px solid rgba(255,255,255,0.07);
   padding: 10px 14px 0;
   box-shadow: 0 4px 24px rgba(0,0,0,0.45);
-  transition: border-bottom-color 300ms ease;
 }
 
 /* Colored underline that matches the active league */
@@ -44,11 +43,10 @@
   opacity: 0.85;
 }
 
-/* Top row: title left, date-picker right */
+/* Top row: title left */
 .scoresHeaderTop {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -74,42 +72,6 @@
   margin-top: 2px;
 }
 
-.scoresHeaderRight {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-/* Date label pill */
-.scoresDatePill {
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(255,255,255,0.7);
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 999px;
-  padding: 5px 12px;
-  white-space: nowrap;
-  letter-spacing: 0.03em;
-}
-
-/* Calendar icon button (the datePickerWrap .iconBtn) */
-.scoresPageHeader .iconBtn {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 16px;
-  line-height: 1;
-  color: #fff;
-  min-width: 36px;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 /* Bottom row: league select scrollable pill tabs */
 .scoresLeagueRow {
   display: flex;
@@ -122,10 +84,8 @@
 }
 .scoresLeagueRow::-webkit-scrollbar { display: none; }
 
-/* Hide the native select; we'll build pill tabs */
-.scoresPageHeader .leagueSelect {
-  display: none;
-}
+/* Hide the native select; we build pill tabs */
+.scoresPageHeader .leagueSelect { display: none; }
 
 /* League pill tabs */
 .scoresLeaguePill {
@@ -146,11 +106,7 @@
   display: flex;
   align-items: center;
 }
-
-.scoresLeaguePill:active {
-  opacity: 0.7;
-}
-
+.scoresLeaguePill:active { opacity: 0.7; }
 .scoresLeaguePill.active {
   background: var(--scores-header-accent, rgba(187,0,0,0.75));
   border-color: var(--scores-header-accent, rgba(187,0,0,0.6));
@@ -158,36 +114,61 @@
   box-shadow: 0 0 12px var(--scores-header-accent, rgba(187,0,0,0.4));
 }
 
-/* Conference row (college only) */
-.scoresConfRow {
+/* ── Date navigator (sits between header and cards) ── */
+.scoresDateNav {
   display: flex;
   align-items: center;
-  gap: 6px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding: 6px 0 2px;
+  justify-content: center;
+  gap: 0;
+  padding: 10px 16px 6px;
 }
-.scoresConfRow::-webkit-scrollbar { display: none; }
-.scoresConfRow select {
-  font-size: 13px;
-  padding: 6px 10px;
+
+.scoresDateNavBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
   border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.07);
-  color: white;
-  outline: none;
-  max-width: 100%;
-  -webkit-appearance: none;
-  appearance: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 140ms ease, color 140ms ease;
+  user-select: none;
 }
+.scoresDateNavBtn:active {
+  background: rgba(255,255,255,0.13);
+  color: #fff;
+}
+
+.scoresDateNavLabel {
+  flex: 1;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 36px;
+}
+.scoresDateNavLabel:active { opacity: 0.7; }
 
 /* ── Scores container ── */
 .scoresContainer {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 10px 12px 80px;
+  padding: 4px 12px 80px;
 }
 
 /* ── Score card shell ── */
@@ -437,30 +418,54 @@
 
   // ─── League pill labels ────────────────────────────────────────────────────
   const LEAGUE_LABELS = {
-    ncaam: "🏀 NCAAB",
-    cfb:   "🏈 CFB",
-    nba:   "🏀 NBA",
-    nhl:   "🏒 NHL",
-    mls:   "⚽ MLS",
-    nfl:   "🏈 NFL",
-    mlb:   "⚾ MLB",
-    pga:   "⛳ PGA",
-    ufc:   "🥊 UFC",
+    ncaam: "\uD83C\uDFC0 NCAAB",
+    cfb:   "\uD83C\uDFC8 CFB",
+    nba:   "\uD83C\uDFC0 NBA",
+    nhl:   "\uD83C\uDFD2 NHL",
+    mls:   "\u26BD MLS",
+    nfl:   "\uD83C\uDFC8 NFL",
+    mlb:   "\u26BE MLB",
+    pga:   "\u26F3 PGA",
+    ufc:   "\uD83E\uDD4A UFC",
   };
 
+  // ─── Date helpers ─────────────────────────────────────────────────────────
+  // Format YYYYMMDD → "Saturday, May 9"
+  function formatDateNav(yyyymmdd) {
+    try {
+      const y = parseInt(yyyymmdd.slice(0,4), 10);
+      const m = parseInt(yyyymmdd.slice(4,6), 10) - 1;
+      const d = parseInt(yyyymmdd.slice(6,8), 10);
+      const dt = new Date(y, m, d);
+      const dayName  = dt.toLocaleDateString("en-US", { weekday: "long" });
+      const monthDay = dt.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+      return `${dayName}, ${monthDay}`;
+    } catch { return yyyymmdd; }
+  }
+
+  // Shift a YYYYMMDD string by +/- N days
+  function shiftDate(yyyymmdd, deltaDays) {
+    try {
+      const y = parseInt(yyyymmdd.slice(0,4), 10);
+      const m = parseInt(yyyymmdd.slice(4,6), 10) - 1;
+      const d = parseInt(yyyymmdd.slice(6,8), 10);
+      const dt = new Date(y, m, d);
+      dt.setDate(dt.getDate() + deltaDays);
+      const ny = dt.getFullYear();
+      const nm = String(dt.getMonth() + 1).padStart(2, "0");
+      const nd = String(dt.getDate()).padStart(2, "0");
+      return `${ny}${nm}${nd}`;
+    } catch { return yyyymmdd; }
+  }
+
   // ─── Build header HTML ─────────────────────────────────────────────────────
-  function buildHeaderHTML(leagueKey, dateYYYYMMDD, color, isCollege, savedConf) {
+  function buildHeaderHTML(leagueKey, color) {
     const leagueLabel = LEAGUE_LABELS[leagueKey] || leagueKey.toUpperCase();
-    const datePretty  = SD.yyyymmddToPretty(dateYYYYMMDD);
 
     const pillsHTML = (SD.LEAGUES || []).map(l => {
       const isActive = l.key === leagueKey;
       return `<button class="scoresLeaguePill${isActive ? " active" : ""}" data-league="${SD.escapeHtml(l.key)}" type="button">${SD.escapeHtml(LEAGUE_LABELS[l.key] || l.key.toUpperCase())}</button>`;
     }).join("");
-
-    const confRowHTML = isCollege
-      ? `<div class="scoresConfRow">${SD.buildConferenceSelectHTML([], savedConf, true)}</div>`
-      : "";
 
     return `
 <div class="scoresPageHeader" style="--scores-header-accent:${SD.escapeHtml(color)}">
@@ -469,15 +474,21 @@
       ${SD.escapeHtml(leagueLabel)}
       <span>Scores</span>
     </div>
-    <div class="scoresHeaderRight">
-      <div class="scoresDatePill" id="scoresDatePill">${SD.escapeHtml(datePretty)}</div>
-      ${SD.buildCalendarButtonHTML()}
-    </div>
   </div>
   <div class="scoresLeagueRow" id="scoresLeagueRow">
     ${pillsHTML}
   </div>
-  ${confRowHTML}
+</div>
+`;
+  }
+
+  // ─── Build date navigator HTML (outside sticky header, above cards) ────────
+  function buildDateNavHTML(dateYYYYMMDD) {
+    return `
+<div class="scoresDateNav" id="scoresDateNav">
+  <button class="scoresDateNavBtn" id="scoresDatePrev" type="button" aria-label="Previous day">&#8249;</button>
+  <div class="scoresDateNavLabel" id="scoresDateNavLabel">${SD.escapeHtml(formatDateNav(dateYYYYMMDD))}</div>
+  <button class="scoresDateNavBtn" id="scoresDateNext" type="button" aria-label="Next day">&#8250;</button>
 </div>
 `;
   }
@@ -492,10 +503,40 @@
       const key = pill.dataset.league;
       if (!key) return;
       SD.saveLeagueKey(key);
-      // Scroll active pill into view
       pill.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
       window.loadScores(true);
     });
+  }
+
+  // ─── Bind date navigator arrows ───────────────────────────────────────────
+  function bindDateNav() {
+    const prev = document.getElementById("scoresDatePrev");
+    const next = document.getElementById("scoresDateNext");
+    const label = document.getElementById("scoresDateNavLabel");
+
+    function changeDate(delta) {
+      const current = SD.getSavedDateYYYYMMDD();
+      const shifted = shiftDate(current, delta);
+      SD.saveDateYYYYMMDD(shifted);
+      if (label) label.textContent = formatDateNav(shifted);
+      window.loadScores(true);
+    }
+
+    if (prev) prev.addEventListener("click", () => changeDate(-1));
+    if (next) next.addEventListener("click", () => changeDate(+1));
+
+    // Tap label = jump to today
+    if (label) {
+      label.addEventListener("click", () => {
+        const today = SD.todayYYYYMMDD ? SD.todayYYYYMMDD() : (() => {
+          const n = new Date();
+          return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,"0")}${String(n.getDate()).padStart(2,"0")}`;
+        })();
+        SD.saveDateYYYYMMDD(today);
+        label.textContent = formatDateNav(today);
+        window.loadScores(true);
+      });
+    }
   }
 
   // ─── Live ticker ──────────────────────────────────────────────────────────
@@ -734,7 +775,7 @@
     container.innerHTML = sorted.map(ev => buildScoreCardHTML(ev, leagueKey)).join("");
   }
 
-  // ─── Conference hydration ──────────────────────────────────────────────────
+  // ─── Conference hydration (kept for data integrity, no UI rendered) ────────
   async function hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events) {
     if (!SD.isCollegeLeagueKey(leagueKey)) return;
     const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
@@ -747,8 +788,6 @@
       }
       if (Object.keys(teamIdToConf).length) SD.saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf);
     }
-    const confs = SD.buildConferenceListFromMap(teamIdToConf);
-    if (confs.length) SD.updateConferenceSelectOptions(confs, leagueKey);
     for (const ev of (events || [])) {
       const id = String(ev?.id || "");
       const comp = ev?.competitions?.[0];
@@ -776,11 +815,11 @@
     const league = SD.getLeagueByKey(leagueKey);
     const color  = SD.LEAGUE_COLORS[leagueKey] || "#bb0000";
 
-    const isCollege   = SD.isCollegeLeagueKey(leagueKey);
-    const savedConf   = SD.getSavedConferenceFilter(leagueKey);
+    const isCollege = SD.isCollegeLeagueKey(leagueKey);
 
     const pageHTML = `
-      ${buildHeaderHTML(leagueKey, dateYYYYMMDD, color, isCollege, savedConf)}
+      ${buildHeaderHTML(leagueKey, color)}
+      ${buildDateNavHTML(dateYYYYMMDD)}
       <div id="scoresContainer" class="scoresContainer"></div>
     `;
 
@@ -788,6 +827,7 @@
     if (content) content.innerHTML = pageHTML;
 
     bindLeaguePills();
+    bindDateNav();
 
     // Scroll active pill into view on load
     const activePill = document.querySelector(".scoresLeaguePill.active");
@@ -804,28 +844,13 @@
       return;
     }
 
-    let filteredEvents = events;
+    renderScoreCards(events, leagueKey, dateYYYYMMDD, false);
+
     if (isCollege) {
-      const confFilterNorm = SD.norm(savedConf);
-      if (confFilterNorm) {
-        const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
-        const teamIdToConf = cached ? cached.teamIdToConf : {};
-        filteredEvents = SD.filterEventsByConferenceUsingMap(events, confFilterNorm, teamIdToConf);
-      }
-      hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events).then(map => {
-        if (map && savedConf) {
-          const norm2 = SD.norm(savedConf);
-          if (norm2) {
-            const reFiltered = SD.filterEventsByConferenceUsingMap(events, norm2, map);
-            renderScoreCards(reFiltered, leagueKey, dateYYYYMMDD, false);
-          }
-        }
-      }).catch(() => {});
+      hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events).catch(() => {});
     }
 
-    renderScoreCards(filteredEvents, leagueKey, dateYYYYMMDD, false);
-
-    SD.hydrateAllOdds(league, leagueKey, dateYYYYMMDD, filteredEvents).catch(() => {});
+    SD.hydrateAllOdds(league, leagueKey, dateYYYYMMDD, events).catch(() => {});
 
     startLiveTicker(league, leagueKey, dateYYYYMMDD);
   };
