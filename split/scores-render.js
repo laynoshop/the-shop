@@ -242,7 +242,7 @@
 }
 .pgaLeaderRow {
   display: grid;
-  grid-template-columns: 28px 1fr 52px 52px;
+  grid-template-columns: 36px 1fr 52px 52px;
   align-items: center;
   gap: 0;
   padding: 11px 12px;
@@ -258,7 +258,7 @@
 /* Header row */
 .pgaLeaderHeaderRow {
   display: grid;
-  grid-template-columns: 28px 1fr 52px 52px;
+  grid-template-columns: 36px 1fr 52px 52px;
   align-items: center;
   padding: 7px 12px;
   border-bottom: 1px solid rgba(255,255,255,0.10);
@@ -272,7 +272,7 @@
 
 /* Rank cell */
 .pgaRank {
-  font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.35);
+  font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.35);
   font-variant-numeric: tabular-nums; text-align: center; line-height: 1;
 }
 .pgaRank.gold { color: #ffd040; text-shadow: 0 0 8px rgba(255,200,0,0.5); }
@@ -454,7 +454,6 @@
   }
 
   // ─── MLB inning label helper ──────────────────────────────────────────────
-  // Returns "Top 8th", "Bot 3rd", etc. No clock shown for MLB.
   function mlbInningLabel(period, situation) {
     const n = Number(period || 0);
     if (!n) return "";
@@ -489,7 +488,6 @@
     const isPost = stateStr === "post";
     const isMLB  = leagueKey === "mlb";
 
-    // ── Always: away on top, home on bottom ──
     const home = competitors.find(c => String(c?.homeAway || "") === "home") || competitors[1] || {};
     const away = competitors.find(c => String(c?.homeAway || "") === "away") || competitors[0] || {};
     const homeTeam = home?.team || {};
@@ -518,6 +516,7 @@
 
     // ── Status line ──
     // MLB never shows a game clock — only inning label.
+    // Pre-game MLB: only show start time from the event date, never statusDetail (which can be "0:00").
     let statusLine = "";
     if (isLive) {
       let periodLabel = "";
@@ -526,16 +525,25 @@
       else if (leagueKey === "nhl")                              periodLabel = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
       else if (leagueKey === "nfl"  || leagueKey === "cfb")     periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
       else periodLabel = period ? `P${period}` : "";
-      // MLB has no clock; all other sports append displayClock if present
       const clockPart = (!isMLB && displayClock) ? ` \u00b7 ${displayClock}` : "";
       statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 " + periodLabel : ""}${clockPart}</div>`;
     } else if (isPost) {
-      statusLine = `<div class="statusFinal">Final${statusDetail && statusDetail.toLowerCase() !== "final" ? " \u00b7 " + statusDetail : ""}</div>`;
+      // MLB post-game: show "Final" + any extra detail (e.g. "F/10" for extra innings)
+      // but never show a raw clock string like "0:00"
+      let finalDetail = "";
+      if (statusDetail && statusDetail.toLowerCase() !== "final") {
+        // Skip anything that looks like a clock (digits:digits)
+        if (!/^\d+:\d+$/.test(statusDetail)) finalDetail = statusDetail;
+      }
+      statusLine = `<div class="statusFinal">Final${finalDetail ? " \u00b7 " + finalDetail : ""}</div>`;
     } else {
+      // Pre-game: show start time from the event date
+      // For MLB, never fall back to statusDetail (it can be "0:00")
       const gameDate = comp?.date || ev?.date || "";
       let timeStr = "";
       if (gameDate) { try { timeStr = new Date(gameDate).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch {} }
-      statusLine = `<div class="statusPre">${SD.escapeHtml(timeStr || statusDetail || "Scheduled")}</div>`;
+      const fallback = isMLB ? "Scheduled" : (statusDetail || "Scheduled");
+      statusLine = `<div class="statusPre">${SD.escapeHtml(timeStr || fallback)}</div>`;
     }
 
     function logoImg(url, abbr) {
@@ -626,8 +634,10 @@
             statusEl.textContent = `LIVE${pl ? " \u00b7 "+pl : ""}${clockPart}`;
           } else if (isPost) {
             const detail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
+            let finalDetail = "";
+            if (detail && detail.toLowerCase() !== "final" && !/^\d+:\d+$/.test(detail)) finalDetail = detail;
             statusEl.className = "statusFinal";
-            statusEl.textContent = `Final${detail && detail.toLowerCase() !== "final" ? " \u00b7 "+detail : ""}`;
+            statusEl.textContent = `Final${finalDetail ? " \u00b7 "+finalDetail : ""}`;
           }
         }
       }
@@ -700,16 +710,11 @@
   }
 
   // ── PGA round label ───────────────────────────────────────────────────────
-  // Builds a human label like "Round 3 Complete" or "Round 2 In Progress"
-  // from ESPN status data. ESPN uses status.period for the current round number.
   function pgaRoundLabel(status, isLive, isPost) {
-    // Try to get the round number. ESPN puts it in status.period for golf.
     const period = Number(status?.period || 0);
-    // Also try status.type.shortDetail which sometimes has "Round 3" or "Final Round"
     const shortDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
 
     let roundNum = period;
-    // If shortDetail has a round number, prefer it
     const detailMatch = shortDetail.match(/round\s*(\d)/i);
     if (detailMatch) roundNum = Number(detailMatch[1]);
 
@@ -718,9 +723,8 @@
     const ordinals = ["1st", "2nd", "3rd", "4th"];
     const roundOrd = ordinals[roundNum - 1] || `R${roundNum}`;
 
-    if (isLive)      return `${roundOrd} Round · In Progress`;
-    if (isPost)      return `${roundOrd} Round · Complete`;
-    // Pre-round: "3rd Round" upcoming
+    if (isLive) return `${roundOrd} Round \u00b7 In Progress`;
+    if (isPost) return `${roundOrd} Round \u00b7 Complete`;
     return `${roundOrd} Round`;
   }
 
@@ -730,52 +734,71 @@
     for (const ev of (events || [])) {
       const comp = ev?.competitions?.[0];
       for (const c of (comp?.competitors || [])) {
-        const status = String(c?.status?.type?.state || c?.status || "").toLowerCase();
-        const isCut = status === "cut" || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("cut");
-        const isWD  = status === "wd"  || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("wd");
+        const rawStatus   = String(c?.status?.type?.state || c?.status || "").toLowerCase();
+        const shortDetail = String(c?.status?.type?.shortDetail || "").trim();
+        const isCut = rawStatus === "cut" || shortDetail.toLowerCase().includes("cut");
+        const isWD  = rawStatus === "wd"  || shortDetail.toLowerCase().includes("wd");
+
+        // ESPN's human-readable position display — "1", "T6", "T12", etc.
+        const displayPos = String(
+          c?.status?.position?.displayName ||
+          c?.curatedRank?.displayName ||
+          c?.position?.displayName ||
+          c?.place ||
+          ""
+        ).trim();
+
+        // Numeric position for sorting — parse from displayPos ("T6" → 6) or explicit field
+        let numericPosition = Number(
+          c?.status?.position?.id ??
+          c?.curatedRank?.current ??
+          c?.position?.id ??
+          c?.place
+        );
+        if (!Number.isFinite(numericPosition) || numericPosition <= 0) {
+          const m = displayPos.match(/\d+/);
+          numericPosition = m ? Number(m[0]) : Infinity;
+        }
+
         competitors.push({
           id:         String(c?.athlete?.id || c?.id || ""),
           name:       String(c?.athlete?.displayName || c?.athlete?.fullName || ""),
           country:    String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
           toPar:      c?.score ?? c?.statistics?.find?.(s => s.name === "scoreToPar")?.displayValue ?? null,
           todayScore: c?.linescores?.slice(-1)?.[0]?.displayValue ?? c?.statistics?.find?.(s => s.name === "scoreToday")?.displayValue ?? null,
-          // ESPN sortOrder is a float like 1.0, 2.0, 3.0 — use it as the real position
-          position:   Number(c?.sortOrder ?? c?.status?.position?.id ?? 999),
-          displayPos: String(c?.status?.position?.displayName || c?.status?.type?.shortDetail || ""),
-          thru:       String(c?.statistics?.find?.(s => s.name === "thru")?.displayValue || c?.status?.type?.shortDetail || ""),
+          position:   numericPosition,
+          displayPos,
+          thru:       String(c?.statistics?.find?.(s => s.name === "thru")?.displayValue || shortDetail || ""),
           isCut,
           isWD,
           rounds:     (c?.linescores || []).map(l => l.displayValue),
         });
       }
     }
+
     competitors.sort((a, b) => {
       if (a.isCut !== b.isCut) return a.isCut ? 1 : -1;
       if (a.isWD  !== b.isWD)  return a.isWD  ? 1 : -1;
-      return a.position - b.position;
+      if (a.position !== b.position) return a.position - b.position;
+      // Secondary sort: toPar (lower is better)
+      const aPar = Number(a.toPar), bPar = Number(b.toPar);
+      if (Number.isFinite(aPar) && Number.isFinite(bPar) && aPar !== bPar) return aPar - bPar;
+      return a.name.localeCompare(b.name);
     });
+
     return competitors;
   }
 
-  // ── Tied rank display ─────────────────────────────────────────────────────
-  // Groups competitors by their ESPN sortOrder position.
-  // First person in each group shows the rank number; tied players show blank.
-  // The NEXT distinct rank number is the count of all players above (e.g. if
-  // 4 people tie for 2nd the next visible rank shown is 6, not 5).
+  // ── PGA rank display ──────────────────────────────────────────────────────
+  // Use ESPN's own displayPos directly ("1", "T6", "T12").
+  // Only fall back to numeric if displayPos is missing.
   function buildTiedRankDisplays(players) {
-    const rankDisplays = [];
-    // Group by exact position value
-    const seen = new Map(); // position -> first index where it appeared
-    for (let i = 0; i < players.length; i++) {
-      const pos = players[i].position;
-      if (!seen.has(pos)) {
-        seen.set(pos, i);
-        rankDisplays.push(String(Math.round(pos)));
-      } else {
-        rankDisplays.push(""); // tied — blank
-      }
-    }
-    return rankDisplays;
+    return players.map(p => {
+      const raw = String(p?.displayPos || "").trim();
+      if (raw) return raw;
+      if (Number.isFinite(p?.position) && p.position !== Infinity) return String(Math.round(p.position));
+      return "";
+    });
   }
 
   async function fetchPGAWeather(lat, lon) {
@@ -821,7 +844,6 @@
     const container = document.getElementById("scoresContainer");
     if (!container) return;
 
-    // ── Tournament meta ──
     const firstEv   = events?.[0];
     const comp       = firstEv?.competitions?.[0];
     const tournName  = String(firstEv?.name || firstEv?.shortName || comp?.name || "PGA Tour");
@@ -832,25 +854,20 @@
     const lat = venue?.address?.latitude  || null;
     const lon = venue?.address?.longitude || null;
 
-    // ── Status ──
     const status   = comp?.status;
     const stateStr = String(status?.type?.state || "").toLowerCase();
     const isLive   = stateStr === "in";
     const isPost   = stateStr === "post";
     const stDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
 
-    // ── Round label ──
     const roundLabel = pgaRoundLabel(status, isLive, isPost);
 
-    // ── Competitors ──
     const competitors = parsePGACompetitors(events);
     const top20       = competitors.filter(c => !c.isCut && !c.isWD).slice(0, 20);
     const cutPlayers  = competitors.filter(c => c.isCut || c.isWD).slice(0, 5);
 
-    // ── Tied rank displays — keyed by actual ESPN position, not array index ──
     const rankDisplays = buildTiedRankDisplays(top20);
 
-    // ── Status pill ──
     let statusPillHTML = "";
     if (isLive) {
       statusPillHTML = `<div class="pgaStatusPill live">Live${stDetail ? " \u00b7 " + stDetail : ""}</div>`;
@@ -860,12 +877,10 @@
       statusPillHTML = `<div class="pgaStatusPill pre">${SD.escapeHtml(stDetail || "Upcoming")}</div>`;
     }
 
-    // ── Round badge (only show if we have a meaningful label) ──
     const roundBadgeHTML = roundLabel
       ? `<div class="pgaRoundBadge">\u26F3 ${SD.escapeHtml(roundLabel)}</div>`
       : "";
 
-    // ── Render hero immediately ──
     container.innerHTML = `
 <div class="pgaHero">
   <div class="pgaTournamentName">${SD.escapeHtml(tournName)}</div>
@@ -885,12 +900,15 @@
   </div>
   ${top20.map((p, i) => {
     const rankTxt  = rankDisplays[i];
-    // Medal class only on the first player at each top-3 position
-    const posNum   = Math.round(p.position);
-    const rMedal   = rankTxt ? rankMedalClass(posNum) : "";
+    // Numeric position from displayPos for medal logic ("T3" → 3, "1" → 1)
+    const posNum   = (() => {
+      const m = rankTxt.match(/\d+/);
+      return m ? Number(m[0]) : (Number.isFinite(p.position) ? Math.round(p.position) : 999);
+    })();
+    const rMedal   = posNum <= 3 ? rankMedalClass(posNum) : "";
     const totalCls = toParClass(p.toPar);
     const todayCls = toParClass(p.todayScore);
-    const isT3     = posNum <= 3 && !!rankTxt; // only highlight the first at that position
+    const isT3     = posNum <= 3;
     return `
 <div class="pgaLeaderRow${isT3 ? " top3" : ""}">
   <div class="pgaRank${rMedal ? " " + rMedal : ""}">${SD.escapeHtml(rankTxt || "")}</div>
