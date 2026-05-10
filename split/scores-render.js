@@ -18,6 +18,170 @@
     style.id = "__scoresRenderStyles";
     style.textContent = `
 
+/* ── Scores page header ── */
+.scoresPageHeader {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(13,10,10,0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 10px 14px 0;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+  transition: border-bottom-color 300ms ease;
+}
+
+/* Colored underline that matches the active league */
+.scoresPageHeader::after {
+  content: "";
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  margin-top: 10px;
+  background: var(--scores-header-accent, rgba(187,0,0,0.8));
+  box-shadow: 0 0 10px var(--scores-header-accent, rgba(187,0,0,0.6));
+  opacity: 0.85;
+}
+
+/* Top row: title left, date-picker right */
+.scoresHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.scoresHeaderTitle {
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scoresHeaderTitle span {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.45);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.scoresHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Date label pill */
+.scoresDatePill {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  padding: 5px 12px;
+  white-space: nowrap;
+  letter-spacing: 0.03em;
+}
+
+/* Calendar icon button (the datePickerWrap .iconBtn) */
+.scoresPageHeader .iconBtn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 16px;
+  line-height: 1;
+  color: #fff;
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Bottom row: league select scrollable pill tabs */
+.scoresLeagueRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.scoresLeagueRow::-webkit-scrollbar { display: none; }
+
+/* Hide the native select; we'll build pill tabs */
+.scoresPageHeader .leagueSelect {
+  display: none;
+}
+
+/* League pill tabs */
+.scoresLeaguePill {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.scoresLeaguePill:active {
+  opacity: 0.7;
+}
+
+.scoresLeaguePill.active {
+  background: var(--scores-header-accent, rgba(187,0,0,0.75));
+  border-color: var(--scores-header-accent, rgba(187,0,0,0.6));
+  color: #fff;
+  box-shadow: 0 0 12px var(--scores-header-accent, rgba(187,0,0,0.4));
+}
+
+/* Conference row (college only) */
+.scoresConfRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 6px 0 2px;
+}
+.scoresConfRow::-webkit-scrollbar { display: none; }
+.scoresConfRow select {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.07);
+  color: white;
+  outline: none;
+  max-width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* ── Scores container ── */
 .scoresContainer {
   display: flex;
@@ -40,11 +204,6 @@
   box-shadow:
     0 4px 16px rgba(0,0,0,0.35),
     inset 0 1px 0 rgba(255,255,255,0.06);
-}
-
-/* League color accent edge — injected via inline style on .scoreCard */
-.scoreCard[data-league-color] {
-  border-left-color: attr(data-league-color color, #555);
 }
 
 /* Live card: subtle red wash */
@@ -260,7 +419,7 @@
   text-overflow: ellipsis;
   line-height: 1.3;
 }
-.venueLine::before { content: "📍 "; }
+.venueLine::before { content: "\uD83D\uDCCD "; }
 
 /* ── Empty state ── */
 .emptyState {
@@ -275,6 +434,69 @@
     `;
     document.head.appendChild(style);
   })();
+
+  // ─── League pill labels ────────────────────────────────────────────────────
+  const LEAGUE_LABELS = {
+    ncaam: "🏀 NCAAB",
+    cfb:   "🏈 CFB",
+    nba:   "🏀 NBA",
+    nhl:   "🏒 NHL",
+    mls:   "⚽ MLS",
+    nfl:   "🏈 NFL",
+    mlb:   "⚾ MLB",
+    pga:   "⛳ PGA",
+    ufc:   "🥊 UFC",
+  };
+
+  // ─── Build header HTML ─────────────────────────────────────────────────────
+  function buildHeaderHTML(leagueKey, dateYYYYMMDD, color, isCollege, savedConf) {
+    const leagueLabel = LEAGUE_LABELS[leagueKey] || leagueKey.toUpperCase();
+    const datePretty  = SD.yyyymmddToPretty(dateYYYYMMDD);
+
+    const pillsHTML = (SD.LEAGUES || []).map(l => {
+      const isActive = l.key === leagueKey;
+      return `<button class="scoresLeaguePill${isActive ? " active" : ""}" data-league="${SD.escapeHtml(l.key)}" type="button">${SD.escapeHtml(LEAGUE_LABELS[l.key] || l.key.toUpperCase())}</button>`;
+    }).join("");
+
+    const confRowHTML = isCollege
+      ? `<div class="scoresConfRow">${SD.buildConferenceSelectHTML([], savedConf, true)}</div>`
+      : "";
+
+    return `
+<div class="scoresPageHeader" style="--scores-header-accent:${SD.escapeHtml(color)}">
+  <div class="scoresHeaderTop">
+    <div class="scoresHeaderTitle">
+      ${SD.escapeHtml(leagueLabel)}
+      <span>Scores</span>
+    </div>
+    <div class="scoresHeaderRight">
+      <div class="scoresDatePill" id="scoresDatePill">${SD.escapeHtml(datePretty)}</div>
+      ${SD.buildCalendarButtonHTML()}
+    </div>
+  </div>
+  <div class="scoresLeagueRow" id="scoresLeagueRow">
+    ${pillsHTML}
+  </div>
+  ${confRowHTML}
+</div>
+`;
+  }
+
+  // ─── Bind pill tab clicks ──────────────────────────────────────────────────
+  function bindLeaguePills() {
+    const row = document.getElementById("scoresLeagueRow");
+    if (!row) return;
+    row.addEventListener("click", e => {
+      const pill = e.target.closest(".scoresLeaguePill");
+      if (!pill) return;
+      const key = pill.dataset.league;
+      if (!key) return;
+      SD.saveLeagueKey(key);
+      // Scroll active pill into view
+      pill.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      window.loadScores(true);
+    });
+  }
 
   // ─── Live ticker ──────────────────────────────────────────────────────────
   let liveInterval = null;
@@ -368,17 +590,14 @@
     const eventId = String(ev?.id || "");
     const venueLine = SD.buildVenueLine(comp);
 
-    // League accent color
     const leagueColor = SD.LEAGUE_COLORS[leagueKey] || "#555";
 
-    // Series badge (playoffs)
     const isPlayoff = SD.PLAYOFF_LEAGUES.has(leagueKey);
     const seriesStatus = isPlayoff ? (comp?.series?.summary || comp?.series?.title || "") : "";
     const seriesBadge = seriesStatus
       ? `<div class="seriesBadge">${SD.escapeHtml(seriesStatus)}</div>`
       : "";
 
-    // Status line
     let statusLine = "";
     if (isLive) {
       let periodLabel = "";
@@ -387,10 +606,10 @@
       else if (leagueKey === "nfl"  || leagueKey === "cfb")   periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
       else if (leagueKey === "mlb") periodLabel = `Inn ${period}`;
       else periodLabel = period ? `P${period}` : "";
-      const clockPart = displayClock ? ` · ${displayClock}` : "";
-      statusLine = `<div class="statusLive">LIVE${periodLabel ? " · " + periodLabel : ""}${clockPart}</div>`;
+      const clockPart = displayClock ? ` \u00b7 ${displayClock}` : "";
+      statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 " + periodLabel : ""}${clockPart}</div>`;
     } else if (isPost) {
-      statusLine = `<div class="statusFinal">Final${statusDetail && statusDetail.toLowerCase() !== "final" ? " · " + statusDetail : ""}</div>`;
+      statusLine = `<div class="statusFinal">Final${statusDetail && statusDetail.toLowerCase() !== "final" ? " \u00b7 " + statusDetail : ""}</div>`;
     } else {
       const gameDate = comp?.date || ev?.date || "";
       let timeStr = "";
@@ -418,7 +637,6 @@
 
     const oddsPlaceholder = `<div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>`;
 
-    // Card classes
     let cardClasses = "scoreCard";
     if (isFavHome || isFavAway) cardClasses += " favCard";
     if (isLive) cardClasses += " cardLive";
@@ -477,15 +695,12 @@
         const home = competitors.find(c => String(c?.homeAway || "") === "home");
         const away = competitors.find(c => String(c?.homeAway || "") === "away");
 
-        // Toggle live class
         card.classList.toggle("cardLive", isLive);
 
-        // Update scores
         const scoreEls = card.querySelectorAll(".score");
         if (scoreEls[0]) scoreEls[0].textContent = String(away?.score ?? "");
         if (scoreEls[1]) scoreEls[1].textContent = String(home?.score ?? "");
 
-        // Update winner classes
         if (isPost) {
           const awayWinner = String(away?.winner || "") === "true";
           const homeWinner = String(home?.winner || "") === "true";
@@ -493,7 +708,6 @@
           if (scoreEls[1]) { scoreEls[1].classList.toggle("winner", homeWinner); scoreEls[1].classList.toggle("loser", !homeWinner); }
         }
 
-        // Update status line
         const statusEl = card.querySelector(".statusLive, .statusFinal, .statusPre");
         if (statusEl) {
           const displayClock = String(status?.displayClock || "").trim();
@@ -506,11 +720,11 @@
             else if (leagueKey === "mlb") periodLabel = `Inn ${period}`;
             else periodLabel = period ? `P${period}` : "";
             statusEl.className = "statusLive";
-            statusEl.textContent = `LIVE${periodLabel ? " · " + periodLabel : ""}${displayClock ? " · " + displayClock : ""}`;
+            statusEl.textContent = `LIVE${periodLabel ? " \u00b7 " + periodLabel : ""}${displayClock ? " \u00b7 " + displayClock : ""}`;
           } else if (isPost) {
             const detail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
             statusEl.className = "statusFinal";
-            statusEl.textContent = `Final${detail && detail.toLowerCase() !== "final" ? " · " + detail : ""}`;
+            statusEl.textContent = `Final${detail && detail.toLowerCase() !== "final" ? " \u00b7 " + detail : ""}`;
           }
         }
       }
@@ -560,26 +774,24 @@
     lastRenderedKey    = renderKey;
 
     const league = SD.getLeagueByKey(leagueKey);
-    const color  = SD.LEAGUE_COLORS[leagueKey] || "#444";
+    const color  = SD.LEAGUE_COLORS[leagueKey] || "#bb0000";
 
     const isCollege   = SD.isCollegeLeagueKey(leagueKey);
     const savedConf   = SD.getSavedConferenceFilter(leagueKey);
-    const confSelectHTML = isCollege ? SD.buildConferenceSelectHTML([], savedConf, true) : "";
 
-    const toolbarHTML = `
-      <div class="scoresToolbar" style="--league-color:${color}">
-        <div class="toolbarRow">
-          ${SD.buildLeagueSelectHTML(leagueKey)}
-          ${SD.buildCalendarButtonHTML()}
-        </div>
-        ${isCollege ? `<div class="toolbarRow">${confSelectHTML}</div>` : ""}
-        <div class="dateLabel">${SD.escapeHtml(SD.yyyymmddToPretty(dateYYYYMMDD))}</div>
-      </div>
+    const pageHTML = `
+      ${buildHeaderHTML(leagueKey, dateYYYYMMDD, color, isCollege, savedConf)}
       <div id="scoresContainer" class="scoresContainer"></div>
     `;
 
     const content = document.getElementById("content");
-    if (content) content.innerHTML = toolbarHTML;
+    if (content) content.innerHTML = pageHTML;
+
+    bindLeaguePills();
+
+    // Scroll active pill into view on load
+    const activePill = document.querySelector(".scoresLeaguePill.active");
+    if (activePill) activePill.scrollIntoView({ behavior: "instant", block: "nearest", inline: "center" });
 
     let events = [];
     try {
