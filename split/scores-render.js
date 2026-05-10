@@ -153,12 +153,12 @@
     0 0 22px rgba(200,155,0,0.13), inset 0 1px 0 rgba(255,220,100,0.09);
 }
 .favRibbon {
-  position: absolute; top: 0; right: 0;
+  display: inline-flex; align-items: center;
   background: linear-gradient(135deg, rgba(200,160,0,0.85), rgba(240,190,30,0.9));
   color: #1a1200; font-size: 9px; font-weight: 900; letter-spacing: 0.09em;
-  text-transform: uppercase; padding: 3px 9px 3px 11px;
-  border-radius: 0 12px 0 10px; line-height: 1.4;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 2;
+  text-transform: uppercase; padding: 3px 9px;
+  border-radius: 5px; line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3); flex-shrink: 0; white-space: nowrap;
 }
 @keyframes scoreFlash {
   0%   { color: #ffd700; text-shadow: 0 0 16px rgba(255,210,0,0.9); }
@@ -630,13 +630,13 @@
 
     return `
 <div class="${cardClasses}" data-eventid="${SD.escapeHtml(eventId)}" style="border-left-color:${SD.escapeHtml(leagueColor)}">
-  ${isFavSpotlight ? `<div class="favRibbon">\u2B50 Your Team</div>` : ""}
   ${seriesBadge}
   <div class="cardHeader">
     ${statusLine}
     <div class="cardHeaderRight">
-      <div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>
       ${broadcastName ? `<div class="broadcastChip">${SD.escapeHtml(broadcastName)}</div>` : ""}
+      ${isFavSpotlight ? `<div class="favRibbon">\u2B50 Shop Team</div>` : ""}
+      <div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>
     </div>
   </div>
   <div class="matchup">
@@ -881,19 +881,6 @@
     }
     competitors.sort((a, b) => a.position - b.position);
     return competitors;
-  }
-
-  async function fetchPGAWeather(lat, lon) {
-    if (!lat || !lon) return null;
-    try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`;
-      const data = await SD.fetchJsonNoStore(url);
-      const hi  = Math.round(data?.daily?.temperature_2m_max?.[0] ?? 0);
-      const lo  = Math.round(data?.daily?.temperature_2m_min?.[0] ?? 0);
-      const wmo = Number(data?.daily?.weathercode?.[0] ?? 0);
-      const cond = wmoToCondition(wmo);
-      return { hi, lo, condition: cond, icon: weatherIcon(cond) };
-    } catch { return null; }
   }
 
   async function renderPGALeaderboard(events, league, leagueKey, dateYYYYMMDD) {
