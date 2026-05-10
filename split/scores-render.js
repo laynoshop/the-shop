@@ -134,7 +134,7 @@
   color: rgba(255,255,255,0.55); flex-shrink: 0; white-space: nowrap;
 }
 .cardHeaderRight {
-  display: flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 55%;
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 60%;
   overflow: hidden;
 }
 /* ── Win probability bar ── */
@@ -152,13 +152,21 @@
   box-shadow: 0 6px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(200,160,0,0.18),
     0 0 22px rgba(200,155,0,0.13), inset 0 1px 0 rgba(255,220,100,0.09);
 }
+/* ── Fav ribbon — full-width strip between header and matchup ── */
 .favRibbon {
-  display: inline-flex; align-items: center;
-  background: linear-gradient(135deg, rgba(200,160,0,0.85), rgba(240,190,30,0.9));
-  color: #1a1200; font-size: 9px; font-weight: 900; letter-spacing: 0.09em;
-  text-transform: uppercase; padding: 3px 9px;
-  border-radius: 5px; line-height: 1.4;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3); flex-shrink: 0; white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 4px 12px;
+  background: linear-gradient(90deg, rgba(200,160,0,0.22) 0%, rgba(200,160,0,0.08) 100%);
+  border-bottom: 1px solid rgba(200,160,0,0.18);
+  color: #f0c040;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.4;
 }
 @keyframes scoreFlash {
   0%   { color: #ffd700; text-shadow: 0 0 16px rgba(255,210,0,0.9); }
@@ -628,6 +636,11 @@
       </div>`;
     })();
 
+    // Fav ribbon — full-width strip, rendered between cardHeader and matchup
+    const favRibbonHTML = isFavSpotlight
+      ? `<div class="favRibbon">\u2B50 Shop Team</div>`
+      : "";
+
     return `
 <div class="${cardClasses}" data-eventid="${SD.escapeHtml(eventId)}" style="border-left-color:${SD.escapeHtml(leagueColor)}">
   ${seriesBadge}
@@ -635,10 +648,10 @@
     ${statusLine}
     <div class="cardHeaderRight">
       ${broadcastName ? `<div class="broadcastChip">${SD.escapeHtml(broadcastName)}</div>` : ""}
-      ${isFavSpotlight ? `<div class="favRibbon">\u2B50 Shop Team</div>` : ""}
       <div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>
     </div>
   </div>
+  ${favRibbonHTML}
   <div class="matchup">
     <div class="teamRow away${isFavAway ? " favTeam" : ""}">
       ${logoImg(awayLogoUrl, awayAbbr)}
