@@ -191,14 +191,6 @@
   background: rgba(80,180,80,0.12); border: 1px solid rgba(80,180,80,0.3); color: rgba(140,220,140,0.9);
 }
 
-/* Round completed badge */
-.pgaRoundBadge {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 4px 10px; border-radius: 999px;
-  background: rgba(255,215,50,0.1); border: 1px solid rgba(255,215,50,0.25); color: rgba(255,215,100,0.85);
-}
-
 /* Weather strip */
 .pgaWeather {
   display: flex;
@@ -454,11 +446,12 @@
   }
 
   // ─── MLB inning label helper ──────────────────────────────────────────────
-  // Returns "Top 8th", "Bot 3rd", etc. No clock shown for MLB.
+  // Returns "Top 8th", "Bottom 3rd", etc.
   function mlbInningLabel(period, situation) {
     const n = Number(period || 0);
     if (!n) return "";
     const suffix = n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
+    // ESPN situation: isTopHalfInning true = top, false/absent = bottom
     const isTop = situation?.isTopHalfInning !== false;
     return `${isTop ? "Top" : "Bot"} ${suffix}`;
   }
@@ -487,7 +480,6 @@
     const statusDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
     const isLive = stateStr === "in";
     const isPost = stateStr === "post";
-    const isMLB  = leagueKey === "mlb";
 
     // ── Always: away on top, home on bottom ──
     const home = competitors.find(c => String(c?.homeAway || "") === "home") || competitors[1] || {};
@@ -517,17 +509,15 @@
     const seriesBadge  = seriesStatus ? `<div class="seriesBadge">${SD.escapeHtml(seriesStatus)}</div>` : "";
 
     // ── Status line ──
-    // MLB never shows a game clock — only inning label.
     let statusLine = "";
     if (isLive) {
       let periodLabel = "";
-      if      (isMLB)                                            periodLabel = mlbInningLabel(period, situation);
+      if      (leagueKey === "mlb")                              periodLabel = mlbInningLabel(period, situation);
       else if (leagueKey === "nba"  || leagueKey === "ncaam")   periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
       else if (leagueKey === "nhl")                              periodLabel = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
       else if (leagueKey === "nfl"  || leagueKey === "cfb")     periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
       else periodLabel = period ? `P${period}` : "";
-      // MLB has no clock; all other sports append displayClock if present
-      const clockPart = (!isMLB && displayClock) ? ` \u00b7 ${displayClock}` : "";
+      const clockPart = displayClock ? ` \u00b7 ${displayClock}` : "";
       statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 " + periodLabel : ""}${clockPart}</div>`;
     } else if (isPost) {
       statusLine = `<div class="statusFinal">Final${statusDetail && statusDetail.toLowerCase() !== "final" ? " \u00b7 " + statusDetail : ""}</div>`;
@@ -586,7 +576,6 @@
       container.innerHTML = `<div class="emptyState">No games found for this date.</div>`;
       return;
     }
-    const isMLB = leagueKey === "mlb";
     if (isRefresh) {
       for (const ev of sorted) {
         const id = String(ev?.id || "");
@@ -616,14 +605,13 @@
           const period = Number(status?.period || 0);
           if (isLive) {
             let pl = "";
-            if      (isMLB)                                            pl = mlbInningLabel(period, situation);
+            if      (leagueKey === "mlb")                              pl = mlbInningLabel(period, situation);
             else if (leagueKey === "nba"  || leagueKey === "ncaam")   pl = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
             else if (leagueKey === "nhl")                              pl = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
             else if (leagueKey === "nfl"  || leagueKey === "cfb")     pl = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
             else pl = period ? `P${period}` : "";
-            const clockPart = (!isMLB && displayClock) ? " \u00b7 " + displayClock : "";
             statusEl.className = "statusLive";
-            statusEl.textContent = `LIVE${pl ? " \u00b7 "+pl : ""}${clockPart}`;
+            statusEl.textContent = `LIVE${pl ? " \u00b7 "+pl : ""}${displayClock ? " \u00b7 "+displayClock : ""}`;
           } else if (isPost) {
             const detail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
             statusEl.className = "statusFinal";
@@ -665,6 +653,7 @@
   //  PGA LEADERBOARD
   // ════════════════════════════════════════════════════════════════════════
 
+  // Weather icon based on ESPN condition string
   function weatherIcon(condition) {
     const c = String(condition || "").toLowerCase();
     if (c.includes("thunder") || c.includes("storm")) return "\u26C8\uFE0F";
@@ -678,6 +667,7 @@
     return "\uD83C\uDF24\uFE0F";
   }
 
+  // Format score relative to par: E, -5, +2
   function formatToPar(val) {
     const n = Number(val);
     if (!Number.isFinite(n)) return String(val || "");
@@ -692,40 +682,17 @@
     return "even";
   }
 
-  function rankMedalClass(pos) {
+  // Rank medal class
+  function rankClass(pos) {
     if (pos === 1) return "gold";
     if (pos === 2) return "silver";
     if (pos === 3) return "bronze";
     return "";
   }
 
-  // ── PGA round label ───────────────────────────────────────────────────────
-  // Builds a human label like "Round 3 Complete" or "Round 2 In Progress"
-  // from ESPN status data. ESPN uses status.period for the current round number.
-  function pgaRoundLabel(status, isLive, isPost) {
-    // Try to get the round number. ESPN puts it in status.period for golf.
-    const period = Number(status?.period || 0);
-    // Also try status.type.shortDetail which sometimes has "Round 3" or "Final Round"
-    const shortDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
-
-    let roundNum = period;
-    // If shortDetail has a round number, prefer it
-    const detailMatch = shortDetail.match(/round\s*(\d)/i);
-    if (detailMatch) roundNum = Number(detailMatch[1]);
-
-    if (!roundNum) return shortDetail || "";
-
-    const ordinals = ["1st", "2nd", "3rd", "4th"];
-    const roundOrd = ordinals[roundNum - 1] || `R${roundNum}`;
-
-    if (isLive)      return `${roundOrd} Round · In Progress`;
-    if (isPost)      return `${roundOrd} Round · Complete`;
-    // Pre-round: "3rd Round" upcoming
-    return `${roundOrd} Round`;
-  }
-
-  // ── Parse ESPN PGA scoreboard events into a tidy competitor list ──────────
+  // Parse ESPN PGA scoreboard events into a tidy competitor list
   function parsePGACompetitors(events) {
+    // ESPN PGA: competitors live on the event itself, not competitions[]
     const competitors = [];
     for (const ev of (events || [])) {
       const comp = ev?.competitions?.[0];
@@ -733,22 +700,23 @@
         const status = String(c?.status?.type?.state || c?.status || "").toLowerCase();
         const isCut = status === "cut" || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("cut");
         const isWD  = status === "wd"  || String(c?.status?.type?.shortDetail || "").toLowerCase().includes("wd");
+        const posRaw = c?.linescores ? null : null; // we use sortOrder for position
         competitors.push({
-          id:         String(c?.athlete?.id || c?.id || ""),
-          name:       String(c?.athlete?.displayName || c?.athlete?.fullName || ""),
-          country:    String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
-          toPar:      c?.score ?? c?.statistics?.find?.(s => s.name === "scoreToPar")?.displayValue ?? null,
-          todayScore: c?.linescores?.slice(-1)?.[0]?.displayValue ?? c?.statistics?.find?.(s => s.name === "scoreToday")?.displayValue ?? null,
-          // ESPN sortOrder is a float like 1.0, 2.0, 3.0 — use it as the real position
-          position:   Number(c?.sortOrder ?? c?.status?.position?.id ?? 999),
-          displayPos: String(c?.status?.position?.displayName || c?.status?.type?.shortDetail || ""),
-          thru:       String(c?.statistics?.find?.(s => s.name === "thru")?.displayValue || c?.status?.type?.shortDetail || ""),
+          id:          String(c?.athlete?.id || c?.id || ""),
+          name:        String(c?.athlete?.displayName || c?.athlete?.fullName || ""),
+          country:     String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
+          toPar:       c?.score ?? c?.statistics?.find?.(s => s.name === "scoreToPar")?.displayValue ?? null,
+          todayScore:  c?.linescores?.slice(-1)?.[0]?.displayValue ?? c?.statistics?.find?.(s => s.name === "scoreToday")?.displayValue ?? null,
+          position:    Number(c?.sortOrder ?? c?.status?.position?.id ?? 999),
+          displayPos:  String(c?.status?.position?.displayName || c?.status?.type?.shortDetail || ""),
+          thru:        String(c?.statistics?.find?.(s => s.name === "thru")?.displayValue || c?.status?.type?.shortDetail || ""),
           isCut,
           isWD,
-          rounds:     (c?.linescores || []).map(l => l.displayValue),
+          rounds:      (c?.linescores || []).map(l => l.displayValue),
         });
       }
     }
+    // Sort by position, cut/WD last
     competitors.sort((a, b) => {
       if (a.isCut !== b.isCut) return a.isCut ? 1 : -1;
       if (a.isWD  !== b.isWD)  return a.isWD  ? 1 : -1;
@@ -757,27 +725,7 @@
     return competitors;
   }
 
-  // ── Tied rank display ─────────────────────────────────────────────────────
-  // Groups competitors by their ESPN sortOrder position.
-  // First person in each group shows the rank number; tied players show blank.
-  // The NEXT distinct rank number is the count of all players above (e.g. if
-  // 4 people tie for 2nd the next visible rank shown is 6, not 5).
-  function buildTiedRankDisplays(players) {
-    const rankDisplays = [];
-    // Group by exact position value
-    const seen = new Map(); // position -> first index where it appeared
-    for (let i = 0; i < players.length; i++) {
-      const pos = players[i].position;
-      if (!seen.has(pos)) {
-        seen.set(pos, i);
-        rankDisplays.push(String(Math.round(pos)));
-      } else {
-        rankDisplays.push(""); // tied — blank
-      }
-    }
-    return rankDisplays;
-  }
-
+  // Fetch weather via Open-Meteo (free, no key). lat/lon from venue.
   async function fetchPGAWeather(lat, lon) {
     if (!lat || !lon) return null;
     try {
@@ -786,6 +734,7 @@
       const hi  = Math.round(data?.daily?.temperature_2m_max?.[0] ?? 0);
       const lo  = Math.round(data?.daily?.temperature_2m_min?.[0] ?? 0);
       const wmo = Number(data?.daily?.weathercode?.[0] ?? 0);
+      // WMO codes → readable condition
       const cond = wmoToCondition(wmo);
       return { hi, lo, condition: cond, icon: weatherIcon(cond) };
     } catch { return null; }
@@ -805,6 +754,7 @@
     return "Partly Cloudy";
   }
 
+  // Try to geocode the venue city/state to get lat/lon
   async function geocodeVenue(city, stateOrCountry) {
     if (!city) return null;
     try {
@@ -821,10 +771,13 @@
     const container = document.getElementById("scoresContainer");
     if (!container) return;
 
-    // ── Tournament meta ──
+    // ── Pull tournament meta from first event ──
     const firstEv   = events?.[0];
     const comp       = firstEv?.competitions?.[0];
-    const tournName  = String(firstEv?.name || firstEv?.shortName || comp?.name || "PGA Tour");
+    const tournName  = String(
+      firstEv?.name || firstEv?.shortName ||
+      comp?.name    || "PGA Tour"
+    );
     const venue      = comp?.venue;
     const venueCity  = String(venue?.address?.city  || "").trim();
     const venueState = String(venue?.address?.state || venue?.address?.country || "").trim();
@@ -839,16 +792,34 @@
     const isPost   = stateStr === "post";
     const stDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
 
-    // ── Round label ──
-    const roundLabel = pgaRoundLabel(status, isLive, isPost);
+    // ── "Show results the day after" logic ──
+    // If isPost and the user is viewing the day AFTER the tournament ended,
+    // we also show the final board — we just skip loading for tomorrow+.
+    // (No extra logic needed here; the date picker drives date; ESPN keeps
+    //  yesterday's data accessible, so we just render whatever comes back.)
 
     // ── Competitors ──
     const competitors = parsePGACompetitors(events);
     const top20       = competitors.filter(c => !c.isCut && !c.isWD).slice(0, 20);
     const cutPlayers  = competitors.filter(c => c.isCut || c.isWD).slice(0, 5);
 
-    // ── Tied rank displays — keyed by actual ESPN position, not array index ──
-    const rankDisplays = buildTiedRankDisplays(top20);
+    // ── Tied rank display ──
+    // Only show the rank number for the first player at each position;
+    // subsequent tied players get a blank rank cell.
+    let lastPos = null;
+    let lastPosCount = 0;
+    const rankDisplays = top20.map((p, i) => {
+      const actualPos = i + 1; // visual rank 1..20
+      // Use position from data if clean, else sequential
+      const pos = p.position < 900 ? p.position : actualPos;
+      if (pos === lastPos) {
+        lastPosCount++;
+        return "";
+      }
+      lastPos = pos;
+      lastPosCount = 1;
+      return String(pos);
+    });
 
     // ── Status pill ──
     let statusPillHTML = "";
@@ -860,20 +831,12 @@
       statusPillHTML = `<div class="pgaStatusPill pre">${SD.escapeHtml(stDetail || "Upcoming")}</div>`;
     }
 
-    // ── Round badge (only show if we have a meaningful label) ──
-    const roundBadgeHTML = roundLabel
-      ? `<div class="pgaRoundBadge">\u26F3 ${SD.escapeHtml(roundLabel)}</div>`
-      : "";
-
-    // ── Render hero immediately ──
+    // ── Render hero immediately (weather loads async) ──
     container.innerHTML = `
 <div class="pgaHero">
   <div class="pgaTournamentName">${SD.escapeHtml(tournName)}</div>
   ${venueDisplay ? `<div class="pgaVenue">${SD.escapeHtml(venueDisplay)}</div>` : ""}
-  <div class="pgaStatusRow">
-    ${statusPillHTML}
-    ${roundBadgeHTML}
-  </div>
+  <div class="pgaStatusRow">${statusPillHTML}</div>
   <div id="pgaWeatherSlot"></div>
 </div>
 <div class="pgaLeaderboard">
@@ -884,16 +847,14 @@
     <div class="pgaLeaderHeaderCell right">Total</div>
   </div>
   ${top20.map((p, i) => {
-    const rankTxt  = rankDisplays[i];
-    // Medal class only on the first player at each top-3 position
-    const posNum   = Math.round(p.position);
-    const rMedal   = rankTxt ? rankMedalClass(posNum) : "";
-    const totalCls = toParClass(p.toPar);
-    const todayCls = toParClass(p.todayScore);
-    const isT3     = posNum <= 3 && !!rankTxt; // only highlight the first at that position
+    const rankTxt   = rankDisplays[i];
+    const rClass    = rankTxt ? rankClass(p.position < 900 ? p.position : i+1) : "";
+    const totalCls  = toParClass(p.toPar);
+    const todayCls  = toParClass(p.todayScore);
+    const isT3      = (p.position < 900 ? p.position : i+1) <= 3;
     return `
 <div class="pgaLeaderRow${isT3 ? " top3" : ""}">
-  <div class="pgaRank${rMedal ? " " + rMedal : ""}">${SD.escapeHtml(rankTxt || "")}</div>
+  <div class="pgaRank${rClass ? " " + rClass : ""}">${SD.escapeHtml(rankTxt || "")}</div>
   <div class="pgaPlayerInfo">
     <div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div>
     <div class="pgaPlayerMeta">${SD.escapeHtml([p.country, p.thru ? (isLive ? "Thru " + p.thru : p.thru) : ""].filter(Boolean).join(" \u00b7 "))}</div>
@@ -914,7 +875,7 @@
   ` : ""}
 </div>`;
 
-    // ── Weather: async inject ──
+    // ── Weather: geocode then fetch (async, injects into slot) ──
     (async () => {
       try {
         let coords = (lat && lon) ? { lat, lon } : await geocodeVenue(venueCity, venueState);
@@ -933,6 +894,31 @@
 </div>`;
       } catch {}
     })();
+  }
+
+  // ─── Conference hydration ─────────────────────────────────────────────────
+  async function hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events) {
+    if (!SD.isCollegeLeagueKey(leagueKey)) return;
+    const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
+    let teamIdToConf = cached ? cached.teamIdToConf : {};
+    if (!cached) {
+      const sampleIds = (events || []).slice(0, 8).map(ev => String(ev?.id || "")).filter(Boolean);
+      for (const eid of sampleIds) {
+        const partialMap = await SD.fetchConferenceMapFromSummary(league, eid);
+        Object.assign(teamIdToConf, partialMap);
+      }
+      if (Object.keys(teamIdToConf).length) SD.saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf);
+    }
+    for (const ev of (events || [])) {
+      const id = String(ev?.id || "");
+      const comp = ev?.competitions?.[0];
+      for (const c of (comp?.competitors || [])) {
+        const teamId = String(c?.team?.id || "");
+        const conf = teamIdToConf[teamId] || SD.getConferenceNameFromCompetitor(c) || "";
+        SD.applyConferenceMetaToDom(id, String(c?.homeAway || ""), conf, SD.getOverallRecordFromCompetitor(c));
+      }
+    }
+    return teamIdToConf;
   }
 
   // ─── Main load function ───────────────────────────────────────────────────
@@ -961,6 +947,7 @@
     const activePill = document.querySelector(".scoresLeaguePill.active");
     if (activePill) activePill.scrollIntoView({ behavior: "instant", block: "nearest", inline: "center" });
 
+    // ── For PGA: if today has no games, try yesterday automatically ──
     let events = [];
     let usedDate = dateYYYYMMDD;
     try {
@@ -969,6 +956,7 @@
       events = data?.events || [];
 
       if (isPGA && !events.length) {
+        // Try yesterday — covers the "Monday morning after Sunday final" case
         const yesterday = shiftDate(dateYYYYMMDD, -1);
         const data2 = await SD.fetchJsonNoStore(SD.withLangRegion(league.endpoint(yesterday)));
         const yEvents = data2?.events || [];
