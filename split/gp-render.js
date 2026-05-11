@@ -431,8 +431,10 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   background: rgba(255,255,255,0.035);
   border: 1px solid rgba(255,255,255,0.06);
   transition: background 150ms ease;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.gpLeaderRow:active { background: rgba(255,255,255,0.06); }
+.gpLeaderRow:active { background: rgba(255,255,255,0.07); }
 
 /* Rank number circle */
 .gpLeaderRankBadge {
@@ -525,6 +527,155 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   border: 1px solid rgba(255,255,255,0.07);
   font-size: 13px; font-weight: 700;
   color: rgba(255,255,255,0.5);
+}
+
+/* ══════════════════════════════════════════════
+   PLAYER PICKS OVERLAY
+   ══════════════════════════════════════════════ */
+.gpPicksOverlayBackdrop {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: flex-end; justify-content: center;
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.16,1,0.3,1);
+  pointer-events: none;
+}
+.gpPicksOverlayBackdrop.gpOverlayVisible {
+  opacity: 1;
+  pointer-events: all;
+}
+.gpPicksOverlaySheet {
+  width: 100%; max-width: 480px;
+  background: #17161a;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-bottom: none;
+  border-radius: 22px 22px 0 0;
+  padding: 0 0 calc(env(safe-area-inset-bottom) + 24px);
+  box-shadow: 0 -8px 48px rgba(0,0,0,0.7);
+  transform: translateY(32px);
+  transition: transform 260ms cubic-bezier(0.16,1,0.3,1);
+  max-height: 82dvh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.gpPicksOverlayBackdrop.gpOverlayVisible .gpPicksOverlaySheet {
+  transform: translateY(0);
+}
+
+/* Drag handle */
+.gpOverlayHandle {
+  width: 40px; height: 4px; border-radius: 999px;
+  background: rgba(255,255,255,0.18);
+  margin: 12px auto 0;
+  flex-shrink: 0;
+}
+
+/* Header row inside sheet */
+.gpOverlayHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+.gpOverlayTitle {
+  display: flex; align-items: center; gap: 10px;
+}
+.gpOverlayAvatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 900; text-transform: uppercase;
+  flex-shrink: 0;
+}
+.gpOverlayName {
+  font-size: 17px; font-weight: 900; color: #fff; line-height: 1.2;
+}
+.gpOverlaySubtitle {
+  font-size: 11px; font-weight: 700;
+  color: rgba(255,255,255,0.38); letter-spacing: 0.06em;
+  text-transform: uppercase; margin-top: 2px;
+}
+.gpOverlayCloseBtn {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+  color: rgba(255,255,255,0.7);
+  font-size: 18px; line-height: 1;
+  transition: background 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.gpOverlayCloseBtn:active { background: rgba(255,255,255,0.16); }
+
+/* Scrollable picks list */
+.gpOverlayBody {
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  flex: 1;
+  padding: 10px 14px 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.gpOverlayBody::-webkit-scrollbar { display: none; }
+
+/* Each pick row */
+.gpOverlayPickRow {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.gpOverlayPickTeamLogo {
+  width: 36px; height: 36px; object-fit: contain;
+  border-radius: 8px; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10); padding: 3px;
+  flex-shrink: 0;
+}
+.gpOverlayPickTeamLogoPlaceholder {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.6);
+  flex-shrink: 0;
+}
+.gpOverlayPickTeamName {
+  flex: 1; min-width: 0;
+  font-size: 15px; font-weight: 800; color: #ddd;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gpOverlayPickGameLabel {
+  font-size: 10px; font-weight: 700;
+  color: rgba(255,255,255,0.3); letter-spacing: 0.04em;
+  margin-top: 2px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.gpOverlayPickResult {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1;
+}
+.gpOverlayPickResult.gpResultWin {
+  background: rgba(50,200,100,0.15);
+  border: 1px solid rgba(50,200,100,0.3);
+  color: #5ddb8a;
+}
+.gpOverlayPickResult.gpResultLoss {
+  background: rgba(220,60,60,0.12);
+  border: 1px solid rgba(220,60,60,0.28);
+  color: #e05555;
+}
+.gpOverlayPickResult.gpResultPending {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.3);
+}
+
+/* Empty state inside overlay */
+.gpOverlayEmpty {
+  padding: 32px 16px; text-align: center;
+  color: rgba(255,255,255,0.35); font-size: 14px; font-weight: 700;
 }
 
     `;
@@ -784,8 +935,6 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Pick breakdown helper ────────────────────────────────────────
-  // Builds a short string like "3 dogs · 2 favs" from the user's winning picks.
-  // Requires the leaderboard row to carry dogWins / favWins counts (set by gp-data.js).
   function pickBreakdown(u) {
     const dogs = Number(u?.dogWins ?? 0);
     const favs = Number(u?.favWins ?? 0);
@@ -794,6 +943,135 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     if (dogs) parts.push(`<span class="gpDogCount">🐶 ${dogs} dog${dogs !== 1 ? "s" : ""}</span>`);
     if (favs) parts.push(`<span class="gpFavCount">❤️ ${favs} fav${favs !== 1 ? "s" : ""}</span>`);
     return parts.join(" &middot; ");
+  }
+
+  // ─── Player Picks Overlay ─────────────────────────────────────────
+  // Builds the bottom-sheet overlay showing one player's picks for the week.
+  // `playerName`  — display name string
+  // `games`       — array of game objects (same shape as used by buildGameCard)
+  // `picksMap`    — { [eventId]: { side: "away"|"home" } }  (the player's picks for this week)
+  function gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap) {
+    const nm = String(playerName || "Someone");
+    const { bg, color } = avatarStyle(nm);
+    const list = Array.isArray(games) ? [...games].sort((a, b) => startMs(a) - startMs(b)) : [];
+
+    const rows = list.map(g => {
+      const eventId = String(g?.eventId || g?.id || "");
+      if (!eventId) return "";
+
+      const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "", logo: g?.awayLogo || "" };
+      const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
+      const awayLogo = String(g?.awayLogo || away?.logo || "").trim();
+      const homeLogo = String(g?.homeLogo || home?.logo || "").trim();
+
+      const pick = picksMap?.[eventId];
+      if (!pick?.side) {
+        // Player didn't pick this game — show as no pick
+        return `
+<div class="gpOverlayPickRow" style="opacity:0.45">
+  <div class="gpOverlayPickTeamLogoPlaceholder">–</div>
+  <div style="flex:1;min-width:0">
+    <div class="gpOverlayPickTeamName" style="color:rgba(255,255,255,0.35)">No pick</div>
+    <div class="gpOverlayPickGameLabel">${esc(safeTeam(away))} @ ${esc(safeTeam(home))}</div>
+  </div>
+  <div class="gpOverlayPickResult gpResultPending">–</div>
+</div>`;
+      }
+
+      const side       = String(pick.side);
+      const pickedTeam = side === "away" ? away : home;
+      const pickedLogo = side === "away" ? awayLogo : homeLogo;
+      const oppTeam    = side === "away" ? home     : away;
+
+      // Determine result from live state
+      const live      = g?.__live || g?.live || null;
+      const state     = String(live?.state || "").toLowerCase();
+      const isFinal   = state === "post";
+      const awayScore = Number(live?.awayScore ?? -1);
+      const homeScore = Number(live?.homeScore ?? -1);
+      let resultCls   = "gpResultPending";
+      let resultIcon  = "·";
+      if (isFinal && awayScore >= 0 && homeScore >= 0) {
+        const pickedWon = side === "away" ? awayScore > homeScore : homeScore > awayScore;
+        resultCls  = pickedWon ? "gpResultWin"  : "gpResultLoss";
+        resultIcon = pickedWon ? "✓"            : "✕";
+      }
+
+      const logoEl = pickedLogo
+        ? `<img class="gpOverlayPickTeamLogo" src="${esc(pickedLogo)}" alt="${esc(safeAbbr(pickedTeam))}" loading="lazy" width="36" height="36" onerror="this.style.display='none'"/>`
+        : `<div class="gpOverlayPickTeamLogoPlaceholder">${esc(safeAbbr(pickedTeam).slice(0,3))}</div>`;
+
+      return `
+<div class="gpOverlayPickRow">
+  ${logoEl}
+  <div style="flex:1;min-width:0">
+    <div class="gpOverlayPickTeamName">${esc(safeTeam(pickedTeam))}</div>
+    <div class="gpOverlayPickGameLabel">vs ${esc(safeTeam(oppTeam))}</div>
+  </div>
+  <div class="gpOverlayPickResult ${resultCls}">${resultIcon}</div>
+</div>`;
+    }).filter(Boolean).join("");
+
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpPicksOverlay" role="dialog" aria-modal="true" aria-label="${esc(nm)}'s picks">
+  <div class="gpPicksOverlaySheet" id="gpPicksOverlaySheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader">
+      <div class="gpOverlayTitle">
+        <div class="gpOverlayAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
+        <div>
+          <div class="gpOverlayName">${esc(nm)}</div>
+          <div class="gpOverlaySubtitle">This week's picks</div>
+        </div>
+      </div>
+      <button class="gpOverlayCloseBtn" id="gpPicksOverlayClose" aria-label="Close">✕</button>
+    </div>
+    <div class="gpOverlayBody">
+      ${rows || `<div class="gpOverlayEmpty">No picks to show.</div>`}
+    </div>
+  </div>
+</div>`;
+  }
+
+  // ─── Show / dismiss overlay (DOM management) ─────────────────────
+  function gpShowPlayerPicksOverlay(playerName, games, picksMap) {
+    // Remove any existing overlay first
+    const existing = document.getElementById("gpPicksOverlay");
+    if (existing) existing.remove();
+
+    // Inject into body
+    document.body.insertAdjacentHTML("beforeend",
+      gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap)
+    );
+
+    const backdrop = document.getElementById("gpPicksOverlay");
+    const sheet    = document.getElementById("gpPicksOverlaySheet");
+    const closeBtn = document.getElementById("gpPicksOverlayClose");
+    if (!backdrop) return;
+
+    // Animate in (next frame so CSS transition fires)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    // X button
+    closeBtn?.addEventListener("click", dismiss);
+
+    // Click outside the sheet (on the backdrop itself)
+    backdrop.addEventListener("click", (e) => {
+      if (!sheet.contains(e.target)) dismiss();
+    });
+
+    // Escape key
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
   }
 
   // ─── Leaderboard ─────────────────────────────────────────────────
@@ -861,8 +1139,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 </div>`;
     }).join("");
 
-    // ── Full Standings (everyone, rank 1+) ──
-    // We show ALL entries (including top 3) in the list so the full picture is clear.
+    // ── Full Standings — clicking a row opens the player picks overlay ──
     const allRows = list.map((u, i) => {
       const rank   = i + 1;
       const nm     = String(u?.name || "Someone");
@@ -874,15 +1151,15 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const record    = `${wins}–${losses}`;
       const breakdown = pickBreakdown(u);
 
-      // Subtle highlight for top 3 in the list
       const topStyle = rank <= 3
         ? rank === 1 ? " style=\"border-color:rgba(255,210,60,0.18);background:rgba(255,200,40,0.05)\""
         : rank === 2 ? " style=\"border-color:rgba(190,190,210,0.14)\""
         : " style=\"border-color:rgba(200,120,60,0.14)\""
         : "";
 
+      // Encode name safely for data attribute (esc handles quotes)
       return `
-<div class="gpLeaderRow"${topStyle}>
+<div class="gpLeaderRow" data-gpplayername="${esc(nm)}"${topStyle}>
   <div class="gpLeaderRankBadge">${esc(String(rank))}</div>
   <div class="gpLeaderAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
   <div class="gpLeaderInfo">
@@ -1066,6 +1343,34 @@ ${saveRow}`;
     checks.forEach(c => { c.checked = (mode === "all"); });
   }
 
+  // ─── Leaderboard row click → player overlay ──────────────────────
+  // Delegated listener: tapping any .gpLeaderRow fires the overlay.
+  // Requires window.__gpCurrentGames and window.__gpCurrentAllPicks to be
+  // kept up-to-date by groupPicks.js (the orchestrator) after each render.
+  if (!window.__GP_LEADER_ROW_BOUND) {
+    window.__GP_LEADER_ROW_BOUND = true;
+    document.addEventListener("click", (e) => {
+      const row = e.target.closest(".gpLeaderRow[data-gpplayername]");
+      if (!row) return;
+      const playerName = String(row.getAttribute("data-gpplayername") || "");
+      if (!playerName) return;
+
+      const games    = Array.isArray(window.__gpCurrentGames)    ? window.__gpCurrentGames    : [];
+      const allPicks = window.__gpCurrentAllPicks || {};
+
+      // allPicks shape: { [eventId]: [ { name, side }, ... ] }
+      // We need to flip it to { [eventId]: { side } } for this player
+      const picksMap = {};
+      for (const [eventId, arr] of Object.entries(allPicks)) {
+        if (!Array.isArray(arr)) continue;
+        const entry = arr.find(p => String(p?.name || "") === playerName);
+        if (entry?.side) picksMap[eventId] = { side: entry.side };
+      }
+
+      gpShowPlayerPicksOverlay(playerName, games, picksMap);
+    });
+  }
+
   // ─── Expose public API ──────────────────────────────────────────
   window.GP_Render = {
     renderPicksHeaderHTML,
@@ -1073,6 +1378,7 @@ ${saveRow}`;
     gpBuildAdminBuilderHTML,
     buildLeaderboardHTML,
     gpApplyAdminSelection,
+    gpShowPlayerPicksOverlay,
   };
 
 })();
