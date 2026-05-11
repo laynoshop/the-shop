@@ -204,6 +204,10 @@
       try { await (ESPN().gpHydrateOddsForGames     || (async () => {}))(games); } catch {}
     }
 
+    // ── expose current state for player picks overlay ──
+    window.__gpCurrentGames    = games;
+    window.__gpCurrentAllPicks = allPicks;
+
     // ── build HTML ──
     const weekSelectHTML = buildWeekSelectHTML(weeks, selectedId);
     const headerHTML     = (Render().renderPicksHeaderHTML || (() => ""))({
