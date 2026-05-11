@@ -200,7 +200,14 @@
   //   +2 pts for a correct underdog pick  (pick matched the team NOT favored)
   //   +1 pt  for a correct favored pick   (pick matched the favored team)
   //   Favorite is inferred from the spread stored in g.__odds / g.oddsDetails.
+  //   Handles ESPN-style odds strings like "PUR -5.5" by matching team
+  //   name and abbreviation tokens, not just "away"/"home" prefixes.
   //   If odds data is unavailable, all correct picks = +1 pt.
+  //
+  // Bug fixes (v2):
+  //   1. uid missing → fall back to name-based key so picks are never dropped.
+  //   2. Odds parser now matches team abbreviation/name tokens (e.g. "PUR")
+  //      so ESPN spread strings correctly resolve favSide.
   //
   // Each row in `rows` includes:
   //   { name, points, wins, losses, picks, dogWins, favWins }
@@ -238,18 +245,40 @@
         else if (homeNum > awayNum) winningSide = "home";
       }
 
+      // — resolve which side is favored from the odds string —
       let favSide = "";
       const oddsDetails = String(
         g?.__odds?.details || g?.oddsDetails || g?.odds?.details || ""
-      ).toLowerCase().trim();
-      if (oddsDetails) {
-        if      (oddsDetails.startsWith("away")) favSide = "away";
-        else if (oddsDetails.startsWith("home")) favSide = "home";
+      ).trim();
+      const oddsLower = oddsDetails.toLowerCase();
+      const awayName  = String(g?.awayTeam?.name || g?.awayName || "").trim();
+      const homeName  = String(g?.homeTeam?.name || g?.homeName || "").trim();
+      const awayAbbr  = String(g?.awayTeam?.abbreviation || g?.awayAbbr || "").trim();
+      const homeAbbr  = String(g?.homeTeam?.abbreviation || g?.homeAbbr || "").trim();
+
+      if (oddsLower) {
+        if      (oddsLower.startsWith("away")) favSide = "away";
+        else if (oddsLower.startsWith("home")) favSide = "home";
         else {
-          const awayName = String(g?.awayTeam?.name || g?.awayName || "").toLowerCase();
-          const homeName = String(g?.homeTeam?.name || g?.homeName || "").toLowerCase();
-          if (awayName && oddsDetails.includes(awayName)) favSide = "away";
-          else if (homeName && oddsDetails.includes(homeName)) favSide = "home";
+          // Match ESPN-style strings like "PUR -5.5" or "Ohio State -3"
+          // by testing each team's abbreviation and full name as word tokens.
+          const candidates = [
+            { side: "away", tokens: [awayAbbr, awayName] },
+            { side: "home", tokens: [homeAbbr, homeName] },
+          ];
+          outer:
+          for (const c of candidates) {
+            for (const rawToken of c.tokens) {
+              const token = String(rawToken || "").trim();
+              if (!token) continue;
+              const escaped = token.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const re = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i");
+              if (re.test(oddsLower)) {
+                favSide = c.side;
+                break outer;
+              }
+            }
+          }
         }
       }
 
@@ -257,7 +286,8 @@
     }
 
     // — tally scores per player —
-    // row shape: { name, points, wins, losses, picks, dogWins, favWins }
+    // FIX: use uid when present; fall back to name-based key so picks
+    // saved before uid was written to the doc are never silently dropped.
     const players = new Map();
 
     for (const [eventId, result] of Object.entries(gameResults)) {
@@ -265,15 +295,16 @@
       const eventPicks = Array.isArray(picks[eventId]) ? picks[eventId] : [];
 
       for (const p of eventPicks) {
-        const uid  = String(p?.uid  || "");
-        const name = String(p?.name || "Someone");
-        const side = String(p?.side || "");
-        if (!uid || !side) continue;
+        const uidRaw = String(p?.uid  || "").trim();
+        const name   = String(p?.name || "Someone").trim() || "Someone";
+        const side   = String(p?.side || "").trim();
+        const key    = uidRaw || `name:${name.toLowerCase()}`;
+        if (!side) continue;
 
-        if (!players.has(uid)) {
-          players.set(uid, { name, points: 0, wins: 0, losses: 0, picks: 0, dogWins: 0, favWins: 0 });
+        if (!players.has(key)) {
+          players.set(key, { name, points: 0, wins: 0, losses: 0, picks: 0, dogWins: 0, favWins: 0 });
         }
-        const row = players.get(uid);
+        const row = players.get(key);
         row.name = name; // keep name current
         row.picks++;
 
@@ -281,13 +312,13 @@
 
         if (side === winningSide) {
           row.wins++;
-          const pickedUnderdog = favSide && side !== favSide;
+          const pickedUnderdog = !!favSide && side !== favSide;
           if (pickedUnderdog) {
             row.points  += 2;
-            row.dogWins += 1;  // ← track underdog wins
+            row.dogWins += 1;
           } else {
             row.points  += 1;
-            row.favWins += 1;  // ← track favorite wins
+            row.favWins += 1;
           }
         } else {
           row.losses++;
