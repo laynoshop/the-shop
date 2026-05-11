@@ -91,7 +91,7 @@
         <button class="doorBtn" type="button" data-go="picks">Picks</button>
         <button class="doorBtn" type="button" data-go="beat">Beat TTUN</button>
         <button class="doorBtn" type="button" data-go="news">Top News</button>
-        <button class="doorBtn" type="button" data-go="golf">⛳ Putt Putt</button>
+        <button class="doorBtn" type="button" data-go="golf">&#x26F3; Putt Putt</button>
         <button class="doorBtn adminOnly" type="button" data-go="shop" style="display:none;">Shop</button>
         <button class="doorBtn adminOnly" type="button" id="piScoreboardBtn" style="display:none;">&#x1F4FA; Pi Scoreboard</button>
       </div>
@@ -144,7 +144,15 @@
   <script src="split/beat.js" defer onerror="__splitFail('split/beat.js')"></script>
   <script src="split/shop.js" defer onerror="__splitFail('split/shop.js')"></script>
   <script src="split/logout.js" defer onerror="__splitFail('split/logout.js')"></script>
+
+  <!-- group picks: sub-modules load first, orchestrator last -->
+  <script src="split/gp-identity.js" defer onerror="__splitFail('split/gp-identity.js')"></script>
+  <script src="split/gp-data.js" defer onerror="__splitFail('split/gp-data.js')"></script>
+  <script src="split/gp-espn.js" defer onerror="__splitFail('split/gp-espn.js')"></script>
+  <script src="split/gp-admin.js" defer onerror="__splitFail('split/gp-admin.js')"></script>
+  <script src="split/gp-render.js" defer onerror="__splitFail('split/gp-render.js')"></script>
   <script src="split/groupPicks.js" defer onerror="__splitFail('split/groupPicks.js')"></script>
+
   <script src="split/pi.js" defer onerror="__splitFail('split/pi.js')"></script>
   <script src="split/golf.js" defer onerror="__splitFail('split/golf.js')"></script>
 
