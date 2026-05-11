@@ -10,19 +10,24 @@
 
    Owns: constants, pending-picks state, week selector,
          renderPicks(), click/change handlers, auto-refresh.
+
+   Layout order for admin:
+     1. Header (sticky)
+     2. Admin Builder Panel   ← TOP of page
+     3. Game cards + leaderboard
 */
 
 (function () {
   "use strict";
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Constants
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   const PICKS_WEEK_KEY = "theShopPicksWeek_v1";
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Safe helpers (local copies for safety)
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   function safeGetLS(key) {
     try { return String(localStorage.getItem(key) || ""); } catch { return ""; }
   }
@@ -48,26 +53,26 @@
     return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
   }
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Sub-module delegates (fail-safe accessors)
-  // ─────────────────────────────────────────
-  const ID    = () => window.GP_Identity || {};
-  const Data  = () => window.GP_Data     || {};
-  const ESPN  = () => window.GP_ESPN     || {};
-  const Admin = () => window.GP_Admin    || {};
-  const Render= () => window.GP_Render   || {};
+  // ───────────────────────────────────────────
+  const ID     = () => window.GP_Identity || {};
+  const Data   = () => window.GP_Data     || {};
+  const ESPN   = () => window.GP_ESPN     || {};
+  const Admin  = () => window.GP_Admin    || {};
+  const Render = () => window.GP_Render   || {};
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Memory bucket (shared with sub-modules)
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   function gpMem() {
     window.__GP_MEM = window.__GP_MEM || {};
     return window.__GP_MEM;
   }
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Pending picks (in-memory, per session)
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   function gpPendingBucket() {
     window.__GP_PENDING = window.__GP_PENDING || {};
     return window.__GP_PENDING;
@@ -87,9 +92,9 @@
   // Expose for use in gp-render.js card builder
   window.gpPendingGet = gpPendingGet;
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Week selector helpers
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   function gpGetSelectedWeekId(metaPublic) {
     const saved = safeGetLS(PICKS_WEEK_KEY).trim();
     if (saved) return saved;
@@ -109,9 +114,9 @@
     return `<select class="smallSelect" data-gpweeksel="1" style="font-weight:900;">${options}</select>`;
   }
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // postRender — wire up save-button state
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   function postRender() {
     syncSaveBtnState();
   }
@@ -122,9 +127,15 @@
     btns.forEach(btn => { btn.disabled = !hasPending; });
   }
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Main renderer
-  // ─────────────────────────────────────────
+  //
+  // DOM order written:
+  //   1. Header  (gpPageHeader — sticky)
+  //   2. gpContainer
+  //        a. Admin builder panel  ← FIRST inside container (admin only)
+  //        b. Games + leaderboard
+  // ───────────────────────────────────────────
   async function renderPicks() {
     const el = document.getElementById("content");
     if (!el) return;
@@ -141,12 +152,9 @@
         rememberChecked: idObj.remember !== false
       });
       const hdr = (Render().renderPicksHeaderHTML || (() => ""))({
-        weekSelectHTML: "",
-        weekId:         "",
-        weekLabel:      "",
-        isAdmin
+        weekSelectHTML: "", weekId: "", weekLabel: "", isAdmin
       });
-      el.innerHTML = `<div class="gameList">${hdr}${gateHTML}</div>`;
+      el.innerHTML = `${hdr}<div class="gpContainer">${gateHTML}</div>`;
       return;
     }
 
@@ -166,27 +174,26 @@
       db = firebase.firestore();
       metaPublic = await (Data().gpGetMetaPublic || (async () => ({})))(db);
     } catch (err) {
-      el.innerHTML = `<div class="gameList"><div class="game"><div class="muted">Failed to connect: ${err?.message || err}</div></div></div>`;
+      el.innerHTML = `<div class="gpContainer"><div class="gpNotice">Failed to connect: ${String(err?.message || err)}</div></div>`;
       return;
     }
 
     // ── week resolution ──
-    const weeks      = Array.isArray(metaPublic?.weeks) ? metaPublic.weeks : [];
-    let selectedId   = gpGetSelectedWeekId(metaPublic);
-    const weekMeta   = weeks.find(w => String(w?.id) === selectedId) || weeks[weeks.length - 1] || null;
+    const weeks    = Array.isArray(metaPublic?.weeks) ? metaPublic.weeks : [];
+    let selectedId = gpGetSelectedWeekId(metaPublic);
+    const weekMeta = weeks.find(w => String(w?.id) === selectedId) || weeks[weeks.length - 1] || null;
     if (!selectedId && weekMeta) selectedId = String(weekMeta.id || "");
-
     const weekLabel = String(weekMeta?.label || selectedId || "");
     const published = !!weekMeta?.published;
 
     // ── games + my picks ──
-    let games  = [];
-    let myMap  = {};
+    let games    = [];
+    let myMap    = {};
     let allPicks = {};
     if (selectedId) {
       try {
-        games  = await (Data().gpGetSlateGames || (async () => []))(db, selectedId);
-        myMap  = await (Data().gpGetMyPicksMap || (async () => ({})))(db, selectedId, playerId);
+        games    = await (Data().gpGetSlateGames      || (async () => []))(db, selectedId);
+        myMap    = await (Data().gpGetMyPicksMap      || (async () => ({})))(db, selectedId, playerId);
         allPicks = await (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, selectedId);
       } catch {}
     }
@@ -206,24 +213,25 @@
       weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin
     });
 
+    // Admin builder goes FIRST inside gpContainer
     let adminBuilderHTML = "";
     if (isAdmin) {
-      const leagueKey  = mem.gpAdminLeagueKey  || getSavedLeagueKeySafe();
-      const dateLabel  = mem.gpAdminDateLabel  || getSavedDateYYYYMMDDSafe();
-      const avail      = mem.gpAvailableEvents || [];
+      const leagueKey = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
+      const dateLabel = mem.gpAdminDateLabel || getSavedDateYYYYMMDDSafe();
+      const avail     = mem.gpAvailableEvents || [];
       adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
         weekId: selectedId, weekLabel, availableEvents: avail,
         leagueKey, dateLabel, isAdmin
       });
     }
 
-    el.innerHTML = `<div class="gameList">${headerHTML}${cardsHTML}${adminBuilderHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${adminBuilderHTML}${cardsHTML}</div>`;
     postRender();
   }
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Click delegation
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   document.addEventListener("click", async (e) => {
     const t = e.target;
     if (!t) return;
@@ -232,18 +240,24 @@
     const pickBtn = t.closest("[data-gppick]");
     if (pickBtn && !pickBtn.disabled) {
       const side    = String(pickBtn.getAttribute("data-gppick") || "");
-      const eventId = String(pickBtn.getAttribute("data-eid") || "");
+      const eventId = String(pickBtn.getAttribute("data-eid")   || "");
       if (side && eventId) {
         gpPendingSet(eventId, side);
         syncSaveBtnState();
-        // Optimistic highlight
-        const slate = pickBtn.getAttribute("data-slate") || "";
         document.querySelectorAll(`[data-gppick][data-eid="${eventId}"]`).forEach(b => {
           const bSide = b.getAttribute("data-gppick");
           b.classList.toggle("gpPickRowActive", bSide === side);
           b.classList.toggle("gpFaded",         bSide !== side);
         });
       }
+      return;
+    }
+
+    // ── select all / none (admin game list) ──
+    const gpSelect = t.getAttribute("data-gpselect") ||
+                     t.closest("[data-gpselect]")?.getAttribute("data-gpselect") || "";
+    if (gpSelect) {
+      (Render().gpApplyAdminSelection || (() => {}))(gpSelect);
       return;
     }
 
@@ -254,7 +268,7 @@
 
     // ── save picks ──
     if (action === "savePicks") {
-      const slateId = String(btn.getAttribute("data-slate") || "");
+      const slateId = String(btn.getAttribute("data-slate") || gpMem().picksSlateId || "");
       const pending = gpPendingBucket();
       const idObj2  = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
       if (!slateId || !Object.keys(pending).length) return;
@@ -275,6 +289,12 @@
       return;
     }
 
+    // ── refresh ──
+    if (action === "refresh") {
+      await renderPicks();
+      return;
+    }
+
     // ── identity: continue ──
     if (action === "playerContinue") {
       const nameEl = document.getElementById("gpIdName");
@@ -283,8 +303,7 @@
       const nm     = String(nameEl?.value || "").trim();
       const cd     = String(codeEl?.value || "").trim();
       const rem    = !!remEl?.checked;
-      const testObj = { name: nm, code: cd };
-      if (!(ID().gpIsIdentityValid || (() => false))(testObj)) {
+      if (!(ID().gpIsIdentityValid || (() => false))({ name: nm, code: cd })) {
         (ID().gpSetIdentityError || (() => {}))("Name (2+ chars) and code (3+ chars) required.");
         return;
       }
@@ -302,18 +321,38 @@
       return;
     }
 
+    // ── name button (open identity gate) ──
+    if (action === "name") {
+      const idObj = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
+      const gateHTML = (ID().gpBuildIdentityGateHTML || (() => ""))({
+        prefillName: idObj.name || "", rememberChecked: idObj.remember !== false
+      });
+      const el = document.getElementById("content");
+      if (el) {
+        const hdr = (Render().renderPicksHeaderHTML || (() => ""))({
+          weekSelectHTML: "", weekId: "", weekLabel: "", isAdmin: getRole() === "admin"
+        });
+        el.innerHTML = `${hdr}<div class="gpContainer">${gateHTML}</div>`;
+        postRender();
+        setTimeout(() => { try { document.getElementById("gpIdName")?.focus(); } catch {} }, 0);
+      }
+      return;
+    }
+
     // ── admin: load games ──
     if (action === "adminLoadGames") {
-      const mem2 = gpMem();
-      const leagueKey  = mem2.gpAdminLeagueKey  || getSavedLeagueKeySafe();
-      const dateStr    = mem2.gpAdminDateLabel  || getSavedDateYYYYMMDDSafe();
-      const listEl = document.getElementById("gpAdminGameList");
-      if (listEl) listEl.innerHTML = `<div class="muted">Loading games…</div>`;
+      const mem2       = gpMem();
+      const leagueKey  = mem2.gpAdminLeagueKey || getSavedLeagueKeySafe();
+      const dateStr    = mem2.gpAdminDateLabel || getSavedDateYYYYMMDDSafe();
+      const statusEl   = document.getElementById("gpAdminStatus");
+      if (statusEl) statusEl.textContent = "Loading games…";
       try {
         const events = await (ESPN().fetchEventsFor || (async () => []))(leagueKey, dateStr);
         mem2.gpAvailableEvents = Array.isArray(events) ? events : [];
+        if (statusEl) statusEl.textContent = `Loaded ${mem2.gpAvailableEvents.length} games.`;
       } catch (err) {
         mem2.gpAvailableEvents = [];
+        if (statusEl) statusEl.textContent = "Error loading games.";
         console.error("[GP] adminLoadGames error:", err);
       }
       await renderPicks();
@@ -333,8 +372,8 @@
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
-        const leagueKey = mem2.gpAdminLeagueKey  || getSavedLeagueKeySafe();
-        const dateStr   = mem2.gpAdminDateLabel  || getSavedDateYYYYMMDDSafe();
+        const leagueKey = mem2.gpAdminLeagueKey || getSavedLeagueKeySafe();
+        const dateStr   = mem2.gpAdminDateLabel || getSavedDateYYYYMMDDSafe();
         const events    = mem2.gpAvailableEvents || [];
         await (Admin().gpAdminAddSelectedGamesToWeek || (async () => {}))(db2, uid, weekId, leagueKey, dateStr, selected, events);
         mem2.gpAvailableEvents = [];
@@ -355,7 +394,7 @@
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
         await (Admin().gpAdminCreateNewWeek || (async () => {}))(db2, uid);
-        safeSetLS(PICKS_WEEK_KEY, ""); // reset to new active week
+        safeSetLS(PICKS_WEEK_KEY, "");
         await renderPicks();
       } catch (err) {
         btn.disabled = false; btn.textContent = "+ New Week";
@@ -383,38 +422,39 @@
     }
   });
 
-  // ─────────────────────────────────────────
-  // Week selector change handler
-  // ─────────────────────────────────────────
-  document.addEventListener("change", (e) => {
-    if (!e.target?.getAttribute("data-gpweeksel")) return;
-    const id = String(e.target.value || "").trim();
-    if (id) {
-      gpSetSelectedWeekId(id);
-      gpPendingClear();
-      renderPicks();
-    }
-  });
-
-  // ─────────────────────────────────────────
-  // Admin: league / date selectors
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
+  // Change handlers
+  // ───────────────────────────────────────────
   document.addEventListener("change", (e) => {
     const t = e.target;
     if (!t) return;
-    if (t.getAttribute("data-league-select") || t.closest("[data-league-select]")) {
-      gpMem().gpAdminLeagueKey = String(t.value || "").trim();
+
+    // Week selector
+    if (t.getAttribute("data-gpweeksel") === "1") {
+      const id = String(t.value || "").trim();
+      if (id) { gpSetSelectedWeekId(id); gpPendingClear(); renderPicks(); }
+      return;
     }
-    if (t.getAttribute("data-date-input") || t.closest("[data-date-input]")) {
-      gpMem().gpAdminDateLabel = String(t.value || "").trim().replace(/-/g, "");
+
+    // Admin league selector
+    if (t.getAttribute("data-league-select") !== null) {
+      gpMem().gpAdminLeagueKey = String(t.value || "").trim();
+      return;
+    }
+
+    // Admin date input  (value is YYYY-MM-DD → store as YYYYMMDD)
+    if (t.getAttribute("data-date-input") !== null) {
+      const v = String(t.value || "").replace(/-/g, "");
+      gpMem().gpAdminDateLabel = v;
+      return;
     }
   });
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Auto-refresh
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   let _gpRefreshTimer = null;
-  const GP_REFRESH_MS = 60 * 1000; // 1 minute
+  const GP_REFRESH_MS = 60 * 1000;
 
   function startGpAutoRefresh() {
     stopGpAutoRefresh();
@@ -431,10 +471,10 @@
     if (document.hidden) stopGpAutoRefresh(); else startGpAutoRefresh();
   });
 
-  // ─────────────────────────────────────────
+  // ───────────────────────────────────────────
   // Expose public API
-  // ─────────────────────────────────────────
-  window.renderPicks       = renderPicks;
+  // ───────────────────────────────────────────
+  window.renderPicks        = renderPicks;
   window.startGpAutoRefresh = startGpAutoRefresh;
   window.stopGpAutoRefresh  = stopGpAutoRefresh;
 
