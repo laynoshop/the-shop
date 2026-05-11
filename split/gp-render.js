@@ -278,50 +278,212 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 }
 
 /* ══════════════════════════════════════════════
-   LEADERBOARD
+   LEADERBOARD  — redesigned
    ══════════════════════════════════════════════ */
+
+/* Outer card */
 .gpLeaderCard {
-  background: rgba(255,255,255,0.045);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px; padding: 14px;
-  display: flex; flex-direction: column; gap: 10px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(10,10,12,0.7);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
 }
-.gpLeaderTitle { font-size: 16px; font-weight: 950; color: #fff; }
-.gpLeaderRow {
-  display: flex; align-items: stretch; gap: 12px;
-  padding: 12px; border-radius: 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
+
+/* Header bar */
+.gpLeaderHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
 }
-.gpLeaderRow.top3 {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.14);
+.gpLeaderHeaderLeft {
+  display: flex; flex-direction: column; gap: 2px;
 }
-.gpLeaderRank {
-  flex: 0 0 auto; min-width: 54px;
-  display: flex; flex-direction: column;
-  justify-content: center; align-items: center; text-align: center;
+.gpLeaderTitle {
+  font-size: 17px; font-weight: 900; color: #fff;
+  letter-spacing: 0.01em; line-height: 1;
 }
-.gpLeaderMedal { font-size: 36px; line-height: 1; }
-.gpLeaderRankNum {
-  font-weight: 1000; font-size: 22px;
-  line-height: 1; letter-spacing: 0.2px; color: rgba(255,255,255,0.92);
+.gpLeaderWeekLabel {
+  font-size: 11px; font-weight: 700;
+  color: rgba(255,255,255,0.38); letter-spacing: 0.08em;
+  text-transform: uppercase; margin-top: 3px;
 }
-.gpLeaderInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-.gpLeaderName {
-  font-size: 20px; font-weight: 1000;
+.gpLeaderScoringNote {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.3); white-space: nowrap;
+}
+.gpLeaderScoringNote span {
+  display: inline-block; background: rgba(255,255,255,0.07);
+  border-radius: 6px; padding: 2px 7px; margin-left: 4px;
+}
+
+/* Podium — top 3 */
+.gpLeaderPodium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 12px 0;
+  background: linear-gradient(180deg, rgba(255,200,40,0.04) 0%, transparent 100%);
+}
+.gpPodiumSlot {
+  display: flex; flex-direction: column; align-items: center;
+  flex: 1; max-width: 130px;
+  position: relative;
+}
+/* 1st place sits higher visually */
+.gpPodiumSlot[data-rank="1"] { order: 2; margin-bottom: 0; }
+.gpPodiumSlot[data-rank="2"] { order: 1; margin-bottom: -12px; }
+.gpPodiumSlot[data-rank="3"] { order: 3; margin-bottom: -20px; }
+
+.gpPodiumAvatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 21px; font-weight: 900; letter-spacing: -0.5px;
+  text-transform: uppercase; flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.12);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  position: relative; z-index: 1;
+}
+.gpPodiumSlot[data-rank="1"] .gpPodiumAvatar {
+  width: 62px; height: 62px; font-size: 25px;
+  border-color: rgba(255,210,60,0.55);
+  box-shadow: 0 0 0 3px rgba(255,210,60,0.18), 0 6px 20px rgba(0,0,0,0.55);
+  background: linear-gradient(145deg, rgba(60,50,20,0.9), rgba(30,24,6,0.9));
+}
+.gpPodiumSlot[data-rank="2"] .gpPodiumAvatar {
+  border-color: rgba(190,190,200,0.45);
+  background: linear-gradient(145deg, rgba(40,40,50,0.9), rgba(20,20,26,0.9));
+}
+.gpPodiumSlot[data-rank="3"] .gpPodiumAvatar {
+  border-color: rgba(180,110,60,0.45);
+  background: linear-gradient(145deg, rgba(45,28,18,0.9), rgba(22,14,8,0.9));
+}
+
+.gpPodiumCrown {
+  position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+  font-size: 18px; line-height: 1;
+  filter: drop-shadow(0 1px 4px rgba(255,180,0,0.5));
+  animation: gpCrownBob 3s ease-in-out infinite;
+}
+@keyframes gpCrownBob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%       { transform: translateX(-50%) translateY(-3px); }
+}
+
+.gpPodiumName {
+  margin-top: 8px;
+  font-size: 12px; font-weight: 900; color: rgba(255,255,255,0.9);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%; text-align: center; letter-spacing: 0.02em;
 }
-.gpLeaderName.top3 { font-size: 22px; }
-.gpLeaderRecord { font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.5); margin-top: 4px; }
-.gpLeaderPoints {
+.gpPodiumSlot[data-rank="1"] .gpPodiumName { font-size: 13px; color: #fff; }
+
+.gpPodiumPoints {
+  margin-top: 4px; margin-bottom: 8px;
+  font-size: 13px; font-weight: 900; letter-spacing: 0.04em;
+}
+.gpPodiumSlot[data-rank="1"] .gpPodiumPoints { color: rgba(255,218,80,0.95); font-size: 15px; }
+.gpPodiumSlot[data-rank="2"] .gpPodiumPoints { color: rgba(200,200,210,0.85); }
+.gpPodiumSlot[data-rank="3"] .gpPodiumPoints { color: rgba(200,130,80,0.85); }
+
+/* Podium platform blocks */
+.gpPodiumBase {
+  width: 100%; border-radius: 8px 8px 0 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 10px 6px; font-size: 18px; line-height: 1;
+}
+.gpPodiumSlot[data-rank="1"] .gpPodiumBase {
+  height: 60px;
+  background: linear-gradient(180deg, rgba(255,200,40,0.22) 0%, rgba(255,180,0,0.10) 100%);
+  border: 1px solid rgba(255,210,60,0.25); border-bottom: none;
+}
+.gpPodiumSlot[data-rank="2"] .gpPodiumBase {
+  height: 46px;
+  background: linear-gradient(180deg, rgba(190,190,210,0.15) 0%, rgba(150,150,170,0.07) 100%);
+  border: 1px solid rgba(190,190,210,0.18); border-bottom: none;
+}
+.gpPodiumSlot[data-rank="3"] .gpPodiumBase {
+  height: 36px;
+  background: linear-gradient(180deg, rgba(200,120,60,0.15) 0%, rgba(160,90,40,0.07) 100%);
+  border: 1px solid rgba(200,120,60,0.18); border-bottom: none;
+}
+
+/* Rest of the pack — ranked list below podium */
+.gpLeaderList {
+  display: flex; flex-direction: column;
+  padding: 10px 10px 14px;
+  gap: 6px;
+}
+
+.gpLeaderRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: background 150ms ease;
+}
+.gpLeaderRow:active { background: rgba(255,255,255,0.06); }
+
+/* Rank number circle */
+.gpLeaderRankBadge {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 900;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Avatar initials circle in list */
+.gpLeaderAvatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 900; text-transform: uppercase;
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.gpLeaderInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.gpLeaderName {
+  font-size: 15px; font-weight: 800; color: #eee;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+/* Pick result chips (W/L dots) */
+.gpLeaderChips {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+}
+.gpChipW {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 900; letter-spacing: 0.04em;
+  background: rgba(60,200,100,0.18); border: 1px solid rgba(60,200,100,0.35);
+  color: rgba(120,255,160,0.9);
+}
+.gpChipL {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 900; letter-spacing: 0.04em;
+  background: rgba(200,60,60,0.14); border: 1px solid rgba(200,60,60,0.28);
+  color: rgba(255,120,120,0.7);
+}
+
+/* Points pill */
+.gpLeaderPtsPill {
   display: flex; align-items: baseline; gap: 2px;
-  background: rgba(0,200,120,0.18); border: 1px solid rgba(0,200,120,0.35);
-  color: rgba(180,255,220,0.95); border-radius: 999px;
-  padding: 10px 14px; white-space: nowrap; flex-shrink: 0;
+  padding: 5px 11px; border-radius: 999px;
+  white-space: nowrap; flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.6);
 }
-.gpLeaderPts    { font-size: 22px; font-weight: 1000; line-height: 1; }
-.gpLeaderPtsLbl { font-size: 12px; font-weight: 900; opacity: 0.85; }
+.gpLeaderPtsNum  { font-size: 16px; font-weight: 900; line-height: 1; }
+.gpLeaderPtsUnit { font-size: 11px; font-weight: 800; opacity: 0.7; margin-left: 1px; }
 
 /* Draft badge */
 .gpDraftBadge {
@@ -386,18 +548,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   function safeRecord(t) { return String(t?.record || "").trim(); }
   function safeAbbr(t)   { return String(t?.abbr   || t?.name || "").slice(0, 4); }
 
-  /**
-   * Reads odds from g.__odds (set by gpHydrateOddsForGames in gp-espn.js)
-   * Falls back to legacy g.odds / g.oddsDetails fields for backwards compat.
-   */
   function safeOddsLine(g) {
-    // Primary: __odds written by gp-espn.js hydration
-    const hydratedDetails  = String(g?.__odds?.details  || "").trim();
-    const hydratedOverUnder = String(g?.__odds?.overUnder || "").trim();
-    // Legacy fallback
-    const legacyDetails  = String(g?.oddsDetails || g?.odds?.details || "").trim();
-    const legacyOverUnder = String(g?.odds?.overUnder || "").trim();
-
+    const hydratedDetails   = String(g?.__odds?.details   || "").trim();
+    const hydratedOverUnder = String(g?.__odds?.overUnder  || "").trim();
+    const legacyDetails     = String(g?.oddsDetails || g?.odds?.details || "").trim();
+    const legacyOverUnder   = String(g?.odds?.overUnder || "").trim();
     const d  = hydratedDetails   || legacyDetails;
     const ou = hydratedOverUnder || legacyOverUnder;
     const parts = [];
@@ -417,16 +572,10 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Status line HTML ────────────────────────────────────────────
-  /**
-   * Reads live state from g.__live (set by gpHydrateLiveStateForGames in gp-espn.js).
-   * Falls back to g.live for backwards compatibility.
-   */
   function buildStatusHTML(g) {
-    // Primary: __live written by gp-espn.js hydration
     const live   = g?.__live || g?.live || null;
     const state  = String(live?.state || "").toLowerCase();
     const detail = String(live?.detail || "").trim();
-
     if (state === "in") {
       return `<div class="gpStatusLive">LIVE${detail ? " · " + esc(detail) : ""}</div>`;
     }
@@ -494,16 +643,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const now    = Date.now();
     const locked = ms > 0 && now >= ms;
 
-    // ── Score data ──
-    // gp-espn.js stores hydration results on g.__live
-    // Fall back to g.live for any legacy data
     const live     = g?.__live || g?.live || null;
     const state    = String(live?.state || "").toLowerCase();
     const isLive   = state === "in";
     const isFinal  = state === "post";
 
-    // Scores are present when the game is in-progress or final
-    // awayScore / homeScore come as strings from the ESPN competitors array
     const awayScoreRaw = live?.awayScore;
     const homeScoreRaw = live?.homeScore;
     const showScores   = (isLive || isFinal) &&
@@ -528,12 +672,10 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const awayFade   = hasPick && !awayActive;
     const homeFade   = hasPick && !homeActive;
 
-    // Card classes
     let cardCls = "gpScoreCard";
     if (isLive)  cardCls += " gpCardLive";
     if (hasPick) cardCls += " gpPickedCard";
 
-    // League color for left border
     const leagueKey = String(g?.leagueKey || "").trim();
     const LEAGUE_COLORS = {
       nfl: "#013369", cfb: "#8B1A1A", nba: "#C9082A", ncaam: "#003087",
@@ -603,53 +745,130 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 </div>`;
   }
 
+  // ─── Avatar color palette (deterministic from name) ──────────────
+  const AVATAR_COLORS = [
+    ["#1a2a4a","#4a8fd4"],["#1a3a1a","#4ad46a"],["#3a1a1a","#d46a4a"],
+    ["#2a1a3a","#8a4ad4"],["#3a2a1a","#d4a44a"],["#1a3a3a","#4ad4c4"],
+    ["#3a1a2a","#d44a8a"],["#2a3a1a","#a4d44a"],
+  ];
+  function avatarStyle(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    const [bg, color] = AVATAR_COLORS[h % AVATAR_COLORS.length];
+    return { bg, color };
+  }
+  function initials(name) {
+    const parts = String(name || "?").trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return String(name || "?").slice(0, 2).toUpperCase();
+  }
+
   // ─── Leaderboard ─────────────────────────────────────────────────
   function buildLeaderboardHTML(weekLabel, leaderboard) {
     const { rows, finalsCount } = leaderboard || {};
-    const list = Array.isArray(rows) ? rows : [];
+    const list  = Array.isArray(rows) ? rows : [];
     const label = String(weekLabel || "");
 
+    const scoringNote = `
+      <div class="gpLeaderScoringNote">
+        Scoring<span>🐶 Dog = 2 pts</span><span>❤️ Fav = 1 pt</span>
+      </div>`;
+
+    // ── No finals yet ──
     if (!finalsCount) {
       return `
 <div class="gpLeaderCard">
-  <div class="gpLeaderTitle">Leaderboard <span style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.4)">${esc(label)}</span></div>
-  <div class="muted" style="font-size:13px;font-weight:700">No finals yet — leaderboard appears once games go final.</div>
-  <div style="margin-top:8px;font-size:12px;font-weight:800;color:rgba(255,255,255,0.35)">2pts = Underdog pick · 1pt = Favored pick</div>
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">🏆 Leaderboard</div>
+      ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
+    </div>
+    ${scoringNote}
+  </div>
+  <div class="gpEmpty" style="padding:28px 20px">
+    <div style="font-size:28px;margin-bottom:8px">⏳</div>
+    <div style="font-size:14px;font-weight:800;color:rgba(255,255,255,0.5)">Leaderboard locks in once games go final</div>
+  </div>
 </div>`;
     }
 
-    function medal(rank) {
-      if (rank === 1) return "🥇";
-      if (rank === 2) return "🥈";
-      if (rank === 3) return "🥉";
-      return null;
-    }
-
-    const rowsHTML = list.length ? list.map((u, i) => {
-      const rank = i + 1;
-      const top3 = rank <= 3;
-      const med  = medal(rank);
+    // ── No picks at all ──
+    if (!list.length) {
       return `
-<div class="gpLeaderRow${top3 ? " top3" : ""}">
-  <div class="gpLeaderRank">
-    ${med ? `<div class="gpLeaderMedal">${med}</div>` : `<div class="gpLeaderRankNum">${esc(String(rank))}</div>`}
+<div class="gpLeaderCard">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">🏆 Leaderboard</div>
+      ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
+    </div>
+    ${scoringNote}
   </div>
+  <div class="gpEmpty" style="padding:28px 20px">No picks recorded this week.</div>
+</div>`;
+    }
+
+    // ── Podium (top 3) ──
+    const podiumSlots = list.slice(0, 3);
+    // Always render 2nd, 1st, 3rd order visually (CSS order handles it)
+    const podiumHTML = podiumSlots.map((u, i) => {
+      const rank = i + 1;
+      const nm   = String(u?.name || "Someone");
+      const { bg, color } = avatarStyle(nm);
+      const pts  = Number(u?.points ?? 0);
+      const CROWNS = ["👑", "🥈", "🥉"];
+      return `
+<div class="gpPodiumSlot" data-rank="${rank}">
+  <div class="gpPodiumAvatar" style="background:${bg};color:${color}">
+    ${rank === 1 ? `<span class="gpPodiumCrown">${CROWNS[0]}</span>` : ""}
+    ${esc(initials(nm))}
+  </div>
+  <div class="gpPodiumName">${esc(nm)}</div>
+  <div class="gpPodiumPoints">${pts} pts</div>
+  <div class="gpPodiumBase">${rank === 1 ? "" : rank === 2 ? CROWNS[1] : CROWNS[2]}</div>
+</div>`;
+    }).join("");
+
+    // ── Rest of the pack (4th+) ──
+    const restRows = list.slice(3).map((u, i) => {
+      const rank = i + 4;
+      const nm   = String(u?.name || "Someone");
+      const pts  = Number(u?.points ?? 0);
+      const wins = Number(u?.wins   ?? 0);
+      const losses = Number(u?.losses ?? 0);
+      const { bg, color } = avatarStyle(nm);
+
+      // Build W/L chips (cap at 8 to avoid overflow)
+      const wChips = Array(Math.min(wins,   8)).fill(`<span class="gpChipW">W</span>`).join("");
+      const lChips = Array(Math.min(losses, 8)).fill(`<span class="gpChipL">L</span>`).join("");
+
+      return `
+<div class="gpLeaderRow">
+  <div class="gpLeaderRankBadge">${esc(String(rank))}</div>
+  <div class="gpLeaderAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
   <div class="gpLeaderInfo">
-    <div class="gpLeaderName${top3 ? " top3" : ""}">${esc(String(u?.name || "Someone"))}</div>
-    <div class="gpLeaderRecord">Picks ${u?.picks ?? 0} · W ${u?.wins ?? 0} · L ${u?.losses ?? 0}</div>
+    <div class="gpLeaderName">${esc(nm)}</div>
+    <div class="gpLeaderChips">${wChips}${lChips}</div>
   </div>
-  <div class="gpLeaderPoints">
-    <span class="gpLeaderPts">${esc(String(u?.points ?? 0))}</span>
-    <span class="gpLeaderPtsLbl">pts</span>
+  <div class="gpLeaderPtsPill">
+    <span class="gpLeaderPtsNum">${esc(String(pts))}</span>
+    <span class="gpLeaderPtsUnit">pts</span>
   </div>
 </div>`;
-    }).join("") : `<div class="muted" style="font-size:13px;font-weight:700">No picks yet.</div>`;
+    }).join("");
 
     return `
 <div class="gpLeaderCard">
-  <div class="gpLeaderTitle">Leaderboard <span style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.4)">${esc(label)}</span></div>
-  ${rowsHTML}
-  <div style="margin-top:4px;font-size:12px;font-weight:800;color:rgba(255,255,255,0.35)">2pts = Underdog pick · 1pt = Favored pick</div>
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">🏆 Leaderboard</div>
+      ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
+    </div>
+    ${scoringNote}
+  </div>
+  <div class="gpLeaderPodium">
+    ${podiumHTML}
+  </div>
+  ${restRows ? `<div class="gpLeaderList">${restRows}</div>` : ""}
 </div>`;
   }
 
