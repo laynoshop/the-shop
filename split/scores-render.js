@@ -122,7 +122,23 @@
 .score.winner { color: #fff; text-shadow: 0 0 12px rgba(255,220,80,0.55), 0 0 28px rgba(255,160,0,0.25); }
 .score.loser { color: rgba(255,255,255,0.3); text-shadow: none; }
 .venueLine { padding: 0 12px 8px; font-size: 11px; color: rgba(255,255,255,0.28); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
-.venueLine::before { content: "\uD83D\uDCCD "; }
+.venueLine::before { content: "📍 "; }
+.scoresRefreshBtn {
+  margin-left: auto;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.65);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 140ms ease, color 140ms ease, transform 300ms ease;
+}
+.scoresRefreshBtn:active { background: rgba(255,255,255,0.14); color: #fff; }
+.scoresRefreshBtn.spinning svg { animation: scRefreshSpin 600ms linear forwards; }
+@keyframes scRefreshSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 .emptyState { padding: 48px 24px; text-align: center; color: rgba(255,255,255,0.38); font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
 
 /* ── Broadcast chip ── */
@@ -217,7 +233,7 @@
   align-items: center;
   gap: 4px;
 }
-.pgaVenue::before { content: "\uD83D\uDCCD"; font-size: 11px; }
+.pgaVenue::before { content: "📍"; font-size: 11px; }
 
 /* Status pill */
 .pgaStatusRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -371,15 +387,15 @@
 
   // ─── League pill labels ──────────────────────────────────────
   const LEAGUE_LABELS = {
-    ncaam: "\uD83C\uDFC0 NCAAB",
-    cfb:   "\uD83C\uDFC8 CFB",
-    nba:   "\uD83C\uDFC0 NBA",
-    nhl:   "\uD83C\uDFD2 NHL",
-    mls:   "\u26BD MLS",
-    nfl:   "\uD83C\uDFC8 NFL",
-    mlb:   "\u26BE MLB",
-    pga:   "\u26F3 PGA",
-    ufc:   "\uD83E\uDD4A UFC",
+    ncaam: "🏀 NCAAB",
+    cfb:   "🏈 CFB",
+    nba:   "🏀 NBA",
+    nhl:   "🏒 NHL",
+    mls:   "⚽ MLS",
+    nfl:   "🏈 NFL",
+    mlb:   "⚾ MLB",
+    pga:   "⛳ PGA",
+    ufc:   "🥊 UFC",
   };
 
   // ─── League pill row scroll memory ────────────────────────────
@@ -435,6 +451,11 @@
 <div class="scoresPageHeader" style="--scores-header-accent:${SD.escapeHtml(color)}">
   <div class="scoresHeaderTop">
     <div class="scoresHeaderTitle">${SD.escapeHtml(leagueLabel)}<span>Scores</span></div>
+    <button class="scoresRefreshBtn" id="scoresRefreshBtn" type="button" aria-label="Refresh scores">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+      </svg>
+    </button>
   </div>
   <div class="scoresLeagueRow" id="scoresLeagueRow">${pillsHTML}</div>
 </div>`;
@@ -476,6 +497,17 @@
     });
   }
 
+  // ─── Bind refresh button ───────────────────────────────────────────
+  function bindRefreshBtn() {
+    const btn = document.getElementById("scoresRefreshBtn");
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      btn.classList.add("spinning");
+      btn.addEventListener("animationend", () => btn.classList.remove("spinning"), { once: true });
+      window.loadScores(true);
+    });
+  }
+
   // ─── Bind date navigator ──────────────────────────────────────────────
   function bindDateNav() {
     const prev   = document.getElementById("scoresDatePrev");
@@ -508,7 +540,7 @@
     return hasLive ? 22000 : 120000;
   }
   function stopLiveTicker() { if (liveInterval) { clearInterval(liveInterval); liveInterval = null; } }
-  function startLiveTicker(league, leagueKey, dateYYYYMMDD) {
+  function startLiveTicker(league, leagueKey, dateYYYYMMDD, currentEvents) {
     stopLiveTicker();
     liveInterval = setInterval(async () => {
       try {
@@ -516,9 +548,9 @@
         const evts = data?.events || [];
         renderScoreCards(evts, leagueKey, dateYYYYMMDD, true);
         clearInterval(liveInterval); liveInterval = null;
-        startLiveTicker(league, leagueKey, dateYYYYMMDD);
+        startLiveTicker(league, leagueKey, dateYYYYMMDD, evts);
       } catch {}
-    }, getLiveRefreshMs([]));
+    }, getLiveRefreshMs(currentEvents || []));
   }
 
   // ─── MLB inning label ───────────────────────────────────────────────
@@ -615,12 +647,12 @@
       else if (leagueKey === "nhl")                              periodLabel = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
       else if (leagueKey === "nfl"  || leagueKey === "cfb")     periodLabel = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
       else periodLabel = period ? `P${period}` : "";
-      const clockPart = (!isMLB && displayClock) ? " \u00b7 " + displayClock : "";
-      statusLine = `<div class="statusLive">LIVE${periodLabel ? " \u00b7 "+periodLabel : ""}${clockPart}</div>`;
+      const clockPart = (!isMLB && displayClock) ? " · " + displayClock : "";
+      statusLine = `<div class="statusLive">LIVE${periodLabel ? " · "+periodLabel : ""}${clockPart}</div>`;
     } else if (isPost) {
       let finalDetail = "";
       if (statusDetail && statusDetail.toLowerCase() !== "final" && !/^\d+:\d+$/.test(statusDetail)) finalDetail = statusDetail;
-      statusLine = `<div class="statusFinal">Final${finalDetail ? " \u00b7 "+finalDetail : ""}</div>`;
+      statusLine = `<div class="statusFinal">Final${finalDetail ? " · "+finalDetail : ""}</div>`;
     } else {
       const gameDate = comp?.date || ev?.date || "";
       let timeStr = "";
@@ -658,7 +690,7 @@
 
     // Fav ribbon — full-width strip, rendered between cardHeader and matchup
     const favRibbonHTML = isFavSpotlight
-      ? `<div class="favRibbon">\u2B50 Shop Team</div>`
+      ? `<div class="favRibbon">⭐ Shop Team</div>`
       : "";
 
     return `
@@ -737,39 +769,43 @@
           if (scoreEls[0]) { scoreEls[0].classList.toggle("winner", aw); scoreEls[0].classList.toggle("loser", !aw); }
           if (scoreEls[1]) { scoreEls[1].classList.toggle("winner", hw); scoreEls[1].classList.toggle("loser", !hw); }
         }
-        // Update win prob bar if present
-        const probBar = card.querySelector(".winProbBar");
-        if (probBar && isLive) {
-          const preds = comp?.predictor || comp?.winProbability || null;
-          const homeChance = Number(preds?.homeTeam?.teamChancePct ?? preds?.homeWinPercentage ?? -1);
-          if (homeChance >= 0 && homeChance <= 100) {
-            const awayEl = probBar.querySelector(".winProbAway");
-            const homeEl = probBar.querySelector(".winProbHome");
-            if (awayEl) awayEl.style.width = `${(100 - homeChance).toFixed(1)}%`;
-            if (homeEl) homeEl.style.width = `${homeChance.toFixed(1)}%`;
-          }
-        }
+        // Update status line
         const statusEl = card.querySelector(".statusLive, .statusFinal, .statusPre");
-        if (statusEl && (isLive || isPost)) {
+        if (statusEl) {
           const displayClock = String(status?.displayClock || "").trim();
           const period = Number(status?.period || 0);
           if (isLive) {
             let pl = "";
-            if      (isMLB)                                            pl = mlbInningLabel(period, situation);
-            else if (leagueKey === "nba"  || leagueKey === "ncaam")   pl = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
-            else if (leagueKey === "nhl")                              pl = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
-            else if (leagueKey === "nfl"  || leagueKey === "cfb")     pl = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
+            if      (isMLB)                                          pl = mlbInningLabel(period, situation);
+            else if (leagueKey === "nba" || leagueKey === "ncaam")   pl = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
+            else if (leagueKey === "nhl")                            pl = period <= 3 ? (["1st","2nd","3rd"][period-1] || `P${period}`) : "OT";
+            else if (leagueKey === "nfl" || leagueKey === "cfb")     pl = ["1st","2nd","3rd","4th"][period-1] || `Q${period}`;
             else pl = period ? `P${period}` : "";
-            const clockPart = (!isMLB && displayClock) ? " \u00b7 " + displayClock : "";
+            const cp = (!isMLB && displayClock) ? " · " + displayClock : "";
             statusEl.className = "statusLive";
-            statusEl.textContent = `LIVE${pl ? " \u00b7 "+pl : ""}${clockPart}`;
+            statusEl.textContent = `LIVE${pl ? " · "+pl : ""}${cp}`;
           } else if (isPost) {
             const detail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
-            let finalDetail = "";
-            if (detail && detail.toLowerCase() !== "final" && !/^\d+:\d+$/.test(detail)) finalDetail = detail;
+            const fd = (detail && detail.toLowerCase() !== "final" && !/^\d+:\d+$/.test(detail)) ? detail : "";
             statusEl.className = "statusFinal";
-            statusEl.textContent = `Final${finalDetail ? " \u00b7 "+finalDetail : ""}`;
+            statusEl.textContent = `Final${fd ? " · "+fd : ""}`;
           }
+        }
+        // Update win prob bar
+        const winProb = (() => {
+          const preds = comp?.predictor || comp?.winProbability || null;
+          const hc = Number(preds?.homeTeam?.teamChancePct ?? preds?.homeWinPercentage ?? -1);
+          if (hc >= 0 && hc <= 100) return { home: hc, away: 100 - hc };
+          const sitProb = comp?.situation?.lastPlay?.probability;
+          const hc2 = Number(sitProb?.homeWinPercentage ?? -1);
+          if (hc2 >= 0 && hc2 <= 100) return { home: hc2, away: 100 - hc2 };
+          return null;
+        })();
+        if (winProb && isLive) {
+          const awayBar = card.querySelector(".winProbAway");
+          const homeBar = card.querySelector(".winProbHome");
+          if (awayBar) awayBar.style.width = winProb.away.toFixed(1) + "%";
+          if (homeBar) homeBar.style.width = winProb.home.toFixed(1) + "%";
         }
       }
       return;
@@ -777,7 +813,7 @@
     container.innerHTML = sorted.map(ev => buildScoreCardHTML(ev, leagueKey)).join("");
   }
 
-  // ─── Conference hydration ──────────────────────────────────────────────────────
+  // ─── Conference / odds hydration ───────────────────────────────────────────
   async function hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events) {
     if (!SD.isCollegeLeagueKey(leagueKey)) return;
     const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
@@ -790,307 +826,277 @@
       }
       if (Object.keys(teamIdToConf).length) SD.saveConfCache(leagueKey, dateYYYYMMDD, teamIdToConf);
     }
+    const confs = SD.buildConferenceListFromMap(teamIdToConf);
+    if (confs.length) SD.updateConferenceSelectOptions(confs, leagueKey);
     for (const ev of (events || [])) {
       const id = String(ev?.id || "");
       const comp = ev?.competitions?.[0];
       for (const c of (comp?.competitors || [])) {
         const teamId = String(c?.team?.id || "");
-        const conf = teamIdToConf[teamId] || SD.getConferenceNameFromCompetitor(c) || "";
-        SD.applyConferenceMetaToDom(id, String(c?.homeAway || ""), conf, SD.getOverallRecordFromCompetitor(c));
+        const conf   = teamIdToConf[teamId] || SD.getConferenceNameFromCompetitor(c) || "";
+        const side   = String(c?.homeAway || "");
+        const record = SD.getOverallRecordFromCompetitor(c);
+        SD.applyConferenceMetaToDom(id, side, conf, record);
       }
     }
     return teamIdToConf;
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  PGA LEADERBOARD
-  // ══════════════════════════════════════════════════════════════════
-
-  function weatherIcon(condition) {
-    const c = String(condition || "").toLowerCase();
-    if (c.includes("thunder") || c.includes("storm")) return "\u26C8\uFE0F";
-    if (c.includes("rain") || c.includes("shower") || c.includes("drizzle")) return "\uD83C\uDF27\uFE0F";
-    if (c.includes("snow")) return "\u2744\uFE0F";
-    if (c.includes("fog") || c.includes("mist")) return "\uD83C\uDF2B\uFE0F";
-    if (c.includes("partly") || c.includes("partial") || c.includes("cloud")) return "\u26C5";
-    if (c.includes("clear") || c.includes("sunny")) return "\u2600\uFE0F";
-    return "\u26C5";
+  // ─── Modal (game detail) ─────────────────────────────────────────────────
+  function bindCardTaps(leagueKey) {
+    const container = document.getElementById("scoresContainer");
+    if (!container) return;
+    container.addEventListener("click", e => {
+      const card = e.target.closest(".scoreCard[data-eventid]");
+      if (!card) return;
+      const eventId = card.dataset.eventid;
+      if (!eventId) return;
+      if (SD.openGameModal) SD.openGameModal(eventId, leagueKey);
+    });
   }
 
-  function wmoToCondition(code) {
-    if (code === 0) return "Clear";
-    if (code === 1) return "Mostly Clear";
-    if (code === 2) return "Partly Cloudy";
-    if (code === 3) return "Overcast";
-    if ([45,48].includes(code)) return "Foggy";
-    if ([51,53,55].includes(code)) return "Drizzle";
-    if ([61,63,65].includes(code)) return "Rain";
-    if ([71,73,75].includes(code)) return "Snow";
-    if ([80,81,82].includes(code)) return "Rain Showers";
-    if ([95,96,99].includes(code)) return "Thunderstorm";
-    return "Partly Cloudy";
-  }
-
-  async function fetchPGAWeather(lat, lon) {
-    if (!lat || !lon) return null;
-    try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`;
-      const data = await SD.fetchJsonNoStore(url);
-      const hi  = Math.round(data?.daily?.temperature_2m_max?.[0] ?? 0);
-      const lo  = Math.round(data?.daily?.temperature_2m_min?.[0] ?? 0);
-      const wmo = Number(data?.daily?.weathercode?.[0] ?? 0);
-      const cond = wmoToCondition(wmo);
-      return { hi, lo, condition: cond, icon: weatherIcon(cond) };
-    } catch { return null; }
-  }
-
-  async function geocodeVenue(city, stateOrCountry) {
-    if (!city) return null;
-    try {
-      const q = encodeURIComponent(`${city}${stateOrCountry ? ", " + stateOrCountry : ""}`);
-      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=1&language=en&format=json`;
-      const data = await SD.fetchJsonNoStore(url);
-      const r = data?.results?.[0];
-      if (!r) return null;
-      return { lat: r.latitude, lon: r.longitude };
-    } catch { return null; }
-  }
-
-  function pgaRoundLabel(status, isLive, isPost) {
-    const detail = String(status?.type?.shortDetail || status?.type?.detail || "").toLowerCase();
-    const period = Number(status?.period || 0);
-    if (detail.includes("round")) return detail.replace(/^.*?(round\s*\d+).*$/i, "$1").trim().replace(/^\w/, c => c.toUpperCase());
-    if (period >= 1 && period <= 4) return `Round ${period}`;
-    return "";
-  }
-
-  function rankMedalClass(posNum) {
-    if (posNum === 1) return "gold";
-    if (posNum === 2) return "silver";
-    if (posNum === 3) return "bronze";
-    return "";
-  }
-
-  function toParClass(n) {
-    if (n < 0)  return "under";
-    if (n > 0)  return "over";
-    return "even";
-  }
-
-  function formatToPar(n) {
-    if (n === 0)  return "E";
-    if (n < 0)   return String(n);
-    return `+${n}`;
-  }
-
-  function parsePGACompetitors(events) {
-    const ev   = (events || [])[0];
-    const comp = ev?.competitions?.[0];
-    const competitors = [];
-    for (const c of (comp?.competitors || [])) {
-      const name = String(c?.athlete?.displayName || c?.athlete?.fullName || "").trim();
-      if (!name) continue;
-      const position = Number(c?.order ?? 999);
-      const toParNum = (c?.score !== undefined && c?.score !== null && c?.score !== "")
-        ? Number(c.score) : null;
-      const validLS = (c?.linescores || []).filter(
-        l => l?.period > 0 && l?.displayValue !== null && l?.displayValue !== undefined && l?.displayValue !== ""
-      );
-      const todayRaw = validLS.length > 0
-        ? validLS.sort((a, b) => Number(b.period) - Number(a.period))[0]?.displayValue
-        : null;
-      const todayNum = (todayRaw !== null && todayRaw !== undefined) ? Number(todayRaw) : null;
-      competitors.push({
-        id:         String(c?.athlete?.id || c?.id || ""),
-        name,
-        country:    String(c?.athlete?.flag?.alt || c?.athlete?.country?.abbreviation || ""),
-        toPar:      Number.isFinite(toParNum)  ? toParNum  : null,
-        todayScore: Number.isFinite(todayNum)  ? todayNum  : null,
-        position:   Number.isFinite(position)  ? position  : 999,
-        isCut:      false,
-        isWD:       false,
-        rounds:     validLS.sort((a,b) => a.period - b.period).map(l => l.displayValue),
-      });
-    }
-    competitors.sort((a, b) => a.position - b.position);
-    return competitors;
-  }
-
-  async function renderPGALeaderboard(events, league, leagueKey, dateYYYYMMDD) {
+  // ─── PGA Leaderboard ──────────────────────────────────────────────────────
+  function renderPGALeaderboard(data, leagueKey, dateYYYYMMDD) {
     const container = document.getElementById("scoresContainer");
     if (!container) return;
 
-    const firstEv   = events?.[0];
-    const comp       = firstEv?.competitions?.[0];
-    const tournName  = String(
-      firstEv?.name || firstEv?.shortName ||
-      comp?.name || "PGA Tour"
-    );
-    const venue      = comp?.venue;
-    const venueCity  = String(venue?.address?.city  || "").trim();
-    const venueState = String(venue?.address?.state || venue?.address?.country || "").trim();
-    const venueDisplay = [venueCity, venueState].filter(Boolean).join(", ");
-    const lat = venue?.address?.latitude  || null;
-    const lon = venue?.address?.longitude || null;
-
-    const status   = comp?.status;
-    const stateStr = String(status?.type?.state || "").toLowerCase();
-    const isLive   = stateStr === "in";
-    const isPost   = stateStr === "post";
-    const stDetail = String(status?.type?.shortDetail || status?.type?.detail || "").trim();
-
-    const roundLabel = pgaRoundLabel(status, isLive, isPost);
-
-    const competitors = parsePGACompetitors(events);
-    const top20       = competitors.filter(c => !c.isCut && !c.isWD).slice(0, 20);
-    const cutPlayers  = competitors.filter(c => c.isCut || c.isWD).slice(0, 5);
-
-    let statusPillHTML = "";
-    if (isLive) {
-      statusPillHTML = `<div class="pgaStatusPill live">Live${stDetail ? " \u00b7 " + stDetail : ""}</div>`;
-    } else if (isPost) {
-      statusPillHTML = `<div class="pgaStatusPill final">Final</div>`;
-    } else {
-      statusPillHTML = `<div class="pgaStatusPill pre">${SD.escapeHtml(stDetail || "Upcoming")}</div>`;
+    const events = data?.events || [];
+    if (!events.length) {
+      container.innerHTML = `<div class="emptyState">No PGA tournament found for this date.</div>`;
+      return;
     }
 
-    const roundBadgeHTML = roundLabel
-      ? `<div class="pgaRoundBadge">\u26F3 ${SD.escapeHtml(roundLabel)}</div>`
-      : "";
+    // Pick the most relevant event (prefer in-progress, then upcoming, then completed)
+    const stateOrder = { "in": 0, "pre": 1, "post": 2 };
+    const sorted = [...events].sort((a, b) => {
+      const sa = stateOrder[String(a?.competitions?.[0]?.status?.type?.state || "post").toLowerCase()] ?? 2;
+      const sb = stateOrder[String(b?.competitions?.[0]?.status?.type?.state || "post").toLowerCase()] ?? 2;
+      return sa - sb;
+    });
+    const ev = sorted[0];
+    const comp = ev?.competitions?.[0];
+    const status = comp?.status;
+    const stateStr = String(status?.type?.state || "").toLowerCase();
+    const isLive = stateStr === "in";
+    const isPost = stateStr === "post";
 
-    const rankDisplays = top20.map((p, i) => String(i + 1));
+    // Tournament info
+    const tournamentName = ev?.name || ev?.shortName || "PGA Tournament";
+    const venue = comp?.venue?.fullName || "";
+    const city  = comp?.venue?.address?.city || "";
+    const state = comp?.venue?.address?.state || "";
+    const venueStr = [venue, city && state ? `${city}, ${state}` : (city || state)].filter(Boolean).join(" · ");
 
-    container.innerHTML = `
+    // Round info
+    const currentRound = Number(comp?.status?.period || 1);
+    const totalRounds  = 4;
+    const roundLabel   = `Round ${currentRound}`;
+    const statusLabel  = isLive ? "In Progress" : isPost ? "Final" : (String(status?.type?.shortDetail || "Upcoming"));
+
+    // Weather
+    const weather = comp?.weather || null;
+    const weatherHTML = (() => {
+      if (!weather) return "";
+      const icon = SD.pgaWeatherIcon ? SD.pgaWeatherIcon(weather) : "🌤️";
+      const condition = weather?.conditionDescription || weather?.condition || "";
+      const tempF = weather?.temperature != null ? `${Math.round(weather.temperature)}°F` : "";
+      const tempC = weather?.temperature != null ? `${Math.round((weather.temperature - 32) * 5/9)}°C` : "";
+      const tempStr = tempF ? `${tempF} / ${tempC}` : "";
+      const wind = weather?.windSpeed != null ? `💨 ${weather.windSpeed} mph ${weather.windDirection || ""}`.trim() : "";
+      return `<div class="pgaWeather">
+        <div class="pgaWeatherIcon">${icon}</div>
+        <div class="pgaWeatherDetails">
+          ${condition ? `<div class="pgaWeatherCondition">${SD.escapeHtml(condition)}</div>` : ""}
+          ${tempStr   ? `<div class="pgaWeatherTemps">${SD.escapeHtml(tempStr)}</div>` : ""}
+          ${wind      ? `<div class="pgaWeatherWind">${SD.escapeHtml(wind)}</div>` : ""}
+        </div>
+      </div>`;
+    })();
+
+    // Hero
+    const statusPillClass = isLive ? "live" : isPost ? "final" : "pre";
+    const heroHTML = `
 <div class="pgaHero">
-  <div class="pgaTournamentName">${SD.escapeHtml(tournName)}</div>
-  ${venueDisplay ? `<div class="pgaVenue">${SD.escapeHtml(venueDisplay)}</div>` : ""}
+  <div class="pgaTournamentName">${SD.escapeHtml(tournamentName)}</div>
+  ${venueStr ? `<div class="pgaVenue">${SD.escapeHtml(venueStr)}</div>` : ""}
   <div class="pgaStatusRow">
-    ${statusPillHTML}
-    ${roundBadgeHTML}
+    <span class="pgaStatusPill ${statusPillClass}">${SD.escapeHtml(statusLabel)}</span>
+    <span class="pgaRoundBadge">${SD.escapeHtml(roundLabel)} of ${totalRounds}</span>
   </div>
-  <div id="pgaWeatherSlot"></div>
-</div>
+  ${weatherHTML}
+</div>`;
+
+    // Round pills
+    const roundPillsHTML = `<div class="pgaRoundPills">
+      ${Array.from({length: totalRounds}, (_, i) => {
+        const r = i + 1;
+        const isActive = r === currentRound;
+        return `<button class="pgaRoundPill${isActive ? " active" : ""}" data-round="${r}" type="button">Round ${r}</button>`;
+      }).join("")}
+    </div>`;
+
+    // Competitors / leaderboard
+    const competitors = comp?.competitors || [];
+
+    // Sort by position (numeric sort on position string)
+    const sorted2 = [...competitors].sort((a, b) => {
+      const pa = parseInt(a?.status?.position?.id || a?.status?.displayOrder || "9999", 10);
+      const pb = parseInt(b?.status?.position?.id || b?.status?.displayOrder || "9999", 10);
+      return pa - pb;
+    });
+
+    function scoreClass(scoreStr) {
+      if (!scoreStr || scoreStr === "E" || scoreStr === "0") return "even";
+      if (scoreStr.startsWith("-")) return "under";
+      return "over";
+    }
+
+    function pgaScoreDisplay(scoreStr) {
+      if (!scoreStr) return "-";
+      const n = parseInt(scoreStr, 10);
+      if (isNaN(n)) return scoreStr;
+      if (n === 0) return "E";
+      return n > 0 ? `+${n}` : `${n}`;
+    }
+
+    let cutReached = false;
+    const leaderRows = sorted2.map((c, i) => {
+      const pos      = c?.status?.position?.displayName || c?.status?.displayOrder || `${i+1}`;
+      const isCut    = String(c?.status?.type?.id || "").toLowerCase().includes("cut") ||
+                       String(c?.status?.type?.name || "").toLowerCase().includes("cut");
+      const isWD     = String(c?.status?.type?.name || "").toLowerCase().includes("withdrawn");
+      const athlete  = c?.athlete || {};
+      const name     = athlete?.displayName || athlete?.fullName || "Unknown";
+      const country  = athlete?.flag?.alt || athlete?.countryFlag?.alt || athlete?.country || "";
+      const totalScore = pgaScoreDisplay(c?.statistics?.find(s => s.name === "scoreToPar")?.displayValue || c?.score || "");
+      const todayScore = pgaScoreDisplay(c?.statistics?.find(s => s.name === "today")?.displayValue || "");
+      const posNum   = parseInt(String(pos).replace(/\D/g, ""), 10) || 999;
+      const isTop3   = posNum <= 3 && !isCut && !isWD;
+
+      let cutDiv = "";
+      if (isCut && !cutReached) {
+        cutReached = true;
+        cutDiv = `<div class="pgaCutDivider"><div class="pgaCutDividerLine"></div><div class="pgaCutDividerLabel">Missed Cut</div><div class="pgaCutDividerLine"></div></div>`;
+      }
+
+      const rankClass = posNum === 1 ? "gold" : posNum === 2 ? "silver" : posNum === 3 ? "bronze" : "";
+
+      return `${cutDiv}<div class="pgaLeaderRow${isTop3 ? " top3" : ""}${isCut || isWD ? " cut" : ""}">
+        <div class="pgaRank${rankClass ? " "+rankClass : ""}">${SD.escapeHtml(String(pos))}</div>
+        <div class="pgaPlayerInfo">
+          <div class="pgaPlayerName">${SD.escapeHtml(name)}</div>
+          ${country ? `<div class="pgaPlayerMeta">${SD.escapeHtml(country)}</div>` : ""}
+        </div>
+        <div class="pgaScoreTotal ${scoreClass(totalScore)}">${SD.escapeHtml(totalScore)}</div>
+        <div class="pgaScoreToday ${scoreClass(todayScore)}">${SD.escapeHtml(todayScore || "-")}</div>
+      </div>`;
+    }).join("");
+
+    const leaderboardHTML = `
 <div class="pgaLeaderboard">
   <div class="pgaLeaderHeaderRow">
-    <div class="pgaLeaderHeaderCell">#</div>
+    <div class="pgaLeaderHeaderCell">Pos</div>
     <div class="pgaLeaderHeaderCell">Player</div>
-    <div class="pgaLeaderHeaderCell right">Today</div>
     <div class="pgaLeaderHeaderCell right">Total</div>
+    <div class="pgaLeaderHeaderCell right">Today</div>
   </div>
-  ${top20.map((p, i) => {
-    const rankTxt  = rankDisplays[i];
-    const posNum   = i + 1;
-    const rMedal   = posNum <= 3 ? rankMedalClass(posNum) : "";
-    const totalCls = p.toPar !== null ? toParClass(p.toPar) : "";
-    const todayCls = p.todayScore !== null ? toParClass(p.todayScore) : "";
-    const isT3     = posNum <= 3;
-    const totalDisp = p.toPar !== null ? formatToPar(p.toPar) : "-";
-    const todayDisp = p.todayScore !== null ? formatToPar(p.todayScore) : "-";
-    return `
-<div class="pgaLeaderRow${isT3 ? " top3" : ""}">
-  <div class="pgaRank${rMedal ? " " + rMedal : ""}">${SD.escapeHtml(rankTxt)}</div>
-  <div class="pgaPlayerInfo">
-    <div class="pgaPlayerName">${SD.escapeHtml(p.name)}</div>
-    ${p.country ? `<div class="pgaPlayerMeta">${SD.escapeHtml(p.country)}</div>` : ""}
-  </div>
-  <div class="pgaScoreToday ${todayCls}">${SD.escapeHtml(todayDisp)}</div>
-  <div class="pgaScoreTotal ${totalCls}">${SD.escapeHtml(totalDisp)}</div>
-</div>`;
-  }).join("")}
+  ${leaderRows}
 </div>`;
 
-    // Async: fetch weather and inject
-    if (lat && lon) {
-      fetchPGAWeather(lat, lon).then(w => {
-        if (!w) return;
-        const slot = document.getElementById("pgaWeatherSlot");
-        if (!slot) return;
-        slot.innerHTML = `<div class="pgaWeather"><div class="pgaWeatherIcon">${w.icon}</div><div class="pgaWeatherDetails"><div class="pgaWeatherCondition">${SD.escapeHtml(w.condition)}</div><div class="pgaWeatherTemps">High ${w.hi}\u00b0 / Low ${w.lo}\u00b0</div></div></div>`;
-      }).catch(() => {});
-    } else if (venueCity) {
-      geocodeVenue(venueCity, venueState).then(coords => {
-        if (!coords) return;
-        return fetchPGAWeather(coords.lat, coords.lon);
-      }).then(w => {
-        if (!w) return;
-        const slot = document.getElementById("pgaWeatherSlot");
-        if (!slot) return;
-        slot.innerHTML = `<div class="pgaWeather"><div class="pgaWeatherIcon">${w.icon}</div><div class="pgaWeatherDetails"><div class="pgaWeatherCondition">${SD.escapeHtml(w.condition)}</div><div class="pgaWeatherTemps">High ${w.hi}\u00b0 / Low ${w.lo}\u00b0</div></div></div>`;
-      }).catch(() => {});
-    }
+    container.innerHTML = heroHTML + roundPillsHTML + leaderboardHTML;
+
+    // Bind round pill clicks
+    container.querySelectorAll(".pgaRoundPill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        container.querySelectorAll(".pgaRoundPill").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        // TODO: re-fetch round-specific data if API supports it
+      });
+    });
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  MAIN LOAD
-  // ══════════════════════════════════════════════════════════════════
+  // ─── UFC / MMA card ─────────────────────────────────────────────────────
+  function renderUFCCard(events, leagueKey) {
+    const container = document.getElementById("scoresContainer");
+    if (!container) return;
+    if (!events.length) {
+      container.innerHTML = `<div class="emptyState">No UFC events found for this date.</div>`;
+      return;
+    }
+    // UFC events are fight cards — render each event as a card with bouts
+    container.innerHTML = events.map(ev => buildScoreCardHTML(ev, leagueKey)).join("");
+  }
 
+  // ─── Main load ───────────────────────────────────────────────────────────
   window.loadScores = async function (forceRefresh) {
     stopLiveTicker();
-    const leagueKey    = SD.getSavedLeagueKey();
-    const dateYYYYMMDD = SD.getSavedDateYYYYMMDD();
-    const league       = SD.getLeagueByKey(leagueKey);
-    const color        = SD.LEAGUE_COLORS[leagueKey] || "#444";
 
+    const leagueKey    = SD.getSavedLeagueKey();
+    const dateStr      = SD.getSavedDateYYYYMMDD();
+    const renderKey    = leagueKey + "_" + dateStr;
+    lastRenderedKey    = renderKey;
+
+    const league = SD.getLeagueByKey(leagueKey);
+    if (!league) return;
+    const color = SD.LEAGUE_COLORS[leagueKey] || "#444";
+
+    // Build shell — header + date nav + container
     const content = document.getElementById("content");
     if (!content) return;
 
-    // Build chrome (header + date nav + container)
+    const isPGA = leagueKey === "pga";
+    const isCollege = SD.isCollegeLeagueKey(leagueKey);
+
     content.innerHTML =
       buildHeaderHTML(leagueKey, color) +
-      buildDateNavHTML(dateYYYYMMDD) +
+      buildDateNavHTML(dateStr) +
       `<div id="scoresContainer" class="scoresContainer"></div>`;
 
+    restoreLeagueRowScroll();
     bindLeaguePills();
     bindDateNav();
-    // Restore the pill row scroll position so it stays where the user left it
-    restoreLeagueRowScroll();
+    bindRefreshBtn();
+    bindCardTaps(leagueKey);
 
-    const container = document.getElementById("scoresContainer");
-
-    // Show skeleton while loading
-    container.innerHTML = Array.from({length: 4}, () =>
-      `<div class="scoreCard" style="border-left-color:#333;min-height:90px;background:rgba(255,255,255,0.03);"></div>`
-    ).join("");
-
+    // Fetch
     let events = [];
     try {
-      const url  = SD.withLangRegion(league.endpoint(dateYYYYMMDD));
+      const url  = SD.withLangRegion(league.endpoint(dateStr));
       const data = await SD.fetchJsonNoStore(url);
+      if (isPGA) {
+        renderPGALeaderboard(data, leagueKey, dateStr);
+        return;
+      }
       events = data?.events || [];
     } catch {
-      container.innerHTML = `<div class="emptyState">Failed to load scores. Check your connection.</div>`;
+      const c = document.getElementById("scoresContainer");
+      if (c) c.innerHTML = `<div class="emptyState">Failed to load scores. Check your connection.</div>`;
       return;
     }
 
-    // PGA gets its own leaderboard renderer
-    if (leagueKey === "pga") {
-      await renderPGALeaderboard(events, league, leagueKey, dateYYYYMMDD);
-      return;
-    }
-
+    // Conference filter (college leagues)
     let filteredEvents = events;
-    if (SD.isCollegeLeagueKey(leagueKey)) {
-      const savedConf   = SD.getSavedConferenceFilter(leagueKey);
-      const confFilterNorm = SD.norm(savedConf);
-      if (confFilterNorm) {
-        const cached = SD.loadConfCache(leagueKey, dateYYYYMMDD);
-        const teamIdToConf = cached ? cached.teamIdToConf : {};
-        filteredEvents = SD.filterEventsByConferenceUsingMap(events, confFilterNorm, teamIdToConf);
+    if (isCollege) {
+      const savedConf = SD.getSavedConferenceFilter(leagueKey);
+      const confNorm  = SD.norm(savedConf);
+      if (confNorm) {
+        const cached = SD.loadConfCache(leagueKey, dateStr);
+        const map    = cached ? cached.teamIdToConf : {};
+        filteredEvents = SD.filterEventsByConferenceUsingMap(events, confNorm, map);
       }
-      hydrateConferenceMeta(league, leagueKey, dateYYYYMMDD, events).then(map => {
-        if (map && SD.getSavedConferenceFilter(leagueKey)) {
-          const norm2 = SD.norm(SD.getSavedConferenceFilter(leagueKey));
-          if (norm2) {
-            const reFiltered = SD.filterEventsByConferenceUsingMap(events, norm2, map);
-            renderScoreCards(reFiltered, leagueKey, dateYYYYMMDD, false);
-          }
+      hydrateConferenceMeta(league, leagueKey, dateStr, events).then(map => {
+        const savedConf2 = SD.getSavedConferenceFilter(leagueKey);
+        const norm2 = SD.norm(savedConf2);
+        if (map && norm2) {
+          const re = SD.filterEventsByConferenceUsingMap(events, norm2, map);
+          renderScoreCards(re, leagueKey, dateStr, false);
         }
       }).catch(() => {});
     }
 
-    renderScoreCards(filteredEvents, leagueKey, dateYYYYMMDD, false);
-    SD.hydrateAllOdds(league, leagueKey, dateYYYYMMDD, filteredEvents).catch(() => {});
-    startLiveTicker(league, leagueKey, dateYYYYMMDD);
+    renderScoreCards(filteredEvents, leagueKey, dateStr, false);
+    SD.hydrateAllOdds(league, leagueKey, dateStr, filteredEvents).catch(() => {});
+    startLiveTicker(league, leagueKey, dateStr, filteredEvents);
   };
 
   window.__stopScoresTicker = stopLiveTicker;
