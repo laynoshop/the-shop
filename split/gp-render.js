@@ -4,9 +4,8 @@
    All HTML builders for the Group Picks tab.
    Exports via window.GP_Render = { ... }
 
-   Changes:
-   - Admin builder is rendered ABOVE game cards (top of page for admins)
-   - Game scorecards now match scores-render.js visual style exactly
+   Key fix: ESPN hydration stores data on g.__live and g.__odds
+   (double-underscore). All score/odds reads now use those keys.
    ========================= */
 
 (function GPRenderModule() {
@@ -131,11 +130,6 @@
   border-left-color: rgba(80,200,120,0.8) !important;
   background: rgba(0,200,100,0.05);
 }
-.gpScoreCard.gpFavCard {
-  border-left-color: #c89a00 !important;
-  background: rgba(200,160,0,0.07);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(200,160,0,0.18), inset 0 1px 0 rgba(255,220,100,0.08);
-}
 .gpCardHeader {
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 8px 12px 6px;
@@ -175,7 +169,7 @@
   padding: 6px 12px 10px; gap: 2px;
 }
 
-/* Team pick buttons — styled like score cards but tappable */
+/* Team pick buttons */
 .gpTeamPickBtn {
   display: flex; align-items: center; gap: 10px;
   padding: 6px 0; min-height: 44px; border-radius: 8px;
@@ -391,9 +385,21 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
   function safeRecord(t) { return String(t?.record || "").trim(); }
   function safeAbbr(t)   { return String(t?.abbr   || t?.name || "").slice(0, 4); }
+
+  /**
+   * Reads odds from g.__odds (set by gpHydrateOddsForGames in gp-espn.js)
+   * Falls back to legacy g.odds / g.oddsDetails fields for backwards compat.
+   */
   function safeOddsLine(g) {
-    const d  = String(g?.oddsDetails || g?.odds?.details || "").trim();
-    const ou = String(g?.oddsOU      || g?.odds?.overUnder || "").trim();
+    // Primary: __odds written by gp-espn.js hydration
+    const hydratedDetails  = String(g?.__odds?.details  || "").trim();
+    const hydratedOverUnder = String(g?.__odds?.overUnder || "").trim();
+    // Legacy fallback
+    const legacyDetails  = String(g?.oddsDetails || g?.odds?.details || "").trim();
+    const legacyOverUnder = String(g?.odds?.overUnder || "").trim();
+
+    const d  = hydratedDetails   || legacyDetails;
+    const ou = hydratedOverUnder || legacyOverUnder;
     const parts = [];
     if (d)  parts.push(`Fav: ${d}`);
     if (ou) parts.push(`O/U ${ou}`);
@@ -411,9 +417,14 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Status line HTML ────────────────────────────────────────────
+  /**
+   * Reads live state from g.__live (set by gpHydrateLiveStateForGames in gp-espn.js).
+   * Falls back to g.live for backwards compatibility.
+   */
   function buildStatusHTML(g) {
-    const live  = g?.live || null;
-    const state = String(live?.state || "").toLowerCase();
+    // Primary: __live written by gp-espn.js hydration
+    const live   = g?.__live || g?.live || null;
+    const state  = String(live?.state || "").toLowerCase();
     const detail = String(live?.detail || "").trim();
 
     if (state === "in") {
@@ -479,25 +490,38 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const awayLogo = String(g?.awayLogo || away?.logo || "").trim();
     const homeLogo = String(g?.homeLogo || home?.logo || "").trim();
 
-    const ms = startMs(g);
-    const now = Date.now();
+    const ms     = startMs(g);
+    const now    = Date.now();
     const locked = ms > 0 && now >= ms;
 
-    const live   = g?.live || null;
-    const state  = String(live?.state || "").toLowerCase();
-    const isLive = state === "in";
-    const isFinal = state === "post";
-    const showScores = (isLive || isFinal) && live?.awayScore != null && live?.homeScore != null;
-    const awayScore  = showScores ? String(live.awayScore) : "";
-    const homeScore  = showScores ? String(live.homeScore) : "";
-    const awayWinner = isFinal && Number(live.awayScore) > Number(live.homeScore);
-    const homeWinner = isFinal && Number(live.homeScore) > Number(live.awayScore);
+    // ── Score data ──
+    // gp-espn.js stores hydration results on g.__live
+    // Fall back to g.live for any legacy data
+    const live     = g?.__live || g?.live || null;
+    const state    = String(live?.state || "").toLowerCase();
+    const isLive   = state === "in";
+    const isFinal  = state === "post";
 
-    const pending  = typeof pendingGet === "function" ? pendingGet(eventId) : "";
-    const saved    = String(myMap?.[eventId]?.side || "");
-    const my       = pending || saved;
-    const isPending = !!pending && pending !== saved;
-    const hasPick  = !!my;
+    // Scores are present when the game is in-progress or final
+    // awayScore / homeScore come as strings from the ESPN competitors array
+    const awayScoreRaw = live?.awayScore;
+    const homeScoreRaw = live?.homeScore;
+    const showScores   = (isLive || isFinal) &&
+                         awayScoreRaw != null && awayScoreRaw !== "" &&
+                         homeScoreRaw != null && homeScoreRaw !== "";
+
+    const awayScore  = showScores ? String(awayScoreRaw) : "";
+    const homeScore  = showScores ? String(homeScoreRaw) : "";
+    const awayNum    = showScores ? Number(awayScoreRaw) : 0;
+    const homeNum    = showScores ? Number(homeScoreRaw) : 0;
+    const awayWinner = isFinal && awayNum > homeNum;
+    const homeWinner = isFinal && homeNum > awayNum;
+
+    const pending    = typeof pendingGet === "function" ? pendingGet(eventId) : "";
+    const saved      = String(myMap?.[eventId]?.side || "");
+    const my         = pending || saved;
+    const isPending  = !!pending && pending !== saved;
+    const hasPick    = !!my;
 
     const awayActive = my === "away";
     const homeActive = my === "home";
@@ -510,15 +534,15 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     if (hasPick) cardCls += " gpPickedCard";
 
     // League color for left border
-    const leagueKey   = String(g?.leagueKey || "").trim();
+    const leagueKey = String(g?.leagueKey || "").trim();
     const LEAGUE_COLORS = {
       nfl: "#013369", cfb: "#8B1A1A", nba: "#C9082A", ncaam: "#003087",
       nhl: "#1E90FF", mlb: "#002D72", mls: "#005DAA",
     };
     const borderColor = LEAGUE_COLORS[leagueKey] || "#555";
 
-    const oddsLine  = safeOddsLine(g);
-    const venueLine = String(g?.venueLine || "").trim();
+    const oddsLine   = safeOddsLine(g);
+    const venueLine  = String(g?.venueLine || "").trim();
     const statusHTML = buildStatusHTML(g);
     const kickoffTime = ms ? fmtTime(ms) : "";
     const kickoffDate = ms ? fmtDate(ms) : "";
@@ -547,7 +571,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         <div class="gpTeamName">${esc(safeTeam(away))}</div>
         ${safeRecord(away) ? `<div class="gpTeamMeta">${esc(safeRecord(away))}</div>` : ""}
       </div>
-      ${showScores ? scoreHTML(awayScore, awayWinner, !awayWinner && isFinal) : ""}
+      ${showScores ? scoreHTML(awayScore, awayWinner, isFinal && !awayWinner) : ""}
     </button>
     <button class="gpTeamPickBtn${homeActive ? " gpPickRowActive" : ""}${homeFade ? " gpFaded" : ""}"
       type="button"
@@ -558,7 +582,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         <div class="gpTeamName">${esc(safeTeam(home))}</div>
         ${safeRecord(home) ? `<div class="gpTeamMeta">${esc(safeRecord(home))}</div>` : ""}
       </div>
-      ${showScores ? scoreHTML(homeScore, homeWinner, !homeWinner && isFinal) : ""}
+      ${showScores ? scoreHTML(homeScore, homeWinner, isFinal && !homeWinner) : ""}
     </button>
   </div>
   <div class="gpPickStrip">
@@ -602,9 +626,9 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     }
 
     const rowsHTML = list.length ? list.map((u, i) => {
-      const rank  = i + 1;
-      const top3  = rank <= 3;
-      const med   = medal(rank);
+      const rank = i + 1;
+      const top3 = rank <= 3;
+      const med  = medal(rank);
       return `
 <div class="gpLeaderRow${top3 ? " top3" : ""}">
   <div class="gpLeaderRank">
@@ -652,16 +676,16 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       return `<option value="${esc(k)}"${k === leagueKey ? " selected" : ""}>${esc(String(l.name || k))}</option>`;
     }).join("");
 
-    // Date value for the input (YYYYMMDD → YYYY-MM-DD)
-    const dl    = String(dateLabel || "").replace(/-/g, "");
+    const dl           = String(dateLabel || "").replace(/-/g, "");
     const dateInputVal = /^\d{8}$/.test(dl) ? `${dl.slice(0,4)}-${dl.slice(4,6)}-${dl.slice(6,8)}` : "";
 
-    const sorted = [...(Array.isArray(availableEvents) ? availableEvents : [])].sort((a, b) => kickoffMs(a) - kickoffMs(b));
+    const sorted = [...(Array.isArray(availableEvents) ? availableEvents : [])]
+      .sort((a, b) => kickoffMs(a) - kickoffMs(b));
 
     const gameRows = sorted.map(ev => {
       const id   = String(ev?.id || "");
       if (!id) return "";
-      const comp = ev?.competitions?.[0];
+      const comp  = ev?.competitions?.[0];
       const comps = Array.isArray(comp?.competitors) ? comp.competitors : [];
       const home  = comps.find(c => c?.homeAway === "home") || comps[1] || {};
       const away  = comps.find(c => c?.homeAway === "away") || comps[0] || {};
@@ -724,13 +748,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     }
 
     const pendingGet = window.gpPendingGet || (() => "");
-    const isDraft = !published && isAdmin;
+    const isDraft    = !published && isAdmin;
 
-    // Sort by start time
-    const sorted = [...list].sort((a, b) => startMs(a) - startMs(b));
+    const sorted    = [...list].sort((a, b) => startMs(a) - startMs(b));
     const gameCards = sorted.map(g => buildGameCard(g, weekId, myMap, pendingGet)).filter(Boolean);
 
-    // Leaderboard
     const GP_Data = window.GP_Data || {};
     let leaderboardHTML = "";
     if (!isDraft) {
@@ -771,7 +793,7 @@ ${saveRow}`;
 </div>`;
   }
 
-  // ─── Select all / none helper (called from click handler) ────────
+  // ─── Select all / none helper ────────
   function gpApplyAdminSelection(mode) {
     const checks = document.querySelectorAll("[data-gpgamesel]");
     checks.forEach(c => { c.checked = (mode === "all"); });
