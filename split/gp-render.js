@@ -309,14 +309,6 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   color: rgba(255,255,255,0.38); letter-spacing: 0.08em;
   text-transform: uppercase; margin-top: 3px;
 }
-.gpLeaderScoringNote {
-  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
-  color: rgba(255,255,255,0.3); white-space: nowrap;
-}
-.gpLeaderScoringNote span {
-  display: inline-block; background: rgba(255,255,255,0.07);
-  border-radius: 6px; padding: 2px 7px; margin-left: 4px;
-}
 
 /* Podium — top 3 */
 .gpLeaderPodium {
@@ -410,11 +402,26 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   border: 1px solid rgba(200,120,60,0.18); border-bottom: none;
 }
 
-/* Rest of the pack — ranked list below podium */
+/* Full standings section label */
+.gpStandingsDivider {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 14px 4px;
+}
+.gpStandingsDividerLine {
+  flex: 1; height: 1px;
+  background: rgba(255,255,255,0.07);
+}
+.gpStandingsDividerLabel {
+  font-size: 10px; font-weight: 900; letter-spacing: 0.12em;
+  text-transform: uppercase; color: rgba(255,255,255,0.25);
+  white-space: nowrap;
+}
+
+/* Standings list */
 .gpLeaderList {
   display: flex; flex-direction: column;
-  padding: 10px 10px 14px;
-  gap: 6px;
+  padding: 4px 10px 6px;
+  gap: 5px;
 }
 
 .gpLeaderRow {
@@ -453,24 +460,22 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   line-height: 1.2;
 }
 
-/* Pick result chips (W/L dots) */
-.gpLeaderChips {
-  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+/* Record + pick breakdown */
+.gpLeaderRecord {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
-.gpChipW {
-  width: 20px; height: 20px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 900; letter-spacing: 0.04em;
-  background: rgba(60,200,100,0.18); border: 1px solid rgba(60,200,100,0.35);
-  color: rgba(120,255,160,0.9);
+.gpRecordBadge {
+  font-size: 12px; font-weight: 900; letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.7);
 }
-.gpChipL {
-  width: 20px; height: 20px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 900; letter-spacing: 0.04em;
-  background: rgba(200,60,60,0.14); border: 1px solid rgba(200,60,60,0.28);
-  color: rgba(255,120,120,0.7);
+.gpRecordBreakdown {
+  font-size: 11px; font-weight: 700;
+  color: rgba(255,255,255,0.32);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.gpRecordBreakdown .gpDogCount  { color: rgba(120,190,255,0.7); }
+.gpRecordBreakdown .gpFavCount  { color: rgba(255,160,160,0.7); }
 
 /* Points pill */
 .gpLeaderPtsPill {
@@ -484,6 +489,21 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 }
 .gpLeaderPtsNum  { font-size: 16px; font-weight: 900; line-height: 1; }
 .gpLeaderPtsUnit { font-size: 11px; font-weight: 800; opacity: 0.7; margin-left: 1px; }
+
+/* Scoring legend — bottom of card */
+.gpLeaderScoringFooter {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.gpLeaderScoringFooter span {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px; padding: 3px 10px;
+}
 
 /* Draft badge */
 .gpDraftBadge {
@@ -763,16 +783,30 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     return String(name || "?").slice(0, 2).toUpperCase();
   }
 
+  // ─── Pick breakdown helper ────────────────────────────────────────
+  // Builds a short string like "3 dogs · 2 favs" from the user's winning picks.
+  // Requires the leaderboard row to carry dogWins / favWins counts (set by gp-data.js).
+  function pickBreakdown(u) {
+    const dogs = Number(u?.dogWins ?? 0);
+    const favs = Number(u?.favWins ?? 0);
+    if (!dogs && !favs) return "";
+    const parts = [];
+    if (dogs) parts.push(`<span class="gpDogCount">🐶 ${dogs} dog${dogs !== 1 ? "s" : ""}</span>`);
+    if (favs) parts.push(`<span class="gpFavCount">❤️ ${favs} fav${favs !== 1 ? "s" : ""}</span>`);
+    return parts.join(" &middot; ");
+  }
+
   // ─── Leaderboard ─────────────────────────────────────────────────
   function buildLeaderboardHTML(weekLabel, leaderboard) {
     const { rows, finalsCount } = leaderboard || {};
     const list  = Array.isArray(rows) ? rows : [];
     const label = String(weekLabel || "");
 
-    const scoringNote = `
-      <div class="gpLeaderScoringNote">
-        Scoring<span>🐶 Dog = 2 pts</span><span>❤️ Fav = 1 pt</span>
-      </div>`;
+    const scoringFooter = `
+<div class="gpLeaderScoringFooter">
+  <span>🐶 Underdog = 2 pts</span>
+  <span>❤️ Favorite = 1 pt</span>
+</div>`;
 
     // ── No finals yet ──
     if (!finalsCount) {
@@ -783,12 +817,12 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       <div class="gpLeaderTitle">🏆 Leaderboard</div>
       ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
     </div>
-    ${scoringNote}
   </div>
   <div class="gpEmpty" style="padding:28px 20px">
     <div style="font-size:28px;margin-bottom:8px">⏳</div>
     <div style="font-size:14px;font-weight:800;color:rgba(255,255,255,0.5)">Leaderboard locks in once games go final</div>
   </div>
+  ${scoringFooter}
 </div>`;
     }
 
@@ -801,15 +835,14 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       <div class="gpLeaderTitle">🏆 Leaderboard</div>
       ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
     </div>
-    ${scoringNote}
   </div>
   <div class="gpEmpty" style="padding:28px 20px">No picks recorded this week.</div>
+  ${scoringFooter}
 </div>`;
     }
 
     // ── Podium (top 3) ──
     const podiumSlots = list.slice(0, 3);
-    // Always render 2nd, 1st, 3rd order visually (CSS order handles it)
     const podiumHTML = podiumSlots.map((u, i) => {
       const rank = i + 1;
       const nm   = String(u?.name || "Someone");
@@ -828,26 +861,36 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 </div>`;
     }).join("");
 
-    // ── Rest of the pack (4th+) ──
-    const restRows = list.slice(3).map((u, i) => {
-      const rank = i + 4;
-      const nm   = String(u?.name || "Someone");
-      const pts  = Number(u?.points ?? 0);
-      const wins = Number(u?.wins   ?? 0);
+    // ── Full Standings (everyone, rank 1+) ──
+    // We show ALL entries (including top 3) in the list so the full picture is clear.
+    const allRows = list.map((u, i) => {
+      const rank   = i + 1;
+      const nm     = String(u?.name || "Someone");
+      const pts    = Number(u?.points ?? 0);
+      const wins   = Number(u?.wins   ?? 0);
       const losses = Number(u?.losses ?? 0);
       const { bg, color } = avatarStyle(nm);
 
-      // Build W/L chips (cap at 8 to avoid overflow)
-      const wChips = Array(Math.min(wins,   8)).fill(`<span class="gpChipW">W</span>`).join("");
-      const lChips = Array(Math.min(losses, 8)).fill(`<span class="gpChipL">L</span>`).join("");
+      const record    = `${wins}–${losses}`;
+      const breakdown = pickBreakdown(u);
+
+      // Subtle highlight for top 3 in the list
+      const topStyle = rank <= 3
+        ? rank === 1 ? " style=\"border-color:rgba(255,210,60,0.18);background:rgba(255,200,40,0.05)\""
+        : rank === 2 ? " style=\"border-color:rgba(190,190,210,0.14)\""
+        : " style=\"border-color:rgba(200,120,60,0.14)\""
+        : "";
 
       return `
-<div class="gpLeaderRow">
+<div class="gpLeaderRow"${topStyle}>
   <div class="gpLeaderRankBadge">${esc(String(rank))}</div>
   <div class="gpLeaderAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
   <div class="gpLeaderInfo">
     <div class="gpLeaderName">${esc(nm)}</div>
-    <div class="gpLeaderChips">${wChips}${lChips}</div>
+    <div class="gpLeaderRecord">
+      <span class="gpRecordBadge">${esc(record)}</span>
+      ${breakdown ? `<span class="gpRecordBreakdown">${breakdown}</span>` : ""}
+    </div>
   </div>
   <div class="gpLeaderPtsPill">
     <span class="gpLeaderPtsNum">${esc(String(pts))}</span>
@@ -863,12 +906,17 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       <div class="gpLeaderTitle">🏆 Leaderboard</div>
       ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
     </div>
-    ${scoringNote}
   </div>
   <div class="gpLeaderPodium">
     ${podiumHTML}
   </div>
-  ${restRows ? `<div class="gpLeaderList">${restRows}</div>` : ""}
+  <div class="gpStandingsDivider">
+    <div class="gpStandingsDividerLine"></div>
+    <div class="gpStandingsDividerLabel">Full Standings</div>
+    <div class="gpStandingsDividerLine"></div>
+  </div>
+  <div class="gpLeaderList">${allRows}</div>
+  ${scoringFooter}
 </div>`;
   }
 
