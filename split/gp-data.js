@@ -2,14 +2,14 @@
    =========================
    GROUP PICKS — Firebase / Firestore Data Layer
    Firebase ready check, Firestore CRUD for slates/picks,
-   and the "Everyone's Picks" lazy-load + cache.
+   leaderboard computation, and the “Everyone’s Picks” lazy-load + cache.
    Exposes all functions on window.GP_Data namespace.
 */
 
 (function () {
   "use strict";
 
-  // --------------- safe localStorage helpers ---------------
+  // ─── safe localStorage helpers ──────────────────────────────────
   function safeGetLS(key) {
     try { return String(localStorage.getItem(key) || ""); } catch { return ""; }
   }
@@ -17,11 +17,10 @@
     try { localStorage.setItem(key, String(val)); } catch {}
   }
 
-  const PICKS_NAME_KEY = "theShopPicksName_v1";
-  const META_PUBLIC_DOC = "public";
-  const META_ADMIN_DOC  = "admin";
+  const PICKS_NAME_KEY   = "theShopPicksName_v1";
+  const META_PUBLIC_DOC  = "public";
 
-  // --------------- Firebase ready ---------------
+  // ─── Firebase ready ───────────────────────────────────────────────
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") {
       await window.ensureFirebaseChatReady();
@@ -68,7 +67,7 @@
     if (!auth.currentUser) throw new Error("Auth not ready (anonymous user missing).");
   }
 
-  // --------------- display name helper ---------------
+  // ─── display name helper ─────────────────────────────────────────
   function getPicksDisplayName() {
     const existingChat = (safeGetLS("theShopChatName_v1") || "").trim();
     if (existingChat) return existingChat.slice(0, 20);
@@ -77,7 +76,7 @@
     return String(name).trim().slice(0, 20);
   }
 
-  // --------------- Firestore refs ---------------
+  // ─── Firestore refs ────────────────────────────────────────────────
   function metaRef(db, docId) {
     return db.collection("pickSlatesMeta").doc(String(docId));
   }
@@ -86,7 +85,7 @@
     return snap.exists ? (snap.data() || {}) : {};
   }
 
-  // --------------- slate games ---------------
+  // ─── slate games ─────────────────────────────────────────────────────
   async function gpGetSlateGames(db, slateId) {
     const snap = await db.collection("pickSlates").doc(slateId).collection("games").get();
     const list = [];
@@ -99,7 +98,7 @@
     return list;
   }
 
-  // --------------- my picks ---------------
+  // ─── my picks ──────────────────────────────────────────────────────────
   async function gpGetMyPicksMap(db, slateId, playerId) {
     if (!playerId) return {};
     const snap = await db.collection("pickSlates").doc(slateId)
@@ -110,21 +109,21 @@
     return map;
   }
 
-  // --------------- all picks for slate ---------------
+  // ─── all picks for slate ────────────────────────────────────────────
   async function gpGetAllPicksForSlate(db, slateId) {
     const out = {};
     const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
-    const userDocs = usersSnap.docs || [];
+    const userDocs  = usersSnap.docs || [];
     for (const u of userDocs) {
-      const playerId = u.id;
+      const playerId  = u.id;
       const gamesSnap = await db.collection("pickSlates").doc(slateId)
         .collection("picks").doc(playerId)
         .collection("games").get();
       gamesSnap.forEach(d => {
         const eventId = d.id;
-        const data = d.data() || {};
-        const name = String(data.name || (u.data()?.name || "Someone"));
-        const side = String(data.side || "");
+        const data    = d.data() || {};
+        const name    = String(data.name || (u.data()?.name || "Someone"));
+        const side    = String(data.side || "");
         if (!out[eventId]) out[eventId] = [];
         out[eventId].push({ uid: playerId, name, side });
       });
@@ -135,13 +134,13 @@
     return out;
   }
 
-  // --------------- save picks (batch write) ---------------
+  // ─── save picks (batch write) ────────────────────────────────────────
   async function gpSaveMyPicksBatch(db, slateId, playerId, pendingMap) {
     const keys = Object.keys(pendingMap || {});
     if (!keys.length) return;
     const picksUserRef = db.collection("pickSlates").doc(slateId)
       .collection("picks").doc(playerId);
-    const name = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
+    const name  = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
     const batch = db.batch();
     batch.set(picksUserRef, {
       uid: String(playerId || ""),
@@ -149,10 +148,10 @@
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
     for (const eventId of keys) {
-      const side = String(pendingMap[eventId] || "");
+      const side    = String(pendingMap[eventId] || "");
       const gameRef = picksUserRef.collection("games").doc(String(eventId));
       batch.set(gameRef, {
-        uid: String(playerId || ""),
+        uid:       String(playerId || ""),
         name,
         side,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -161,7 +160,7 @@
     await batch.commit();
   }
 
-  // --------------- everyone's picks cache ---------------
+  // ─── everyone’s picks cache ─────────────────────────────────────────
   function gpGetAllPicksCacheBucket(weekId) {
     window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
     const k = String(weekId || "");
@@ -173,15 +172,15 @@
     const k = String(weekId || "").trim();
     if (!k) return {};
     const bucket = gpGetAllPicksCacheBucket(k);
-    const TTL = 2 * 60 * 1000;
-    const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
-    if (fresh) return bucket.data || {};
+    const TTL    = 2 * 60 * 1000;
+    const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+    if (fresh)         return bucket.data || {};
     if (bucket.promise) return bucket.promise;
     bucket.promise = (async () => {
       try {
-        const data = await gpGetAllPicksForSlate(db, k);
+        const data  = await gpGetAllPicksForSlate(db, k);
         bucket.data = data || {};
-        bucket.ts = Date.now();
+        bucket.ts   = Date.now();
         return bucket.data;
       } finally {
         bucket.promise = null;
@@ -190,23 +189,147 @@
     return bucket.promise;
   }
 
-  // --------------- everyone's picks lazy-load toggle listener ---------------
+  // ──────────────────────────────────────────────────────────────
+  // gpComputeWeeklyLeaderboard
+  //
+  // Computes standings for a slate given:
+  //   games     — array of game objects (with __live or live for score state)
+  //   allPicks  — { [eventId]: [ { uid, name, side } ] }
+  //
+  // Scoring:
+  //   +2 pts for a correct underdog pick  (pick matched the team NOT favored)
+  //   +1 pt  for a correct favored pick   (pick matched the favored team)
+  //   Favorite is inferred from the spread stored in g.__odds / g.oddsDetails.
+  //   If odds data is unavailable, all correct picks = +1 pt.
+  //
+  // Returns: { rows: [...], finalsCount: N }
+  //   rows sorted descending by points, then wins, then name
+  // ──────────────────────────────────────────────────────────────
+  function gpComputeWeeklyLeaderboard(games, allPicks) {
+    const list  = Array.isArray(games)    ? games    : [];
+    const picks = (allPicks && typeof allPicks === "object") ? allPicks : {};
+
+    // — identify games that have gone final —
+    const finalGames = list.filter(g => {
+      // Live state is stored on g.__live by gp-espn.js hydration,
+      // fall back to g.live for any legacy / Firestore-persisted state.
+      const live  = g?.__live || g?.live || null;
+      const state = String(live?.state || "").toLowerCase();
+      return state === "post";
+    });
+
+    const finalsCount = finalGames.length;
+    if (!finalsCount) return { rows: [], finalsCount: 0 };
+
+    // — build a lookup: eventId → { winningSide, isFavoredWinner } —
+    //
+    // winningSide: "away" | "home" | "" (tie / no result)
+    // favSide:     "away" | "home" | "" (which side was favored per odds)
+    const gameResults = {};
+    for (const g of finalGames) {
+      const eventId = String(g?.eventId || g?.id || "");
+      if (!eventId) continue;
+
+      const live = g?.__live || g?.live || null;
+      const awayNum = Number(live?.awayScore ?? NaN);
+      const homeNum = Number(live?.homeScore ?? NaN);
+
+      let winningSide = "";
+      if (Number.isFinite(awayNum) && Number.isFinite(homeNum)) {
+        if      (awayNum > homeNum) winningSide = "away";
+        else if (homeNum > awayNum) winningSide = "home";
+        // else tie — winningSide stays ""
+      }
+
+      // Determine favored side from odds.
+      // g.__odds.details or g.oddsDetails typically look like:
+      //   "Home -3.5"  or  "Away -7"  or  "Kansas City Chiefs -3"
+      // We look for "away" / "home" keywords (case-insensitive).
+      // If neither keyword is present we leave favSide blank
+      // (both sides score the same in that case).
+      let favSide = "";
+      const oddsDetails = String(
+        g?.__odds?.details || g?.oddsDetails || g?.odds?.details || ""
+      ).toLowerCase().trim();
+      if (oddsDetails) {
+        if      (oddsDetails.startsWith("away")) favSide = "away";
+        else if (oddsDetails.startsWith("home")) favSide = "home";
+        // named team — try to match against team names
+        else {
+          const awayName = String(g?.awayTeam?.name || g?.awayName || "").toLowerCase();
+          const homeName = String(g?.homeTeam?.name || g?.homeName || "").toLowerCase();
+          if (awayName && oddsDetails.includes(awayName)) favSide = "away";
+          else if (homeName && oddsDetails.includes(homeName)) favSide = "home";
+        }
+      }
+
+      gameResults[eventId] = { winningSide, favSide };
+    }
+
+    // — tally scores per player —
+    // Collect every unique player across all events
+    const players = new Map(); // uid → { name, points, wins, losses, picks }
+
+    for (const [eventId, result] of Object.entries(gameResults)) {
+      const { winningSide, favSide } = result;
+      const eventPicks = Array.isArray(picks[eventId]) ? picks[eventId] : [];
+
+      for (const p of eventPicks) {
+        const uid  = String(p?.uid  || "");
+        const name = String(p?.name || "Someone");
+        const side = String(p?.side || "");
+        if (!uid || !side) continue;
+
+        if (!players.has(uid)) {
+          players.set(uid, { name, points: 0, wins: 0, losses: 0, picks: 0 });
+        }
+        const row = players.get(uid);
+        // Update name to latest (in case it changed)
+        row.name = name;
+        row.picks++;
+
+        if (!winningSide) continue; // tie — no points awarded
+
+        if (side === winningSide) {
+          // Correct pick
+          row.wins++;
+          // +2 if picked the underdog, +1 if picked the favorite
+          const pickedUnderdog = favSide && side !== favSide;
+          row.points += pickedUnderdog ? 2 : 1;
+        } else {
+          // Wrong pick
+          row.losses++;
+        }
+      }
+    }
+
+    // — sort and return —
+    const rows = [...players.values()].sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.wins   !== a.wins)   return b.wins   - a.wins;
+      return String(a.name).localeCompare(String(b.name));
+    });
+
+    return { rows, finalsCount };
+  }
+
+  // ─── everyone’s picks lazy-load toggle listener ───────────────────
   function esc(s) {
     if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
     return String(s ?? "")
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+      .replace(/&/g,  "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g,  "&gt;")
+      .replace(/"/g,  "&quot;")
+      .replace(/'/g,  "&#39;");
   }
 
   function gpBuildEveryoneLinesForEvent({ everyoneArr, awayName, homeName }) {
     const arr = Array.isArray(everyoneArr) ? everyoneArr : [];
     if (!arr.length) return `<div class="muted">No picks yet.</div>`;
     return arr.map(p => {
-      const nm = String(p?.name || "Someone");
+      const nm   = String(p?.name || "Someone");
       const side = String(p?.side || "");
-      const team = (side === "away") ? (awayName || "—") : (side === "home" ? (homeName || "—") : "—");
+      const team = side === "away" ? (awayName || "—") : side === "home" ? (homeName || "—") : "—";
       return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
     }).join("");
   }
@@ -229,7 +352,7 @@
           if (bodyEl.getAttribute("data-loaded") === "1") return;
           bodyEl.innerHTML = `<div class="muted">Loading&#x2026;</div>`;
           await ensureFirebaseReadySafe();
-          const db = firebase.firestore();
+          const db  = firebase.firestore();
           const all = await gpEnsureAllPicksForWeek(db, weekId);
           const everyoneArr = Array.isArray(all?.[eventId]) ? all[eventId] : [];
           const awayName = String(details.getAttribute("data-away") || "Away");
@@ -239,9 +362,9 @@
         } catch (err) {
           console.error("Everyone's Picks lazy-load error:", err);
           try {
-            const details = e.target;
-            const weekId  = String(details?.getAttribute("data-weekid") || "").trim();
-            const eventId = String(details?.getAttribute("data-eid")    || "").trim();
+            const det2    = e.target;
+            const weekId  = String(det2?.getAttribute("data-weekid") || "").trim();
+            const eventId = String(det2?.getAttribute("data-eid")    || "").trim();
             const bodyEl  = document.getElementById(`gpEveryone_${weekId}_${eventId}`);
             if (bodyEl) bodyEl.innerHTML = `<div class="muted">Couldn't load picks.</div>`;
           } catch {}
@@ -250,7 +373,7 @@
     }, true);
   }
 
-  // --------------- expose on window ---------------
+  // ─── expose on window ──────────────────────────────────────────────────
   window.GP_Data = {
     ensureFirebaseReadySafe,
     getPicksDisplayName,
@@ -261,11 +384,11 @@
     gpGetAllPicksForSlate,
     gpSaveMyPicksBatch,
     gpGetAllPicksCacheBucket,
-    gpEnsureAllPicksForWeek
+    gpEnsureAllPicksForWeek,
+    gpComputeWeeklyLeaderboard,       // ← was missing, now included
   };
 
   // Also expose ensureFirebaseReadySafe at top level for back-compat
-  // (some callers in groupPicks.js call it directly)
   window.ensureFirebaseReadySafe = ensureFirebaseReadySafe;
 
 })();
