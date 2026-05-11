@@ -125,19 +125,23 @@
 .venueLine::before { content: "📍 "; }
 .scoresRefreshBtn {
   margin-left: auto;
-  width: 36px; height: 36px;
+  height: 32px;
+  padding: 0 12px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 10px;
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.12);
   color: rgba(255,255,255,0.65);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   flex-shrink: 0;
+  white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
-  transition: background 140ms ease, color 140ms ease, transform 300ms ease;
+  transition: background 140ms ease, color 140ms ease;
 }
 .scoresRefreshBtn:active { background: rgba(255,255,255,0.14); color: #fff; }
-.scoresRefreshBtn.spinning svg { animation: scRefreshSpin 600ms linear forwards; }
-@keyframes scRefreshSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.scoresRefreshBtn.spinning { opacity: 0.5; pointer-events: none; }
 
 .emptyState { padding: 48px 24px; text-align: center; color: rgba(255,255,255,0.38); font-size: 15px; font-weight: 600; letter-spacing: 0.2px; }
 
@@ -451,11 +455,7 @@
 <div class="scoresPageHeader" style="--scores-header-accent:${SD.escapeHtml(color)}">
   <div class="scoresHeaderTop">
     <div class="scoresHeaderTitle">${SD.escapeHtml(leagueLabel)}<span>Scores</span></div>
-    <button class="scoresRefreshBtn" id="scoresRefreshBtn" type="button" aria-label="Refresh scores">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-      </svg>
-    </button>
+    <button class="scoresRefreshBtn" id="scoresRefreshBtn" type="button" aria-label="Refresh scores">Refresh</button>
   </div>
   <div class="scoresLeagueRow" id="scoresLeagueRow">${pillsHTML}</div>
 </div>`;
@@ -503,7 +503,7 @@
     if (!btn) return;
     btn.addEventListener("click", () => {
       btn.classList.add("spinning");
-      btn.addEventListener("animationend", () => btn.classList.remove("spinning"), { once: true });
+      setTimeout(() => btn.classList.remove("spinning"), 800);
       window.loadScores(true);
     });
   }
