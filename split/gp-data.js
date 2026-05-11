@@ -2,7 +2,7 @@
    =========================
    GROUP PICKS — Firebase / Firestore Data Layer
    Firebase ready check, Firestore CRUD for slates/picks,
-   leaderboard computation, and the “Everyone’s Picks” lazy-load + cache.
+   leaderboard computation, and the "Everyone's Picks" lazy-load + cache.
    Exposes all functions on window.GP_Data namespace.
 */
 
@@ -160,7 +160,7 @@
     await batch.commit();
   }
 
-  // ─── everyone’s picks cache ─────────────────────────────────────────
+  // ─── everyone's picks cache ─────────────────────────────────────────
   function gpGetAllPicksCacheBucket(weekId) {
     window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
     const k = String(weekId || "");
@@ -174,7 +174,7 @@
     const bucket = gpGetAllPicksCacheBucket(k);
     const TTL    = 2 * 60 * 1000;
     const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
-    if (fresh)         return bucket.data || {};
+    if (fresh)          return bucket.data || {};
     if (bucket.promise) return bucket.promise;
     bucket.promise = (async () => {
       try {
@@ -202,6 +202,9 @@
   //   Favorite is inferred from the spread stored in g.__odds / g.oddsDetails.
   //   If odds data is unavailable, all correct picks = +1 pt.
   //
+  // Each row in `rows` includes:
+  //   { name, points, wins, losses, picks, dogWins, favWins }
+  //
   // Returns: { rows: [...], finalsCount: N }
   //   rows sorted descending by points, then wins, then name
   // ──────────────────────────────────────────────────────────────
@@ -211,8 +214,6 @@
 
     // — identify games that have gone final —
     const finalGames = list.filter(g => {
-      // Live state is stored on g.__live by gp-espn.js hydration,
-      // fall back to g.live for any legacy / Firestore-persisted state.
       const live  = g?.__live || g?.live || null;
       const state = String(live?.state || "").toLowerCase();
       return state === "post";
@@ -221,16 +222,13 @@
     const finalsCount = finalGames.length;
     if (!finalsCount) return { rows: [], finalsCount: 0 };
 
-    // — build a lookup: eventId → { winningSide, isFavoredWinner } —
-    //
-    // winningSide: "away" | "home" | "" (tie / no result)
-    // favSide:     "away" | "home" | "" (which side was favored per odds)
+    // — build a lookup: eventId → { winningSide, favSide } —
     const gameResults = {};
     for (const g of finalGames) {
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) continue;
 
-      const live = g?.__live || g?.live || null;
+      const live    = g?.__live || g?.live || null;
       const awayNum = Number(live?.awayScore ?? NaN);
       const homeNum = Number(live?.homeScore ?? NaN);
 
@@ -238,15 +236,8 @@
       if (Number.isFinite(awayNum) && Number.isFinite(homeNum)) {
         if      (awayNum > homeNum) winningSide = "away";
         else if (homeNum > awayNum) winningSide = "home";
-        // else tie — winningSide stays ""
       }
 
-      // Determine favored side from odds.
-      // g.__odds.details or g.oddsDetails typically look like:
-      //   "Home -3.5"  or  "Away -7"  or  "Kansas City Chiefs -3"
-      // We look for "away" / "home" keywords (case-insensitive).
-      // If neither keyword is present we leave favSide blank
-      // (both sides score the same in that case).
       let favSide = "";
       const oddsDetails = String(
         g?.__odds?.details || g?.oddsDetails || g?.odds?.details || ""
@@ -254,7 +245,6 @@
       if (oddsDetails) {
         if      (oddsDetails.startsWith("away")) favSide = "away";
         else if (oddsDetails.startsWith("home")) favSide = "home";
-        // named team — try to match against team names
         else {
           const awayName = String(g?.awayTeam?.name || g?.awayName || "").toLowerCase();
           const homeName = String(g?.homeTeam?.name || g?.homeName || "").toLowerCase();
@@ -267,8 +257,8 @@
     }
 
     // — tally scores per player —
-    // Collect every unique player across all events
-    const players = new Map(); // uid → { name, points, wins, losses, picks }
+    // row shape: { name, points, wins, losses, picks, dogWins, favWins }
+    const players = new Map();
 
     for (const [eventId, result] of Object.entries(gameResults)) {
       const { winningSide, favSide } = result;
@@ -281,23 +271,25 @@
         if (!uid || !side) continue;
 
         if (!players.has(uid)) {
-          players.set(uid, { name, points: 0, wins: 0, losses: 0, picks: 0 });
+          players.set(uid, { name, points: 0, wins: 0, losses: 0, picks: 0, dogWins: 0, favWins: 0 });
         }
         const row = players.get(uid);
-        // Update name to latest (in case it changed)
-        row.name = name;
+        row.name = name; // keep name current
         row.picks++;
 
-        if (!winningSide) continue; // tie — no points awarded
+        if (!winningSide) continue; // tie — no points
 
         if (side === winningSide) {
-          // Correct pick
           row.wins++;
-          // +2 if picked the underdog, +1 if picked the favorite
           const pickedUnderdog = favSide && side !== favSide;
-          row.points += pickedUnderdog ? 2 : 1;
+          if (pickedUnderdog) {
+            row.points  += 2;
+            row.dogWins += 1;  // ← track underdog wins
+          } else {
+            row.points  += 1;
+            row.favWins += 1;  // ← track favorite wins
+          }
         } else {
-          // Wrong pick
           row.losses++;
         }
       }
@@ -313,7 +305,7 @@
     return { rows, finalsCount };
   }
 
-  // ─── everyone’s picks lazy-load toggle listener ───────────────────
+  // ─── everyone's picks lazy-load toggle listener ───────────────────
   function esc(s) {
     if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
     return String(s ?? "")
@@ -385,7 +377,7 @@
     gpSaveMyPicksBatch,
     gpGetAllPicksCacheBucket,
     gpEnsureAllPicksForWeek,
-    gpComputeWeeklyLeaderboard,       // ← was missing, now included
+    gpComputeWeeklyLeaderboard,
   };
 
   // Also expose ensureFirebaseReadySafe at top level for back-compat
