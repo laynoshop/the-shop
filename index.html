@@ -3,130 +3,202 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#bb0000" />
   <title>The Shop</title>
-  <link rel="manifest" href="manifest.json" />
+
+  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css" />
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 </head>
+
 <body>
 
-<!-- ========== LOGIN ========== -->
-<div id="login">
-  <div class="login-inner">
-    <div class="login-logo">
-      <img src="buckeye-O.png" alt="Buckeye O" class="login-buckeye" />
+  <noscript>
+    <div style="padding:16px;font-family:-apple-system,system-ui;">
+      This app requires JavaScript to run.
     </div>
-    <h1 class="login-title">The Shop</h1>
-    <div class="login-days-row">
-      <span id="daysSinceNumber">0</span> days since TTUN has won in The Game
-    </div>
-    <div class="login-form">
-      <input id="code" type="text" placeholder="Enter Scarlet Key"
-             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-      <button id="loginBtn" type="button" onclick="window.checkCode && window.checkCode()">Enter The Shop</button>
-    </div>
-    <div id="loginMsg" class="login-msg"></div>
-  </div>
-</div>
+  </noscript>
 
-<!-- ========== ENTRY DOORS ========== -->
-<div id="entry" style="display:none;">
-  <div class="entry-inner">
-    <div class="entry-logo">
-      <img src="buckeye-O.png" alt="Buckeye O" class="entry-buckeye" />
+  <!-- =========================
+       LOGIN (ELITE LIVE VERSION)
+       ========================= -->
+  <div id="login" class="loginScreen">
+    <div class="days-since">
+      <div class="daysNumber" id="daysSinceNumber">446</div>
+      <div class="daysLabel">DAYS SINCE TTUN WON IN THE GAME</div>
     </div>
-    <h2 class="entry-title">Welcome to The Shop</h2>
-    <div class="entryDoors">
-        <button class="doorBtn" type="button" data-go="scores">🏈 Scores</button>
-        <button class="doorBtn" type="button" data-go="picks">🎯 Picks</button>
-        <button class="doorBtn" type="button" data-go="beat">🔥 Beat TTUN</button>
-        <button class="doorBtn" type="button" data-go="news">📰 Top News</button>
-        <button class="doorBtn" type="button" data-go="golf">⛳ Putt Putt</button>
-        <button class="doorBtn" type="button" data-go="fun">🎉 Fun</button>
-        <button class="doorBtn adminOnly" type="button" data-go="shop">🛒 Shop</button>
-    </div>
-    <button id="piScoreboardBtn" class="pi-btn" type="button" style="display:none;">📺 Pi Scoreboard</button>
-    <div id="rivalryBanner" class="rivalry-banner-entry"></div>
-    <div class="entry-countdown">
-      <div class="entry-countdown-label">Next Game Countdown</div>
-      <div class="countdown-boxes">
-        <div class="cd-box"><span id="cdDays">--</span><div class="cd-label">Days</div></div>
-        <div class="cd-box"><span id="cdHours">--</span><div class="cd-label">Hrs</div></div>
-        <div class="cd-box"><span id="cdMins">--</span><div class="cd-label">Min</div></div>
-        <div class="cd-box"><span id="cdSecs">--</span><div class="cd-label">Sec</div></div>
+
+    <div class="loginCard">
+      <h1 class="loginTitle">The Shop</h1>
+      <div class="loginSubtitle">Enter the Scarlet Key</div>
+
+      <div class="loginForm">
+        <input
+          type="password"
+          id="code"
+          class="loginInput"
+          placeholder="Scarlet Key"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+        />
+        <button class="loginBtn" id="loginBtn" type="button" disabled>
+          Loading&#x2026;
+        </button>
       </div>
-      <div id="countdownSub" class="cd-sub"></div>
+
+      <div class="loginHint">Authorized members only</div>
     </div>
   </div>
-</div>
 
-<!-- ========== APP ========== -->
-<div id="app" style="display:none;">
-  <div class="header">
-    <img src="buckeye-O.png" alt="O" class="header-logo" />
-    <span class="header-title">The Shop</span>
-    <button class="logout-btn" type="button"
-      onclick="window.logoutUser && window.logoutUser()">← Exit</button>
+  <!-- =========================
+       ENTRY (LIVE VERSION)
+       ========================= -->
+  <div id="entry" class="entryScreen" style="display:none;">
+    <div class="entryWrap">
+      <div class="entryTop">
+        <div class="entryChant">
+          <span>4 TO 6</span>
+          <span>A TO B</span>
+        </div>
+
+        <div class="countdownCard" id="countdownCard">
+          <div class="countdownTitle">Countdown to The Game</div>
+
+          <div class="countdownNums" id="countdownNums">
+            <div class="cdUnit">
+              <div class="cdNum" id="cdDays">--</div>
+              <div class="cdLab">DAYS</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdHours">--</div>
+              <div class="cdLab">HRS</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdMins">--</div>
+              <div class="cdLab">MIN</div>
+            </div>
+            <div class="cdUnit">
+              <div class="cdNum" id="cdSecs">--</div>
+              <div class="cdLab">SEC</div>
+            </div>
+          </div>
+
+          <div class="countdownSub" id="countdownSub"></div>
+        </div>
+      </div>
+
+      <div class="entryDoors">
+        <button class="doorBtn" type="button" data-go="scores">Scores</button>
+        <button class="doorBtn" type="button" data-go="picks">Picks</button>
+        <button class="doorBtn" type="button" data-go="beat">Beat TTUN</button>
+        <button class="doorBtn" type="button" data-go="news">Top News</button>
+        <button class="doorBtn" type="button" data-go="golf">&#x26F3; Putt Putt</button>
+        <button class="doorBtn adminOnly" type="button" data-go="shop" style="display:none;">Shop</button>
+        <button class="doorBtn adminOnly" type="button" id="piScoreboardBtn" style="display:none;">&#x1F4FA; Pi Scoreboard</button>
+      </div>
+    </div>
   </div>
 
-  <div id="content" class="content"></div>
+  <!-- =========================
+       APP
+       ========================= -->
+  <div id="app" style="display:none;">
+    <div id="content"></div>
+    <div class="tabs"></div>
+    <div id="rivalryBanner" class="rivalryBanner"></div>
+  </div>
 
-  <div class="tabs"></div>
-  <div id="rivalryBanner" class="rivalry-banner"></div>
-</div>
+  <!-- =========================
+       PI SCOREBOARD OVERLAY
+       ========================= -->
+  <div id="piScoreboard" style="display:none;"></div>
 
-<!-- ========== SCRIPTS ========== -->
-<script>
+  <!-- =========================
+       SPLIT LOAD FAILURE ALERT
+       ========================= -->
+  <script>
     window.__splitFail = function (file) {
-      console.error("Split file failed to load:", file);
+      alert("\u274C Failed to load: " + file +
+        "\nCheck that it exists in /split/ and was pushed to GitHub.");
     };
-</script>
+  </script>
 
-<!-- Main script (legacy monolith — kept for backward compat) -->
-<script src="script.js" defer></script>
+  <!-- =========================
+       FIREBASE (Compat)
+       ========================= -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-<!-- Split files -->
-<script src="split/shared.js"    defer onerror="__splitFail('split/shared.js')"></script>
-<script src="split/boot.js"      defer onerror="__splitFail('split/boot.js')"></script>
-<script src="split/scores-data.js" defer onerror="__splitFail('split/scores-data.js')"></script>
-<script src="split/scores-render.js" defer onerror="__splitFail('split/scores-render.js')"></script>
-<script src="split/groupPicks.js" defer onerror="__splitFail('split/groupPicks.js')"></script>
-<script src="split/beat.js"      defer onerror="__splitFail('split/beat.js')"></script>
-<script src="split/news.js"      defer onerror="__splitFail('split/news.js')"></script>
-<script src="split/shop.js"      defer onerror="__splitFail('split/shop.js')"></script>
-<script src="split/golf.js"      defer onerror="__splitFail('split/golf.js')"></script>
-<script src="split/fun.js"       defer onerror="__splitFail('split/fun.js')"></script>
-<script src="split/gp-identity.js" defer onerror="__splitFail('split/gp-identity.js')"></script>
-<script src="split/gp-data.js"   defer onerror="__splitFail('split/gp-data.js')"></script>
-<script src="split/gp-espn.js"   defer onerror="__splitFail('split/gp-espn.js')"></script>
-<script src="split/gp-render.js" defer onerror="__splitFail('split/gp-render.js')"></script>
-<script src="split/gp-admin.js"  defer onerror="__splitFail('split/gp-admin.js')"></script>
-<script src="split/pi.js"        defer onerror="__splitFail('split/pi.js')"></script>
-<script src="split/logout.js"    defer onerror="__splitFail('split/logout.js')"></script>
-<script src="split/app.js"       defer onerror="__splitFail('split/app.js')"></script>
+  <!-- =========================
+       SPLIT ARCHITECTURE
+       (ORDER MATTERS)
+       ========================= -->
+  <script src="split/boot.js" defer onerror="__splitFail('split/boot.js')"></script>
+  <script src="split/shared.js" defer onerror="__splitFail('split/shared.js')"></script>
 
-<script>
+  <!-- scores: data first, render second -->
+  <script src="split/scores-data.js" defer onerror="__splitFail('split/scores-data.js')"></script>
+  <script src="split/scores-render.js" defer onerror="__splitFail('split/scores-render.js')"></script>
+
+  <script src="split/news.js" defer onerror="__splitFail('split/news.js')"></script>
+  <script src="split/beat.js" defer onerror="__splitFail('split/beat.js')"></script>
+  <script src="split/shop.js" defer onerror="__splitFail('split/shop.js')"></script>
+  <script src="split/logout.js" defer onerror="__splitFail('split/logout.js')"></script>
+
+  <!-- group picks: sub-modules load first, orchestrator last -->
+  <script src="split/gp-identity.js" defer onerror="__splitFail('split/gp-identity.js')"></script>
+  <script src="split/gp-data.js" defer onerror="__splitFail('split/gp-data.js')"></script>
+  <script src="split/gp-espn.js" defer onerror="__splitFail('split/gp-espn.js')"></script>
+  <script src="split/gp-admin.js" defer onerror="__splitFail('split/gp-admin.js')"></script>
+  <script src="split/gp-render.js" defer onerror="__splitFail('split/gp-render.js')"></script>
+  <script src="split/groupPicks.js" defer onerror="__splitFail('split/groupPicks.js')"></script>
+
+  <script src="split/pi.js" defer onerror="__splitFail('split/pi.js')"></script>
+  <script src="split/golf.js" defer onerror="__splitFail('split/golf.js')"></script>
+
+  <script src="split/app.js" defer onerror="__splitFail('split/app.js')"></script>
+
+  <!-- =========================
+       READY GATE (wait for checkCode)
+       ========================= -->
+  <script>
     (function () {
+      const btn = document.getElementById("loginBtn");
+      const code = document.getElementById("code");
+
       function enableIfReady() {
         if (typeof window.checkCode === "function") {
-          const btn = document.getElementById("loginBtn");
-          if (btn) btn.disabled = false;
+          btn.disabled = false;
+          btn.textContent = "Unlock";
+          btn.onclick = () => window.checkCode();
+
+          code.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              window.checkCode();
+            }
+          });
+
+          return true;
         }
+        return false;
       }
-      document.addEventListener("DOMContentLoaded", () => {
-        const btn = document.getElementById("loginBtn");
-        if (btn) btn.disabled = true;
-        setTimeout(enableIfReady, 800);
-      });
-      window.addEventListener("load", enableIfReady);
+
+      if (enableIfReady()) return;
+
+      let ticks = 0;
+      const t = setInterval(() => {
+        ticks++;
+        if (enableIfReady()) return clearInterval(t);
+
+        if (ticks >= 160) {
+          clearInterval(t);
+          btn.textContent = "Load error";
+          btn.disabled = true;
+        }
+      }, 50);
     })();
-</script>
+  </script>
 
 </body>
 </html>
