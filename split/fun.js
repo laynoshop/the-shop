@@ -90,12 +90,22 @@
 .country-input-wrap { display: flex; gap: 6px; align-items: center; }
 .country-result { font-size: 13px; font-weight: 700; margin-top: 6px; min-height: 18px; }
 .country-answer { font-size: 11px; color: #777; margin-top: 2px; }
-.number-big { font-size: 36px; font-weight: 900; color: #bb0000; line-height: 1; margin-bottom: 5px; }
-.number-fact { font-size: 13px; color: #ccc; line-height: 1.5; }
-.book-title { font-size: 14px; font-weight: 900; color: #fff; line-height: 1.3; margin-bottom: 2px; }
-.book-author { font-size: 12px; color: #aaa; margin-bottom: 1px; }
-.book-year { font-size: 11px; color: #666; margin-bottom: 4px; }
-.book-subjects { font-size: 11px; color: #777; margin-bottom: 6px; }
+/* NASA APOD */
+.apod-img { width: 100%; border-radius: 10px; object-fit: cover; max-height: 220px; background: #111; display: block; }
+.apod-title { font-size: 14px; font-weight: 900; color: #fff; margin-bottom: 3px; }
+.apod-date { font-size: 10px; color: #666; margin-bottom: 5px; }
+.apod-expl { font-size: 12px; color: #aaa; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+/* ISS */
+.iss-coords { font-size: 22px; font-weight: 900; color: #fff; letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 4px; }
+.iss-label { font-size: 10px; font-weight: 700; color: #bb0000; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
+.iss-location { font-size: 12px; color: #aaa; line-height: 1.5; }
+.iss-pulse { display: inline-block; width: 8px; height: 8px; background: #4caf50; border-radius: 50%; margin-right: 5px; animation: issPulse 1.4s ease-in-out infinite; }
+@keyframes issPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.5)} }
+/* EARTHQUAKE */
+.quake-mag { font-size: 36px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+.quake-place { font-size: 13px; font-weight: 700; color: #fff; line-height: 1.4; margin-bottom: 3px; }
+.quake-meta { font-size: 11px; color: #888; line-height: 1.6; }
+.quake-badge { display: inline-block; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
 .fun-btn {
   align-self: flex-start;
   background: #bb0000; color: #fff;
@@ -129,14 +139,6 @@
   flex: 1; min-width: 0; outline: none;
 }
 .fun-input:focus { border-color: #bb0000; }
-.fun-input-sm {
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 8px; color: #fff;
-  padding: 7px 10px; font-size: 13px;
-  width: 100px; outline: none;
-}
-.fun-input-sm:focus { border-color: #bb0000; }
 .fun-footer-row {
   display: flex; align-items: center;
   gap: 8px; flex-wrap: wrap;
@@ -303,49 +305,64 @@
     </div>
   </div>
 
-  <!-- NUMBER FACT -->
-  <div class="fun-section-label">Number Facts</div>
-  <div class="fun-card" id="fun-number">
+  <!-- NASA APOD -->
+  <div class="fun-section-label">NASA · Astronomy Picture of the Day</div>
+  <div class="fun-card" id="fun-apod">
     <div class="fun-card-header">
-      <span class="fun-card-icon">🔢</span>
-      <span class="fun-card-title">Number Fact</span>
+      <span class="fun-card-icon">🔭</span>
+      <span class="fun-card-title">NASA Picture of the Day</span>
     </div>
     <div class="fun-divider"></div>
-    <div id="number-loading" class="fun-loading">Fetching fact…</div>
-    <div id="number-content" style="display:none;">
-      <div class="number-big" id="number-big"></div>
-      <div class="number-fact" id="number-fact"></div>
-    </div>
-    <div class="fun-footer-row">
-      <input type="number" id="number-input" class="fun-input-sm" placeholder="Any number" min="0" max="99999" />
-      <button class="fun-btn-sm" onclick="window.__funLoadNumberCustom()">Look up</button>
-      <button class="fun-btn" onclick="window.__funLoadNumber()">Random ↻</button>
-    </div>
-  </div>
-
-  <!-- BOOK -->
-  <div class="fun-section-label">Reading</div>
-  <div class="fun-card" id="fun-book">
-    <div class="fun-card-header">
-      <span class="fun-card-icon">📖</span>
-      <span class="fun-card-title">Random Book Pick</span>
-    </div>
-    <div class="fun-divider"></div>
-    <div id="book-loading" class="fun-loading">Picking a book…</div>
-    <div id="book-content" style="display:none;">
-      <div class="fun-media-row">
-        <img id="book-cover" class="fun-thumb-tall" src="" alt="" loading="lazy" />
-        <div class="fun-media-info">
-          <div class="book-title" id="book-title"></div>
-          <div class="book-author" id="book-author"></div>
-          <div class="book-year" id="book-year"></div>
-          <div class="book-subjects" id="book-subjects"></div>
-          <a id="book-link" class="fun-btn-sm" style="display:inline-block;text-decoration:none;" href="#" target="_blank" rel="noopener noreferrer">Open Library →</a>
-        </div>
+    <div id="apod-loading" class="fun-loading">Fetching from NASA…</div>
+    <div id="apod-content" style="display:none;">
+      <img id="apod-img" class="apod-img" src="" alt="" loading="lazy" />
+      <div style="margin-top:9px;">
+        <div class="apod-title" id="apod-title"></div>
+        <div class="apod-date" id="apod-date"></div>
+        <div class="apod-expl" id="apod-expl"></div>
       </div>
     </div>
     <div class="fun-footer-row">
-      <button class="fun-btn" onclick="window.__funLoadBook()">New Book ↻</button>
+      <button class="fun-btn" onclick="window.__funLoadApod()">Random Day ↻</button>
+    </div>
+  </div>
+
+  <!-- ISS TRACKER -->
+  <div class="fun-section-label">Live · International Space Station</div>
+  <div class="fun-card" id="fun-iss">
+    <div class="fun-card-header">
+      <span class="fun-card-icon">🛸</span>
+      <span class="fun-card-title">ISS Live Tracker</span>
+    </div>
+    <div class="fun-divider"></div>
+    <div id="iss-loading" class="fun-loading">Locating the ISS…</div>
+    <div id="iss-content" style="display:none;">
+      <div class="iss-label"><span class="iss-pulse"></span>Live Position</div>
+      <div class="iss-coords" id="iss-coords"></div>
+      <div class="iss-location" id="iss-location"></div>
+    </div>
+    <div class="fun-footer-row">
+      <button class="fun-btn" onclick="window.__funRefreshISS()">Refresh ↻</button>
+    </div>
+  </div>
+
+  <!-- USGS EARTHQUAKE -->
+  <div class="fun-section-label">Live · USGS Earthquake Feed</div>
+  <div class="fun-card" id="fun-quake">
+    <div class="fun-card-header">
+      <span class="fun-card-icon">🌎</span>
+      <span class="fun-card-title">Latest Earthquake</span>
+    </div>
+    <div class="fun-divider"></div>
+    <div id="quake-loading" class="fun-loading">Checking seismic activity…</div>
+    <div id="quake-content" style="display:none;">
+      <div id="quake-badge-wrap"></div>
+      <div class="quake-mag" id="quake-mag"></div>
+      <div class="quake-place" id="quake-place"></div>
+      <div class="quake-meta" id="quake-meta"></div>
+    </div>
+    <div class="fun-footer-row">
+      <button class="fun-btn" onclick="window.__funLoadQuake()">Refresh ↻</button>
     </div>
   </div>
 
@@ -359,15 +376,21 @@
     window.__funLoadMovie();
     window.__funLoadCocktail();
     window.__funLoadCountry();
-    window.__funLoadNumber();
-    window.__funLoadBook();
+    window.__funLoadApod();
+    window.__funLoadISS();
+    window.__funLoadQuake();
 
     setTimeout(() => {
       const g = document.getElementById("country-guess");
       if (g) g.addEventListener("keydown", e => { if (e.key === "Enter") window.__funGuessCountry(); });
-      const n = document.getElementById("number-input");
-      if (n) n.addEventListener("keydown", e => { if (e.key === "Enter") window.__funLoadNumberCustom(); });
     }, 50);
+
+    // ISS auto-refresh every 10 seconds while Fun page is visible
+    if (window.__issInterval) clearInterval(window.__issInterval);
+    window.__issInterval = setInterval(() => {
+      if (document.getElementById("fun-iss")) window.__funRefreshISS();
+      else clearInterval(window.__issInterval);
+    }, 10000);
   };
 
   // ============================================================
@@ -397,7 +420,7 @@
   function escAttr(str) { return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;"); }
 
   // ============================================================
-  // 1. JOKE (now first)
+  // 1. JOKE
   // ============================================================
   window.__funLoadJoke = function () {
     showLoading("joke-loading", "joke-content");
@@ -510,7 +533,7 @@
   };
 
   // ============================================================
-  // 4. BORED — tries multiple known endpoints
+  // 4. BORED
   // ============================================================
   const BORED_POOL = [
     "Take a walk somewhere you've never been",
@@ -537,22 +560,14 @@
 
   window.__funLoadBored = function () {
     showLoading("bored-loading", "bored-content");
-
-    // Try the current known working Bored API endpoint
     safeFetch("https://bored.api.lewagon.com/api/activity", 6000)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(b => {
-        _showBoredResult(b.activity, b.type, b.participants, b.price);
-      })
+      .then(b => { _showBoredResult(b.activity, b.type, b.participants, b.price); })
       .catch(() => {
-        // Fallback 2: appbrewery mirror
         safeFetch("https://bored-api.appbrewery.com/random", 5000)
           .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-          .then(b => {
-            _showBoredResult(b.activity, b.type, b.participants, b.price);
-          })
+          .then(b => { _showBoredResult(b.activity, b.type, b.participants, b.price); })
           .catch(() => {
-            // Final fallback: curated local pool (variety of 20)
             const act = BORED_POOL[Math.floor(Math.random() * BORED_POOL.length)];
             _showBoredResult(act, "recreational", null, 0);
           });
@@ -620,12 +635,10 @@
       .then(data => {
         const d = data.drinks[0];
         __currentCocktail = d;
-
         const ci = document.getElementById("cocktail-img");
         if (ci) { ci.src = d.strDrinkThumb || ""; ci.alt = d.strDrink || ""; ci.style.display = d.strDrinkThumb ? "" : "none"; }
         setText("cocktail-name", d.strDrink || "");
         setText("cocktail-glass", d.strGlass ? `🥃 ${d.strGlass}` : "");
-
         const ings = [];
         for (let i = 1; i <= 15; i++) {
           const ing = d[`strIngredient${i}`], meas = d[`strMeasure${i}`];
@@ -651,15 +664,10 @@
       `🥃 Serve in: ${d.strGlass || "any glass"}\n\n` +
       `Ingredients:\n${ings.map(x => `• ${x}`).join("\n")}\n\n` +
       (d.strInstructions ? `How to make it:\n${d.strInstructions.slice(0, 280)}${d.strInstructions.length > 280 ? "..." : ""}` : "");
-
     if (navigator.share) {
-      // Native share sheet (iOS/Android) — Message, WhatsApp, etc.
-      navigator.share({ title: `Cocktail: ${d.strDrink}`, text: msg })
-        .catch(() => {}); // user cancelled — no action needed
+      navigator.share({ title: `Cocktail: ${d.strDrink}`, text: msg }).catch(() => {});
     } else {
-      // Fallback: open SMS with pre-filled body (works on any mobile)
-      const smsBody = encodeURIComponent(msg);
-      window.open(`sms:?body=${smsBody}`, "_blank");
+      window.open(`sms:?body=${encodeURIComponent(msg)}`, "_blank");
     }
   };
 
@@ -714,99 +722,151 @@
   };
 
   // ============================================================
-  // 8. NUMBER FACT
-  // Numbers API has CORS issues in browsers; we use a Wikipedia
-  // search as a reliable CORS-friendly fallback that always works.
+  // 8. NASA APOD
+  // Uses NASA's demo key (DEMO_KEY) — 30 req/hour, plenty for casual use.
+  // Loads today's picture by default; "Random Day" picks a random date
+  // between 1995-06-16 (first APOD) and today.
   // ============================================================
-  window.__funLoadNumber = function () {
-    showLoading("number-loading", "number-content");
-    __fetchNumberFact(Math.floor(Math.random() * 999) + 1);
-  };
+  window.__funLoadApod = function () {
+    showLoading("apod-loading", "apod-content");
 
-  window.__funLoadNumberCustom = function () {
-    const v = parseInt(document.getElementById("number-input")?.value || "", 10);
-    if (isNaN(v)) return;
-    showLoading("number-loading", "number-content");
-    __fetchNumberFact(v);
-  };
+    // Pick a random date between APOD launch and today
+    const start = new Date("1995-06-16").getTime();
+    const end   = Date.now();
+    const rnd   = new Date(start + Math.random() * (end - start));
+    const dateStr = rnd.toISOString().slice(0, 10);
 
-  function __fetchNumberFact(n) {
-    // Primary: numbersapi.com (plain text, no JSON to avoid CORS preflight)
-    safeFetch(`https://numbersapi.com/${n}/trivia`, 7000)
-      .then(r => {
-        if (!r.ok) throw new Error(r.status);
-        return r.text();
-      })
-      .then(text => {
-        setText("number-big", String(n));
-        setText("number-fact", text);
-        showContent("number-loading", "number-content");
+    safeFetch(`https://api.nasa.gov/planetary/apod?date=${dateStr}&api_key=DEMO_KEY`, 10000)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error.message || "NASA error");
+        const img = document.getElementById("apod-img");
+        if (img) {
+          // APOD can be a video (YouTube) — fall back to thumbnail or hide
+          const isImg = d.media_type === "image";
+          img.src = isImg ? d.url : (d.thumbnail_url || "");
+          img.alt = d.title || "NASA APOD";
+          img.style.display = (img.src) ? "" : "none";
+        }
+        setText("apod-title", d.title || "");
+        setText("apod-date", d.date || "");
+        setText("apod-expl", d.explanation || "");
+        showContent("apod-loading", "apod-content");
       })
       .catch(() => {
-        // Fallback: Wikipedia search for the number — always has CORS headers
-        safeFetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${n}`, 7000)
+        // Fallback: try today's APOD without a date param
+        safeFetch("https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY", 8000)
           .then(r => r.json())
-          .then(wiki => {
-            const extract = wiki.extract || "";
-            const firstSentence = extract.split(".")[0] + ".";
-            setText("number-big", String(n));
-            setText("number-fact", firstSentence.length > 20 ? firstSentence : `${n} — ` + (extract.slice(0, 180) || "Interesting number!"));
-            showContent("number-loading", "number-content");
+          .then(d => {
+            const img = document.getElementById("apod-img");
+            if (img) { img.src = d.url || ""; img.alt = d.title || ""; img.style.display = d.url ? "" : "none"; }
+            setText("apod-title", d.title || "");
+            setText("apod-date", d.date || "");
+            setText("apod-expl", d.explanation || "");
+            showContent("apod-loading", "apod-content");
+          })
+          .catch(() => setText("apod-loading", "⚠️ NASA API unavailable. Try again shortly."));
+      });
+  };
+
+  // ============================================================
+  // 9. ISS LIVE TRACKER
+  // wheretheiss.at — no key, CORS-enabled, updates every ~5 s on their end.
+  // We refresh the card every 10 s automatically.
+  // Reverse-geocodes with BigDataCloud (free, no key).
+  // ============================================================
+  window.__funLoadISS = window.__funRefreshISS = function () {
+    // Don't flash loader on auto-refresh — only show on first load
+    const content = document.getElementById("iss-content");
+    if (!content || content.style.display === "none") {
+      showLoading("iss-loading", "iss-content");
+    }
+
+    safeFetch("https://api.wheretheiss.at/v1/satellites/25544", 6000)
+      .then(r => r.json())
+      .then(d => {
+        const lat = parseFloat(d.latitude).toFixed(4);
+        const lon = parseFloat(d.longitude).toFixed(4);
+        const latDir = d.latitude >= 0 ? "N" : "S";
+        const lonDir = d.longitude >= 0 ? "E" : "W";
+        setText("iss-coords", `${Math.abs(lat)}° ${latDir},  ${Math.abs(lon)}° ${lonDir}`);
+
+        // Try reverse geocode to get a readable location name
+        safeFetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${d.latitude}&longitude=${d.longitude}&localityLanguage=en`,
+          5000
+        )
+          .then(r => r.json())
+          .then(geo => {
+            const parts = [geo.locality, geo.countryName].filter(Boolean);
+            const loc = parts.length ? parts.join(", ") : "Over the ocean 🌊";
+            setText("iss-location", `📍 Currently flying over: ${loc}\n🏎️ Speed: ${Math.round(d.velocity).toLocaleString()} km/h  ·  🛰️ Altitude: ${Math.round(d.altitude)} km`);
           })
           .catch(() => {
-            // Last resort: handcrafted facts pool
-            const facts = [
-              `${n} is ${n % 2 === 0 ? "an even" : "an odd"} number.`,
-              `${n} squared is ${n * n}.`,
-              `${n} in binary is ${n.toString(2)}.`,
-              `${n} is ${isPrime(n) ? "a prime" : "not a prime"} number.`,
-              `The square root of ${n} is approximately ${Math.sqrt(n).toFixed(3)}.`
-            ];
-            setText("number-big", String(n));
-            setText("number-fact", facts[Math.floor(Math.random() * facts.length)]);
-            showContent("number-loading", "number-content");
+            setText("iss-location", `🏎️ Speed: ${Math.round(d.velocity).toLocaleString()} km/h  ·  🛰️ Altitude: ${Math.round(d.altitude)} km`);
           });
-      });
-  }
 
-  function isPrime(n) {
-    if (n < 2) return false;
-    for (let i = 2; i <= Math.sqrt(n); i++) if (n % i === 0) return false;
-    return true;
-  }
-
-  // ============================================================
-  // 9. BOOK
-  // ============================================================
-  const BOOK_SUBJECTS = [
-    "science_fiction","mystery","adventure","fantasy","history",
-    "philosophy","biography","thriller","classic_literature","humor"
-  ];
-
-  window.__funLoadBook = function () {
-    showLoading("book-loading", "book-content");
-    const subj = BOOK_SUBJECTS[Math.floor(Math.random() * BOOK_SUBJECTS.length)];
-    safeFetch(`https://openlibrary.org/subjects/${subj}.json?limit=20`)
-      .then(r => r.json())
-      .then(data => {
-        const works = data.works || [];
-        if (!works.length) throw new Error();
-        const w = works[Math.floor(Math.random() * works.length)];
-        const ce = document.getElementById("book-cover");
-        if (ce) {
-          if (w.cover_id) { ce.src = `https://covers.openlibrary.org/b/id/${w.cover_id}-M.jpg`; ce.alt = w.title || "book"; ce.style.display = ""; }
-          else ce.style.display = "none";
-        }
-        setText("book-title", w.title || "Unknown Title");
-        const authors = (w.authors || []).map(a => a.name).join(", ");
-        setText("book-author", authors ? `by ${authors}` : "");
-        setText("book-year", w.first_publish_year ? `First published ${w.first_publish_year}` : "");
-        setText("book-subjects", (w.subject || []).slice(0, 3).join(", ") || subj.replace(/_/g, " "));
-        const le = document.getElementById("book-link");
-        if (le && w.key) le.href = `https://openlibrary.org${w.key}`;
-        showContent("book-loading", "book-content");
+        showContent("iss-loading", "iss-content");
       })
-      .catch(() => setText("book-loading", "⚠️ Open Library unavailable."));
+      .catch(() => setText("iss-loading", "⚠️ ISS tracker unavailable."));
+  };
+
+  // ============================================================
+  // 10. USGS EARTHQUAKE FEED
+  // Pulls the most recent significant earthquake from the past 30 days.
+  // Falls back to "all" earthquakes (M1+) if the significant feed is empty.
+  // ============================================================
+  function _magColor(mag) {
+    if (mag >= 7) return "#e53935";
+    if (mag >= 5) return "#fb8c00";
+    if (mag >= 3) return "#fdd835";
+    return "#66bb6a";
+  }
+  function _magLabel(mag) {
+    if (mag >= 7) return "Major";
+    if (mag >= 5) return "Strong";
+    if (mag >= 3) return "Moderate";
+    return "Minor";
+  }
+
+  window.__funLoadQuake = function () {
+    showLoading("quake-loading", "quake-content");
+
+    // Try significant quakes first, then all M1+ as fallback
+    const urls = [
+      "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson",
+      "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/1.0_month.geojson"
+    ];
+
+    function tryUrl(idx) {
+      if (idx >= urls.length) { setText("quake-loading", "⚠️ USGS feed unavailable."); return; }
+      safeFetch(urls[idx], 10000)
+        .then(r => r.json())
+        .then(data => {
+          const features = data.features || [];
+          if (!features.length) { tryUrl(idx + 1); return; }
+          // Sort by time desc, take most recent
+          features.sort((a, b) => b.properties.time - a.properties.time);
+          const q = features[0].properties;
+          const mag = parseFloat(q.mag) || 0;
+          const color = _magColor(mag);
+          const label = _magLabel(mag);
+          setHTML("quake-badge-wrap",
+            `<span class="quake-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${label}</span>`
+          );
+          const magEl = document.getElementById("quake-mag");
+          if (magEl) { magEl.textContent = `M ${mag.toFixed(1)}`; magEl.style.color = color; }
+          setText("quake-place", q.place || "Unknown location");
+          const time = q.time ? new Date(q.time).toLocaleString() : "";
+          const depth = features[0].geometry?.coordinates?.[2];
+          const parts = [time ? `🕐 ${time}` : "", depth != null ? `🔽 Depth: ${Math.round(depth)} km` : ""].filter(Boolean);
+          setText("quake-meta", parts.join("  ·  "));
+          showContent("quake-loading", "quake-content");
+        })
+        .catch(() => tryUrl(idx + 1));
+    }
+
+    tryUrl(0);
   };
 
 })();
