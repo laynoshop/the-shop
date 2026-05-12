@@ -186,6 +186,9 @@
     const weekLabel = String(weekMeta?.label || selectedId || "");
     const published = !!weekMeta?.published;
 
+    // ── FIX: store slateId so save handler can always find it ──
+    mem.picksSlateId = selectedId;
+
     // ── games + my picks ──
     let games    = [];
     let myMap    = {};
@@ -272,16 +275,30 @@
 
     // ── save picks ──
     if (action === "savePicks") {
-      const slateId = String(btn.getAttribute("data-slate") || gpMem().picksSlateId || "");
+      // Resolve slateId: prefer gpMem (set during renderPicks), then fall back
+      // to data-slate on the button (only present on team pick buttons, not save btn)
+      const slateId = String(gpMem().picksSlateId || btn.getAttribute("data-slate") || "").trim();
       const pending = gpPendingBucket();
       const idObj2  = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
-      if (!slateId || !Object.keys(pending).length) return;
+
+      if (!slateId) {
+        console.error("[GP] savePicks: no slateId found — cannot save");
+        return;
+      }
+      if (!Object.keys(pending).length) return;
+
+      const playerId = idObj2.playerId || gpMem().picksPlayerId || "";
+      if (!playerId) {
+        console.error("[GP] savePicks: no playerId — cannot save");
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = "Saving…";
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
-        await (Data().gpSaveMyPicksBatch || (async () => {}))(db2, slateId, idObj2.playerId, pending);
+        await (Data().gpSaveMyPicksBatch || (async () => {}))(db2, slateId, playerId, pending);
         gpPendingClear();
         btn.textContent = "Saved!";
         setTimeout(() => renderPicks(), 800);
