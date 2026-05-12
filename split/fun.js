@@ -38,79 +38,32 @@
   flex-direction: column;
   gap: 8px;
 }
-.fun-card-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
+.fun-card-header { display: flex; align-items: center; gap: 7px; }
 .fun-card-icon { font-size: 16px; line-height: 1; flex-shrink: 0; }
 .fun-card-title { font-size: 13px; font-weight: 800; color: #fff; letter-spacing: 0.1px; }
-.fun-divider {
-  height: 1px;
-  background: rgba(255,255,255,0.07);
-  margin: 0;
-}
-.fun-body { font-size: 13px; color: #ccc; line-height: 1.5; }
+.fun-divider { height: 1px; background: rgba(255,255,255,0.07); margin: 0; }
 .fun-loading { font-size: 12px; color: #666; font-style: italic; }
-/* Row layout for image+info widgets */
-.fun-media-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.fun-thumb {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: #111;
-}
-.fun-thumb-tall {
-  width: 52px;
-  height: 76px;
-  border-radius: 6px;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: #111;
-}
-.fun-thumb-poke {
-  width: 72px;
-  height: 72px;
-  object-fit: contain;
-  flex-shrink: 0;
-  image-rendering: pixelated;
-}
+.fun-media-row { display: flex; gap: 12px; align-items: flex-start; }
+.fun-thumb { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: #111; }
+.fun-thumb-tall { width: 52px; height: 76px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #111; }
+.fun-thumb-poke { width: 72px; height: 72px; object-fit: contain; flex-shrink: 0; image-rendering: pixelated; }
 .fun-media-info { flex: 1; min-width: 0; }
-/* Type badges */
 .poke-types { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
-.poke-type-badge {
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 99px;
-  text-transform: capitalize;
-}
-/* Stat bars */
+.poke-type-badge { color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 99px; text-transform: capitalize; }
 .poke-stat-row { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
 .poke-stat-label { font-size: 9px; font-weight: 700; color: #666; width: 26px; flex-shrink: 0; }
 .poke-stat-bar-bg { flex: 1; background: rgba(255,255,255,0.08); border-radius: 99px; height: 4px; overflow: hidden; }
 .poke-stat-bar { height: 100%; background: #bb0000; border-radius: 99px; }
 .poke-stat-val { font-size: 9px; color: #888; width: 20px; text-align: right; }
-/* Trivia */
 .trivia-category { font-size: 10px; font-weight: 700; color: #bb0000; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
 .trivia-q { font-size: 13px; font-weight: 600; color: #eee; line-height: 1.4; margin-bottom: 8px; }
 .trivia-choices { display: flex; flex-direction: column; gap: 5px; }
 .trivia-choice {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px;
-  color: #ccc;
-  padding: 7px 10px;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
+  border-radius: 8px; color: #ccc;
+  padding: 7px 10px; font-size: 12px;
+  text-align: left; cursor: pointer;
   transition: background 0.15s;
 }
 .trivia-choice:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
@@ -119,103 +72,99 @@
 .trivia-result  { font-size: 12px; font-weight: 700; margin-top: 4px; }
 .trivia-win { color: #66bb6a; }
 .trivia-lose { color: #ef5350; }
-/* Joke */
 .joke-setup { font-size: 13px; color: #ddd; line-height: 1.5; }
-.joke-punchline-wrap {
-  background: rgba(187,0,0,0.1);
-  border-left: 3px solid #bb0000;
-  border-radius: 0 8px 8px 0;
-  padding: 8px 10px;
-}
+.joke-punchline-wrap { background: rgba(187,0,0,0.1); border-left: 3px solid #bb0000; border-radius: 0 8px 8px 0; padding: 8px 10px; }
 .joke-punchline { font-size: 13px; font-weight: 700; color: #fff; }
-/* Bored */
 .bored-activity { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.4; }
 .bored-meta { font-size: 11px; color: #666; margin-top: 2px; }
-/* Movie */
 .movie-title { font-size: 14px; font-weight: 900; color: #fff; line-height: 1.3; margin-bottom: 1px; }
 .movie-meta { font-size: 11px; color: #888; margin-bottom: 3px; }
 .movie-rating { font-size: 12px; font-weight: 700; color: #f5a623; margin-bottom: 4px; }
 .movie-plot { font-size: 12px; color: #aaa; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-/* Cocktail */
 .cocktail-name { font-size: 14px; font-weight: 900; color: #fff; margin-bottom: 2px; }
 .cocktail-glass { font-size: 11px; color: #888; margin-bottom: 5px; }
 .cocktail-ing-title { font-size: 10px; font-weight: 700; color: #bb0000; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
 .cocktail-ing-item { font-size: 12px; color: #bbb; line-height: 1.6; }
-/* Country */
 .country-flag { font-size: 40px; line-height: 1; margin-bottom: 6px; }
 .country-clues { font-size: 12px; color: #bbb; line-height: 1.8; margin-bottom: 8px; }
 .country-input-wrap { display: flex; gap: 6px; align-items: center; }
 .country-result { font-size: 13px; font-weight: 700; margin-top: 6px; min-height: 18px; }
 .country-answer { font-size: 11px; color: #777; margin-top: 2px; }
-/* Number */
 .number-big { font-size: 36px; font-weight: 900; color: #bb0000; line-height: 1; margin-bottom: 5px; }
 .number-fact { font-size: 13px; color: #ccc; line-height: 1.5; }
-.fun-number-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-/* Book */
 .book-title { font-size: 14px; font-weight: 900; color: #fff; line-height: 1.3; margin-bottom: 2px; }
 .book-author { font-size: 12px; color: #aaa; margin-bottom: 1px; }
 .book-year { font-size: 11px; color: #666; margin-bottom: 4px; }
 .book-subjects { font-size: 11px; color: #777; margin-bottom: 6px; }
-/* Buttons */
 .fun-btn {
   align-self: flex-start;
-  background: #bb0000;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 7px 13px;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
+  background: #bb0000; color: #fff;
+  border: none; border-radius: 8px;
+  padding: 7px 13px; font-size: 12px;
+  font-weight: 800; cursor: pointer;
+  transition: opacity 0.15s; flex-shrink: 0;
 }
 .fun-btn:active { opacity: 0.75; }
 .fun-btn-sm {
-  background: transparent;
-  color: #bb0000;
+  background: transparent; color: #bb0000;
   border: 1.5px solid rgba(187,0,0,0.5);
-  border-radius: 7px;
-  padding: 6px 11px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  flex-shrink: 0;
+  border-radius: 7px; padding: 6px 11px;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; flex-shrink: 0;
 }
 .fun-btn-sm:active { background: rgba(187,0,0,0.15); }
+.fun-btn-share {
+  background: #1a6e3c; color: #fff;
+  border: none; border-radius: 8px;
+  padding: 7px 13px; font-size: 12px;
+  font-weight: 800; cursor: pointer;
+  transition: opacity 0.15s; flex-shrink: 0;
+}
+.fun-btn-share:active { opacity: 0.75; }
 .fun-input {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 8px;
-  color: #fff;
-  padding: 7px 10px;
-  font-size: 13px;
-  flex: 1;
-  min-width: 0;
-  outline: none;
+  border-radius: 8px; color: #fff;
+  padding: 7px 10px; font-size: 13px;
+  flex: 1; min-width: 0; outline: none;
 }
 .fun-input:focus { border-color: #bb0000; }
 .fun-input-sm {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 8px;
-  color: #fff;
-  padding: 7px 10px;
-  font-size: 13px;
-  width: 100px;
-  outline: none;
+  border-radius: 8px; color: #fff;
+  padding: 7px 10px; font-size: 13px;
+  width: 100px; outline: none;
 }
 .fun-input-sm:focus { border-color: #bb0000; }
 .fun-footer-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: flex; align-items: center;
+  gap: 8px; flex-wrap: wrap;
 }
 </style>
 
 <div class="fun-page">
+
+  <!-- JOKE (top) -->
+  <div class="fun-section-label">Humor</div>
+  <div class="fun-card" id="fun-joke">
+    <div class="fun-card-header">
+      <span class="fun-card-icon">😂</span>
+      <span class="fun-card-title">Random Joke</span>
+    </div>
+    <div class="fun-divider"></div>
+    <div id="joke-loading" class="fun-loading">Loading joke…</div>
+    <div id="joke-content" style="display:none;">
+      <div class="joke-setup" id="joke-setup"></div>
+      <div class="joke-punchline-wrap" id="joke-punchline-wrap" style="display:none;margin-top:8px;">
+        <div class="joke-punchline" id="joke-punchline"></div>
+      </div>
+    </div>
+    <div class="fun-footer-row">
+      <button class="fun-btn-sm" id="joke-reveal-btn" onclick="window.__funRevealPunchline()" style="display:none;">Reveal 👀</button>
+      <button class="fun-btn" onclick="window.__funLoadJoke()">New Joke ↻</button>
+    </div>
+  </div>
 
   <!-- TRIVIA -->
   <div class="fun-section-label">Trivia</div>
@@ -258,27 +207,6 @@
     </div>
     <div class="fun-footer-row">
       <button class="fun-btn" onclick="window.__funLoadPokemon()">New Pokémon ↻</button>
-    </div>
-  </div>
-
-  <!-- JOKE -->
-  <div class="fun-section-label">Humor</div>
-  <div class="fun-card" id="fun-joke">
-    <div class="fun-card-header">
-      <span class="fun-card-icon">😂</span>
-      <span class="fun-card-title">Random Joke</span>
-    </div>
-    <div class="fun-divider"></div>
-    <div id="joke-loading" class="fun-loading">Loading joke…</div>
-    <div id="joke-content" style="display:none;">
-      <div class="joke-setup" id="joke-setup"></div>
-      <div class="joke-punchline-wrap" id="joke-punchline-wrap" style="display:none;margin-top:8px;">
-        <div class="joke-punchline" id="joke-punchline"></div>
-      </div>
-    </div>
-    <div class="fun-footer-row">
-      <button class="fun-btn-sm" id="joke-reveal-btn" onclick="window.__funRevealPunchline()" style="display:none;">Reveal 👀</button>
-      <button class="fun-btn" onclick="window.__funLoadJoke()">New Joke ↻</button>
     </div>
   </div>
 
@@ -346,6 +274,7 @@
       </div>
     </div>
     <div class="fun-footer-row">
+      <button class="fun-btn-share" id="cocktail-share-btn" onclick="window.__funShareCocktail()" style="display:none;">📤 Share with Friends</button>
       <button class="fun-btn" onclick="window.__funLoadCocktail()">New Drink ↻</button>
     </div>
   </div>
@@ -423,10 +352,9 @@
 </div>
 `;
 
-    // Boot all widgets
+    window.__funLoadJoke();
     window.__funLoadTrivia();
     window.__funLoadPokemon();
-    window.__funLoadJoke();
     window.__funLoadBored();
     window.__funLoadMovie();
     window.__funLoadCocktail();
@@ -434,7 +362,6 @@
     window.__funLoadNumber();
     window.__funLoadBook();
 
-    // Enter key bindings
     setTimeout(() => {
       const g = document.getElementById("country-guess");
       if (g) g.addEventListener("keydown", e => { if (e.key === "Enter") window.__funGuessCountry(); });
@@ -470,7 +397,35 @@
   function escAttr(str) { return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;"); }
 
   // ============================================================
-  // 1. TRIVIA
+  // 1. JOKE (now first)
+  // ============================================================
+  window.__funLoadJoke = function () {
+    showLoading("joke-loading", "joke-content");
+    const pw = document.getElementById("joke-punchline-wrap");
+    const rb = document.getElementById("joke-reveal-btn");
+    if (pw) pw.style.display = "none";
+    if (rb) rb.style.display = "none";
+
+    safeFetch("https://official-joke-api.appspot.com/random_joke")
+      .then(r => r.json())
+      .then(j => {
+        setText("joke-setup", j.setup);
+        setText("joke-punchline", j.punchline);
+        showContent("joke-loading", "joke-content");
+        if (rb) rb.style.display = "";
+      })
+      .catch(() => setText("joke-loading", "⚠️ Joke API unavailable."));
+  };
+
+  window.__funRevealPunchline = function () {
+    const pw = document.getElementById("joke-punchline-wrap");
+    const rb = document.getElementById("joke-reveal-btn");
+    if (pw) pw.style.display = "";
+    if (rb) rb.style.display = "none";
+  };
+
+  // ============================================================
+  // 2. TRIVIA
   // ============================================================
   let __triviaCorrect = "";
 
@@ -486,16 +441,13 @@
         __triviaCorrect = decodeHTML(q.correct_answer);
         const answers = [...q.incorrect_answers.map(a => decodeHTML(a)), __triviaCorrect]
           .sort(() => Math.random() - 0.5);
-
         setText("trivia-cat", decodeHTML(q.category) + " · " + q.difficulty.toUpperCase());
         setText("trivia-q", decodeHTML(q.question));
         setHTML("trivia-result", "");
-
         const ch = document.getElementById("trivia-choices");
         if (ch) ch.innerHTML = answers.map(a =>
           `<button class="trivia-choice" onclick="window.__funCheckTrivia(this,'${escAttr(a)}')">${a}</button>`
         ).join("");
-
         showContent("trivia-loading", "trivia-content");
       })
       .catch(() => {
@@ -520,7 +472,7 @@
   };
 
   // ============================================================
-  // 2. POKEMON
+  // 3. POKEMON
   // ============================================================
   window.__funLoadPokemon = function () {
     showLoading("poke-loading", "poke-content");
@@ -558,57 +510,65 @@
   };
 
   // ============================================================
-  // 3. JOKE
+  // 4. BORED — tries multiple known endpoints
   // ============================================================
-  window.__funLoadJoke = function () {
-    showLoading("joke-loading", "joke-content");
-    const pw = document.getElementById("joke-punchline-wrap");
-    const rb = document.getElementById("joke-reveal-btn");
-    if (pw) pw.style.display = "none";
-    if (rb) rb.style.display = "none";
+  const BORED_POOL = [
+    "Take a walk somewhere you've never been",
+    "Learn 5 words in a new language",
+    "Do 20 push-ups right now",
+    "Text someone you haven't talked to in a while",
+    "Cook something from scratch with what's in your fridge",
+    "Draw something without lifting your pen",
+    "Write down 3 things you're grateful for today",
+    "Watch a documentary on a topic you know nothing about",
+    "Find a new podcast and listen to one episode",
+    "Do a 10-minute meditation or breathing exercise",
+    "Read the first chapter of a book you've been putting off",
+    "Rearrange one room or corner of your space",
+    "Search 'random Wikipedia article' and read the whole thing",
+    "Plan your perfect dream vacation in detail",
+    "Try a new genre of music for 30 minutes",
+    "Write a short story in exactly 6 sentences",
+    "Learn a magic trick from YouTube",
+    "Take 10 photos of interesting things around you",
+    "Make a playlist for a specific mood",
+    "Do a digital detox for the next hour"
+  ];
 
-    safeFetch("https://official-joke-api.appspot.com/random_joke")
-      .then(r => r.json())
-      .then(j => {
-        setText("joke-setup", j.setup);
-        setText("joke-punchline", j.punchline);
-        showContent("joke-loading", "joke-content");
-        if (rb) rb.style.display = "";
-      })
-      .catch(() => setText("joke-loading", "⚠️ Joke API unavailable."));
-  };
-
-  window.__funRevealPunchline = function () {
-    const pw = document.getElementById("joke-punchline-wrap");
-    const rb = document.getElementById("joke-reveal-btn");
-    if (pw) pw.style.display = "";
-    if (rb) rb.style.display = "none";
-  };
-
-  // ============================================================
-  // 4. BORED
-  // ============================================================
   window.__funLoadBored = function () {
     showLoading("bored-loading", "bored-content");
-    safeFetch("https://bored-api.appbrewery.com/random")
-      .then(r => r.json())
+
+    // Try the current known working Bored API endpoint
+    safeFetch("https://bored.api.lewagon.com/api/activity", 6000)
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(b => {
-        setText("bored-activity", b.activity || "");
-        const parts = [
-          b.type ? `🏷️ ${b.type.charAt(0).toUpperCase()+b.type.slice(1)}` : "",
-          b.participants ? `👥 ${b.participants}` : "",
-          b.price === 0 ? "💸 Free" : ""
-        ].filter(Boolean);
-        setText("bored-meta", parts.join("  ·  "));
-        showContent("bored-loading", "bored-content");
+        _showBoredResult(b.activity, b.type, b.participants, b.price);
       })
       .catch(() => {
-        const f = ["Go for a walk somewhere new","Call someone you haven't talked to in a while","Cook a new recipe","Read the first chapter of a random book"];
-        setText("bored-activity", f[Math.floor(Math.random()*f.length)]);
-        setText("bored-meta", "💡 Offline suggestion");
-        showContent("bored-loading", "bored-content");
+        // Fallback 2: appbrewery mirror
+        safeFetch("https://bored-api.appbrewery.com/random", 5000)
+          .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+          .then(b => {
+            _showBoredResult(b.activity, b.type, b.participants, b.price);
+          })
+          .catch(() => {
+            // Final fallback: curated local pool (variety of 20)
+            const act = BORED_POOL[Math.floor(Math.random() * BORED_POOL.length)];
+            _showBoredResult(act, "recreational", null, 0);
+          });
       });
   };
+
+  function _showBoredResult(activity, type, participants, price) {
+    setText("bored-activity", activity || "");
+    const parts = [
+      type ? `🏷️ ${type.charAt(0).toUpperCase() + type.slice(1)}` : "",
+      participants ? `👥 ${participants} participant${participants !== 1 ? "s" : ""}` : "",
+      price === 0 ? "💸 Free" : ""
+    ].filter(Boolean);
+    setText("bored-meta", parts.join("  ·  "));
+    showContent("bored-loading", "bored-content");
+  }
 
   // ============================================================
   // 5. MOVIE
@@ -624,7 +584,7 @@
 
   window.__funLoadMovie = function () {
     showLoading("movie-loading", "movie-content");
-    const id = MOVIE_IDS[Math.floor(Math.random()*MOVIE_IDS.length)];
+    const id = MOVIE_IDS[Math.floor(Math.random() * MOVIE_IDS.length)];
     safeFetch(`https://www.omdbapi.com/?i=${id}&apikey=trilogy`)
       .then(r => r.json())
       .then(m => {
@@ -646,27 +606,61 @@
   };
 
   // ============================================================
-  // 6. COCKTAIL
+  // 6. COCKTAIL + SHARE
   // ============================================================
+  let __currentCocktail = null;
+
   window.__funLoadCocktail = function () {
     showLoading("cocktail-loading", "cocktail-content");
+    const shareBtn = document.getElementById("cocktail-share-btn");
+    if (shareBtn) shareBtn.style.display = "none";
+
     safeFetch("https://www.thecocktaildb.com/api/json/v1/1/random.php")
       .then(r => r.json())
       .then(data => {
         const d = data.drinks[0];
+        __currentCocktail = d;
+
         const ci = document.getElementById("cocktail-img");
         if (ci) { ci.src = d.strDrinkThumb || ""; ci.alt = d.strDrink || ""; ci.style.display = d.strDrinkThumb ? "" : "none"; }
         setText("cocktail-name", d.strDrink || "");
         setText("cocktail-glass", d.strGlass ? `🥃 ${d.strGlass}` : "");
+
         const ings = [];
         for (let i = 1; i <= 15; i++) {
           const ing = d[`strIngredient${i}`], meas = d[`strMeasure${i}`];
-          if (ing?.trim()) ings.push(`${meas ? meas.trim()+" " : ""}${ing.trim()}`);
+          if (ing?.trim()) ings.push(`${meas ? meas.trim() + " " : ""}${ing.trim()}`);
         }
-        setHTML("cocktail-ingredients", ings.map(i => `<div class="cocktail-ing-item">• ${i}</div>`).join(""));
+        setHTML("cocktail-ingredients", ings.map(x => `<div class="cocktail-ing-item">• ${x}</div>`).join(""));
         showContent("cocktail-loading", "cocktail-content");
+        if (shareBtn) shareBtn.style.display = "";
       })
       .catch(() => setText("cocktail-loading", "⚠️ Cocktail API unavailable."));
+  };
+
+  window.__funShareCocktail = function () {
+    if (!__currentCocktail) return;
+    const d = __currentCocktail;
+    const ings = [];
+    for (let i = 1; i <= 15; i++) {
+      const ing = d[`strIngredient${i}`], meas = d[`strMeasure${i}`];
+      if (ing?.trim()) ings.push(`${meas ? meas.trim() + " " : ""}${ing.trim()}`);
+    }
+    const msg =
+      `🍸 ${d.strDrink}\n` +
+      `🥃 Serve in: ${d.strGlass || "any glass"}\n\n` +
+      `Ingredients:\n${ings.map(x => `• ${x}`).join("\n")}\n\n` +
+      (d.strInstructions ? `How to make it:\n${d.strInstructions.slice(0, 280)}${d.strInstructions.length > 280 ? "..." : ""}` : "");
+
+    if (navigator.share) {
+      // Native share sheet (iOS/Android) — Message, WhatsApp, etc.
+      navigator.share({ title: `Cocktail: ${d.strDrink}`, text: msg })
+        .catch(() => {}); // user cancelled — no action needed
+    } else {
+      // Fallback: open SMS with pre-filled body (works on any mobile)
+      const smsBody = encodeURIComponent(msg);
+      window.open(`sms:?body=${smsBody}`, "_blank");
+    }
   };
 
   // ============================================================
@@ -686,14 +680,14 @@
     safeFetch("https://restcountries.com/v3.1/all?fields=name,flags,capital,population,region")
       .then(r => r.json())
       .then(list => {
-        __currentCountry = list[Math.floor(Math.random()*list.length)];
+        __currentCountry = list[Math.floor(Math.random() * list.length)];
         const c = __currentCountry;
         const fe = document.getElementById("country-flag");
         if (fe) fe.textContent = c.flags?.emoji || "🏳️";
         const clues = [
           c.region ? `🌐 Region: ${c.region}` : "",
           c.capital?.[0] ? `🏛️ Capital starts with: <b>${c.capital[0][0]}…</b>` : "",
-          c.population ? `👥 Pop: ~${(c.population/1e6).toFixed(1)}M` : "",
+          c.population ? `👥 Pop: ~${(c.population / 1e6).toFixed(1)}M` : "",
           `🔤 ${c.name.common.length} letters`
         ].filter(Boolean);
         setHTML("country-clues", clues.join("<br/>"));
@@ -708,8 +702,8 @@
     const guess = (gi?.value || "").trim().toLowerCase();
     const correct = (__currentCountry.name.common || "").toLowerCase();
     const alts = [
-      ...Object.values(__currentCountry.name?.nativeName || {}).map(n => (n.common||"¨").toLowerCase()),
-      (__currentCountry.name?.official||"¨").toLowerCase()
+      ...Object.values(__currentCountry.name?.nativeName || {}).map(n => (n.common || "").toLowerCase()),
+      (__currentCountry.name?.official || "").toLowerCase()
     ];
     const right = guess === correct || alts.includes(guess);
     __countryGuessed = true;
@@ -721,26 +715,64 @@
 
   // ============================================================
   // 8. NUMBER FACT
+  // Numbers API has CORS issues in browsers; we use a Wikipedia
+  // search as a reliable CORS-friendly fallback that always works.
   // ============================================================
   window.__funLoadNumber = function () {
     showLoading("number-loading", "number-content");
-    __fetchNumberFact(Math.floor(Math.random() * 1000));
+    __fetchNumberFact(Math.floor(Math.random() * 999) + 1);
   };
+
   window.__funLoadNumberCustom = function () {
     const v = parseInt(document.getElementById("number-input")?.value || "", 10);
     if (isNaN(v)) return;
     showLoading("number-loading", "number-content");
     __fetchNumberFact(v);
   };
+
   function __fetchNumberFact(n) {
-    safeFetch(`https://numbersapi.com/${n}/trivia?json`)
-      .then(r => r.json())
-      .then(d => { setText("number-big", String(n)); setText("number-fact", d.text || "No fact found."); showContent("number-loading", "number-content"); })
-      .catch(() => safeFetch(`https://numbersapi.com/${n}`)
-        .then(r => r.text())
-        .then(t => { setText("number-big", String(n)); setText("number-fact", t || "No fact found."); showContent("number-loading", "number-content"); })
-        .catch(() => { setText("number-big", String(n)); setText("number-fact", `${n} is a number. The Numbers API seems offline right now.`); showContent("number-loading", "number-content"); })
-      );
+    // Primary: numbersapi.com (plain text, no JSON to avoid CORS preflight)
+    safeFetch(`https://numbersapi.com/${n}/trivia`, 7000)
+      .then(r => {
+        if (!r.ok) throw new Error(r.status);
+        return r.text();
+      })
+      .then(text => {
+        setText("number-big", String(n));
+        setText("number-fact", text);
+        showContent("number-loading", "number-content");
+      })
+      .catch(() => {
+        // Fallback: Wikipedia search for the number — always has CORS headers
+        safeFetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${n}`, 7000)
+          .then(r => r.json())
+          .then(wiki => {
+            const extract = wiki.extract || "";
+            const firstSentence = extract.split(".")[0] + ".";
+            setText("number-big", String(n));
+            setText("number-fact", firstSentence.length > 20 ? firstSentence : `${n} — ` + (extract.slice(0, 180) || "Interesting number!"));
+            showContent("number-loading", "number-content");
+          })
+          .catch(() => {
+            // Last resort: handcrafted facts pool
+            const facts = [
+              `${n} is ${n % 2 === 0 ? "an even" : "an odd"} number.`,
+              `${n} squared is ${n * n}.`,
+              `${n} in binary is ${n.toString(2)}.`,
+              `${n} is ${isPrime(n) ? "a prime" : "not a prime"} number.`,
+              `The square root of ${n} is approximately ${Math.sqrt(n).toFixed(3)}.`
+            ];
+            setText("number-big", String(n));
+            setText("number-fact", facts[Math.floor(Math.random() * facts.length)]);
+            showContent("number-loading", "number-content");
+          });
+      });
+  }
+
+  function isPrime(n) {
+    if (n < 2) return false;
+    for (let i = 2; i <= Math.sqrt(n); i++) if (n % i === 0) return false;
+    return true;
   }
 
   // ============================================================
@@ -750,24 +782,26 @@
     "science_fiction","mystery","adventure","fantasy","history",
     "philosophy","biography","thriller","classic_literature","humor"
   ];
+
   window.__funLoadBook = function () {
     showLoading("book-loading", "book-content");
-    const subj = BOOK_SUBJECTS[Math.floor(Math.random()*BOOK_SUBJECTS.length)];
+    const subj = BOOK_SUBJECTS[Math.floor(Math.random() * BOOK_SUBJECTS.length)];
     safeFetch(`https://openlibrary.org/subjects/${subj}.json?limit=20`)
       .then(r => r.json())
       .then(data => {
         const works = data.works || [];
         if (!works.length) throw new Error();
-        const w = works[Math.floor(Math.random()*works.length)];
+        const w = works[Math.floor(Math.random() * works.length)];
         const ce = document.getElementById("book-cover");
         if (ce) {
-          if (w.cover_id) { ce.src = `https://covers.openlibrary.org/b/id/${w.cover_id}-M.jpg`; ce.alt = w.title||"book"; ce.style.display = ""; }
+          if (w.cover_id) { ce.src = `https://covers.openlibrary.org/b/id/${w.cover_id}-M.jpg`; ce.alt = w.title || "book"; ce.style.display = ""; }
           else ce.style.display = "none";
         }
         setText("book-title", w.title || "Unknown Title");
-        setText("book-author", (w.authors||[]).map(a=>a.name).join(", ") ? `by ${(w.authors||[]).map(a=>a.name).join(", ")}` : "");
+        const authors = (w.authors || []).map(a => a.name).join(", ");
+        setText("book-author", authors ? `by ${authors}` : "");
         setText("book-year", w.first_publish_year ? `First published ${w.first_publish_year}` : "");
-        setText("book-subjects", (w.subject||[]).slice(0,3).join(", ") || subj.replace(/_/g," "));
+        setText("book-subjects", (w.subject || []).slice(0, 3).join(", ") || subj.replace(/_/g, " "));
         const le = document.getElementById("book-link");
         if (le && w.key) le.href = `https://openlibrary.org${w.key}`;
         showContent("book-loading", "book-content");
