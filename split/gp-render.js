@@ -666,6 +666,12 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   border: 1px solid rgba(220,60,60,0.28);
   color: #e05555;
 }
+.gpOverlayPickResult.gpResultTie {
+  background: rgba(255,200,80,0.12);
+  border: 1px solid rgba(255,200,80,0.28);
+  color: rgba(255,210,100,0.9);
+  font-size: 17px;
+}
 .gpOverlayPickResult.gpResultPending {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.12);
@@ -992,9 +998,15 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       let resultCls   = "gpResultPending";
       let resultIcon  = "·";
       if (isFinal && awayScore >= 0 && homeScore >= 0) {
-        const pickedWon = side === "away" ? awayScore > homeScore : homeScore > awayScore;
-        resultCls  = pickedWon ? "gpResultWin"  : "gpResultLoss";
-        resultIcon = pickedWon ? "✓"            : "✕";
+        const isTie = awayScore === homeScore;
+        if (isTie) {
+          resultCls  = "gpResultTie";
+          resultIcon = "🤝";
+        } else {
+          const pickedWon = side === "away" ? awayScore > homeScore : homeScore > awayScore;
+          resultCls  = pickedWon ? "gpResultWin"  : "gpResultLoss";
+          resultIcon = pickedWon ? "✓"            : "✕";
+        }
       }
 
       const logoEl = pickedLogo
@@ -1084,6 +1096,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 <div class="gpLeaderScoringFooter">
   <span>🐶 Underdog = 2 pts</span>
   <span>❤️ Favorite = 1 pt</span>
+  <span>🤝 Tie = 0.5 pts</span>
 </div>`;
 
     // ── No finals yet ──
@@ -1146,9 +1159,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const pts    = Number(u?.points ?? 0);
       const wins   = Number(u?.wins   ?? 0);
       const losses = Number(u?.losses ?? 0);
+      const ties   = Number(u?.ties   ?? 0);
       const { bg, color } = avatarStyle(nm);
 
-      const record    = `${wins}–${losses}`;
+      // Show W-L-T when ties exist, otherwise W-L
+      const record    = ties > 0 ? `${wins}–${losses}–${ties}` : `${wins}–${losses}`;
       const breakdown = pickBreakdown(u);
 
       const topStyle = rank <= 3
