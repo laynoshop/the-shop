@@ -185,7 +185,8 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "picks",  label: "Picks" },
       { key: "beat",   label: "Beat<br/>TTUN" },
       { key: "news",   label: "Top<br/>News" },
-      { key: "golf",   label: "⛳<br/>Putt" }
+      { key: "golf",   label: "&#x26F3;<br/>Putt" },
+      { key: "fun",    label: "&#x1F389;<br/>Fun" }
     ];
 
     if (role === "admin") baseTabs.push({ key: "shop", label: "Shop" });
@@ -268,6 +269,7 @@ window.replaceMichiganText = replaceMichiganText;
     else if (tab === "news")  safe("renderTopNews", true);
     else if (tab === "shop")  safe("renderShop");
     else if (tab === "golf")  safe("renderGolf");
+    else if (tab === "fun")   safe("renderFun");
     else safe("loadScores", true);
 
     updateRivalryBanner();
