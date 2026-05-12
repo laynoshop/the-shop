@@ -80,7 +80,25 @@
 .movie-title { font-size: 14px; font-weight: 900; color: #fff; line-height: 1.3; margin-bottom: 1px; }
 .movie-meta { font-size: 11px; color: #888; margin-bottom: 3px; }
 .movie-rating { font-size: 12px; font-weight: 700; color: #f5a623; margin-bottom: 4px; }
-.movie-plot { font-size: 12px; color: #aaa; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* Expandable text — shared by movie plot & APOD description */
+.expandable-text {
+  font-size: 12px; color: #aaa; line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.expandable-text.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+.expand-hint {
+  font-size: 11px; color: #bb0000; font-weight: 700;
+  cursor: pointer; margin-top: 2px; display: inline-block;
+}
 .cocktail-name { font-size: 14px; font-weight: 900; color: #fff; margin-bottom: 2px; }
 .cocktail-glass { font-size: 11px; color: #888; margin-bottom: 5px; }
 .cocktail-ing-title { font-size: 10px; font-weight: 700; color: #bb0000; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
@@ -90,15 +108,18 @@
 .country-input-wrap { display: flex; gap: 6px; align-items: center; }
 .country-result { font-size: 13px; font-weight: 700; margin-top: 6px; min-height: 18px; }
 .country-answer { font-size: 11px; color: #777; margin-top: 2px; }
+/* ON THIS DAY */
+.otd-year { font-size: 28px; font-weight: 900; color: #bb0000; line-height: 1; margin-bottom: 4px; }
+.otd-text { font-size: 13px; color: #ddd; line-height: 1.5; }
+.otd-date-label { font-size: 10px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
 /* NASA APOD */
 .apod-img { width: 100%; border-radius: 10px; object-fit: cover; max-height: 220px; background: #111; display: block; }
 .apod-title { font-size: 14px; font-weight: 900; color: #fff; margin-bottom: 3px; }
 .apod-date { font-size: 10px; color: #666; margin-bottom: 5px; }
-.apod-expl { font-size: 12px; color: #aaa; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 /* ISS */
 .iss-coords { font-size: 22px; font-weight: 900; color: #fff; letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 4px; }
 .iss-label { font-size: 10px; font-weight: 700; color: #bb0000; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
-.iss-location { font-size: 12px; color: #aaa; line-height: 1.5; }
+.iss-location { font-size: 12px; color: #aaa; line-height: 1.5; white-space: pre-line; }
 .iss-pulse { display: inline-block; width: 8px; height: 8px; background: #4caf50; border-radius: 50%; margin-right: 5px; animation: issPulse 1.4s ease-in-out infinite; }
 @keyframes issPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.5)} }
 /* EARTHQUAKE */
@@ -147,7 +168,7 @@
 
 <div class="fun-page">
 
-  <!-- JOKE (top) -->
+  <!-- JOKE -->
   <div class="fun-section-label">Humor</div>
   <div class="fun-card" id="fun-joke">
     <div class="fun-card-header">
@@ -165,6 +186,25 @@
     <div class="fun-footer-row">
       <button class="fun-btn-sm" id="joke-reveal-btn" onclick="window.__funRevealPunchline()" style="display:none;">Reveal 👀</button>
       <button class="fun-btn" onclick="window.__funLoadJoke()">New Joke ↻</button>
+    </div>
+  </div>
+
+  <!-- ON THIS DAY IN HISTORY -->
+  <div class="fun-section-label">On This Day in History</div>
+  <div class="fun-card" id="fun-otd">
+    <div class="fun-card-header">
+      <span class="fun-card-icon">📜</span>
+      <span class="fun-card-title">On This Day</span>
+    </div>
+    <div class="fun-divider"></div>
+    <div id="otd-loading" class="fun-loading">Digging through history…</div>
+    <div id="otd-content" style="display:none;">
+      <div class="otd-date-label" id="otd-date-label"></div>
+      <div class="otd-year" id="otd-year"></div>
+      <div class="otd-text" id="otd-text"></div>
+    </div>
+    <div class="fun-footer-row">
+      <button class="fun-btn" onclick="window.__funLoadOTD()">Another Event ↻</button>
     </div>
   </div>
 
@@ -246,7 +286,8 @@
           <div class="movie-title" id="movie-title"></div>
           <div class="movie-meta" id="movie-year"></div>
           <div class="movie-rating" id="movie-rating"></div>
-          <div class="movie-plot" id="movie-plot"></div>
+          <div class="expandable-text" id="movie-plot" onclick="window.__funToggleExpand('movie-plot','movie-plot-hint')"></div>
+          <span class="expand-hint" id="movie-plot-hint" onclick="window.__funToggleExpand('movie-plot','movie-plot-hint')" style="display:none;">Read more ▾</span>
         </div>
       </div>
     </div>
@@ -319,7 +360,8 @@
       <div style="margin-top:9px;">
         <div class="apod-title" id="apod-title"></div>
         <div class="apod-date" id="apod-date"></div>
-        <div class="apod-expl" id="apod-expl"></div>
+        <div class="expandable-text" id="apod-expl" onclick="window.__funToggleExpand('apod-expl','apod-expl-hint')"></div>
+        <span class="expand-hint" id="apod-expl-hint" onclick="window.__funToggleExpand('apod-expl','apod-expl-hint')" style="display:none;">Read more ▾</span>
       </div>
     </div>
     <div class="fun-footer-row">
@@ -370,6 +412,7 @@
 `;
 
     window.__funLoadJoke();
+    window.__funLoadOTD();
     window.__funLoadTrivia();
     window.__funLoadPokemon();
     window.__funLoadBored();
@@ -385,7 +428,6 @@
       if (g) g.addEventListener("keydown", e => { if (e.key === "Enter") window.__funGuessCountry(); });
     }, 50);
 
-    // ISS auto-refresh every 10 seconds while Fun page is visible
     if (window.__issInterval) clearInterval(window.__issInterval);
     window.__issInterval = setInterval(() => {
       if (document.getElementById("fun-iss")) window.__funRefreshISS();
@@ -420,6 +462,32 @@
   function escAttr(str) { return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;"); }
 
   // ============================================================
+  // EXPANDABLE TEXT TOGGLE (shared by movie plot & APOD)
+  // ============================================================
+  window.__funToggleExpand = function (textId, hintId) {
+    const el = document.getElementById(textId);
+    const hint = document.getElementById(hintId);
+    if (!el) return;
+    const expanded = el.classList.toggle("expanded");
+    if (hint) hint.textContent = expanded ? "Show less ▴" : "Read more ▾";
+  };
+
+  // After setting text on an expandable element, check if it actually overflows
+  // (short texts don't need the hint at all).
+  function _initExpandable(textId, hintId, text) {
+    const el = document.getElementById(textId);
+    const hint = document.getElementById(hintId);
+    if (!el) return;
+    el.classList.remove("expanded");
+    el.textContent = text;
+    if (hint) {
+      hint.textContent = "Read more ▾";
+      // Show hint only if text is long enough to actually be clipped
+      hint.style.display = text && text.length > 120 ? "" : "none";
+    }
+  }
+
+  // ============================================================
   // 1. JOKE
   // ============================================================
   window.__funLoadJoke = function () {
@@ -428,7 +496,6 @@
     const rb = document.getElementById("joke-reveal-btn");
     if (pw) pw.style.display = "none";
     if (rb) rb.style.display = "none";
-
     safeFetch("https://official-joke-api.appspot.com/random_joke")
       .then(r => r.json())
       .then(j => {
@@ -448,7 +515,64 @@
   };
 
   // ============================================================
-  // 2. TRIVIA
+  // 2. ON THIS DAY IN HISTORY
+  // Uses the Wikipedia "On this day" REST API — no key, great CORS.
+  // Pulls a random "selected" event from today's date each time.
+  // ============================================================
+  let __otdEvents = [];
+  let __otdIndex  = 0;
+
+  window.__funLoadOTD = function () {
+    showLoading("otd-loading", "otd-content");
+
+    const now   = new Date();
+    const month = now.getMonth() + 1;   // 1-12
+    const day   = now.getDate();         // 1-31
+    const monthNames = ["January","February","March","April","May","June",
+                        "July","August","September","October","November","December"];
+    const dateLabel = `${monthNames[now.getMonth()]} ${day}`;
+
+    // If we already fetched today's events, just cycle through them
+    if (__otdEvents.length > 0) {
+      __otdIndex = (__otdIndex + 1) % __otdEvents.length;
+      _showOTDEvent(__otdEvents[__otdIndex], dateLabel);
+      return;
+    }
+
+    safeFetch(`https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${month}/${day}`, 8000)
+      .then(r => r.json())
+      .then(data => {
+        const events = data.selected || data.events || [];
+        if (!events.length) throw new Error("empty");
+        // Shuffle so it feels fresh each session
+        __otdEvents = events.sort(() => Math.random() - 0.5);
+        __otdIndex  = 0;
+        _showOTDEvent(__otdEvents[0], dateLabel);
+      })
+      .catch(() => {
+        // Fallback: Wikipedia "On this day" legacy endpoint
+        safeFetch(`https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/${month}/${day}`, 8000)
+          .then(r => r.json())
+          .then(data => {
+            const events = data.selected || [];
+            if (!events.length) throw new Error("empty");
+            __otdEvents = events.sort(() => Math.random() - 0.5);
+            __otdIndex  = 0;
+            _showOTDEvent(__otdEvents[0], dateLabel);
+          })
+          .catch(() => setText("otd-loading", "⚠️ Couldn't load history. Try again."));
+      });
+  };
+
+  function _showOTDEvent(evt, dateLabel) {
+    setText("otd-date-label", dateLabel);
+    setText("otd-year", evt.year ? String(evt.year) : "");
+    setText("otd-text", evt.text || evt.description || "");
+    showContent("otd-loading", "otd-content");
+  }
+
+  // ============================================================
+  // 3. TRIVIA
   // ============================================================
   let __triviaCorrect = "";
 
@@ -456,7 +580,6 @@
     showLoading("trivia-loading", "trivia-content");
     const nb = document.getElementById("trivia-next");
     if (nb) nb.style.display = "none";
-
     safeFetch("https://opentdb.com/api.php?amount=1&type=multiple")
       .then(r => r.json())
       .then(data => {
@@ -475,8 +598,8 @@
       })
       .catch(() => {
         setText("trivia-loading", "⚠️ Couldn't load. Tap Next.");
-        const nb = document.getElementById("trivia-next");
-        if (nb) nb.style.display = "";
+        const nb2 = document.getElementById("trivia-next");
+        if (nb2) nb2.style.display = "";
       });
   };
 
@@ -495,7 +618,7 @@
   };
 
   // ============================================================
-  // 3. POKEMON
+  // 4. POKEMON
   // ============================================================
   window.__funLoadPokemon = function () {
     showLoading("poke-loading", "poke-content");
@@ -533,7 +656,7 @@
   };
 
   // ============================================================
-  // 4. BORED
+  // 5. BORED
   // ============================================================
   const BORED_POOL = [
     "Take a walk somewhere you've never been",
@@ -586,7 +709,7 @@
   }
 
   // ============================================================
-  // 5. MOVIE
+  // 6. MOVIE — expandable plot
   // ============================================================
   const MOVIE_IDS = [
     "tt0111161","tt0068646","tt0071562","tt0468569","tt0050083",
@@ -614,14 +737,14 @@
         setText("movie-title", m.Title || "");
         setText("movie-year", [m.Year, m.Genre].filter(v => v && v !== "N/A").join(" · "));
         setText("movie-rating", m.imdbRating && m.imdbRating !== "N/A" ? `⭐ ${m.imdbRating}/10` : "");
-        setText("movie-plot", m.Plot && m.Plot !== "N/A" ? m.Plot : "");
+        _initExpandable("movie-plot", "movie-plot-hint", m.Plot && m.Plot !== "N/A" ? m.Plot : "");
         showContent("movie-loading", "movie-content");
       })
       .catch(() => setText("movie-loading", "⚠️ Movie API unavailable."));
   };
 
   // ============================================================
-  // 6. COCKTAIL + SHARE
+  // 7. COCKTAIL + SHARE
   // ============================================================
   let __currentCocktail = null;
 
@@ -629,7 +752,6 @@
     showLoading("cocktail-loading", "cocktail-content");
     const shareBtn = document.getElementById("cocktail-share-btn");
     if (shareBtn) shareBtn.style.display = "none";
-
     safeFetch("https://www.thecocktaildb.com/api/json/v1/1/random.php")
       .then(r => r.json())
       .then(data => {
@@ -672,7 +794,7 @@
   };
 
   // ============================================================
-  // 7. COUNTRY GUESSER
+  // 8. COUNTRY GUESSER
   // ============================================================
   let __currentCountry = null, __countryGuessed = false;
 
@@ -684,7 +806,6 @@
     if (ca) { ca.style.display = "none"; ca.textContent = ""; }
     const gi = document.getElementById("country-guess");
     if (gi) gi.value = "";
-
     safeFetch("https://restcountries.com/v3.1/all?fields=name,flags,capital,population,region")
       .then(r => r.json())
       .then(list => {
@@ -722,76 +843,59 @@
   };
 
   // ============================================================
-  // 8. NASA APOD
-  // Uses NASA's demo key (DEMO_KEY) — 30 req/hour, plenty for casual use.
-  // Loads today's picture by default; "Random Day" picks a random date
-  // between 1995-06-16 (first APOD) and today.
+  // 9. NASA APOD — expandable description
   // ============================================================
   window.__funLoadApod = function () {
     showLoading("apod-loading", "apod-content");
-
-    // Pick a random date between APOD launch and today
     const start = new Date("1995-06-16").getTime();
-    const end   = Date.now();
-    const rnd   = new Date(start + Math.random() * (end - start));
+    const rnd   = new Date(start + Math.random() * (Date.now() - start));
     const dateStr = rnd.toISOString().slice(0, 10);
+
+    function _renderApod(d) {
+      const img = document.getElementById("apod-img");
+      if (img) {
+        const isImg = d.media_type === "image";
+        img.src = isImg ? d.url : (d.thumbnail_url || "");
+        img.alt = d.title || "NASA APOD";
+        img.style.display = img.src ? "" : "none";
+      }
+      setText("apod-title", d.title || "");
+      setText("apod-date", d.date || "");
+      _initExpandable("apod-expl", "apod-expl-hint", d.explanation || "");
+      showContent("apod-loading", "apod-content");
+    }
 
     safeFetch(`https://api.nasa.gov/planetary/apod?date=${dateStr}&api_key=DEMO_KEY`, 10000)
       .then(r => r.json())
-      .then(d => {
-        if (d.error) throw new Error(d.error.message || "NASA error");
-        const img = document.getElementById("apod-img");
-        if (img) {
-          // APOD can be a video (YouTube) — fall back to thumbnail or hide
-          const isImg = d.media_type === "image";
-          img.src = isImg ? d.url : (d.thumbnail_url || "");
-          img.alt = d.title || "NASA APOD";
-          img.style.display = (img.src) ? "" : "none";
-        }
-        setText("apod-title", d.title || "");
-        setText("apod-date", d.date || "");
-        setText("apod-expl", d.explanation || "");
-        showContent("apod-loading", "apod-content");
-      })
+      .then(d => { if (d.error) throw new Error(); _renderApod(d); })
       .catch(() => {
-        // Fallback: try today's APOD without a date param
         safeFetch("https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY", 8000)
           .then(r => r.json())
-          .then(d => {
-            const img = document.getElementById("apod-img");
-            if (img) { img.src = d.url || ""; img.alt = d.title || ""; img.style.display = d.url ? "" : "none"; }
-            setText("apod-title", d.title || "");
-            setText("apod-date", d.date || "");
-            setText("apod-expl", d.explanation || "");
-            showContent("apod-loading", "apod-content");
-          })
+          .then(d => _renderApod(d))
           .catch(() => setText("apod-loading", "⚠️ NASA API unavailable. Try again shortly."));
       });
   };
 
   // ============================================================
-  // 9. ISS LIVE TRACKER
-  // wheretheiss.at — no key, CORS-enabled, updates every ~5 s on their end.
-  // We refresh the card every 10 s automatically.
-  // Reverse-geocodes with BigDataCloud (free, no key).
+  // 10. ISS LIVE TRACKER — speed in mph
   // ============================================================
   window.__funLoadISS = window.__funRefreshISS = function () {
-    // Don't flash loader on auto-refresh — only show on first load
     const content = document.getElementById("iss-content");
-    if (!content || content.style.display === "none") {
-      showLoading("iss-loading", "iss-content");
-    }
+    if (!content || content.style.display === "none") showLoading("iss-loading", "iss-content");
 
     safeFetch("https://api.wheretheiss.at/v1/satellites/25544", 6000)
       .then(r => r.json())
       .then(d => {
-        const lat = parseFloat(d.latitude).toFixed(4);
-        const lon = parseFloat(d.longitude).toFixed(4);
-        const latDir = d.latitude >= 0 ? "N" : "S";
+        const lat    = parseFloat(d.latitude).toFixed(4);
+        const lon    = parseFloat(d.longitude).toFixed(4);
+        const latDir = d.latitude  >= 0 ? "N" : "S";
         const lonDir = d.longitude >= 0 ? "E" : "W";
         setText("iss-coords", `${Math.abs(lat)}° ${latDir},  ${Math.abs(lon)}° ${lonDir}`);
 
-        // Try reverse geocode to get a readable location name
+        // Convert km/h → mph (1 km/h = 0.621371 mph)
+        const mph = Math.round(d.velocity * 0.621371).toLocaleString();
+        const altMi = Math.round(d.altitude * 0.621371);
+
         safeFetch(
           `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${d.latitude}&longitude=${d.longitude}&localityLanguage=en`,
           5000
@@ -800,10 +904,10 @@
           .then(geo => {
             const parts = [geo.locality, geo.countryName].filter(Boolean);
             const loc = parts.length ? parts.join(", ") : "Over the ocean 🌊";
-            setText("iss-location", `📍 Currently flying over: ${loc}\n🏎️ Speed: ${Math.round(d.velocity).toLocaleString()} km/h  ·  🛰️ Altitude: ${Math.round(d.altitude)} km`);
+            setText("iss-location", `📍 Currently flying over: ${loc}\n🏎️ Speed: ${mph} mph  ·  🛰️ Altitude: ${altMi} mi`);
           })
           .catch(() => {
-            setText("iss-location", `🏎️ Speed: ${Math.round(d.velocity).toLocaleString()} km/h  ·  🛰️ Altitude: ${Math.round(d.altitude)} km`);
+            setText("iss-location", `🏎️ Speed: ${mph} mph  ·  🛰️ Altitude: ${altMi} mi`);
           });
 
         showContent("iss-loading", "iss-content");
@@ -812,9 +916,7 @@
   };
 
   // ============================================================
-  // 10. USGS EARTHQUAKE FEED
-  // Pulls the most recent significant earthquake from the past 30 days.
-  // Falls back to "all" earthquakes (M1+) if the significant feed is empty.
+  // 11. USGS EARTHQUAKE FEED
   // ============================================================
   function _magColor(mag) {
     if (mag >= 7) return "#e53935";
@@ -831,13 +933,10 @@
 
   window.__funLoadQuake = function () {
     showLoading("quake-loading", "quake-content");
-
-    // Try significant quakes first, then all M1+ as fallback
     const urls = [
       "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson",
       "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/1.0_month.geojson"
     ];
-
     function tryUrl(idx) {
       if (idx >= urls.length) { setText("quake-loading", "⚠️ USGS feed unavailable."); return; }
       safeFetch(urls[idx], 10000)
@@ -845,27 +944,26 @@
         .then(data => {
           const features = data.features || [];
           if (!features.length) { tryUrl(idx + 1); return; }
-          // Sort by time desc, take most recent
           features.sort((a, b) => b.properties.time - a.properties.time);
-          const q = features[0].properties;
-          const mag = parseFloat(q.mag) || 0;
+          const q     = features[0].properties;
+          const mag   = parseFloat(q.mag) || 0;
           const color = _magColor(mag);
-          const label = _magLabel(mag);
           setHTML("quake-badge-wrap",
-            `<span class="quake-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${label}</span>`
+            `<span class="quake-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${_magLabel(mag)}</span>`
           );
           const magEl = document.getElementById("quake-mag");
           if (magEl) { magEl.textContent = `M ${mag.toFixed(1)}`; magEl.style.color = color; }
           setText("quake-place", q.place || "Unknown location");
-          const time = q.time ? new Date(q.time).toLocaleString() : "";
+          const time  = q.time ? new Date(q.time).toLocaleString() : "";
           const depth = features[0].geometry?.coordinates?.[2];
-          const parts = [time ? `🕐 ${time}` : "", depth != null ? `🔽 Depth: ${Math.round(depth)} km` : ""].filter(Boolean);
-          setText("quake-meta", parts.join("  ·  "));
+          setText("quake-meta", [
+            time  ? `🕐 ${time}` : "",
+            depth != null ? `🔽 Depth: ${Math.round(depth)} km` : ""
+          ].filter(Boolean).join("  ·  "));
           showContent("quake-loading", "quake-content");
         })
         .catch(() => tryUrl(idx + 1));
     }
-
     tryUrl(0);
   };
 
