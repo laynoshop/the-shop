@@ -4,6 +4,11 @@
    Leagues list, fetchEventsFor, live score hydration,
    odds hydration + sessionStorage cache.
    Exposes all functions on window.GP_ESPN namespace.
+
+   v2 fix: after hydrating live scores, any game that has gone
+   final (state === "post") is written back to Firestore so the
+   leaderboard can compute correctly even after ESPN stops
+   returning data for old dates.
 */
 
 (function () {
@@ -143,6 +148,55 @@
     }
   }
 
+  // Persist final scores back to Firestore so the leaderboard can
+  // compute correctly for old weeks when ESPN no longer returns data.
+  async function gpPersistFinalScores(games, liveMap) {
+    try {
+      const toWrite = [];
+      for (const g of games) {
+        const eid  = String(g?.eventId || g?.id || "").trim();
+        const info = liveMap.get(eid);
+        if (!info || String(info.state || "").toLowerCase() !== "post") continue;
+        // Only write if not already stored
+        if (g.finalHomeScore != null && g.finalAwayScore != null) continue;
+        const homeScore = Number(info.homeScore);
+        const awayScore = Number(info.awayScore);
+        if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) continue;
+        const weekId = String(g?.weekId || "").trim();
+        if (!weekId || !eid) continue;
+        toWrite.push({ eid, weekId, homeScore, awayScore });
+      }
+      if (!toWrite.length) return;
+
+      // Ensure firebase is ready
+      if (typeof window.GP_Data?.ensureFirebaseReadySafe === "function") {
+        await window.GP_Data.ensureFirebaseReadySafe();
+      }
+      const db = firebase.firestore();
+      const batch = db.batch();
+      for (const { eid, weekId, homeScore, awayScore } of toWrite) {
+        const ref = db.collection("pickSlates").doc(weekId)
+          .collection("games").doc(eid);
+        batch.set(ref, {
+          finalHomeScore: homeScore,
+          finalAwayScore: awayScore,
+          finalState:     "post",
+          finalizedAt:    firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        // Also update in-memory game object so leaderboard can use it immediately
+        const gObj = games.find(g => String(g?.eventId || g?.id || "") === eid);
+        if (gObj) {
+          gObj.finalHomeScore = homeScore;
+          gObj.finalAwayScore = awayScore;
+          gObj.finalState     = "post";
+        }
+      }
+      await batch.commit();
+    } catch (err) {
+      console.warn("[GP] gpPersistFinalScores error (non-fatal):", err);
+    }
+  }
+
   async function gpHydrateLiveStateForGames(games) {
     const list = Array.isArray(games) ? games : [];
     if (!list.length) return;
@@ -182,6 +236,9 @@
       const eid = String(g?.eventId || g?.id || "").trim();
       g.__live = liveMap.get(eid) || null;
     }
+
+    // Persist any newly-final scores back to Firestore
+    await gpPersistFinalScores(list, liveMap);
   }
 
   // --------------- odds helpers ---------------

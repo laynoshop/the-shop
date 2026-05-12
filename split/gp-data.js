@@ -4,6 +4,14 @@
    Firebase ready check, Firestore CRUD for slates/picks,
    leaderboard computation, and the "Everyone's Picks" lazy-load + cache.
    Exposes all functions on window.GP_Data namespace.
+
+   v2 fixes in gpComputeWeeklyLeaderboard:
+   1. uid missing → fall back to name-based key so picks are never dropped.
+   2. Odds parser now matches team abbreviation/name tokens (e.g. "PUR")
+      so ESPN spread strings correctly resolve favSide.
+   3. Score resolution: prefer __live (in-memory from ESPN), then fall back
+      to finalHomeScore / finalAwayScore stored in Firestore by gp-espn.js
+      after a game goes final. This fixes leaderboards for completed weeks.
 */
 
 (function () {
@@ -192,38 +200,28 @@
   // ──────────────────────────────────────────────────────────────
   // gpComputeWeeklyLeaderboard
   //
-  // Computes standings for a slate given:
-  //   games     — array of game objects (with __live or live for score state)
-  //   allPicks  — { [eventId]: [ { uid, name, side } ] }
+  // Score resolution priority per game (highest to lowest):
+  //   1. g.__live.homeScore / g.__live.awayScore   (in-memory from ESPN hydration)
+  //   2. g.finalHomeScore  / g.finalAwayScore      (persisted to Firestore by gp-espn.js)
   //
-  // Scoring:
-  //   +2 pts for a correct underdog pick  (pick matched the team NOT favored)
-  //   +1 pt  for a correct favored pick   (pick matched the favored team)
-  //   Favorite is inferred from the spread stored in g.__odds / g.oddsDetails.
-  //   Handles ESPN-style odds strings like "PUR -5.5" by matching team
-  //   name and abbreviation tokens, not just "away"/"home" prefixes.
-  //   If odds data is unavailable, all correct picks = +1 pt.
+  // State resolution priority:
+  //   1. g.__live.state
+  //   2. g.finalState
   //
-  // Bug fixes (v2):
-  //   1. uid missing → fall back to name-based key so picks are never dropped.
-  //   2. Odds parser now matches team abbreviation/name tokens (e.g. "PUR")
-  //      so ESPN spread strings correctly resolve favSide.
-  //
-  // Each row in `rows` includes:
-  //   { name, points, wins, losses, picks, dogWins, favWins }
-  //
-  // Returns: { rows: [...], finalsCount: N }
-  //   rows sorted descending by points, then wins, then name
+  // Odds resolution (favSide):
+  //   oddsDetails string matched against team abbreviation + full name tokens
+  //   so ESPN strings like "PUR -5.5" resolve correctly.
   // ──────────────────────────────────────────────────────────────
   function gpComputeWeeklyLeaderboard(games, allPicks) {
     const list  = Array.isArray(games)    ? games    : [];
     const picks = (allPicks && typeof allPicks === "object") ? allPicks : {};
 
     // — identify games that have gone final —
+    // Check __live first (in-memory), then stored finalState field
     const finalGames = list.filter(g => {
-      const live  = g?.__live || g?.live || null;
-      const state = String(live?.state || "").toLowerCase();
-      return state === "post";
+      const liveState   = String(g?.__live?.state    || "").toLowerCase();
+      const storedState = String(g?.finalState       || "").toLowerCase();
+      return liveState === "post" || storedState === "post";
     });
 
     const finalsCount = finalGames.length;
@@ -235,12 +233,14 @@
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) continue;
 
-      const live    = g?.__live || g?.live || null;
-      const awayNum = Number(live?.awayScore ?? NaN);
-      const homeNum = Number(live?.homeScore ?? NaN);
+      // Score: prefer live, fall back to stored finals
+      const liveHome   = g?.__live?.homeScore;
+      const liveAway   = g?.__live?.awayScore;
+      const homeNum    = Number(liveHome ?? g?.finalHomeScore ?? NaN);
+      const awayNum    = Number(liveAway ?? g?.finalAwayScore ?? NaN);
 
       let winningSide = "";
-      if (Number.isFinite(awayNum) && Number.isFinite(homeNum)) {
+      if (Number.isFinite(homeNum) && Number.isFinite(awayNum)) {
         if      (awayNum > homeNum) winningSide = "away";
         else if (homeNum > awayNum) winningSide = "home";
       }
@@ -253,15 +253,14 @@
       const oddsLower = oddsDetails.toLowerCase();
       const awayName  = String(g?.awayTeam?.name || g?.awayName || "").trim();
       const homeName  = String(g?.homeTeam?.name || g?.homeName || "").trim();
-      const awayAbbr  = String(g?.awayTeam?.abbreviation || g?.awayAbbr || "").trim();
-      const homeAbbr  = String(g?.homeTeam?.abbreviation || g?.homeAbbr || "").trim();
+      const awayAbbr  = String(g?.awayTeam?.abbr || g?.awayTeam?.abbreviation || g?.awayAbbr || "").trim();
+      const homeAbbr  = String(g?.homeTeam?.abbr || g?.homeTeam?.abbreviation || g?.homeAbbr || "").trim();
 
       if (oddsLower) {
         if      (oddsLower.startsWith("away")) favSide = "away";
         else if (oddsLower.startsWith("home")) favSide = "home";
         else {
           // Match ESPN-style strings like "PUR -5.5" or "Ohio State -3"
-          // by testing each team's abbreviation and full name as word tokens.
           const candidates = [
             { side: "away", tokens: [awayAbbr, awayName] },
             { side: "home", tokens: [homeAbbr, homeName] },
@@ -305,10 +304,10 @@
           players.set(key, { name, points: 0, wins: 0, losses: 0, picks: 0, dogWins: 0, favWins: 0 });
         }
         const row = players.get(key);
-        row.name = name; // keep name current
+        row.name = name;
         row.picks++;
 
-        if (!winningSide) continue; // tie — no points
+        if (!winningSide) continue;
 
         if (side === winningSide) {
           row.wins++;
@@ -411,7 +410,6 @@
     gpComputeWeeklyLeaderboard,
   };
 
-  // Also expose ensureFirebaseReadySafe at top level for back-compat
   window.ensureFirebaseReadySafe = ensureFirebaseReadySafe;
 
 })();
