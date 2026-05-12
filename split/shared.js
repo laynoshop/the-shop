@@ -185,8 +185,7 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "picks",  label: "Picks" },
       { key: "beat",   label: "Beat<br/>TTUN" },
       { key: "news",   label: "Top<br/>News" },
-      { key: "golf",   label: "⛳<br/>Putt" },
-      { key: "fun",    label: "🎉<br/>Fun" }
+      { key: "golf",   label: "⛳<br/>Putt" }
     ];
 
     if (role === "admin") baseTabs.push({ key: "shop", label: "Shop" });
@@ -269,7 +268,6 @@ window.replaceMichiganText = replaceMichiganText;
     else if (tab === "news")  safe("renderTopNews", true);
     else if (tab === "shop")  safe("renderShop");
     else if (tab === "golf")  safe("renderGolf");
-    else if (tab === "fun")   safe("renderFun");
     else safe("loadScores", true);
 
     updateRivalryBanner();
@@ -285,125 +283,113 @@ window.replaceMichiganText = replaceMichiganText;
   const btn = document.getElementById("loginBtn");
 
   if (!input) return;
+  const entered = String(input.value || "").trim();
+  if (!entered) {
+    input.focus();
+    return;
+  }
 
-  const raw = String(input.value || "").trim();
-  if (!raw) return;
-
-  if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
+  if (window.__APP_LOADING) {
+    alert("App is still loading — try again in a second.");
+    return;
+  }
+  window.__APP_LOADING = true;
 
   try {
-    let role = "";
+    if (btn) btn.textContent = "Loading\u2026";
 
-    // --- HARDCODED KEYS (instant, no network) ---
-    const HARD_CODES = {
-      "SCARLET":   "admin",
-      "BUCKEYE":   "admin",
-      "OHIOSTATE": "admin",
-      "THESHOP":   "admin",
-      "GUEST":     "guest",
-      "VISITOR":   "guest"
-    };
-
-    const upper = raw.toUpperCase();
-    if (HARD_CODES[upper]) {
-      role = HARD_CODES[upper];
-    }
-
-    // --- FIREBASE LOOKUP (if no hardcoded match) ---
-    if (!role) {
-      if (typeof window.ensureFirebaseChatReady !== "function" || !window.firebase) {
-        if (btn) { btn.disabled = false; btn.textContent = "Enter The Shop"; }
-        alert("Firebase not loaded yet. Please wait a moment and try again.");
-        return;
-      }
-
-      try {
-        await window.ensureFirebaseChatReady();
-      } catch (firebaseErr) {
-        if (btn) { btn.disabled = false; btn.textContent = "Enter The Shop"; }
-        alert("Firebase failed to initialize. Check your connection.");
-        return;
-      }
-
-      const db = firebase.firestore();
-
-      // 1. Try redeemInviteCodeHttp cloud function first
-      try {
-        const resp = await fetch(
-          "https://us-central1-the-shop-chat.cloudfunctions.net/redeemInviteCodeHttp",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: raw })
-          }
-        );
-        const json = await resp.json();
-        if (json.role) role = json.role;
-      } catch (cfErr) {
-        console.warn("Cloud function failed, falling back to Firestore direct:", cfErr);
-      }
-
-      // 2. Fallback: direct Firestore read
-      if (!role) {
-        try {
-          const snap = await db.collection("inviteCodes").doc(raw.toUpperCase()).get();
-          if (snap.exists) {
-            const d = snap.data() || {};
-            if (d.role) role = d.role;
-          }
-        } catch (fsErr) {
-          console.warn("Firestore fallback failed:", fsErr);
-        }
-      }
-    }
-
-    if (!role) {
-      if (btn) { btn.disabled = false; btn.textContent = "Enter The Shop"; }
-      alert("Invalid code. Try again.");
+    if (typeof window.ensureFirebaseChatReady !== "function" || !window.firebase) {
+      alert("App is still loading — try again in a second.");
       return;
     }
 
-    // --- SUCCESS ---
-    window.__serverRoleCache = role;
+    await window.ensureFirebaseChatReady();
+
+    const user = firebase.auth().currentUser;
+    if (!user) throw new Error("No auth user");
+
+    const token = await user.getIdToken();
+
+    const redeemUrls = [
+      "https://us-central1-the-shop-chat.cloudfunctions.net/redeemInviteCodeHttp",
+      "https://redeeminvitecodehttp-an5l4al3xa-uc.a.run.app"
+    ];
+
+    let role = "";
+    let lastErr = null;
+
+    for (const url of redeemUrls) {
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({ code: entered })
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        role = String(data?.role || "");
+
+        if (resp.ok && (role === "admin" || role === "guest")) {
+          lastErr = null;
+          break;
+        }
+        lastErr = new Error("Invalid code");
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    if (lastErr) throw lastErr;
+
     safeRoleSet(role);
+    window.__serverRoleCache = role;
 
-    if (btn) { btn.disabled = false; btn.textContent = "Enter The Shop"; }
+    try {
+      const DATE_KEY = "theShopDate_v1";
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      localStorage.setItem(DATE_KEY, `${y}${m}${da}`);
+    } catch {}
 
-    // Advance to entry screen (door selection)
-    showEntryScreen();
+    input.value = "";
 
-    const tab = window.__activeTab || "scores";
     buildTabsForRole(role);
-    showTab(tab);
-
-  } catch (err) {
-    console.error("checkCode error:", err);
-    if (btn) { btn.disabled = false; btn.textContent = "Enter The Shop"; }
-    alert("Something went wrong. Please try again.");
+    showEntryScreen();
+  } catch (e) {
+    console.error("checkCode failed:", e);
+    if (btn) btn.textContent = "Load error";
+    alert("App is still loading — try again in a second.");
+    setTimeout(() => { if (btn) btn.textContent = "Unlock"; }, 900);
+    return;
+  } finally {
+    window.__APP_LOADING = false;
+    if (btn) btn.textContent = "Unlock";
   }
 }
 window.checkCode = checkCode;
 
   // ------------------------------------------------------------
-  // Logout
+  // Global click delegation for tabs
   // ------------------------------------------------------------
-  window.logoutUser = function logoutUser() {
-    try { window.hardResetAppInitState && window.hardResetAppInitState(); } catch {}
-    try { safeRoleSet(""); } catch {}
-    try { window.__serverRoleCache = ""; } catch {}
-    try { window.__activeTab = "scores"; } catch {}
+  document.addEventListener("click", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("button") : null;
+    if (!btn) return;
 
-    const app = document.getElementById("app");
-    const login = document.getElementById("login");
-    const entry = document.getElementById("entry");
-
-    if (app) app.style.display = "none";
-    if (entry) entry.style.display = "none";
-    if (login) {
-      login.style.display = "flex";
-      const codeEl = document.getElementById("code");
-      if (codeEl) { codeEl.value = ""; codeEl.focus(); }
+    const tab = btn.getAttribute("data-tab");
+    if (tab) {
+      showTab(tab);
+      return;
     }
-  };
+  });
+
+  // Initial banner update (safe)
+  document.addEventListener("DOMContentLoaded", () => {
+    try { updateRivalryBanner(); } catch {}
+  });
 
 })();
