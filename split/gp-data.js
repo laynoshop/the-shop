@@ -12,6 +12,10 @@
    3. Score resolution: prefer __live (in-memory from ESPN), then fall back
       to finalHomeScore / finalAwayScore stored in Firestore by gp-espn.js
       after a game goes final. This fixes leaderboards for completed weeks.
+
+   v3 fix: expose gpBustAllPicksCache so groupPicks.js can invalidate
+      the allPicks cache immediately after a save, making everyone's picks
+      appear as soon as the page re-renders after saving.
 */
 
 (function () {
@@ -176,6 +180,15 @@
     return window.__GP_ALLPICKS_CACHE[k];
   }
 
+  // ─── bust the allPicks cache for a given week ───────────────────────
+  // Call this immediately after a save so the next render fetches fresh data.
+  function gpBustAllPicksCache(weekId) {
+    const k = String(weekId || "").trim();
+    if (!k) return;
+    window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
+    window.__GP_ALLPICKS_CACHE[k] = { ts: 0, data: null, promise: null };
+  }
+
   async function gpEnsureAllPicksForWeek(db, weekId) {
     const k = String(weekId || "").trim();
     if (!k) return {};
@@ -199,25 +212,11 @@
 
   // ──────────────────────────────────────────────────────────────
   // gpComputeWeeklyLeaderboard
-  //
-  // Score resolution priority per game (highest to lowest):
-  //   1. g.__live.homeScore / g.__live.awayScore   (in-memory from ESPN hydration)
-  //   2. g.finalHomeScore  / g.finalAwayScore      (persisted to Firestore by gp-espn.js)
-  //
-  // State resolution priority:
-  //   1. g.__live.state
-  //   2. g.finalState
-  //
-  // Odds resolution (favSide):
-  //   oddsDetails string matched against team abbreviation + full name tokens
-  //   so ESPN strings like "PUR -5.5" resolve correctly.
   // ──────────────────────────────────────────────────────────────
   function gpComputeWeeklyLeaderboard(games, allPicks) {
     const list  = Array.isArray(games)    ? games    : [];
     const picks = (allPicks && typeof allPicks === "object") ? allPicks : {};
 
-    // — identify games that have gone final —
-    // Check __live first (in-memory), then stored finalState field
     const finalGames = list.filter(g => {
       const liveState   = String(g?.__live?.state    || "").toLowerCase();
       const storedState = String(g?.finalState       || "").toLowerCase();
@@ -227,13 +226,11 @@
     const finalsCount = finalGames.length;
     if (!finalsCount) return { rows: [], finalsCount: 0 };
 
-    // — build a lookup: eventId → { winningSide, favSide } —
     const gameResults = {};
     for (const g of finalGames) {
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) continue;
 
-      // Score: prefer live, fall back to stored finals
       const liveHome   = g?.__live?.homeScore;
       const liveAway   = g?.__live?.awayScore;
       const homeNum    = Number(liveHome ?? g?.finalHomeScore ?? NaN);
@@ -243,9 +240,9 @@
       if (Number.isFinite(homeNum) && Number.isFinite(awayNum)) {
         if      (awayNum > homeNum) winningSide = "away";
         else if (homeNum > awayNum) winningSide = "home";
+        // equal scores → winningSide stays "" (tie)
       }
 
-      // — resolve which side is favored from the odds string —
       let favSide = "";
       const oddsDetails = String(
         g?.__odds?.details || g?.oddsDetails || g?.odds?.details || ""
@@ -260,7 +257,6 @@
         if      (oddsLower.startsWith("away")) favSide = "away";
         else if (oddsLower.startsWith("home")) favSide = "home";
         else {
-          // Match ESPN-style strings like "PUR -5.5" or "Ohio State -3"
           const candidates = [
             { side: "away", tokens: [awayAbbr, awayName] },
             { side: "home", tokens: [homeAbbr, homeName] },
@@ -285,8 +281,6 @@
     }
 
     // — tally scores per player —
-    // FIX: use uid when present; fall back to name-based key so picks
-    // saved before uid was written to the doc are never silently dropped.
     const players = new Map();
 
     for (const [eventId, result] of Object.entries(gameResults)) {
@@ -301,15 +295,17 @@
         if (!side) continue;
 
         if (!players.has(key)) {
-          players.set(key, { name, points: 0, wins: 0, losses: 0, picks: 0, dogWins: 0, favWins: 0 });
+          players.set(key, { name, points: 0, wins: 0, losses: 0, ties: 0, picks: 0, dogWins: 0, favWins: 0 });
         }
         const row = players.get(key);
         row.name = name;
         row.picks++;
 
-        if (!winningSide) continue;
-
-        if (side === winningSide) {
+        if (!winningSide) {
+          // Tie game — award 0.5 points
+          row.ties++;
+          row.points += 0.5;
+        } else if (side === winningSide) {
           row.wins++;
           const pickedUnderdog = !!favSide && side !== favSide;
           if (pickedUnderdog) {
@@ -325,7 +321,6 @@
       }
     }
 
-    // — sort and return —
     const rows = [...players.values()].sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points;
       if (b.wins   !== a.wins)   return b.wins   - a.wins;
@@ -406,6 +401,7 @@
     gpGetAllPicksForSlate,
     gpSaveMyPicksBatch,
     gpGetAllPicksCacheBucket,
+    gpBustAllPicksCache,
     gpEnsureAllPicksForWeek,
     gpComputeWeeklyLeaderboard,
   };

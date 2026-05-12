@@ -93,6 +93,35 @@
   window.gpPendingGet = gpPendingGet;
 
   // ───────────────────────────────────────────
+  // Cache bust helper
+  // Clears the allPicks in-memory cache for a week so the next
+  // renderPicks() re-fetches fresh data from Firestore.
+  // Also strips data-loaded from any open <details> so they re-render.
+  // ───────────────────────────────────────────
+  function gpBustAllPicksCache(weekId) {
+    // 1. Bust the in-memory cache bucket
+    const bustFn = Data().gpBustAllPicksCache;
+    if (typeof bustFn === "function") {
+      bustFn(weekId);
+    } else {
+      // Fallback: clear directly if gp-data.js hasn't exposed the helper yet
+      try {
+        if (window.__GP_ALLPICKS_CACHE && window.__GP_ALLPICKS_CACHE[weekId]) {
+          window.__GP_ALLPICKS_CACHE[weekId] = { ts: 0, data: null, promise: null };
+        }
+      } catch {}
+    }
+    // 2. Bust data-loaded on any open <details> for this week so they re-fetch
+    try {
+      document.querySelectorAll(`[data-gpeveryone="1"][data-weekid="${weekId}"]`).forEach(det => {
+        const bodyId = `gpEveryone_${weekId}_${det.getAttribute("data-eid") || ""}`;
+        const bodyEl = document.getElementById(bodyId);
+        if (bodyEl) bodyEl.removeAttribute("data-loaded");
+      });
+    } catch {}
+  }
+
+  // ───────────────────────────────────────────
   // Week selector helpers
   // ───────────────────────────────────────────
   function gpGetSelectedWeekId(metaPublic) {
@@ -186,7 +215,7 @@
     const weekLabel = String(weekMeta?.label || selectedId || "");
     const published = !!weekMeta?.published;
 
-    // ── FIX: store slateId so save handler can always find it ──
+    // ── store slateId so save handler can always find it ──
     mem.picksSlateId = selectedId;
 
     // ── games + my picks ──
@@ -275,23 +304,14 @@
 
     // ── save picks ──
     if (action === "savePicks") {
-      // Resolve slateId: prefer gpMem (set during renderPicks), then fall back
-      // to data-slate on the button (only present on team pick buttons, not save btn)
-      const slateId = String(gpMem().picksSlateId || btn.getAttribute("data-slate") || "").trim();
-      const pending = gpPendingBucket();
-      const idObj2  = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
-
-      if (!slateId) {
-        console.error("[GP] savePicks: no slateId found — cannot save");
-        return;
-      }
-      if (!Object.keys(pending).length) return;
-
+      const slateId  = String(gpMem().picksSlateId || btn.getAttribute("data-slate") || "").trim();
+      const pending  = gpPendingBucket();
+      const idObj2   = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
       const playerId = idObj2.playerId || gpMem().picksPlayerId || "";
-      if (!playerId) {
-        console.error("[GP] savePicks: no playerId — cannot save");
-        return;
-      }
+
+      if (!slateId)  { console.error("[GP] savePicks: no slateId");  return; }
+      if (!playerId) { console.error("[GP] savePicks: no playerId"); return; }
+      if (!Object.keys(pending).length) return;
 
       btn.disabled = true;
       btn.textContent = "Saving…";
@@ -300,6 +320,8 @@
         const db2 = firebase.firestore();
         await (Data().gpSaveMyPicksBatch || (async () => {}))(db2, slateId, playerId, pending);
         gpPendingClear();
+        // Bust the allPicks cache so the re-render fetches fresh data
+        gpBustAllPicksCache(slateId);
         btn.textContent = "Saved!";
         setTimeout(() => renderPicks(), 800);
       } catch (err) {
