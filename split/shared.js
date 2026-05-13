@@ -186,7 +186,11 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "beat",   label: "Beat<br/>TTUN" },
       { key: "news",   label: "Top<br/>News" },
       { key: "golf",   label: "&#x26F3;<br/>Putt" },
-      { key: "fun",    label: "&#x1F389;<br/>Fun" }
+      { key: "fun",    label: "&#x1F389;<br/>Fun" },
+      // =========================
+      // STOCKS TAB
+      // =========================
+      { key: "stocks", label: "&#x1F4C8;<br/>Stocks" }
     ];
 
     if (role === "admin") baseTabs.push({ key: "shop", label: "Shop" });
@@ -263,13 +267,17 @@ window.replaceMichiganText = replaceMichiganText;
       }
     };
 
-    if (tab === "scores")    safe("loadScores", true);
-    else if (tab === "picks") safe("renderPicks", true);
-    else if (tab === "beat")  safe("renderBeatTTUN");
-    else if (tab === "news")  safe("renderTopNews", true);
-    else if (tab === "shop")  safe("renderShop");
-    else if (tab === "golf")  safe("renderGolf");
-    else if (tab === "fun")   safe("renderFun");
+    if (tab === "scores")      safe("loadScores", true);
+    else if (tab === "picks")  safe("renderPicks", true);
+    else if (tab === "beat")   safe("renderBeatTTUN");
+    else if (tab === "news")   safe("renderTopNews", true);
+    else if (tab === "shop")   safe("renderShop");
+    else if (tab === "golf")   safe("renderGolf");
+    else if (tab === "fun")    safe("renderFun");
+    // =========================
+    // STOCKS TAB ROUTE
+    // =========================
+    else if (tab === "stocks") safe("renderStocks");
     else safe("loadScores", true);
 
     updateRivalryBanner();
