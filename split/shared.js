@@ -132,12 +132,20 @@ window.replaceMichiganText = replaceMichiganText;
     if (entry) entry.style.display = "flex";
 
     const role = getRole();
+    const isAdmin = role === "admin";
 
+    // Admin-only entry doors
     const shopDoor = document.querySelector('.doorBtn[data-go="shop"]');
-    if (shopDoor) shopDoor.style.display = (role === "admin") ? "" : "none";
+    if (shopDoor) shopDoor.style.display = isAdmin ? "" : "none";
 
     const piBtn = document.getElementById("piScoreboardBtn");
-    if (piBtn) piBtn.style.display = (role === "admin") ? "" : "none";
+    if (piBtn) piBtn.style.display = isAdmin ? "" : "none";
+
+    // =========================
+    // STOCKS: admin only
+    // =========================
+    const stocksDoor = document.querySelector('.doorBtn[data-go="stocks"]');
+    if (stocksDoor) stocksDoor.style.display = isAdmin ? "" : "none";
 
     updateRivalryBanner();
 
@@ -180,6 +188,7 @@ window.replaceMichiganText = replaceMichiganText;
     const tabs = document.querySelector(".tabs");
     if (!tabs) return;
 
+    // Base tabs visible to everyone
     const baseTabs = [
       { key: "scores", label: "Scores" },
       { key: "picks",  label: "Picks" },
@@ -187,13 +196,15 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "news",   label: "Top<br/>News" },
       { key: "golf",   label: "&#x26F3;<br/>Putt" },
       { key: "fun",    label: "&#x1F389;<br/>Fun" },
-      // =========================
-      // STOCKS TAB
-      // =========================
-      { key: "stocks", label: "&#x1F4C8;<br/>Stocks" }
     ];
 
-    if (role === "admin") baseTabs.push({ key: "shop", label: "Shop" });
+    // =========================
+    // STOCKS + SHOP: admin only
+    // =========================
+    if (role === "admin") {
+      baseTabs.push({ key: "stocks", label: "&#x1F4C8;<br/>Stocks" });
+      baseTabs.push({ key: "shop",   label: "Shop" });
+    }
 
     tabs.innerHTML = baseTabs
       .map(t => `<button type="button" data-tab="${t.key}">${t.label}</button>`)
@@ -245,8 +256,8 @@ window.replaceMichiganText = replaceMichiganText;
   function showTab(tab) {
     const role = getRole();
 
-    // Block Shop for guests
-    if (tab === "shop" && role !== "admin") tab = "scores";
+    // Block admin-only tabs for guests
+    if ((tab === "shop" || tab === "stocks") && role !== "admin") tab = "scores";
 
     currentTab = tab;
     window.__activeTab = tab;
