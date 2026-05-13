@@ -11,7 +11,7 @@
   window.STOCKS_CONFIG = {
     FINNHUB_KEY : "d826gf9r01gtiq8uqmo0d826g",
     FMP_KEY     : "tImqah3bCdyE0yZ6J9b46MSwj1IeeZWQ",
-    OPENAI_KEY  : "PASTE_NEW_KEY_HERE",   // <-- rotate & paste new key from OpenAI
+    OPENAI_KEY  : "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",   // <-- rotate & paste new key from OpenAI
     AV_KEY      : "",                     // Alpha Vantage (free signup if needed)
   };
 
