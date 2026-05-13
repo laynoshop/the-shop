@@ -899,13 +899,13 @@
   };
 
   // ============================================================
-  // 0b. STOCK SPOTLIGHT — random pick from ticker list
+  // 0b. STOCK SPOTLIGHT — random pick from spotlight pool
   // ============================================================
-  // Full company info + news from Finnhub profile + quote + news endpoints
+  // Uses Finnhub profile2 + quote + stock/metric (for real 52W data) + company-news
   const SPOTLIGHT_POOL = [
     "AAPL","MSFT","GOOGL","AMZN","TSLA","META","NVDA","JPM","V","WMT",
     "DIS","NFLX","BA","XOM","KO","PEP","NKE","MCD","INTC","AMD",
-    "CRM","PYPL","UBER","LYFT","SPOT","SNAP","TWTR","SHOP","SQ","ROKU",
+    "CRM","PYPL","UBER","LYFT","SPOT","SNAP","SHOP","SQ","ROKU",
     "XLE","QQQ","SPY","GLD","BABA","TSM","SONY","TM","F","GM"
   ];
 
@@ -916,8 +916,10 @@
     Promise.all([
       safeFetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${sym}&token=${FINNHUB_KEY}`, 8000).then(r => r.json()).catch(() => ({})),
       safeFetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`, 8000).then(r => r.json()).catch(() => ({})),
+      // /stock/metric returns metric.52WeekHigh and metric.52WeekLow — the real annual range
+      safeFetch(`https://finnhub.io/api/v1/stock/metric?symbol=${sym}&metric=all&token=${FINNHUB_KEY}`, 8000).then(r => r.json()).catch(() => ({})),
       safeFetch(`https://finnhub.io/api/v1/company-news?symbol=${sym}&from=${_daysAgo(7)}&to=${_today()}&token=${FINNHUB_KEY}`, 8000).then(r => r.json()).catch(() => ([]))
-    ]).then(([profile, quote, news]) => {
+    ]).then(([profile, quote, metrics, news]) => {
       if (!document.getElementById("spot-content")) return;
 
       // Logo
@@ -962,12 +964,17 @@
       const parts = [profile.finnhubIndustry, profile.country ? "🌐 " + profile.country : ""].filter(Boolean);
       setText("spot-sector", parts.join("  ·  "));
 
+      // 52W High/Low — from /stock/metric which has the real annual range
+      const m = metrics.metric || {};
+      const w52High = m["52WeekHigh"] != null ? "$" + parseFloat(m["52WeekHigh"]).toFixed(2) : "—";
+      const w52Low  = m["52WeekLow"]  != null ? "$" + parseFloat(m["52WeekLow"]).toFixed(2)  : "—";
+
       // Stat grid
       const stats = [
-        { label: "Mkt Cap",    val: fmtLargeNum(profile.marketCapitalization ? profile.marketCapitalization * 1e6 : null) },
-        { label: "52W High",   val: quote["52WeekHigh"]  ? "$" + parseFloat(quote["52WeekHigh"]).toFixed(2)  : (quote.h ? "$" + quote.h.toFixed(2) : "—") },
-        { label: "52W Low",    val: quote["52WeekLow"]   ? "$" + parseFloat(quote["52WeekLow"]).toFixed(2)   : (quote.l ? "$" + quote.l.toFixed(2) : "—") },
-        { label: "IPO",        val: profile.ipo || "—" }
+        { label: "Mkt Cap",  val: fmtLargeNum(profile.marketCapitalization ? profile.marketCapitalization * 1e6 : null) },
+        { label: "52W High", val: w52High },
+        { label: "52W Low",  val: w52Low  },
+        { label: "IPO",      val: profile.ipo || "—" }
       ];
       setHTML("spot-meta-grid", stats.map(s => `
         <div class="spot-meta-item">
