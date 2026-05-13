@@ -93,6 +93,10 @@
         <button class="doorBtn" type="button" data-go="news">Top News</button>
         <button class="doorBtn" type="button" data-go="golf">&#x26F3; Putt Putt</button>
         <button class="doorBtn" type="button" data-go="fun">&#x1F389; Fun</button>
+        <!-- ========================= -->
+        <!-- STOCKS ENTRY DOOR        -->
+        <!-- ========================= -->
+        <button class="doorBtn" type="button" data-go="stocks">&#x1F4C8; Stocks</button>
         <button class="doorBtn adminOnly" type="button" data-go="shop" style="display:none;">Shop</button>
         <button class="doorBtn adminOnly" type="button" id="piScoreboardBtn" style="display:none;">&#x1F4FA; Pi Scoreboard</button>
       </div>
@@ -159,6 +163,16 @@
   <script src="split/fun.js" defer onerror="__splitFail('split/fun.js')"></script>
 
   <script src="split/app.js" defer onerror="__splitFail('split/app.js')"></script>
+
+  <!-- =========================
+       STOCKS MODULE
+       (data first, render second, init last)
+       ========================= -->
+  <script src="stocks/stocks-data.js" defer onerror="__splitFail('stocks/stocks-data.js')"></script>
+  <script src="stocks/stocks-screener.js" defer onerror="__splitFail('stocks/stocks-screener.js')"></script>
+  <script src="stocks/stocks-signals.js" defer onerror="__splitFail('stocks/stocks-signals.js')"></script>
+  <script src="stocks/stocks-render.js" defer onerror="__splitFail('stocks/stocks-render.js')"></script>
+  <script src="stocks/stocks-init.js" defer onerror="__splitFail('stocks/stocks-init.js')"></script>
 
   <!-- =========================
        READY GATE (wait for checkCode)
