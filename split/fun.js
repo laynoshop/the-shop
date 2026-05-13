@@ -12,6 +12,91 @@
 
     content.innerHTML = `
 <style>
+/* ── TICKER STRIP ─────────────────────────────────────────── */
+.ticker-strip-wrap {
+  background: #111;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 2px;
+}
+.ticker-strip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px 5px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.ticker-strip-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: #555;
+}
+.ticker-strip-refresh {
+  font-size: 10px;
+  color: #444;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ticker-strip-refresh:active { color: #bb0000; border-color: rgba(187,0,0,0.4); }
+.ticker-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(255,255,255,0.05);
+}
+.ticker-card {
+  background: #111;
+  padding: 9px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ticker-sym {
+  font-size: 11px;
+  font-weight: 900;
+  color: #ccc;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ticker-price {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.ticker-change {
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ticker-up   { color: #4caf50; }
+.ticker-down { color: #ef5350; }
+.ticker-flat { color: #888; }
+.ticker-loading {
+  font-size: 11px;
+  color: #555;
+  font-style: italic;
+  padding: 10px 12px;
+  text-align: center;
+}
+.ticker-updated {
+  font-size: 9px;
+  color: #3a3a3a;
+  text-align: right;
+  padding: 4px 10px 5px;
+}
+/* ── rest of page ─────────────────────────────────────────── */
 .fun-page {
   padding: 12px 12px 8px;
   max-width: 480px;
@@ -194,6 +279,18 @@
 </style>
 
 <div class="fun-page">
+
+  <!-- STOCK TICKER STRIP -->
+  <div class="fun-section-label">📈 Markets</div>
+  <div class="ticker-strip-wrap">
+    <div class="ticker-strip-header">
+      <span class="ticker-strip-label">Live Quotes · Finnhub</span>
+      <button class="ticker-strip-refresh" onclick="window.__funLoadTicker()">↻ Refresh</button>
+    </div>
+    <div id="ticker-loading" class="ticker-loading">Loading quotes…</div>
+    <div id="ticker-cards" class="ticker-cards" style="display:none;"></div>
+    <div class="ticker-updated" id="ticker-updated"></div>
+  </div>
 
   <!-- JOKE -->
   <div class="fun-section-label">Humor</div>
@@ -483,6 +580,7 @@
 </div>
 `;
 
+    window.__funLoadTicker();
     window.__funLoadJoke();
     window.__funLoadOTD();
     window.__funLoadTrivia();
@@ -506,6 +604,13 @@
       if (document.getElementById("fun-iss")) window.__funRefreshISS();
       else clearInterval(window.__issInterval);
     }, 10000);
+
+    // Auto-refresh ticker every 60 seconds
+    if (window.__tickerInterval) clearInterval(window.__tickerInterval);
+    window.__tickerInterval = setInterval(() => {
+      if (document.getElementById("ticker-cards")) window.__funLoadTicker();
+      else clearInterval(window.__tickerInterval);
+    }, 60000);
   };
 
   // ============================================================
@@ -580,6 +685,75 @@
     });
     return __leafletReady;
   }
+
+  // ============================================================
+  // 0. STOCK / CRYPTO TICKER  (Finnhub)
+  // ============================================================
+  const FINNHUB_KEY = "d81t7p9r01qrojfd4es0d81t7p9r01qrojfd4esg";
+
+  // Symbols: stocks use plain ticker, crypto uses Finnhub exchange:pair format
+  const TICKER_SYMBOLS = [
+    { sym: "WMT",              label: "WMT",   crypto: false },
+    { sym: "BINANCE:XRPUSDT",  label: "XRP",   crypto: true  },
+    { sym: "XLE",              label: "XLE",   crypto: false },
+    { sym: "DIS",              label: "DIS",   crypto: false },
+    { sym: "QQQ",              label: "QQQ",   crypto: false },
+    { sym: "MSFT",             label: "MSFT",  crypto: false }
+  ];
+
+  window.__funLoadTicker = function () {
+    const loadEl  = document.getElementById("ticker-loading");
+    const cardsEl = document.getElementById("ticker-cards");
+    if (!loadEl || !cardsEl) return;
+    loadEl.style.display  = "";
+    cardsEl.style.display = "none";
+
+    const promises = TICKER_SYMBOLS.map(t =>
+      safeFetch(
+        `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(t.sym)}&token=${FINNHUB_KEY}`,
+        8000
+      )
+        .then(r => r.json())
+        .then(q => ({ ...t, c: q.c, pc: q.pc, d: q.d, dp: q.dp }))
+        .catch(() => ({ ...t, c: null, pc: null, d: null, dp: null }))
+    );
+
+    Promise.all(promises).then(results => {
+      if (!document.getElementById("ticker-cards")) return;
+
+      const html = results.map(r => {
+        const price   = r.c  != null && r.c  !== 0 ? r.c  : null;
+        const change  = r.d  != null              ? r.d  : null;
+        const changePct = r.dp != null            ? r.dp : null;
+
+        let priceStr  = price    != null ? (r.crypto ? "$" + price.toFixed(4) : "$" + price.toFixed(2)) : "—";
+        let changeStr = "—";
+        let cls       = "ticker-flat";
+
+        if (change != null && changePct != null) {
+          const sign = change >= 0 ? "+" : "";
+          changeStr  = `${sign}${change.toFixed(2)} (${sign}${changePct.toFixed(2)}%)`;
+          cls        = change > 0 ? "ticker-up" : change < 0 ? "ticker-down" : "ticker-flat";
+        }
+
+        const arrow = cls === "ticker-up" ? "▲" : cls === "ticker-down" ? "▼" : "";
+
+        return `<div class="ticker-card">
+  <span class="ticker-sym">${r.label}</span>
+  <span class="ticker-price">${priceStr}</span>
+  <span class="ticker-change ${cls}">${arrow} ${changeStr}</span>
+</div>`;
+      }).join("");
+
+      cardsEl.innerHTML = html;
+      loadEl.style.display  = "none";
+      cardsEl.style.display = "";
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setText("ticker-updated", `Updated ${timeStr} · 15-min delay`);
+    });
+  };
 
   // ============================================================
   // 1. JOKE
@@ -1003,7 +1177,6 @@
   window.__funLoadMars = function () {
     showLoading("mars-loading", "mars-content");
 
-    // Primary: NASA InSight Mars Weather API (DEMO_KEY)
     safeFetch("https://api.nasa.gov/insight_weather/?api_key=DEMO_KEY&feedtype=json&ver=1.0", 10000)
       .then(r => r.json())
       .then(data => {
@@ -1030,7 +1203,6 @@
         showContent("mars-loading", "mars-content");
       })
       .catch(() => {
-        // Fallback: NASA Mars Rover weather proxy via MAAS2 (free, no key)
         safeFetch("https://mars.nasa.gov/rss/api/?feed=weather&category=msl&feedtype=json", 8000)
           .then(r => r.json())
           .then(data => {
@@ -1052,7 +1224,6 @@
             showContent("mars-loading", "mars-content");
           })
           .catch(() => {
-            // Final fallback: show plausible static Martian data with clear disclaimer
             setText("mars-sol-label", "Martian Sol (Day) — Typical Values");
             setText("mars-sol", "Sol ????");
             setText("mars-high", "-10");
