@@ -377,6 +377,7 @@
       </div>
     </div>
     <div class="fun-footer-row">
+      <button class="fun-btn-share" id="apod-share-btn" onclick="window.__funShareApod()" style="display:none;">📤 Share with Daughters</button>
       <button class="fun-btn" onclick="window.__funLoadApod()">Random Day ↻</button>
     </div>
   </div>
@@ -506,7 +507,6 @@
     if (__leafletReady) return __leafletReady;
     __leafletReady = new Promise((resolve) => {
       if (window.L) { resolve(window.L); return; }
-      // Inject Leaflet CSS
       if (!document.getElementById("leaflet-css")) {
         const link = document.createElement("link");
         link.id = "leaflet-css";
@@ -514,7 +514,6 @@
         link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
         document.head.appendChild(link);
       }
-      // Inject Leaflet JS
       const script = document.createElement("script");
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
       script.onload = () => resolve(window.L);
@@ -874,15 +873,21 @@
   };
 
   // ============================================================
-  // 9. NASA APOD
+  // 9. NASA APOD + SHARE
   // ============================================================
+  let __currentApod = null;
+
   window.__funLoadApod = function () {
     showLoading("apod-loading", "apod-content");
+    const shareBtn = document.getElementById("apod-share-btn");
+    if (shareBtn) shareBtn.style.display = "none";
+
     const start = new Date("1995-06-16").getTime();
     const rnd   = new Date(start + Math.random() * (Date.now() - start));
     const dateStr = rnd.toISOString().slice(0, 10);
 
     function _renderApod(d) {
+      __currentApod = d;
       const img = document.getElementById("apod-img");
       if (img) {
         const isImg = d.media_type === "image";
@@ -894,6 +899,7 @@
       setText("apod-date", d.date || "");
       _initExpandable("apod-expl", "apod-expl-hint", d.explanation || "");
       showContent("apod-loading", "apod-content");
+      if (shareBtn) shareBtn.style.display = "";
     }
 
     safeFetch(`https://api.nasa.gov/planetary/apod?date=${dateStr}&api_key=DEMO_KEY`, 10000)
@@ -907,15 +913,40 @@
       });
   };
 
+  window.__funShareApod = function () {
+    if (!__currentApod) return;
+    const d = __currentApod;
+    const title  = d.title  || "NASA Astronomy Picture of the Day";
+    const date   = d.date   || "";
+    const expl   = d.explanation ? d.explanation.slice(0, 300) + (d.explanation.length > 300 ? "..." : "") : "";
+    const imgUrl = d.media_type === "image" ? (d.hdurl || d.url || "") : (d.thumbnail_url || "");
+
+    const msg =
+      `🔭 NASA Picture of the Day — ${date}\n\n` +
+      `"🌌 ${title}"\n\n` +
+      (expl ? `${expl}\n\n` : "") +
+      (imgUrl ? `🖼️ View image: ${imgUrl}\n\n` : "") +
+      `⭐ From NASA's Astronomy Picture of the Day archive`;
+
+    if (navigator.share) {
+      navigator.share({
+        title: `NASA APOD: ${title}`,
+        text: msg,
+        url: imgUrl || "https://apod.nasa.gov"
+      }).catch(() => {});
+    } else {
+      window.open(`sms:?body=${encodeURIComponent(msg)}`, "_blank");
+    }
+  };
+
   // ============================================================
   // 10. ISS LIVE TRACKER + LEAFLET MAP
   // ============================================================
-  let __issMap    = null;   // Leaflet map instance
-  let __issMarker = null;   // Leaflet marker
-  let __issPath   = null;   // Leaflet polyline for orbit trail
-  let __issTrail  = [];     // Array of [lat, lon] for trail
+  let __issMap    = null;
+  let __issMarker = null;
+  let __issPath   = null;
+  let __issTrail  = [];
 
-  // Custom rocket/ISS icon using a simple SVG div icon
   function _issIcon(L) {
     return L.divIcon({
       className: "",
@@ -936,8 +967,6 @@
   function _initISSMap(L, lat, lon) {
     const mapEl = document.getElementById("iss-map");
     if (!mapEl) return;
-
-    // First-time map creation
     if (!__issMap) {
       __issMap = L.map("iss-map", {
         center: [lat, lon],
@@ -947,14 +976,10 @@
         dragging: true,
         scrollWheelZoom: false
       });
-
-      // CartoDB Dark Matter tiles — dark theme, no API key needed
       L.tileLayer(
         "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
         { subdomains: "abcd", maxZoom: 6 }
       ).addTo(__issMap);
-
-      // Orbit trail polyline
       __issTrail  = [[lat, lon]];
       __issPath   = L.polyline(__issTrail, {
         color: "#bb0000",
@@ -962,16 +987,10 @@
         opacity: 0.5,
         dashArray: "4 6"
       }).addTo(__issMap);
-
-      // ISS marker
       __issMarker = L.marker([lat, lon], { icon: _issIcon(L) }).addTo(__issMap);
-
     } else {
-      // Subsequent refreshes — move marker + extend trail
       __issMarker.setLatLng([lat, lon]);
       __issMap.panTo([lat, lon], { animate: true, duration: 1.2 });
-
-      // Keep trail to last 30 points so it doesn't get too long
       __issTrail.push([lat, lon]);
       if (__issTrail.length > 30) __issTrail.shift();
       __issPath.setLatLngs(__issTrail);
@@ -981,7 +1000,6 @@
   window.__funLoadISS = window.__funRefreshISS = function () {
     const content = document.getElementById("iss-content");
     if (!content || content.style.display === "none") showLoading("iss-loading", "iss-content");
-
     safeFetch("https://api.wheretheiss.at/v1/satellites/25544", 6000)
       .then(r => r.json())
       .then(d => {
@@ -991,14 +1009,9 @@
         const lonDir = lon >= 0 ? "E" : "W";
         setText("iss-coords",
           `${Math.abs(lat).toFixed(4)}° ${latDir},  ${Math.abs(lon).toFixed(4)}° ${lonDir}`);
-
         const mph   = Math.round(d.velocity * 0.621371).toLocaleString();
         const altMi = Math.round(d.altitude * 0.621371);
-
-        // Show card first so map div is visible before Leaflet init
         showContent("iss-loading", "iss-content");
-
-        // Reverse geocode for location label
         safeFetch(
           `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
           5000
@@ -1014,14 +1027,10 @@
             setText("iss-location",
               `🏎️ Speed: ${mph} mph  ·  🛰️ Altitude: ${altMi} mi`);
           });
-
-        // Load Leaflet and render / update map
         _loadLeaflet().then(L => {
-          if (!L) return; // CDN failed gracefully
-          // Leaflet needs the container to be visible — tiny delay ensures layout is done
+          if (!L) return;
           setTimeout(() => {
             _initISSMap(L, lat, lon);
-            // Invalidate size in case the card was hidden when map first created
             if (__issMap) __issMap.invalidateSize();
           }, 80);
         });
