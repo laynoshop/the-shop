@@ -80,7 +80,7 @@
 .movie-title { font-size: 14px; font-weight: 900; color: #fff; line-height: 1.3; margin-bottom: 1px; }
 .movie-meta { font-size: 11px; color: #888; margin-bottom: 3px; }
 .movie-rating { font-size: 12px; font-weight: 700; color: #f5a623; margin-bottom: 4px; }
-/* Expandable text — shared by movie plot & APOD description */
+/* Expandable text */
 .expandable-text {
   font-size: 12px; color: #aaa; line-height: 1.45;
   overflow: hidden;
@@ -122,6 +122,18 @@
 .iss-location { font-size: 12px; color: #aaa; line-height: 1.5; white-space: pre-line; }
 .iss-pulse { display: inline-block; width: 8px; height: 8px; background: #4caf50; border-radius: 50%; margin-right: 5px; animation: issPulse 1.4s ease-in-out infinite; }
 @keyframes issPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.5)} }
+/* ISS MAP */
+#iss-map {
+  width: 100%;
+  height: 200px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0d1117;
+  margin-top: 4px;
+  position: relative;
+  z-index: 0;
+}
+.iss-map-credit { font-size: 9px; color: #444; text-align: right; margin-top: 2px; }
 /* EARTHQUAKE */
 .quake-mag { font-size: 36px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
 .quake-place { font-size: 13px; font-weight: 700; color: #fff; line-height: 1.4; margin-bottom: 3px; }
@@ -382,6 +394,8 @@
       <div class="iss-label"><span class="iss-pulse"></span>Live Position</div>
       <div class="iss-coords" id="iss-coords"></div>
       <div class="iss-location" id="iss-location"></div>
+      <div id="iss-map"></div>
+      <div class="iss-map-credit">© OpenStreetMap contributors</div>
     </div>
     <div class="fun-footer-row">
       <button class="fun-btn" onclick="window.__funRefreshISS()">Refresh ↻</button>
@@ -462,7 +476,7 @@
   function escAttr(str) { return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;"); }
 
   // ============================================================
-  // EXPANDABLE TEXT TOGGLE (shared by movie plot & APOD)
+  // EXPANDABLE TEXT TOGGLE
   // ============================================================
   window.__funToggleExpand = function (textId, hintId) {
     const el = document.getElementById(textId);
@@ -472,8 +486,6 @@
     if (hint) hint.textContent = expanded ? "Show less ▴" : "Read more ▾";
   };
 
-  // After setting text on an expandable element, check if it actually overflows
-  // (short texts don't need the hint at all).
   function _initExpandable(textId, hintId, text) {
     const el = document.getElementById(textId);
     const hint = document.getElementById(hintId);
@@ -482,9 +494,34 @@
     el.textContent = text;
     if (hint) {
       hint.textContent = "Read more ▾";
-      // Show hint only if text is long enough to actually be clipped
       hint.style.display = text && text.length > 120 ? "" : "none";
     }
+  }
+
+  // ============================================================
+  // LEAFLET LOADER — loads CSS + JS from CDN once, then resolves
+  // ============================================================
+  let __leafletReady = null;
+  function _loadLeaflet() {
+    if (__leafletReady) return __leafletReady;
+    __leafletReady = new Promise((resolve) => {
+      if (window.L) { resolve(window.L); return; }
+      // Inject Leaflet CSS
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+      }
+      // Inject Leaflet JS
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = () => resolve(window.L);
+      script.onerror = () => resolve(null);
+      document.head.appendChild(script);
+    });
+    return __leafletReady;
   }
 
   // ============================================================
@@ -516,23 +553,19 @@
 
   // ============================================================
   // 2. ON THIS DAY IN HISTORY
-  // Uses the Wikipedia "On this day" REST API — no key, great CORS.
-  // Pulls a random "selected" event from today's date each time.
   // ============================================================
   let __otdEvents = [];
   let __otdIndex  = 0;
 
   window.__funLoadOTD = function () {
     showLoading("otd-loading", "otd-content");
-
     const now   = new Date();
-    const month = now.getMonth() + 1;   // 1-12
-    const day   = now.getDate();         // 1-31
+    const month = now.getMonth() + 1;
+    const day   = now.getDate();
     const monthNames = ["January","February","March","April","May","June",
                         "July","August","September","October","November","December"];
     const dateLabel = `${monthNames[now.getMonth()]} ${day}`;
 
-    // If we already fetched today's events, just cycle through them
     if (__otdEvents.length > 0) {
       __otdIndex = (__otdIndex + 1) % __otdEvents.length;
       _showOTDEvent(__otdEvents[__otdIndex], dateLabel);
@@ -544,13 +577,11 @@
       .then(data => {
         const events = data.selected || data.events || [];
         if (!events.length) throw new Error("empty");
-        // Shuffle so it feels fresh each session
         __otdEvents = events.sort(() => Math.random() - 0.5);
         __otdIndex  = 0;
         _showOTDEvent(__otdEvents[0], dateLabel);
       })
       .catch(() => {
-        // Fallback: Wikipedia "On this day" legacy endpoint
         safeFetch(`https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/${month}/${day}`, 8000)
           .then(r => r.json())
           .then(data => {
@@ -709,7 +740,7 @@
   }
 
   // ============================================================
-  // 6. MOVIE — expandable plot
+  // 6. MOVIE
   // ============================================================
   const MOVIE_IDS = [
     "tt0111161","tt0068646","tt0071562","tt0468569","tt0050083",
@@ -843,7 +874,7 @@
   };
 
   // ============================================================
-  // 9. NASA APOD — expandable description
+  // 9. NASA APOD
   // ============================================================
   window.__funLoadApod = function () {
     showLoading("apod-loading", "apod-content");
@@ -877,8 +908,76 @@
   };
 
   // ============================================================
-  // 10. ISS LIVE TRACKER — speed in mph
+  // 10. ISS LIVE TRACKER + LEAFLET MAP
   // ============================================================
+  let __issMap    = null;   // Leaflet map instance
+  let __issMarker = null;   // Leaflet marker
+  let __issPath   = null;   // Leaflet polyline for orbit trail
+  let __issTrail  = [];     // Array of [lat, lon] for trail
+
+  // Custom rocket/ISS icon using a simple SVG div icon
+  function _issIcon(L) {
+    return L.divIcon({
+      className: "",
+      html: `<div style="
+        width:28px;height:28px;
+        background:#bb0000;
+        border:2px solid #fff;
+        border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        font-size:15px;line-height:1;
+        box-shadow:0 0 8px rgba(187,0,0,0.7),0 0 20px rgba(187,0,0,0.3);
+      ">🛸</div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+  }
+
+  function _initISSMap(L, lat, lon) {
+    const mapEl = document.getElementById("iss-map");
+    if (!mapEl) return;
+
+    // First-time map creation
+    if (!__issMap) {
+      __issMap = L.map("iss-map", {
+        center: [lat, lon],
+        zoom: 3,
+        zoomControl: false,
+        attributionControl: false,
+        dragging: true,
+        scrollWheelZoom: false
+      });
+
+      // CartoDB Dark Matter tiles — dark theme, no API key needed
+      L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        { subdomains: "abcd", maxZoom: 6 }
+      ).addTo(__issMap);
+
+      // Orbit trail polyline
+      __issTrail  = [[lat, lon]];
+      __issPath   = L.polyline(__issTrail, {
+        color: "#bb0000",
+        weight: 1.5,
+        opacity: 0.5,
+        dashArray: "4 6"
+      }).addTo(__issMap);
+
+      // ISS marker
+      __issMarker = L.marker([lat, lon], { icon: _issIcon(L) }).addTo(__issMap);
+
+    } else {
+      // Subsequent refreshes — move marker + extend trail
+      __issMarker.setLatLng([lat, lon]);
+      __issMap.panTo([lat, lon], { animate: true, duration: 1.2 });
+
+      // Keep trail to last 30 points so it doesn't get too long
+      __issTrail.push([lat, lon]);
+      if (__issTrail.length > 30) __issTrail.shift();
+      __issPath.setLatLngs(__issTrail);
+    }
+  }
+
   window.__funLoadISS = window.__funRefreshISS = function () {
     const content = document.getElementById("iss-content");
     if (!content || content.style.display === "none") showLoading("iss-loading", "iss-content");
@@ -886,31 +985,46 @@
     safeFetch("https://api.wheretheiss.at/v1/satellites/25544", 6000)
       .then(r => r.json())
       .then(d => {
-        const lat    = parseFloat(d.latitude).toFixed(4);
-        const lon    = parseFloat(d.longitude).toFixed(4);
-        const latDir = d.latitude  >= 0 ? "N" : "S";
-        const lonDir = d.longitude >= 0 ? "E" : "W";
-        setText("iss-coords", `${Math.abs(lat)}° ${latDir},  ${Math.abs(lon)}° ${lonDir}`);
+        const lat    = parseFloat(d.latitude);
+        const lon    = parseFloat(d.longitude);
+        const latDir = lat >= 0 ? "N" : "S";
+        const lonDir = lon >= 0 ? "E" : "W";
+        setText("iss-coords",
+          `${Math.abs(lat).toFixed(4)}° ${latDir},  ${Math.abs(lon).toFixed(4)}° ${lonDir}`);
 
-        // Convert km/h → mph (1 km/h = 0.621371 mph)
-        const mph = Math.round(d.velocity * 0.621371).toLocaleString();
+        const mph   = Math.round(d.velocity * 0.621371).toLocaleString();
         const altMi = Math.round(d.altitude * 0.621371);
 
+        // Show card first so map div is visible before Leaflet init
+        showContent("iss-loading", "iss-content");
+
+        // Reverse geocode for location label
         safeFetch(
-          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${d.latitude}&longitude=${d.longitude}&localityLanguage=en`,
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
           5000
         )
           .then(r => r.json())
           .then(geo => {
             const parts = [geo.locality, geo.countryName].filter(Boolean);
             const loc = parts.length ? parts.join(", ") : "Over the ocean 🌊";
-            setText("iss-location", `📍 Currently flying over: ${loc}\n🏎️ Speed: ${mph} mph  ·  🛰️ Altitude: ${altMi} mi`);
+            setText("iss-location",
+              `📍 Currently flying over: ${loc}\n🏎️ Speed: ${mph} mph  ·  🛰️ Altitude: ${altMi} mi`);
           })
           .catch(() => {
-            setText("iss-location", `🏎️ Speed: ${mph} mph  ·  🛰️ Altitude: ${altMi} mi`);
+            setText("iss-location",
+              `🏎️ Speed: ${mph} mph  ·  🛰️ Altitude: ${altMi} mi`);
           });
 
-        showContent("iss-loading", "iss-content");
+        // Load Leaflet and render / update map
+        _loadLeaflet().then(L => {
+          if (!L) return; // CDN failed gracefully
+          // Leaflet needs the container to be visible — tiny delay ensures layout is done
+          setTimeout(() => {
+            _initISSMap(L, lat, lon);
+            // Invalidate size in case the card was hidden when map first created
+            if (__issMap) __issMap.invalidateSize();
+          }, 80);
+        });
       })
       .catch(() => setText("iss-loading", "⚠️ ISS tracker unavailable."));
   };
@@ -949,8 +1063,7 @@
           const mag   = parseFloat(q.mag) || 0;
           const color = _magColor(mag);
           setHTML("quake-badge-wrap",
-            `<span class="quake-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${_magLabel(mag)}</span>`
-          );
+            `<span class="quake-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${_magLabel(mag)}</span>`);
           const magEl = document.getElementById("quake-mag");
           if (magEl) { magEl.textContent = `M ${mag.toFixed(1)}`; magEl.style.color = color; }
           setText("quake-place", q.place || "Unknown location");
