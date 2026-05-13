@@ -116,6 +116,21 @@
 .apod-img { width: 100%; border-radius: 10px; object-fit: cover; max-height: 220px; background: #111; display: block; }
 .apod-title { font-size: 14px; font-weight: 900; color: #fff; margin-bottom: 3px; }
 .apod-date { font-size: 10px; color: #666; margin-bottom: 5px; }
+/* MARS WEATHER */
+.mars-sol { font-size: 28px; font-weight: 900; color: #c1440e; line-height: 1; margin-bottom: 2px; }
+.mars-sol-label { font-size: 10px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.mars-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.mars-stat-card {
+  background: rgba(193,68,14,0.1);
+  border: 1px solid rgba(193,68,14,0.2);
+  border-radius: 10px;
+  padding: 9px 11px;
+}
+.mars-stat-label { font-size: 9px; font-weight: 800; color: #c1440e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.mars-stat-val { font-size: 18px; font-weight: 900; color: #fff; line-height: 1; }
+.mars-stat-unit { font-size: 10px; color: #888; margin-top: 1px; }
+.mars-season { font-size: 11px; color: #888; margin-top: 4px; }
+.mars-note { font-size: 10px; color: #555; font-style: italic; line-height: 1.4; margin-top: 6px; }
 /* ISS */
 .iss-coords { font-size: 22px; font-weight: 900; color: #fff; letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 4px; }
 .iss-label { font-size: 10px; font-weight: 700; color: #bb0000; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
@@ -382,6 +397,48 @@
     </div>
   </div>
 
+  <!-- MARS WEATHER -->
+  <div class="fun-section-label">NASA · Mars Weather</div>
+  <div class="fun-card" id="fun-mars">
+    <div class="fun-card-header">
+      <span class="fun-card-icon">🔴</span>
+      <span class="fun-card-title">Mars Weather</span>
+    </div>
+    <div class="fun-divider"></div>
+    <div id="mars-loading" class="fun-loading">Contacting the Red Planet…</div>
+    <div id="mars-content" style="display:none;">
+      <div class="mars-sol-label" id="mars-sol-label"></div>
+      <div class="mars-sol" id="mars-sol"></div>
+      <div class="mars-grid">
+        <div class="mars-stat-card">
+          <div class="mars-stat-label">🌡️ High Temp</div>
+          <div class="mars-stat-val" id="mars-high">—</div>
+          <div class="mars-stat-unit">°F</div>
+        </div>
+        <div class="mars-stat-card">
+          <div class="mars-stat-label">🥶 Low Temp</div>
+          <div class="mars-stat-val" id="mars-low">—</div>
+          <div class="mars-stat-unit">°F</div>
+        </div>
+        <div class="mars-stat-card">
+          <div class="mars-stat-label">💨 Avg Wind</div>
+          <div class="mars-stat-val" id="mars-wind">—</div>
+          <div class="mars-stat-unit">mph</div>
+        </div>
+        <div class="mars-stat-card">
+          <div class="mars-stat-label">📍 Location</div>
+          <div class="mars-stat-val" style="font-size:12px;line-height:1.3;" id="mars-location">Jezero Crater</div>
+          <div class="mars-stat-unit">Perseverance Rover</div>
+        </div>
+      </div>
+      <div class="mars-season" id="mars-season"></div>
+      <div class="mars-note" id="mars-note"></div>
+    </div>
+    <div class="fun-footer-row">
+      <button class="fun-btn" onclick="window.__funLoadMars()">Refresh ↻</button>
+    </div>
+  </div>
+
   <!-- ISS TRACKER -->
   <div class="fun-section-label">Live · International Space Station</div>
   <div class="fun-card" id="fun-iss">
@@ -435,6 +492,7 @@
     window.__funLoadCocktail();
     window.__funLoadCountry();
     window.__funLoadApod();
+    window.__funLoadMars();
     window.__funLoadISS();
     window.__funLoadQuake();
 
@@ -940,7 +998,78 @@
   };
 
   // ============================================================
-  // 10. ISS LIVE TRACKER + LEAFLET MAP
+  // 10. MARS WEATHER
+  // ============================================================
+  window.__funLoadMars = function () {
+    showLoading("mars-loading", "mars-content");
+
+    // Primary: NASA InSight Mars Weather API (DEMO_KEY)
+    safeFetch("https://api.nasa.gov/insight_weather/?api_key=DEMO_KEY&feedtype=json&ver=1.0", 10000)
+      .then(r => r.json())
+      .then(data => {
+        const sols = data.sol_keys || [];
+        if (!sols.length) throw new Error("no sols");
+        const latestSol = sols[sols.length - 1];
+        const w = data[latestSol];
+
+        const highF = w.AT?.mx != null ? Math.round((w.AT.mx * 9/5) + 32) : null;
+        const lowF  = w.AT?.mn != null ? Math.round((w.AT.mn * 9/5) + 32) : null;
+        const windMph = w.HWS?.av != null ? Math.round(w.HWS.av * 2.237) : null;
+        const season = w.Season ? w.Season.charAt(0).toUpperCase() + w.Season.slice(1) : null;
+
+        setText("mars-sol-label", "Martian Sol (Day)");
+        setText("mars-sol", `Sol ${latestSol}`);
+        setText("mars-high", highF != null ? String(highF) : "—");
+        setText("mars-low",  lowF  != null ? String(lowF)  : "—");
+        setText("mars-wind", windMph != null ? String(windMph) : "—");
+        setText("mars-location", "Elysium Planitia");
+        const loc = document.getElementById("mars-location");
+        if (loc) loc.nextElementSibling.textContent = "InSight Lander";
+        if (season) setText("mars-season", `🌱 Northern Hemisphere Season: ${season}`);
+        setText("mars-note", "Data from NASA's InSight Mars Lander. 1 Martian sol ≈ 24h 37min.");
+        showContent("mars-loading", "mars-content");
+      })
+      .catch(() => {
+        // Fallback: NASA Mars Rover weather proxy via MAAS2 (free, no key)
+        safeFetch("https://mars.nasa.gov/rss/api/?feed=weather&category=msl&feedtype=json", 8000)
+          .then(r => r.json())
+          .then(data => {
+            const reports = data.soles || [];
+            if (!reports.length) throw new Error("no data");
+            const latest = reports[0];
+            setText("mars-sol-label", "Martian Sol (Day)");
+            setText("mars-sol", `Sol ${latest.sol || "—"}`);
+            const hi = latest.max_temp_fahrenheit != null ? Math.round(parseFloat(latest.max_temp_fahrenheit)) : null;
+            const lo = latest.min_temp_fahrenheit != null ? Math.round(parseFloat(latest.min_temp_fahrenheit)) : null;
+            setText("mars-high", hi != null ? String(hi) : "—");
+            setText("mars-low",  lo  != null ? String(lo)  : "—");
+            setText("mars-wind", "—");
+            setText("mars-location", "Gale Crater");
+            const locEl = document.getElementById("mars-location");
+            if (locEl && locEl.nextElementSibling) locEl.nextElementSibling.textContent = "Curiosity Rover";
+            if (latest.season) setText("mars-season", `🌱 Season: ${latest.season}`);
+            setText("mars-note", "Data from NASA's Curiosity rover at Gale Crater. 1 Martian sol ≈ 24h 37min.");
+            showContent("mars-loading", "mars-content");
+          })
+          .catch(() => {
+            // Final fallback: show plausible static Martian data with clear disclaimer
+            setText("mars-sol-label", "Martian Sol (Day) — Typical Values");
+            setText("mars-sol", "Sol ????");
+            setText("mars-high", "-10");
+            setText("mars-low",  "-100");
+            setText("mars-wind", "~11");
+            setText("mars-location", "Jezero Crater");
+            const locEl = document.getElementById("mars-location");
+            if (locEl && locEl.nextElementSibling) locEl.nextElementSibling.textContent = "Perseverance Rover";
+            setText("mars-season", "");
+            setText("mars-note", "⚠️ Live Mars data temporarily unavailable. Showing typical Martian surface values for reference. Tap Refresh to try again.");
+            showContent("mars-loading", "mars-content");
+          });
+      });
+  };
+
+  // ============================================================
+  // 11. ISS LIVE TRACKER + LEAFLET MAP
   // ============================================================
   let __issMap    = null;
   let __issMarker = null;
@@ -1039,7 +1168,7 @@
   };
 
   // ============================================================
-  // 11. USGS EARTHQUAKE FEED
+  // 12. USGS EARTHQUAKE FEED
   // ============================================================
   function _magColor(mag) {
     if (mag >= 7) return "#e53935";
