@@ -12,6 +12,10 @@
 
   let __tier2Listener = null;
 
+  // In-flight dedup guard — prevents the same ticker from being processed
+  // multiple times when onSnapshot fires while a previous run is still in progress.
+  const __processing = new Set();
+
   // -----------------------------------------------------------
   // Fetch latest news headlines (up to 3) from Finnhub
   // -----------------------------------------------------------
@@ -52,11 +56,11 @@
     if (t.pct90d != null) lines.push(`90-day trend: ${t.pct90d > 0 ? "+" : ""}${t.pct90d}%`);
     if (t.sma20  != null) lines.push(`SMA20: $${t.sma20} | SMA50: $${t.sma50 || "N/A"} | Price vs SMA20: ${t.price > t.sma20 ? "ABOVE" : "BELOW"}`);
     if (t.aboveSMA20Streak != null && t.aboveSMA20Streak > 0) lines.push(`Days above SMA20 streak: ${t.aboveSMA20Streak}`);
-    if (t.high90d != null) lines.push(`90-day range: $${t.low90d} – $${t.high90d} | Current vs range: ${(((t.price - t.low90d) / (t.high90d - t.low90d)) * 100).toFixed(0)}% of range`);
+    if (t.high90d != null) lines.push(`90-day range: $${t.low90d} \u2013 $${t.high90d} | Current vs range: ${(((t.price - t.low90d) / (t.high90d - t.low90d)) * 100).toFixed(0)}% of range`);
     if (t.volRatio5v20 != null) lines.push(`Volume (5d avg vs 20d avg): ${t.volRatio5v20}x`);
 
     // --- Technical indicators ---
-    if (t.rsi != null) lines.push(`RSI(14): ${t.rsi}${t.rsi > 70 ? " ⚠️ OVERBOUGHT" : t.rsi < 30 ? " ⚠️ OVERSOLD" : ""}`);
+    if (t.rsi != null) lines.push(`RSI(14): ${t.rsi}${t.rsi > 70 ? " \u26a0\ufe0f OVERBOUGHT" : t.rsi < 30 ? " \u26a0\ufe0f OVERSOLD" : ""}`);
     if (t.macdHist != null) {
       const dir = t.macdBullish ? "BULLISH CROSS" : t.macdBearish ? "BEARISH CROSS" : "no cross";
       lines.push(`MACD histogram: ${t.macdHist} | Signal: ${dir}`);
@@ -65,7 +69,7 @@
     // --- Analyst opinion ---
     if (t.analystConsensus) lines.push(`Analyst consensus: ${t.analystConsensus}`);
     if (t.analystTargetMean != null) {
-      lines.push(`Price target — mean: $${t.analystTargetMean}` +
+      lines.push(`Price target \u2014 mean: $${t.analystTargetMean}` +
         (t.analystUpsidePct != null ? ` (${t.analystUpsidePct > 0 ? "+" : ""}${t.analystUpsidePct}% upside)` : "") +
         (t.analystTargetHigh != null ? ` | high: $${t.analystTargetHigh}` : "")
       );
@@ -205,28 +209,42 @@
   // Process a single candidate through Enrichment + Tier 2
   // -----------------------------------------------------------
   async function processCandidateTier2(db, candidate) {
-    console.log(`[Stocks Tier2] Processing: ${candidate.ticker}`);
+    const ticker = candidate.ticker;
 
-    // 1. Enrich with FMP historical + fundamentals
-    let enriched = candidate;
-    if (typeof window.enrichCandidate === "function") {
-      enriched = await window.enrichCandidate(db, candidate);
-    } else {
-      console.warn("[Stocks Tier2] enrichCandidate not available — stocks-enrichment.js loaded?");
-    }
-
-    // 2. Fetch news headlines (Finnhub)
-    const newsHeadlines = await fetchNewsHeadlines(enriched.ticker);
-
-    // 3. Call OpenAI via Cloud Function
-    const signal = await callAISignal(enriched, newsHeadlines);
-    if (!signal) {
-      console.warn(`[Stocks Tier2] No signal returned for ${enriched.ticker}`);
+    // Dedup guard: skip if already in-flight for this ticker
+    if (__processing.has(ticker)) {
+      console.log(`[Stocks Tier2] Skipping ${ticker} — already processing.`);
       return;
     }
+    __processing.add(ticker);
 
-    // 4. Write signal card to Firestore
-    await writeSignalCard(db, enriched, signal, newsHeadlines);
+    try {
+      console.log(`[Stocks Tier2] Processing: ${ticker}`);
+
+      // 1. Enrich with FMP historical + fundamentals
+      let enriched = candidate;
+      if (typeof window.enrichCandidate === "function") {
+        enriched = await window.enrichCandidate(db, candidate);
+      } else {
+        console.warn("[Stocks Tier2] enrichCandidate not available — stocks-enrichment.js loaded?");
+      }
+
+      // 2. Fetch news headlines (Finnhub)
+      const newsHeadlines = await fetchNewsHeadlines(enriched.ticker);
+
+      // 3. Call OpenAI via Cloud Function
+      const signal = await callAISignal(enriched, newsHeadlines);
+      if (!signal) {
+        console.warn(`[Stocks Tier2] No signal returned for ${ticker}`);
+        return;
+      }
+
+      // 4. Write signal card to Firestore
+      await writeSignalCard(db, enriched, signal, newsHeadlines);
+    } finally {
+      // Always release the lock so future re-runs (e.g. next day) can proceed
+      __processing.delete(ticker);
+    }
   }
 
   // -----------------------------------------------------------
@@ -234,6 +252,7 @@
   // -----------------------------------------------------------
   function startTier2Listener(db) {
     if (__tier2Listener) { __tier2Listener(); __tier2Listener = null; }
+    __processing.clear(); // Reset in-flight set on fresh start
     const cfg = window.STOCKS_CONFIG || {};
     console.log("[Stocks Tier2] Listener started — watching for new candidates...");
 

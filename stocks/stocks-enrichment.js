@@ -210,20 +210,20 @@
       ...candidate,
 
       // Price context
-      sma20:             priceCtx?.sma20            || null,
-      sma50:             priceCtx?.sma50            || null,
-      pct5d:             priceCtx?.pct5             || null,
-      pct30d:            priceCtx?.pct30            || null,
-      pct90d:            priceCtx?.pct90            || null,
-      high90d:           priceCtx?.high90           || null,
-      low90d:            priceCtx?.low90            || null,
-      aboveSMA20Streak:  priceCtx?.aboveSMA20Streak || null,
-      volRatio5v20:      priceCtx?.volRatio         || null,
+      sma20:             priceCtx?.sma20            ?? null,
+      sma50:             priceCtx?.sma50            ?? null,
+      pct5d:             priceCtx?.pct5             ?? null,
+      pct30d:            priceCtx?.pct30            ?? null,
+      pct90d:            priceCtx?.pct90            ?? null,
+      high90d:           priceCtx?.high90           ?? null,
+      low90d:            priceCtx?.low90            ?? null,
+      aboveSMA20Streak:  priceCtx?.aboveSMA20Streak ?? null,
+      volRatio5v20:      priceCtx?.volRatio         ?? null,
 
       // Analyst
-      analystTargetMean:   targets?.targetMean   || null,
-      analystTargetHigh:   targets?.targetHigh   || null,
-      analystConsensus:    targets?.consensus    || null,
+      analystTargetMean:   targets?.targetMean   ?? null,
+      analystTargetHigh:   targets?.targetHigh   ?? null,
+      analystConsensus:    targets?.consensus    ?? null,
       analystUpsidePct,
       latestRating,
       ratingChanges:       ratings  || [],
@@ -248,10 +248,13 @@
     };
 
     // Write enriched fields back to Firestore candidate doc
+    // FIX: use enriched.sma20 / enriched.sma50 instead of bare sma20/sma50
+    // (those were local vars inside fetchPriceContext, not in scope here)
     try {
       const cfg = window.STOCKS_CONFIG || {};
       const updatePayload = {
-        sma20, sma50,
+        sma20:            enriched.sma20,
+        sma50:            enriched.sma50,
         pct5d:            enriched.pct5d,
         pct30d:           enriched.pct30d,
         pct90d:           enriched.pct90d,
