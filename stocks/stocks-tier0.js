@@ -1,30 +1,22 @@
 // stocks/stocks-tier0.js
 // TIER 0 — Dynamic Watchlist Builder.
-// FMP Starter plan handles: batch quotes, gainers/losers, earnings calendar.
-// Finnhub free handles: recent news check (company-news).
+// FMP Starter plan: uses /stable/quote/{symbol} (single-symbol, fetched in parallel groups).
+// /stable/batch-quote requires a higher plan — not used.
+// Finnhub free handles: recent news check.
 // Writes results to Firestore dailyWatchlist/{date}/triggered/{ticker}
-// and updates window.STOCKS_UNIVERSE so Tier 1 screens the right stocks.
-//
-// NOTE: Uses FMP /stable/ endpoints (post-Aug 2025 API).
-// /stable/batch-quote?symbols=AAPL,MSFT,...  for multi-ticker quotes
-// /stable/biggest-gainers and /stable/biggest-losers for movers
-// /stable/earnings-calendar for upcoming earnings
 
 (function () {
   "use strict";
 
-  // -----------------------------------------------------------
-  // CONFIG
-  // -----------------------------------------------------------
   var TIER0_CONFIG = {
     MAX_WATCHLIST:       40,
     MIN_CHANGE_PCT:      1.0,
     MIN_VOLUME_RATIO:    1.5,
     EARNINGS_DAYS_AHEAD: 5,
     FIRESTORE_ROOT:      "dailyWatchlist",
-    FMP_BATCH_SIZE:      50,
-    FMP_DELAY_MS:        300,
-    NEWS_DELAY_MS:       1100
+    PARALLEL_SIZE:       10,   // fetch N quotes simultaneously
+    FMP_DELAY_MS:        200,  // pause between parallel groups
+    NEWS_DELAY_MS:       1100  // Finnhub free = 60 req/min
   };
 
   var FMP_BASE = "https://financialmodelingprep.com/stable";
@@ -70,70 +62,62 @@
     "SPY":"ETF","QQQ":"ETF","IWM":"ETF","DIA":"ETF","XLK":"ETF"
   };
 
-  // -----------------------------------------------------------
-  // HELPERS
-  // -----------------------------------------------------------
   function getFMPKey()     { return (window.STOCKS_CONFIG || {}).FMP_KEY     || ""; }
   function getFinnhubKey() { return (window.STOCKS_CONFIG || {}).FINNHUB_KEY || ""; }
   function todayStr()      { return new Date().toISOString().slice(0, 10); }
   function delay(ms)       { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-  // Normalize a raw FMP quote object to a consistent shape.
-  // The stable API may use different field names than v3.
-  function normalizeQuote(q) {
-    return {
-      symbol:           q.symbol           || q.ticker || "",
-      price:            q.price            || q.lastPrice || q.currentPrice || 0,
-      changesPercentage: q.changesPercentage != null ? q.changesPercentage
-                        : (q.changePercentage != null ? q.changePercentage
-                        : (q.change != null && q.previousClose ? (q.change / q.previousClose) * 100 : 0)),
-      volume:           q.volume           || 0,
-      avgVolume:        q.avgVolume        || q.averageVolume || 0
-    };
+  // Fetch a single symbol: /stable/quote/{symbol}?apikey=KEY
+  // Returns a normalized quote object or null on failure.
+  async function fetchSingleQuote(ticker, key) {
+    try {
+      var res = await fetch(FMP_BASE + "/quote/" + ticker + "?apikey=" + key);
+      if (!res.ok) {
+        if (res.status !== 402) console.warn("[Tier0] Quote " + ticker + " HTTP " + res.status);
+        return null;
+      }
+      var data = await res.json();
+      // /stable/quote/{symbol} returns an array with one object
+      var q = Array.isArray(data) ? data[0] : data;
+      if (!q || q["Error Message"]) return null;
+      return {
+        symbol:            q.symbol           || ticker,
+        price:             q.price            || q.lastPrice || 0,
+        changesPercentage: q.changesPercentage != null ? q.changesPercentage
+                           : (q.changePercentage != null ? q.changePercentage : 0),
+        volume:            q.volume           || 0,
+        avgVolume:         q.avgVolume        || q.averageVolume || 0
+      };
+    } catch (e) { return null; }
   }
 
   // -----------------------------------------------------------
-  // STEP 1 — FMP batch quotes
-  // /stable/batch-quote?symbols=AAPL,MSFT,...&apikey=KEY
+  // STEP 1 — Fetch all quotes in parallel groups of PARALLEL_SIZE
   // -----------------------------------------------------------
-  async function fetchFMPBatchQuotes(tickers) {
+  async function fetchAllQuotes(tickers) {
     var key = getFMPKey();
     if (!key) { console.warn("[Tier0] FMP key not set."); return []; }
     var results = [];
-    for (var i = 0; i < tickers.length; i += TIER0_CONFIG.FMP_BATCH_SIZE) {
-      var batch = tickers.slice(i, i + TIER0_CONFIG.FMP_BATCH_SIZE).join(",");
-      try {
-        var res = await fetch(
-          FMP_BASE + "/batch-quote?symbols=" + encodeURIComponent(batch) + "&apikey=" + key
-        );
-        if (res.ok) {
-          var data = await res.json();
-          // Diagnostic: log shape of first response only
-          if (i === 0) {
-            var sample = Array.isArray(data) ? data[0] : data;
-            console.log("[Tier0] Quote response sample:", JSON.stringify(sample).slice(0, 200));
+    var logged  = false;
+    for (var i = 0; i < tickers.length; i += TIER0_CONFIG.PARALLEL_SIZE) {
+      var group   = tickers.slice(i, i + TIER0_CONFIG.PARALLEL_SIZE);
+      var fetched = await Promise.all(group.map(function (t) { return fetchSingleQuote(t, key); }));
+      fetched.forEach(function (q) {
+        if (q) {
+          if (!logged) {
+            console.log("[Tier0] Quote sample:", JSON.stringify(q));
+            logged = true;
           }
-          if (Array.isArray(data)) {
-            results = results.concat(data.map(normalizeQuote));
-          } else if (data && typeof data === "object" && !data["Error Message"]) {
-            // Single object returned — wrap it
-            results.push(normalizeQuote(data));
-          } else if (data && data["Error Message"]) {
-            console.warn("[Tier0] FMP quote API error:", data["Error Message"]);
-          }
-        } else {
-          var errText = await res.text().catch(function () { return ""; });
-          console.warn("[Tier0] FMP batch quotes HTTP " + res.status, errText.slice(0, 100));
+          results.push(q);
         }
-      } catch (e) { console.warn("[Tier0] FMP batch error:", e); }
-      if (i + TIER0_CONFIG.FMP_BATCH_SIZE < tickers.length) await delay(TIER0_CONFIG.FMP_DELAY_MS);
+      });
+      if (i + TIER0_CONFIG.PARALLEL_SIZE < tickers.length) await delay(TIER0_CONFIG.FMP_DELAY_MS);
     }
     return results;
   }
 
   // -----------------------------------------------------------
-  // STEP 2 — FMP top gainers + losers
-  // /stable/biggest-gainers and /stable/biggest-losers
+  // STEP 2 — FMP biggest gainers + losers
   // -----------------------------------------------------------
   async function fetchFMPMovers() {
     var key = getFMPKey();
@@ -143,12 +127,9 @@
       var g = await fetch(FMP_BASE + "/biggest-gainers?apikey=" + key);
       if (g.ok) {
         var gd = await g.json();
-        if (i === 0 && Array.isArray(gd) && gd[0]) {
-          console.log("[Tier0] Gainers sample:", JSON.stringify(gd[0]).slice(0, 150));
-        }
         if (Array.isArray(gd)) {
-          // Normalize: stable API may use 'ticker' instead of 'symbol'
-          movers = movers.concat(gd.slice(0, 15).map(function(m) {
+          if (gd[0]) console.log("[Tier0] Gainer sample:", JSON.stringify(gd[0]).slice(0, 120));
+          movers = movers.concat(gd.slice(0, 15).map(function (m) {
             return { symbol: m.symbol || m.ticker || "" };
           }));
         }
@@ -158,7 +139,7 @@
       if (l.ok) {
         var ld = await l.json();
         if (Array.isArray(ld)) {
-          movers = movers.concat(ld.slice(0, 15).map(function(m) {
+          movers = movers.concat(ld.slice(0, 15).map(function (m) {
             return { symbol: m.symbol || m.ticker || "" };
           }));
         }
@@ -169,7 +150,6 @@
 
   // -----------------------------------------------------------
   // STEP 3 — FMP earnings calendar
-  // /stable/earnings-calendar?from=...&to=...&apikey=KEY
   // -----------------------------------------------------------
   async function fetchEarningsTickers() {
     var key = getFMPKey();
@@ -180,9 +160,7 @@
       future.setDate(today.getDate() + TIER0_CONFIG.EARNINGS_DAYS_AHEAD);
       var from = today.toISOString().slice(0, 10);
       var to   = future.toISOString().slice(0, 10);
-      var res  = await fetch(
-        FMP_BASE + "/earnings-calendar?from=" + from + "&to=" + to + "&apikey=" + key
-      );
+      var res  = await fetch(FMP_BASE + "/earnings-calendar?from=" + from + "&to=" + to + "&apikey=" + key);
       if (!res.ok) return new Set();
       var data = await res.json();
       return Array.isArray(data) ? new Set(data.map(function (e) { return e.symbol || e.ticker || ""; })) : new Set();
@@ -190,7 +168,7 @@
   }
 
   // -----------------------------------------------------------
-  // STEP 4 — Finnhub recent news check
+  // STEP 4 — Finnhub news check
   // -----------------------------------------------------------
   async function hasRecentNews(ticker) {
     var key = getFinnhubKey();
@@ -236,15 +214,12 @@
       changePct: parseFloat(changePct.toFixed(2)),
       volume:    vol,
       avgVolume: avgVol,
-      sector:    SECTOR_MAP[q.symbol] || q.sector || "",
+      sector:    SECTOR_MAP[q.symbol] || "",
       triggers:  triggers,
       score:     triggers.length + Math.abs(changePct) / 10
     };
   }
 
-  // -----------------------------------------------------------
-  // SECTOR MOMENTUM
-  // -----------------------------------------------------------
   function applySectorMomentum(candidates) {
     var counts = {};
     candidates.forEach(function (c) {
@@ -309,7 +284,7 @@
     var combined     = Array.from(new Set(SEED_UNIVERSE.concat(moverTickers)));
     console.log("[Tier0] Universe: " + combined.length + " tickers (seed + movers)");
 
-    var quotes = await fetchFMPBatchQuotes(combined);
+    var quotes = await fetchAllQuotes(combined);
     console.log("[Tier0] Quotes received: " + quotes.length);
 
     var scored = [];
