@@ -1,8 +1,8 @@
 // stocks/stocks-tier0.js
 // TIER 0 — Dynamic Watchlist Builder.
-// Quotes:          Finnhub /quote + /stock/metric (CORS-safe, existing key, real-time)
-// Movers+Earnings: FMP /api/v3 (paid plan, limited to non-real-time endpoints)
-// News:            Finnhub /company-news (existing key)
+// Quotes:          Finnhub /quote only — sequential, 1 req/sec (free plan = 60/min)
+// Movers+Earnings: FMP /api/v3 (paid plan)
+// News:            Finnhub /company-news
 // Writes results to Firestore dailyWatchlist/{date}/triggered/{ticker}
 
 (function () {
@@ -14,8 +14,7 @@
     MIN_VOLUME_RATIO:    1.5,
     EARNINGS_DAYS_AHEAD: 5,
     FIRESTORE_ROOT:      "dailyWatchlist",
-    PARALLEL_SIZE:       5,    // Finnhub free = 60 req/min; keep groups small
-    QUOTE_DELAY_MS:      1200, // ~50 req/min to stay safe with quote+metric per ticker
+    QUOTE_DELAY_MS:      1100, // 1 req/sec = safe under Finnhub free 60/min
     FMP_DELAY_MS:        500,
     NEWS_DELAY_MS:       1100
   };
@@ -69,44 +68,33 @@
   function delay(ms)       { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   // -----------------------------------------------------------
-  // QUOTE — Finnhub /quote  (CORS-safe, real-time)
-  // Returns: c=current, pc=prev close, dp=change%, v=volume (today)
-  // avgVolume comes from /stock/metric (52-week avg daily volume)
+  // QUOTE — Finnhub /quote  (CORS-safe, real-time, 1 req per ticker)
+  // Returns c=current price, dp=change%, v=today volume
+  // Note: Finnhub /quote does not return avgVolume — volume_surge
+  // trigger is skipped when avgVolume is unavailable (ok, gap/earnings
+  // triggers are the primary signals anyway)
   // -----------------------------------------------------------
   async function fetchSingleQuote(ticker) {
     var key = getFinnhubKey();
     if (!key) return null;
     try {
-      // Fetch quote and metric in parallel
-      var [qRes, mRes] = await Promise.all([
-        fetch(FINNHUB_BASE + "/quote?symbol=" + ticker + "&token=" + key),
-        fetch(FINNHUB_BASE + "/stock/metric?symbol=" + ticker + "&metric=all&token=" + key)
-      ]);
-
-      if (!qRes.ok) {
-        console.warn("[Tier0] Finnhub quote " + ticker + " HTTP " + qRes.status);
+      var res = await fetch(FINNHUB_BASE + "/quote?symbol=" + ticker + "&token=" + key);
+      if (!res.ok) {
+        if (res.status !== 429) console.warn("[Tier0] Finnhub quote " + ticker + " HTTP " + res.status);
         return null;
       }
-      var q = await qRes.json();
-      if (!q || !q.c || q.c === 0) return null; // no price = bad symbol or market closed
+      var q = await res.json();
+      if (!q || !q.c || q.c === 0) return null;
 
-      var avgVolume = 0;
-      if (mRes.ok) {
-        var m = await mRes.json();
-        // metric.10DayAverageTradingVolume is in millions; convert
-        if (m && m.metric) {
-          avgVolume = (m.metric["10DayAverageTradingVolume"] || 0) * 1e6;
-        }
-      }
-
-      var changePct = q.dp != null ? q.dp : (q.pc ? ((q.c - q.pc) / q.pc) * 100 : 0);
+      var changePct = q.dp != null ? q.dp
+                    : (q.pc && q.pc !== 0 ? ((q.c - q.pc) / q.pc) * 100 : 0);
 
       return {
         symbol:            ticker,
         price:             q.c,
         changesPercentage: parseFloat(changePct.toFixed(2)),
         volume:            q.v  || 0,
-        avgVolume:         Math.round(avgVolume)
+        avgVolume:         0    // not available from Finnhub /quote
       };
     } catch (e) {
       console.warn("[Tier0] Finnhub quote error " + ticker + ":", e.message);
@@ -115,26 +103,21 @@
   }
 
   // -----------------------------------------------------------
-  // STEP 1 — Fetch all quotes in parallel groups
+  // STEP 1 — Sequential quote fetching, 1 per second
   // -----------------------------------------------------------
   async function fetchAllQuotes(tickers) {
+    var key = getFinnhubKey();
+    if (!key) { console.warn("[Tier0] Finnhub key not set."); return []; }
     var results = [];
     var logged  = false;
-    for (var i = 0; i < tickers.length; i += TIER0_CONFIG.PARALLEL_SIZE) {
-      var group   = tickers.slice(i, i + TIER0_CONFIG.PARALLEL_SIZE);
-      var fetched = await Promise.all(group.map(function (t) { return fetchSingleQuote(t); }));
-      fetched.forEach(function (q) {
-        if (q) {
-          if (!logged) {
-            console.log("[Tier0] Quote sample:", JSON.stringify(q));
-            logged = true;
-          }
-          results.push(q);
-        }
-      });
-      if (i + TIER0_CONFIG.PARALLEL_SIZE < tickers.length) {
-        await delay(TIER0_CONFIG.QUOTE_DELAY_MS);
+    for (var i = 0; i < tickers.length; i++) {
+      var q = await fetchSingleQuote(tickers[i]);
+      if (q) {
+        if (!logged) { console.log("[Tier0] Quote sample:", JSON.stringify(q)); logged = true; }
+        results.push(q);
       }
+      // Always wait between quotes to respect 60 req/min
+      if (i < tickers.length - 1) await delay(TIER0_CONFIG.QUOTE_DELAY_MS);
     }
     return results;
   }
@@ -223,8 +206,9 @@
     if (changePct >=  TIER0_CONFIG.MIN_CHANGE_PCT) triggers.push("gap_up");
     if (changePct <= -TIER0_CONFIG.MIN_CHANGE_PCT) triggers.push("gap_down");
 
+    // Volume surge only fires when avgVolume is available
     var vol    = q.volume    || 0;
-    var avgVol = q.avgVolume || 1;
+    var avgVol = q.avgVolume || 0;
     if (avgVol > 0 && vol >= avgVol * TIER0_CONFIG.MIN_VOLUME_RATIO) triggers.push("volume_surge");
 
     if (earningsSet.has(q.symbol)) triggers.push("earnings_proximity");
