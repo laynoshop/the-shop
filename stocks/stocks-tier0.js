@@ -4,6 +4,9 @@
 // Finnhub free handles: recent news check (company-news).
 // Writes results to Firestore dailyWatchlist/{date}/triggered/{ticker}
 // and updates window.STOCKS_UNIVERSE so Tier 1 screens the right stocks.
+//
+// NOTE: Uses FMP /stable/ endpoints (post-Aug 2025 API).
+// Legacy /api/v3/ endpoints are no longer supported for new accounts.
 
 (function () {
   "use strict";
@@ -21,6 +24,9 @@
     FMP_DELAY_MS:        300,  // small pause between FMP batch calls
     NEWS_DELAY_MS:       1100  // Finnhub free = 60 req/min
   };
+
+  // FMP stable base URL (replaces legacy /api/v3/)
+  var FMP_BASE = "https://financialmodelingprep.com/stable";
 
   // 150-ticker seed covering all 11 S&P sectors + high-beta Nasdaq names.
   // FMP /gainers + /losers dynamically augment this at runtime.
@@ -87,7 +93,7 @@
 
   // -----------------------------------------------------------
   // STEP 1 — FMP batch quotes (50 symbols per request)
-  // Returns array of FMP quote objects
+  // NEW: /stable/quote?symbol=AAPL,MSFT,...&apikey=KEY
   // -----------------------------------------------------------
   async function fetchFMPBatchQuotes(tickers) {
     var key = getFMPKey();
@@ -97,7 +103,7 @@
       var batch = tickers.slice(i, i + TIER0_CONFIG.FMP_BATCH_SIZE).join(",");
       try {
         var res = await fetch(
-          "https://financialmodelingprep.com/api/v3/quote/" + batch + "?apikey=" + key
+          FMP_BASE + "/quote?symbol=" + batch + "&apikey=" + key
         );
         if (res.ok) {
           var data = await res.json();
@@ -113,19 +119,20 @@
 
   // -----------------------------------------------------------
   // STEP 2 — FMP top gainers + losers (dynamic universe expansion)
+  // NEW: /stable/biggest-gainers and /stable/biggest-losers
   // -----------------------------------------------------------
   async function fetchFMPMovers() {
     var key = getFMPKey();
     if (!key) return [];
     var movers = [];
     try {
-      var g = await fetch("https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey=" + key);
+      var g = await fetch(FMP_BASE + "/biggest-gainers?apikey=" + key);
       if (g.ok) {
         var gd = await g.json();
         if (Array.isArray(gd)) movers = movers.concat(gd.slice(0, 15));
       }
       await delay(TIER0_CONFIG.FMP_DELAY_MS);
-      var l = await fetch("https://financialmodelingprep.com/api/v3/stock_market/losers?apikey=" + key);
+      var l = await fetch(FMP_BASE + "/biggest-losers?apikey=" + key);
       if (l.ok) {
         var ld = await l.json();
         if (Array.isArray(ld)) movers = movers.concat(ld.slice(0, 15));
@@ -136,6 +143,7 @@
 
   // -----------------------------------------------------------
   // STEP 3 — FMP earnings calendar (next N days)
+  // NEW: /stable/earnings-calendar?from=...&to=...&apikey=KEY
   // -----------------------------------------------------------
   async function fetchEarningsTickers() {
     var key = getFMPKey();
@@ -147,7 +155,7 @@
       var from = today.toISOString().slice(0, 10);
       var to   = future.toISOString().slice(0, 10);
       var res  = await fetch(
-        "https://financialmodelingprep.com/api/v3/earning_calendar?from=" + from + "&to=" + to + "&apikey=" + key
+        FMP_BASE + "/earnings-calendar?from=" + from + "&to=" + to + "&apikey=" + key
       );
       if (!res.ok) return new Set();
       var data = await res.json();
@@ -157,7 +165,7 @@
 
   // -----------------------------------------------------------
   // STEP 4 — Finnhub recent news check (>= 2 articles in 24h)
-  // Still uses Finnhub free — FMP news costs more credits
+  // Still uses Finnhub free — unchanged
   // -----------------------------------------------------------
   async function hasRecentNews(ticker) {
     var key = getFinnhubKey();
