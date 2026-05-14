@@ -284,7 +284,6 @@
   flex-shrink: 0;
 }
 
-/* Dismiss (×) button — top-right of header */
 .ssc-dismiss-btn {
   margin-left: auto;
   flex-shrink: 0;
@@ -310,9 +309,7 @@
   transform: scale(1.08);
 }
 
-.ssc-dismiss-btn:active {
-  transform: scale(0.96);
-}
+.ssc-dismiss-btn:active { transform: scale(0.96); }
 
 /* ── Price row ── */
 .ssc-price-row {
@@ -354,7 +351,7 @@
   flex-shrink: 0;
 }
 
-/* ── Data grid ── */
+/* ── Grid ── */
 .ssc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -443,7 +440,6 @@
   word-break: break-word;
 }
 
-/* Full timestamp — wraps naturally on small screens */
 .ssc-time {
   flex-shrink: 0;
   font-size: 11px;
@@ -457,11 +453,122 @@
   line-height: 1.35;
 }
 
-/* ── Expires ── */
 .ssc-expires {
   padding-bottom: 14px;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.3px;
   color: rgba(245,158,11,0.75);
+}
+
+/* =========================
+   DISMISS CONFIRMATION OVERLAY
+   ========================= */
+
+.ssc-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10,10,10,0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  padding: 20px;
+}
+
+.ssc-confirm-overlay.ssc-confirm-visible {
+  opacity: 1;
+}
+
+.ssc-confirm-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  max-width: 260px;
+  animation: confirmBoxIn 0.22s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+@keyframes confirmBoxIn {
+  from { transform: scale(0.92) translateY(6px); opacity: 0; }
+  to   { transform: scale(1) translateY(0);      opacity: 1; }
+}
+
+.ssc-confirm-icon {
+  font-size: 28px;
+  line-height: 1;
+  filter: grayscale(0.2);
+}
+
+.ssc-confirm-msg {
+  font-size: 15px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.92);
+  line-height: 1.45;
+  letter-spacing: 0.1px;
+}
+
+.ssc-confirm-msg strong {
+  color: #fff;
+}
+
+.ssc-confirm-sub {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.45);
+  display: block;
+  margin-top: 4px;
+}
+
+.ssc-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.ssc-confirm-cancel {
+  padding: 9px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  color: rgba(255,255,255,0.70);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.ssc-confirm-cancel:hover {
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+}
+
+.ssc-confirm-yes {
+  padding: 9px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  color: #fff;
+  background: rgba(239,68,68,0.75);
+  border: 1px solid rgba(239,68,68,0.50);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(239,68,68,0.25);
+  transition: background 0.14s ease, box-shadow 0.14s ease, transform 0.12s ease;
+}
+
+.ssc-confirm-yes:hover {
+  background: rgba(239,68,68,0.92);
+  box-shadow: 0 8px 22px rgba(239,68,68,0.38);
+}
+
+.ssc-confirm-yes:active {
+  transform: scale(0.97);
 }

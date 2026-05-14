@@ -4,9 +4,6 @@
 (function () {
   "use strict";
 
-  // -----------------------------------------------------------
-  // Direction helpers
-  // -----------------------------------------------------------
   function normalizeDirection(raw) {
     if (!raw) return "NEUTRAL";
     const v = String(raw).toUpperCase().trim();
@@ -52,7 +49,6 @@
     return map[(impact || "").toUpperCase()] || "\u26AA";
   }
 
-  // Full "Generated on MM/DD/YYYY at HH:MM AM/PM"
   function fmtTimestamp(ts) {
     if (!ts) return "--";
     try {
@@ -72,45 +68,88 @@
   }
 
   // -----------------------------------------------------------
-  // Dismiss a signal — deletes from Firestore
-  // Only admins can delete per Firestore rules.
+  // Show inline confirmation overlay on the card.
+  // Two outcomes: confirm → delete + animate out | cancel → restore card
+  // -----------------------------------------------------------
+  function showDismissConfirm(card, docId) {
+    // Prevent double-overlays
+    if (card.querySelector(".ssc-confirm-overlay")) return;
+
+    const ticker = (card.querySelector(".ssc-ticker") || {}).textContent || "this signal";
+
+    const overlay = document.createElement("div");
+    overlay.className = "ssc-confirm-overlay";
+    overlay.innerHTML = `
+      <div class="ssc-confirm-box">
+        <div class="ssc-confirm-icon">&#x1F5D1;</div>
+        <div class="ssc-confirm-msg">Remove <strong>${ticker}</strong> signal?<br><span class="ssc-confirm-sub">It can regenerate next time the screener runs.</span></div>
+        <div class="ssc-confirm-actions">
+          <button class="ssc-confirm-cancel">Keep it</button>
+          <button class="ssc-confirm-yes">Yes, remove</button>
+        </div>
+      </div>
+    `;
+
+    card.appendChild(overlay);
+
+    // Trigger fade-in on next frame
+    requestAnimationFrame(() => overlay.classList.add("ssc-confirm-visible"));
+
+    // Cancel
+    overlay.querySelector(".ssc-confirm-cancel").addEventListener("click", (e) => {
+      e.stopPropagation();
+      overlay.classList.remove("ssc-confirm-visible");
+      setTimeout(() => overlay.remove(), 220);
+    });
+
+    // Confirm → delete
+    overlay.querySelector(".ssc-confirm-yes").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      overlay.classList.remove("ssc-confirm-visible");
+
+      // Animate card out
+      card.style.transition = "opacity 0.25s ease, transform 0.25s ease, max-height 0.35s ease, margin-bottom 0.35s ease";
+      card.style.overflow   = "hidden";
+      card.style.opacity    = "0";
+      card.style.transform  = "scale(0.97) translateY(-4px)";
+      card.style.maxHeight  = card.offsetHeight + "px";
+      setTimeout(() => { card.style.maxHeight = "0"; card.style.marginBottom = "0"; }, 30);
+
+      try {
+        const db  = getDb();
+        const cfg = window.STOCKS_CONFIG || {};
+        await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").doc(docId).delete();
+        setTimeout(() => card.remove(), 400);
+      } catch (err) {
+        console.error("[Stocks] Dismiss error:", err);
+        // Roll back
+        card.style.opacity      = "1";
+        card.style.transform    = "none";
+        card.style.maxHeight    = "";
+        card.style.marginBottom = "";
+        setTimeout(() => overlay.remove(), 10);
+        alert("Could not remove signal. Check permissions.");
+      }
+    });
+  }
+
+  // -----------------------------------------------------------
+  // Bind dismiss buttons — opens inline confirm instead of deleting immediately
   // -----------------------------------------------------------
   function bindDismissButtons() {
     document.querySelectorAll(".ssc-dismiss-btn").forEach(btn => {
-      btn.addEventListener("click", async (e) => {
+      btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const card   = btn.closest(".stock-signal-card");
-        const docId  = btn.dataset.docid;
+        const card  = btn.closest(".stock-signal-card");
+        const docId = btn.dataset.docid;
         if (!docId || !card) return;
-
-        // Animate out first
-        card.style.transition = "opacity 0.25s ease, transform 0.25s ease, max-height 0.35s ease";
-        card.style.opacity    = "0";
-        card.style.transform  = "scale(0.97) translateY(-4px)";
-        card.style.maxHeight  = card.offsetHeight + "px";
-        setTimeout(() => { card.style.maxHeight = "0"; card.style.marginBottom = "0"; }, 10);
-
-        try {
-          const db  = getDb();
-          const cfg = window.STOCKS_CONFIG || {};
-          await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").doc(docId).delete();
-          setTimeout(() => card.remove(), 380);
-        } catch (err) {
-          console.error("[Stocks] Dismiss error:", err);
-          // Roll back animation if delete failed
-          card.style.opacity   = "1";
-          card.style.transform = "none";
-          card.style.maxHeight = "";
-          card.style.marginBottom = "";
-          alert("Could not remove signal. Check permissions.");
-        }
+        showDismissConfirm(card, docId);
       });
     });
   }
 
   // -----------------------------------------------------------
   // Render a single signal card
-  // docId is passed in so the dismiss button can reference it
   // -----------------------------------------------------------
   function renderSignalCard(signal, docId) {
     const rawDir     = signal.direction || signal.signal || "NEUTRAL";
@@ -189,9 +228,6 @@
     `;
   }
 
-  // -----------------------------------------------------------
-  // Main render
-  // -----------------------------------------------------------
   function renderStocks() {
     const content = document.getElementById("content");
     if (!content) return;
@@ -282,7 +318,6 @@
       window.startTier2Listener(db);
     }
 
-    // orderBy desc = newest signal always at the top
     __signalListener = db
       .collection(cfg.SIGNALS_COLLECTION || "stockSignals")
       .orderBy("generatedAt", "desc")
@@ -297,7 +332,6 @@
         }
 
         const cards = [];
-        // doc.id is passed to renderSignalCard so dismiss button can reference it
         snapshot.forEach(doc => cards.push(renderSignalCard(doc.data(), doc.id)));
         list.innerHTML = cards.join("");
         bindDismissButtons();
