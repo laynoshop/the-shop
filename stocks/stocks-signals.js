@@ -22,14 +22,14 @@
   // -----------------------------------------------------------
   async function fetchLivePrice(ticker) {
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d&events=div%2Csplit`;
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
       const res = await fetch(url);
       if (!res.ok) return null;
       const json = await res.json();
       const meta = json?.chart?.result?.[0]?.meta;
       if (!meta) return null;
-      const price     = meta.regularMarketPrice     ?? null;
-      const prevClose = meta.chartPreviousClose      ?? meta.previousClose ?? null;
+      const price     = meta.regularMarketPrice  ?? null;
+      const prevClose = meta.chartPreviousClose   ?? meta.previousClose ?? null;
       const changePct = (price && prevClose && prevClose !== 0)
         ? parseFloat((((price - prevClose) / prevClose) * 100).toFixed(2))
         : null;
@@ -56,7 +56,6 @@
       if (!res.ok) return "No recent news found.";
       const articles = await res.json();
       if (!articles || !articles.length) return "No recent news found.";
-      // Also store the first article's url for the news link on the card
       fetchNewsHeadlines._lastUrl    = articles[0]?.url    || "";
       fetchNewsHeadlines._lastSource = articles[0]?.source || "";
       return articles
@@ -75,9 +74,7 @@
     const t = enriched;
     const lines = [];
 
-    // --- Price action ---
     lines.push(`TICKER: ${t.ticker} | Price: $${t.price} | Today: ${t.changePct > 0 ? "+" : ""}${t.changePct}%`);
-
     if (t.pct5d  != null) lines.push(`5-day trend: ${t.pct5d > 0 ? "+" : ""}${t.pct5d}%`);
     if (t.pct30d != null) lines.push(`30-day trend: ${t.pct30d > 0 ? "+" : ""}${t.pct30d}%`);
     if (t.pct90d != null) lines.push(`90-day trend: ${t.pct90d > 0 ? "+" : ""}${t.pct90d}%`);
@@ -85,15 +82,11 @@
     if (t.aboveSMA20Streak != null && t.aboveSMA20Streak > 0) lines.push(`Days above SMA20 streak: ${t.aboveSMA20Streak}`);
     if (t.high90d != null) lines.push(`90-day range: $${t.low90d} \u2013 $${t.high90d} | Current vs range: ${(((t.price - t.low90d) / (t.high90d - t.low90d)) * 100).toFixed(0)}% of range`);
     if (t.volRatio5v20 != null) lines.push(`Volume (5d avg vs 20d avg): ${t.volRatio5v20}x`);
-
-    // --- Technical indicators ---
     if (t.rsi != null) lines.push(`RSI(14): ${t.rsi}${t.rsi > 70 ? " \u26a0\ufe0f OVERBOUGHT" : t.rsi < 30 ? " \u26a0\ufe0f OVERSOLD" : ""}`);
     if (t.macdHist != null) {
       const dir = t.macdBullish ? "BULLISH CROSS" : t.macdBearish ? "BEARISH CROSS" : "no cross";
       lines.push(`MACD histogram: ${t.macdHist} | Signal: ${dir}`);
     }
-
-    // --- Analyst opinion ---
     if (t.analystConsensus) lines.push(`Analyst consensus: ${t.analystConsensus}`);
     if (t.analystTargetMean != null) {
       lines.push(`Price target \u2014 mean: $${t.analystTargetMean}` +
@@ -106,28 +99,14 @@
       const recent = t.ratingChanges.slice(1, 4).map(r => `${r.firm} ${r.action} (${r.date})`).join(", ");
       lines.push(`Other recent ratings: ${recent}`);
     }
-
-    // --- Earnings ---
-    if (t.beatStreak != null) {
-      lines.push(`EPS beat streak: ${t.beatStreak} of last ${Math.min(t.earningsSurprises?.length || 0, 4)} quarters`);
-    }
-    if (t.lastSurprisePct != null) {
-      lines.push(`Most recent earnings surprise: ${t.lastSurprisePct > 0 ? "+" : ""}${t.lastSurprisePct}% vs estimate`);
-    }
-    if (t.earningsSurprises && t.earningsSurprises.length > 1) {
-      const hist = t.earningsSurprises.map(e => (e.surprisePct != null ? (e.surprisePct > 0 ? "+" : "") + e.surprisePct + "%" : "N/A")).join(", ");
-      lines.push(`EPS surprise history (newest first): ${hist}`);
-    }
+    if (t.beatStreak != null) lines.push(`EPS beat streak: ${t.beatStreak} of last ${Math.min(t.earningsSurprises?.length || 0, 4)} quarters`);
+    if (t.lastSurprisePct != null) lines.push(`Most recent earnings surprise: ${t.lastSurprisePct > 0 ? "+" : ""}${t.lastSurprisePct}% vs estimate`);
     if (t.earningsDate) lines.push(`Next earnings date: ${t.earningsDate}`);
-
-    // --- Fundamentals ---
     if (t.peRatioCurrent != null)  lines.push(`P/E ratio: ${t.peRatioCurrent}`);
     if (t.debtToEquity   != null)  lines.push(`Debt/Equity: ${t.debtToEquity}`);
     if (t.roePct         != null)  lines.push(`Return on Equity: ${t.roePct}%`);
     if (t.grossMarginPct != null)  lines.push(`Gross margin: ${t.grossMarginPct}%`);
     if (t.revenueGrowthYoY != null) lines.push(`Revenue growth YoY (latest quarter): ${t.revenueGrowthYoY > 0 ? "+" : ""}${t.revenueGrowthYoY}%`);
-
-    // --- Income trend ---
     if (t.incomeTrend && t.incomeTrend.length >= 2) {
       const trend = t.incomeTrend.map(q => {
         const rev = q.revenue ? "$" + (q.revenue / 1e9).toFixed(2) + "B" : "N/A";
@@ -136,10 +115,7 @@
       }).join(" | ");
       lines.push(`Revenue trend (newest first): ${trend}`);
     }
-
-    // --- News ---
     lines.push(`Recent news: ${newsHeadlines}`);
-
     return lines.join("\n");
   }
 
@@ -157,7 +133,6 @@
         body:    JSON.stringify({
           ticker:       enriched.ticker,
           price:        enriched.price,
-          // Core technicals (backward-compat with Cloud Function)
           rsi:          enriched.rsi,
           macd:         enriched.macdHist,
           macdSignal:   enriched.macdBullish ? "bullish" : enriched.macdBearish ? "bearish" : null,
@@ -167,7 +142,6 @@
           pe:           enriched.peRatioCurrent,
           earningsDate: enriched.earningsDate || "",
           newsHeadline: newsHeadlines,
-          // Full enriched brief — Cloud Function uses this for the system prompt
           analystBrief: brief
         })
       });
@@ -177,6 +151,7 @@
         return null;
       }
       const data = await res.json();
+      console.log("[Stocks Tier2] Raw Cloud Function response:", JSON.stringify(data));
       return data?.analysis || null;
     } catch (e) {
       console.error("[Stocks Tier2] callAISignal failed:", e);
@@ -185,8 +160,8 @@
   }
 
   // -----------------------------------------------------------
-  // Safely parse a value that might be "$154.20 - $158.00", "154.20", null, etc.
-  // Returns the string as-is if it looks meaningful, null otherwise.
+  // Safely parse a value that might be "$154.20", "154.20", null, etc.
+  // Returns the string as-is if meaningful, null otherwise.
   // -----------------------------------------------------------
   function safeField(val) {
     if (val === null || val === undefined) return null;
@@ -196,74 +171,114 @@
   }
 
   // -----------------------------------------------------------
+  // Fallback trade levels calculated from price + direction
+  // Used when the Cloud Function / AI doesn't return these fields.
+  // BULLISH:  entry = price, target = +5%, stop = -2.5%, R/R = 2:1
+  // BEARISH:  entry = price, target = -5%, stop = +2.5%, R/R = 2:1
+  // -----------------------------------------------------------
+  function calcFallbackLevels(price, direction) {
+    if (!price || !direction) return {};
+    const p   = parseFloat(price);
+    const dir = String(direction).toUpperCase();
+    const fmt = n => "$" + n.toFixed(2);
+
+    if (dir === "BULLISH") {
+      const entry  = p;
+      const target = p * 1.05;
+      const stop   = p * 0.975;
+      const rr     = (((target - entry) / (entry - stop))).toFixed(1) + ":1";
+      return {
+        entry_zone:  fmt(entry),
+        target:      fmt(target),
+        stop_loss:   fmt(stop),
+        risk_reward: rr
+      };
+    }
+    if (dir === "BEARISH") {
+      const entry  = p;
+      const target = p * 0.95;
+      const stop   = p * 1.025;
+      const rr     = (((entry - target) / (stop - entry))).toFixed(1) + ":1";
+      return {
+        entry_zone:  fmt(entry),
+        target:      fmt(target),
+        stop_loss:   fmt(stop),
+        risk_reward: rr
+      };
+    }
+    // NEUTRAL — just show entry
+    return { entry_zone: fmt(p) };
+  }
+
+  // -----------------------------------------------------------
   // Write the final signal card to Firestore
   // -----------------------------------------------------------
   async function writeSignalCard(db, enriched, signal, newsHeadlines, livePrice) {
     try {
       const cfg = window.STOCKS_CONFIG || {};
 
-      // Use live price if we got one, otherwise fall back to enriched price
       const finalPrice     = (livePrice && livePrice.price)     ?? enriched.price;
       const finalChangePct = (livePrice && livePrice.changePct != null) ? livePrice.changePct : enriched.changePct;
 
-      // Grab the news URL captured during fetchNewsHeadlines
       const newsUrl    = fetchNewsHeadlines._lastUrl    || "";
       const newsSource = fetchNewsHeadlines._lastSource || "";
 
-      // Safely extract AI fields — never write empty strings, always null if missing
-      const entry_zone  = safeField(signal.entry_zone);
-      const target      = safeField(signal.target);
-      const stop_loss   = safeField(signal.stop_loss);
-      const risk_reward = safeField(signal.risk_reward);
-      const time_horizon = safeField(signal.time_horizon);
-      const reasoning   = safeField(signal.summary || signal.reasoning);
-      const direction   = safeField(signal.signal || signal.direction) || "NEUTRAL";
-      const confidence  = signal.confidence ?? null;
-      const signal_type = safeField(signal.signal_type);
-      const news_impact = safeField(signal.news_impact) || "NONE";
-      const expires_note = safeField(signal.expires_note);
+      const direction  = safeField(signal.signal || signal.direction) || "NEUTRAL";
+      const confidence = signal.confidence ?? null;
+
+      // Try AI fields first, fall back to calculated levels if missing
+      let entry_zone  = safeField(signal.entry_zone);
+      let target      = safeField(signal.target);
+      let stop_loss   = safeField(signal.stop_loss);
+      let risk_reward = safeField(signal.risk_reward);
+
+      if (!entry_zone || !target || !stop_loss) {
+        console.warn(`[Stocks Tier2] AI missing trade levels for ${enriched.ticker} — calculating from price.`);
+        const fallback = calcFallbackLevels(finalPrice, direction);
+        entry_zone  = entry_zone  || fallback.entry_zone  || null;
+        target      = target      || fallback.target      || null;
+        stop_loss   = stop_loss   || fallback.stop_loss   || null;
+        risk_reward = risk_reward || fallback.risk_reward || null;
+      }
 
       const card = {
         ticker:       enriched.ticker,
         price:        finalPrice,
         changePct:    finalChangePct,
-        rsi:          enriched.rsi          ?? null,
-        macdCrossed:  enriched.macdCrossed  ?? null,
+        rsi:          enriched.rsi         ?? null,
+        macdCrossed:  enriched.macdCrossed ?? null,
         newsHeadline: newsHeadlines,
         newsUrl,
         newsSource,
-        // Enrichment snapshot on the card
         pct90d:           enriched.pct90d           ?? null,
-        analystConsensus: enriched.analystConsensus || null,
-        analystUpsidePct: enriched.analystUpsidePct ?? null,
-        latestRating:     enriched.latestRating     || null,
-        beatStreak:       enriched.beatStreak       ?? null,
-        lastSurprisePct:  enriched.lastSurprisePct  ?? null,
-        revenueGrowthYoY: enriched.revenueGrowthYoY ?? null,
-        peRatioCurrent:   enriched.peRatioCurrent   ?? null,
+        analystConsensus: enriched.analystConsensus  || null,
+        analystUpsidePct: enriched.analystUpsidePct  ?? null,
+        latestRating:     enriched.latestRating      || null,
+        beatStreak:       enriched.beatStreak        ?? null,
+        lastSurprisePct:  enriched.lastSurprisePct   ?? null,
+        revenueGrowthYoY: enriched.revenueGrowthYoY  ?? null,
+        peRatioCurrent:   enriched.peRatioCurrent    ?? null,
         generatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        // LLM output — null instead of empty string so the render layer shows "--" properly
+        // LLM output + fallback levels
         direction,
         confidence,
-        signal_type,
+        signal_type:   safeField(signal.signal_type),
         entry_zone,
         target,
         stop_loss,
         risk_reward,
-        time_horizon,
-        reasoning,
-        news_impact,
-        expires_note
+        time_horizon:  safeField(signal.time_horizon),
+        reasoning:     safeField(signal.summary || signal.reasoning),
+        news_impact:   safeField(signal.news_impact) || "NONE",
+        expires_note:  safeField(signal.expires_note)
       };
 
-      // Strip out nulls so Firestore doesn't store them unnecessarily
-      // (keep fields that are intentionally null for display logic)
       await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").add(card);
       await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(enriched.ticker).update({
         tier2Processed: true
       });
 
-      console.log(`[Stocks Tier2] \u2705 Signal card: ${enriched.ticker} \u2014 ${direction} (${confidence}%) | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | Live price: $${finalPrice}`);
+      console.log(`[Stocks Tier2] \u2705 Card written: ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} Target: ${target} Stop: ${stop_loss} RR: ${risk_reward} | $${finalPrice} (${finalChangePct}%)`);
     } catch (e) {
       console.error("[Stocks Tier2] writeSignalCard error:", e);
     }
@@ -275,7 +290,6 @@
   async function processCandidateTier2(db, candidate) {
     const ticker = candidate.ticker;
 
-    // Dedup guard: skip if already in-flight for this ticker
     if (__processing.has(ticker)) {
       console.log(`[Stocks Tier2] Skipping ${ticker} — already processing.`);
       return;
@@ -285,7 +299,6 @@
     try {
       console.log(`[Stocks Tier2] Processing: ${ticker}`);
 
-      // 1. Enrich with FMP historical + fundamentals
       let enriched = candidate;
       if (typeof window.enrichCandidate === "function") {
         enriched = await window.enrichCandidate(db, candidate);
@@ -293,7 +306,6 @@
         console.warn("[Stocks Tier2] enrichCandidate not available — stocks-enrichment.js loaded?");
       }
 
-      // 2. Fetch news headlines (Finnhub) + live price (Yahoo) in parallel
       const [newsHeadlines, livePrice] = await Promise.all([
         fetchNewsHeadlines(ticker),
         fetchLivePrice(ticker)
@@ -303,17 +315,14 @@
         console.log(`[Stocks Tier2] Live price for ${ticker}: $${livePrice.price} (${livePrice.changePct}%)`);
       }
 
-      // 3. Call OpenAI via Cloud Function
       const signal = await callAISignal(enriched, newsHeadlines);
       if (!signal) {
         console.warn(`[Stocks Tier2] No signal returned for ${ticker}`);
         return;
       }
 
-      // 4. Write signal card to Firestore with live price baked in
       await writeSignalCard(db, enriched, signal, newsHeadlines, livePrice);
     } finally {
-      // Always release the lock so future re-runs (e.g. next day) can proceed
       __processing.delete(ticker);
     }
   }
@@ -323,7 +332,7 @@
   // -----------------------------------------------------------
   function startTier2Listener(db) {
     if (__tier2Listener) { __tier2Listener(); __tier2Listener = null; }
-    __processing.clear(); // Reset in-flight set on fresh start
+    __processing.clear();
     const cfg = window.STOCKS_CONFIG || {};
     console.log("[Stocks Tier2] Listener started — watching for new candidates...");
 
