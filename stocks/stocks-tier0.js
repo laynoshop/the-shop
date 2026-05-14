@@ -6,7 +6,9 @@
 // and updates window.STOCKS_UNIVERSE so Tier 1 screens the right stocks.
 //
 // NOTE: Uses FMP /stable/ endpoints (post-Aug 2025 API).
-// Legacy /api/v3/ endpoints are no longer supported for new accounts.
+// /stable/batch-quote?symbols=AAPL,MSFT,...  for multi-ticker quotes
+// /stable/biggest-gainers and /stable/biggest-losers for movers
+// /stable/earnings-calendar for upcoming earnings
 
 (function () {
   "use strict";
@@ -15,45 +17,30 @@
   // CONFIG
   // -----------------------------------------------------------
   var TIER0_CONFIG = {
-    MAX_WATCHLIST:       40,   // cap on tickers that pass
-    MIN_CHANGE_PCT:      1.0,  // minimum absolute % move to qualify
-    MIN_VOLUME_RATIO:    1.5,  // today volume must be >= 1.5x avg
-    EARNINGS_DAYS_AHEAD: 5,    // flag if earnings within N calendar days
+    MAX_WATCHLIST:       40,
+    MIN_CHANGE_PCT:      1.0,
+    MIN_VOLUME_RATIO:    1.5,
+    EARNINGS_DAYS_AHEAD: 5,
     FIRESTORE_ROOT:      "dailyWatchlist",
-    FMP_BATCH_SIZE:      50,   // FMP /quote supports up to 50 symbols per call
-    FMP_DELAY_MS:        300,  // small pause between FMP batch calls
-    NEWS_DELAY_MS:       1100  // Finnhub free = 60 req/min
+    FMP_BATCH_SIZE:      50,
+    FMP_DELAY_MS:        300,
+    NEWS_DELAY_MS:       1100
   };
 
-  // FMP stable base URL (replaces legacy /api/v3/)
   var FMP_BASE = "https://financialmodelingprep.com/stable";
 
-  // 150-ticker seed covering all 11 S&P sectors + high-beta Nasdaq names.
-  // FMP /gainers + /losers dynamically augment this at runtime.
   var SEED_UNIVERSE = [
-    // Mega-cap tech
     "AAPL","MSFT","NVDA","AMZN","GOOGL","GOOG","META","TSLA","NFLX","ORCL",
-    // Semiconductors
     "AMD","INTC","AVGO","QCOM","MU","AMAT","LRCX","KLAC","TXN","MRVL",
-    // Software / Cloud
     "CRM","NOW","ADBE","INTU","SNOW","DDOG","PANW","CRWD","ZS","OKTA",
-    // Financials
     "JPM","BAC","GS","MS","WFC","C","AXP","V","MA","BLK",
-    // Healthcare
     "JNJ","UNH","PFE","ABBV","MRK","LLY","TMO","ABT","AMGN","GILD",
-    // Energy
     "XOM","CVX","COP","EOG","SLB","OXY","MPC","PSX","VLO","HAL",
-    // Consumer Discretionary
     "HD","MCD","NKE","SBUX","TGT","LOW","BKNG","MAR","HLT","ABNB",
-    // Consumer Staples
     "WMT","COST","PG","KO","PEP","PM","MO","CL","GIS","KHC",
-    // Industrials
     "CAT","DE","HON","RTX","LMT","GE","BA","UPS","FDX","CSX",
-    // Utilities / Real Estate
     "NEE","DUK","SO","D","AMT","PLD","EQIX","SPG","O","WELL",
-    // ETFs
     "SPY","QQQ","IWM","DIA","XLF","XLK","XLE","XLV","XLI","XLY",
-    // High-beta / momentum
     "MSTR","PLTR","COIN","HOOD","RBLX","SNAP","UBER","LYFT","RIVN","LCID"
   ];
 
@@ -91,9 +78,23 @@
   function todayStr()      { return new Date().toISOString().slice(0, 10); }
   function delay(ms)       { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+  // Normalize a raw FMP quote object to a consistent shape.
+  // The stable API may use different field names than v3.
+  function normalizeQuote(q) {
+    return {
+      symbol:           q.symbol           || q.ticker || "",
+      price:            q.price            || q.lastPrice || q.currentPrice || 0,
+      changesPercentage: q.changesPercentage != null ? q.changesPercentage
+                        : (q.changePercentage != null ? q.changePercentage
+                        : (q.change != null && q.previousClose ? (q.change / q.previousClose) * 100 : 0)),
+      volume:           q.volume           || 0,
+      avgVolume:        q.avgVolume        || q.averageVolume || 0
+    };
+  }
+
   // -----------------------------------------------------------
-  // STEP 1 — FMP batch quotes (50 symbols per request)
-  // NEW: /stable/quote?symbol=AAPL,MSFT,...&apikey=KEY
+  // STEP 1 — FMP batch quotes
+  // /stable/batch-quote?symbols=AAPL,MSFT,...&apikey=KEY
   // -----------------------------------------------------------
   async function fetchFMPBatchQuotes(tickers) {
     var key = getFMPKey();
@@ -103,13 +104,26 @@
       var batch = tickers.slice(i, i + TIER0_CONFIG.FMP_BATCH_SIZE).join(",");
       try {
         var res = await fetch(
-          FMP_BASE + "/quote?symbol=" + batch + "&apikey=" + key
+          FMP_BASE + "/batch-quote?symbols=" + encodeURIComponent(batch) + "&apikey=" + key
         );
         if (res.ok) {
           var data = await res.json();
-          if (Array.isArray(data)) results = results.concat(data);
+          // Diagnostic: log shape of first response only
+          if (i === 0) {
+            var sample = Array.isArray(data) ? data[0] : data;
+            console.log("[Tier0] Quote response sample:", JSON.stringify(sample).slice(0, 200));
+          }
+          if (Array.isArray(data)) {
+            results = results.concat(data.map(normalizeQuote));
+          } else if (data && typeof data === "object" && !data["Error Message"]) {
+            // Single object returned — wrap it
+            results.push(normalizeQuote(data));
+          } else if (data && data["Error Message"]) {
+            console.warn("[Tier0] FMP quote API error:", data["Error Message"]);
+          }
         } else {
-          console.warn("[Tier0] FMP batch quotes HTTP " + res.status);
+          var errText = await res.text().catch(function () { return ""; });
+          console.warn("[Tier0] FMP batch quotes HTTP " + res.status, errText.slice(0, 100));
         }
       } catch (e) { console.warn("[Tier0] FMP batch error:", e); }
       if (i + TIER0_CONFIG.FMP_BATCH_SIZE < tickers.length) await delay(TIER0_CONFIG.FMP_DELAY_MS);
@@ -118,8 +132,8 @@
   }
 
   // -----------------------------------------------------------
-  // STEP 2 — FMP top gainers + losers (dynamic universe expansion)
-  // NEW: /stable/biggest-gainers and /stable/biggest-losers
+  // STEP 2 — FMP top gainers + losers
+  // /stable/biggest-gainers and /stable/biggest-losers
   // -----------------------------------------------------------
   async function fetchFMPMovers() {
     var key = getFMPKey();
@@ -129,21 +143,33 @@
       var g = await fetch(FMP_BASE + "/biggest-gainers?apikey=" + key);
       if (g.ok) {
         var gd = await g.json();
-        if (Array.isArray(gd)) movers = movers.concat(gd.slice(0, 15));
+        if (i === 0 && Array.isArray(gd) && gd[0]) {
+          console.log("[Tier0] Gainers sample:", JSON.stringify(gd[0]).slice(0, 150));
+        }
+        if (Array.isArray(gd)) {
+          // Normalize: stable API may use 'ticker' instead of 'symbol'
+          movers = movers.concat(gd.slice(0, 15).map(function(m) {
+            return { symbol: m.symbol || m.ticker || "" };
+          }));
+        }
       }
       await delay(TIER0_CONFIG.FMP_DELAY_MS);
       var l = await fetch(FMP_BASE + "/biggest-losers?apikey=" + key);
       if (l.ok) {
         var ld = await l.json();
-        if (Array.isArray(ld)) movers = movers.concat(ld.slice(0, 15));
+        if (Array.isArray(ld)) {
+          movers = movers.concat(ld.slice(0, 15).map(function(m) {
+            return { symbol: m.symbol || m.ticker || "" };
+          }));
+        }
       }
     } catch (e) { console.warn("[Tier0] FMP movers error:", e); }
     return movers;
   }
 
   // -----------------------------------------------------------
-  // STEP 3 — FMP earnings calendar (next N days)
-  // NEW: /stable/earnings-calendar?from=...&to=...&apikey=KEY
+  // STEP 3 — FMP earnings calendar
+  // /stable/earnings-calendar?from=...&to=...&apikey=KEY
   // -----------------------------------------------------------
   async function fetchEarningsTickers() {
     var key = getFMPKey();
@@ -159,13 +185,12 @@
       );
       if (!res.ok) return new Set();
       var data = await res.json();
-      return Array.isArray(data) ? new Set(data.map(function (e) { return e.symbol; })) : new Set();
+      return Array.isArray(data) ? new Set(data.map(function (e) { return e.symbol || e.ticker || ""; })) : new Set();
     } catch (e) { console.warn("[Tier0] Earnings calendar error:", e); return new Set(); }
   }
 
   // -----------------------------------------------------------
-  // STEP 4 — Finnhub recent news check (>= 2 articles in 24h)
-  // Still uses Finnhub free — unchanged
+  // STEP 4 — Finnhub recent news check
   // -----------------------------------------------------------
   async function hasRecentNews(ticker) {
     var key = getFinnhubKey();
@@ -187,7 +212,7 @@
   }
 
   // -----------------------------------------------------------
-  // SCORE — decide if a quote qualifies and why
+  // SCORE
   // -----------------------------------------------------------
   function scoreQuote(q, earningsSet) {
     if (!q.symbol || !q.price) return null;
@@ -218,8 +243,7 @@
   }
 
   // -----------------------------------------------------------
-  // SECTOR MOMENTUM — if >= 3 tickers from same sector passed,
-  // add sector_momentum trigger to all of them
+  // SECTOR MOMENTUM
   // -----------------------------------------------------------
   function applySectorMomentum(candidates) {
     var counts = {};
@@ -236,7 +260,7 @@
   }
 
   // -----------------------------------------------------------
-  // WRITE to Firestore dailyWatchlist/{today}/triggered/{ticker}
+  // WRITE to Firestore
   // -----------------------------------------------------------
   async function writeWatchlist(db, candidates) {
     var today   = todayStr();
@@ -273,7 +297,6 @@
   async function runTier0(db) {
     if (!db) { console.warn("[Tier0] Firestore not available."); return []; }
 
-    // Parallel: earnings + movers at the same time
     console.log("[Tier0] Starting watchlist build...");
     var earningsPromise = fetchEarningsTickers();
     var moversPromise   = fetchFMPMovers();
@@ -282,16 +305,13 @@
 
     console.log("[Tier0] Earnings tickers (next " + TIER0_CONFIG.EARNINGS_DAYS_AHEAD + "d): " + earningsSet.size);
 
-    // Build combined universe: seed + movers (deduped)
     var moverTickers = moverData.map(function (m) { return m.symbol; }).filter(Boolean);
     var combined     = Array.from(new Set(SEED_UNIVERSE.concat(moverTickers)));
     console.log("[Tier0] Universe: " + combined.length + " tickers (seed + movers)");
 
-    // Batch fetch quotes via FMP (fast — 50 per request)
     var quotes = await fetchFMPBatchQuotes(combined);
     console.log("[Tier0] Quotes received: " + quotes.length);
 
-    // Score each quote
     var scored = [];
     quotes.forEach(function (q) {
       var r = scoreQuote(q, earningsSet);
@@ -299,14 +319,10 @@
     });
     console.log("[Tier0] Tickers passing filter: " + scored.length);
 
-    // Apply sector momentum bonus
     scored = applySectorMomentum(scored);
-
-    // Sort by score, cap at MAX_WATCHLIST
     scored.sort(function (a, b) { return b.score - a.score; });
     var watchlist = scored.slice(0, TIER0_CONFIG.MAX_WATCHLIST);
 
-    // News check on top 20 via Finnhub (rate-limited)
     var newsLimit = Math.min(watchlist.length, 20);
     for (var i = 0; i < newsLimit; i++) {
       var hasNews = await hasRecentNews(watchlist[i].ticker);
@@ -323,10 +339,8 @@
       console.log("  " + w.ticker + " | " + w.changePct + "% | " + w.triggers.join(", "));
     });
 
-    // Write to Firestore
     await writeWatchlist(db, watchlist);
 
-    // Update STOCKS_UNIVERSE so Tier 1 screens these tickers
     window.STOCKS_UNIVERSE = watchlist.map(function (w) { return w.ticker; });
     console.log("[Tier0] window.STOCKS_UNIVERSE updated \u2192 " + window.STOCKS_UNIVERSE.length + " tickers.");
 
@@ -334,7 +348,7 @@
   }
 
   // -----------------------------------------------------------
-  // MANUAL TRIGGER — "Rebuild Now" button in the overlay
+  // MANUAL TRIGGER
   // -----------------------------------------------------------
   window.runTier0Manual = async function () {
     var db = null;
@@ -345,15 +359,14 @@
 
   // -----------------------------------------------------------
   // AUTO-RUN on page load (weekdays, 8 AM–8 PM ET)
-  // Skips if a fresh watchlist already exists (< 3 hours old)
   // -----------------------------------------------------------
   async function autoRunIfNeeded() {
     try {
       var now = new Date();
       var et  = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-      if (et.getDay() === 0 || et.getDay() === 6) return; // weekend
+      if (et.getDay() === 0 || et.getDay() === 6) return;
       var hour = et.getHours();
-      if (hour < 8 || hour >= 20) return; // outside trading window
+      if (hour < 8 || hour >= 20) return;
 
       var db = null;
       try { if (window.firebase && window.firebase.firestore) db = window.firebase.firestore(); } catch (e) {}
@@ -368,7 +381,6 @@
         var ageMs   = Date.now() - builtAt;
 
         if (ageMs < 3 * 60 * 60 * 1000) {
-          // Fresh — load existing watchlist into STOCKS_UNIVERSE
           var subSnap = await db
             .collection(TIER0_CONFIG.FIRESTORE_ROOT)
             .doc(today)
@@ -384,15 +396,13 @@
         }
       }
 
-      console.log("[Tier0] No fresh watchlist — auto-building...");
+      console.log("[Tier0] No fresh watchlist \u2014 auto-building...");
       await runTier0(db);
     } catch (e) {
       console.warn("[Tier0] Auto-run error:", e.message || e);
     }
   }
 
-  // Delay 4s to ensure Firebase + STOCKS_CONFIG are fully initialised
   setTimeout(autoRunIfNeeded, 4000);
-
   console.log("[Tier0] Watchlist builder loaded.");
 })();
