@@ -14,11 +14,11 @@
   const __processing  = new Set();
 
   // -----------------------------------------------------------
-  // Fetch LIVE price + changePct from Yahoo Finance
+  // Fetch LIVE price + changePct via Vercel proxy (bypasses Yahoo CORS block)
   // -----------------------------------------------------------
   async function fetchLivePrice(ticker) {
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
+      const url = `/api/price?ticker=${encodeURIComponent(ticker)}`;
       const res = await fetch(url);
       if (!res.ok) return null;
       const json = await res.json();
