@@ -167,7 +167,7 @@
         setStatus("Tier 0 error. Check console.", "error");
       } finally {
         rebuildBtn.disabled = false;
-        rebuildBtn.textContent = "&#x21BB; Rebuild Now";
+        rebuildBtn.innerHTML = "&#x21BB; Rebuild Now";  // FIX: innerHTML so the ↻ entity renders correctly
       }
     });
 
