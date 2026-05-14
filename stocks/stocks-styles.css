@@ -1,9 +1,7 @@
 /* =========================
    STOCKS PAGE — Premium Terminal Styles
-   matches stocks-render.js class names exactly
    ========================= */
 
-/* ── Page wrapper ── */
 .stocks-wrap {
   padding: 14px 14px 8px;
   display: flex;
@@ -11,10 +9,7 @@
   gap: 16px;
 }
 
-/* ── Page header ── */
-.stocks-header {
-  padding: 4px 2px 2px;
-}
+.stocks-header { padding: 4px 2px 2px; }
 
 .stocks-title {
   font-size: 22px;
@@ -32,7 +27,6 @@
   color: rgba(255,255,255,0.45);
 }
 
-/* ── Controls bar (status + run button) ── */
 .stocks-controls {
   display: flex;
   align-items: center;
@@ -46,7 +40,6 @@
   box-shadow: 0 10px 24px rgba(0,0,0,0.25);
 }
 
-/* Status pill */
 .stocks-status {
   display: inline-flex;
   align-items: center;
@@ -87,7 +80,6 @@
   50%      { transform: scale(1.35); opacity: 0.75; }
 }
 
-/* Run Screener button */
 .stocks-run-btn {
   padding: 10px 18px;
   border-radius: 14px;
@@ -99,25 +91,14 @@
     radial-gradient(500px 140px at 50% -40px, rgba(187,0,0,0.45), transparent 65%),
     rgba(187,0,0,0.80);
   border: 1px solid rgba(187,0,0,0.50);
-  box-shadow:
-    0 14px 32px rgba(187,0,0,0.24),
-    0 12px 22px rgba(0,0,0,0.35);
-  transition: transform 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease;
+  box-shadow: 0 14px 32px rgba(187,0,0,0.24), 0 12px 22px rgba(0,0,0,0.35);
+  transition: transform 0.14s ease, filter 0.14s ease;
   white-space: nowrap;
 }
 
-.stocks-run-btn:active {
-  transform: translateY(1px) scale(0.99);
-  filter: brightness(1.08);
-}
+.stocks-run-btn:active  { transform: translateY(1px) scale(0.99); filter: brightness(1.08); }
+.stocks-run-btn:disabled { opacity: 0.55; filter: grayscale(0.3); box-shadow: none; }
 
-.stocks-run-btn:disabled {
-  opacity: 0.55;
-  filter: grayscale(0.3);
-  box-shadow: none;
-}
-
-/* ── Market badge ── */
 .stocks-market-badge {
   font-size: 13px;
   font-weight: 900;
@@ -147,14 +128,12 @@
   color: rgba(255,255,255,0.65);
 }
 
-/* ── Signals list ── */
 .stocks-signals-list {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-/* ── Empty state ── */
 .stocks-empty {
   display: flex;
   align-items: center;
@@ -170,7 +149,6 @@
   letter-spacing: 0.2px;
 }
 
-/* ── Loading dots ── */
 .stocks-loading {
   display: flex;
   flex-direction: row;
@@ -209,7 +187,7 @@
 }
 
 /* =========================
-   SIGNAL CARD — stock-signal-card
+   SIGNAL CARD
    ========================= */
 
 .stock-signal-card {
@@ -220,9 +198,7 @@
   background:
     radial-gradient(700px 200px at 50% -30px, rgba(255,255,255,0.04), transparent 60%),
     rgba(38,38,38,0.90);
-  box-shadow:
-    0 18px 40px rgba(0,0,0,0.45),
-    0 0 0 1px rgba(255,255,255,0.04) inset;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   padding: 0;
@@ -234,13 +210,10 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Direction-based left edge glow */
 .stock-signal-card::before {
   content: "";
   position: absolute;
-  left: 0;
-  top: 14px;
-  bottom: 14px;
+  left: 0; top: 14px; bottom: 14px;
   width: 4px;
   border-radius: 999px;
   background: rgba(156,163,175,0.55);
@@ -248,39 +221,20 @@
   opacity: 0.95;
 }
 
-.stock-signal-card[data-direction="BULLISH"]::before {
-  background: rgba(34,197,94,0.80);
-  box-shadow: 0 0 18px rgba(34,197,94,0.35);
-}
+.stock-signal-card[data-direction="BULLISH"]::before { background: rgba(34,197,94,0.80);  box-shadow: 0 0 18px rgba(34,197,94,0.35); }
+.stock-signal-card[data-direction="BEARISH"]::before { background: rgba(239,68,68,0.80);  box-shadow: 0 0 18px rgba(239,68,68,0.35); }
+.stock-signal-card[data-direction="NEUTRAL"]::before { background: rgba(245,158,11,0.80); box-shadow: 0 0 18px rgba(245,158,11,0.30); }
 
-.stock-signal-card[data-direction="BEARISH"]::before {
-  background: rgba(239,68,68,0.80);
-  box-shadow: 0 0 18px rgba(239,68,68,0.35);
-}
-
-.stock-signal-card[data-direction="NEUTRAL"]::before {
-  background: rgba(245,158,11,0.80);
-  box-shadow: 0 0 18px rgba(245,158,11,0.30);
-}
-
-/* Subtle direction-tinted top bloom */
 .stock-signal-card[data-direction="BULLISH"] {
-  background:
-    radial-gradient(700px 200px at 50% -30px, rgba(34,197,94,0.10), transparent 60%),
-    rgba(38,38,38,0.90);
+  background: radial-gradient(700px 200px at 50% -30px, rgba(34,197,94,0.10), transparent 60%), rgba(38,38,38,0.90);
 }
 .stock-signal-card[data-direction="BEARISH"] {
-  background:
-    radial-gradient(700px 200px at 50% -30px, rgba(239,68,68,0.10), transparent 60%),
-    rgba(38,38,38,0.90);
+  background: radial-gradient(700px 200px at 50% -30px, rgba(239,68,68,0.10), transparent 60%), rgba(38,38,38,0.90);
 }
 .stock-signal-card[data-direction="NEUTRAL"] {
-  background:
-    radial-gradient(700px 200px at 50% -30px, rgba(245,158,11,0.08), transparent 60%),
-    rgba(38,38,38,0.90);
+  background: radial-gradient(700px 200px at 50% -30px, rgba(245,158,11,0.08), transparent 60%), rgba(38,38,38,0.90);
 }
 
-/* Card inner padding (offset from left edge bar) */
 .ssc-header,
 .ssc-price-row,
 .ssc-grid,
@@ -291,7 +245,7 @@
   padding-right: 16px;
 }
 
-/* ── Header row: ticker + direction + confidence ── */
+/* ── Header ── */
 .ssc-header {
   display: flex;
   align-items: center;
@@ -322,7 +276,6 @@
 }
 
 .ssc-confidence {
-  margin-left: auto;
   font-size: 12px;
   font-weight: 1000;
   letter-spacing: 0.8px;
@@ -331,7 +284,37 @@
   flex-shrink: 0;
 }
 
-/* ── Price row: price, change%, signal type ── */
+/* Dismiss (×) button — top-right of header */
+.ssc-dismiss-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.45);
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+
+.ssc-dismiss-btn:hover {
+  background: rgba(239,68,68,0.18);
+  border-color: rgba(239,68,68,0.35);
+  color: #f87171;
+  transform: scale(1.08);
+}
+
+.ssc-dismiss-btn:active {
+  transform: scale(0.96);
+}
+
+/* ── Price row ── */
 .ssc-price-row {
   display: flex;
   align-items: baseline;
@@ -371,7 +354,7 @@
   flex-shrink: 0;
 }
 
-/* ── Data grid: Entry / Target / Stop / RR ── */
+/* ── Data grid ── */
 .ssc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -409,7 +392,7 @@
 .ssc-green { color: #4ade80; }
 .ssc-red   { color: #f87171; }
 
-/* ── AI Reasoning ── */
+/* ── Reasoning ── */
 .ssc-reasoning {
   padding-top: 12px;
   padding-bottom: 12px;
@@ -420,7 +403,7 @@
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 
-/* ── Footer: news + timestamp ── */
+/* ── Footer ── */
 .ssc-footer {
   display: flex;
   align-items: flex-start;
@@ -432,11 +415,7 @@
   flex-wrap: wrap;
 }
 
-/* News section */
-.ssc-news {
-  flex: 1;
-  min-width: 0;
-}
+.ssc-news { flex: 1; min-width: 0; }
 
 .ssc-news-link {
   display: block;
@@ -464,17 +443,21 @@
   word-break: break-word;
 }
 
+/* Full timestamp — wraps naturally on small screens */
 .ssc-time {
-  white-space: nowrap;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: rgba(255,255,255,0.38);
+  color: rgba(255,255,255,0.35);
+  white-space: normal;
+  text-align: right;
   padding-top: 2px;
+  max-width: 160px;
+  line-height: 1.35;
 }
 
-/* ── Expires note ── */
+/* ── Expires ── */
 .ssc-expires {
   padding-bottom: 14px;
   font-size: 11px;
