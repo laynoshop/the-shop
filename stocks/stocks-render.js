@@ -1,8 +1,7 @@
 // stocks/stocks-render.js
-// Renders the Stocks tab UI:
-//   - API key entry panel (first-time setup)
-//   - Live signal cards from Firestore
-//   - Screener run button + status
+// Renders the Stocks tab UI.
+// Keys come from window.STOCKS_CONFIG (loaded by stocks-init.js via Remote Config).
+// No manual key entry panel — keys are managed in Firebase Remote Config.
 
 (function () {
   "use strict";
@@ -12,9 +11,9 @@
   // -----------------------------------------------------------
   function directionBadge(direction) {
     const map = {
-      BULLISH: { color: "#22c55e", icon: "▲", label: "BULLISH" },
-      BEARISH: { color: "#ef4444", icon: "▼", label: "BEARISH" },
-      NEUTRAL: { color: "#f59e0b", icon: "●", label: "NEUTRAL" }
+      BULLISH: { color: "#22c55e", icon: "\u25b2", label: "BULLISH" },
+      BEARISH: { color: "#ef4444", icon: "\u25bc", label: "BEARISH" },
+      NEUTRAL: { color: "#f59e0b", icon: "\u25cf", label: "NEUTRAL" }
     };
     return map[direction] || map.NEUTRAL;
   }
@@ -30,12 +29,12 @@
 
   function newsImpactBadge(impact) {
     const map = {
-      POSITIVE: "🟢",
-      NEGATIVE: "🔴",
-      NEUTRAL:  "🟡",
-      NONE:     "⚪"
+      POSITIVE: "\uD83D\uDFE2",
+      NEGATIVE: "\uD83D\uDD34",
+      NEUTRAL:  "\uD83D\uDFE1",
+      NONE:     "\u26AA"
     };
-    return map[impact] || "⚪";
+    return map[impact] || "\u26AA";
   }
 
   function fmtTime(ts) {
@@ -50,23 +49,23 @@
   // Render a single signal card
   // -----------------------------------------------------------
   function renderSignalCard(signal) {
-    const dir  = directionBadge(signal.direction);
-    const conf = confidenceBadge(signal.confidence);
+    const dir      = directionBadge(signal.direction);
+    const conf     = confidenceBadge(signal.confidence);
     const newsIcon = newsImpactBadge(signal.news_impact);
-    const changeSign = signal.changePct >= 0 ? "+" : "";
+    const changeSign = (signal.changePct || 0) >= 0 ? "+" : "";
 
     return `
-      <div class="stock-signal-card" data-direction="${signal.direction}">
+      <div class="stock-signal-card" data-direction="${signal.direction || "NEUTRAL"}">
         <div class="ssc-header">
           <div class="ssc-ticker">${signal.ticker}</div>
           <div class="ssc-direction" style="color:${dir.color}">${dir.icon} ${dir.label}</div>
-          <div class="ssc-confidence" style="background:${conf.bg};color:${conf.color}">${signal.confidence}</div>
+          <div class="ssc-confidence" style="background:${conf.bg};color:${conf.color}">${signal.confidence || "--"}</div>
         </div>
 
         <div class="ssc-price-row">
-          <span class="ssc-price">$${signal.price}</span>
-          <span class="ssc-change" style="color:${signal.changePct >= 0 ? '#22c55e' : '#ef4444'}">${changeSign}${signal.changePct}%</span>
-          <span class="ssc-type">${signal.signal_type}</span>
+          <span class="ssc-price">$${signal.price || "--"}</span>
+          <span class="ssc-change" style="color:${(signal.changePct || 0) >= 0 ? '#22c55e' : '#ef4444'}">${changeSign}${signal.changePct || 0}%</span>
+          <span class="ssc-type">${signal.signal_type || ""}</span>
         </div>
 
         <div class="ssc-grid">
@@ -101,28 +100,15 @@
   }
 
   // -----------------------------------------------------------
-  // API Key Setup Panel (shown on first visit)
+  // Loading skeleton shown while keys are fetching
   // -----------------------------------------------------------
-  function renderKeySetupPanel() {
+  function renderLoadingSkeleton() {
     return `
-      <div class="stocks-setup-panel">
-        <div class="stocks-setup-title">⚙️ Stocks Setup</div>
-        <div class="stocks-setup-sub">Enter your API keys to activate the signal engine. Keys are stored in memory only — never saved to Firestore or GitHub.</div>
-
-        <div class="stocks-key-row">
-          <label class="stocks-key-label">Finnhub API Key</label>
-          <input type="password" id="sKeyFinnhub" class="stocks-key-input" placeholder="Paste Finnhub key here" autocomplete="off" />
-        </div>
-        <div class="stocks-key-row">
-          <label class="stocks-key-label">Alpha Vantage API Key</label>
-          <input type="password" id="sKeyAlpha" class="stocks-key-input" placeholder="Paste Alpha Vantage key here" autocomplete="off" />
-        </div>
-        <div class="stocks-key-row">
-          <label class="stocks-key-label">OpenAI API Key</label>
-          <input type="password" id="sKeyOpenAI" class="stocks-key-input" placeholder="Paste OpenAI key here" autocomplete="off" />
-        </div>
-
-        <button class="stocks-save-keys-btn" id="stocksSaveKeys" type="button">Save Keys &amp; Start Engine</button>
+      <div class="stocks-loading">
+        <div class="stocks-loading-dot"></div>
+        <div class="stocks-loading-dot"></div>
+        <div class="stocks-loading-dot"></div>
+        <div class="stocks-loading-text">Loading stock engine\u2026</div>
       </div>
     `;
   }
@@ -134,25 +120,24 @@
     const content = document.getElementById("content");
     if (!content) return;
 
-    const keysSet = !!(window.__STOCKS_FINNHUB_KEY && window.__STOCKS_OPENAI_KEY);
+    const cfg     = window.STOCKS_CONFIG || {};
+    const keysSet = !!(cfg.FINNHUB_KEY && cfg.FMP_KEY);
 
     content.innerHTML = `
       <div class="stocks-wrap">
 
         <div class="stocks-header">
-          <div class="stocks-title">📈 Stock Signals</div>
+          <div class="stocks-title">\uD83D\uDCC8 Stock Signals</div>
           <div class="stocks-subtitle">AI-powered Tier 1 + Tier 2 signal engine</div>
         </div>
 
-        ${!keysSet ? renderKeySetupPanel() : ""}
-
-        ${keysSet ? `
+        ${!keysSet ? renderLoadingSkeleton() : `
           <div class="stocks-controls">
             <div class="stocks-status" id="stocksStatus">
               <span class="stocks-status-dot" id="stocksDot"></span>
               <span id="stocksStatusText">Engine ready</span>
             </div>
-            <button class="stocks-run-btn" id="stocksRunBtn" type="button">▶ Run Screener Now</button>
+            <button class="stocks-run-btn" id="stocksRunBtn" type="button">&#x25B6; Run Screener Now</button>
           </div>
 
           <div class="stocks-market-badge" id="stocksMarketBadge"></div>
@@ -160,13 +145,14 @@
           <div class="stocks-signals-list" id="stocksSignalsList">
             <div class="stocks-empty">No signals yet. Run the screener or wait for the next auto-scan.</div>
           </div>
-        ` : ""}
+        `}
 
       </div>
     `;
 
     if (!keysSet) {
-      bindKeySetup();
+      // Keys not loaded yet — wait for Remote Config then re-render
+      waitForKeysAndRerender();
     } else {
       bindControls();
       updateMarketBadge();
@@ -175,30 +161,24 @@
   }
 
   // -----------------------------------------------------------
-  // Bind key setup form
+  // Poll until Remote Config keys are loaded, then re-render
   // -----------------------------------------------------------
-  function bindKeySetup() {
-    const btn = document.getElementById("stocksSaveKeys");
-    if (!btn) return;
-
-    btn.addEventListener("click", () => {
-      const fk = (document.getElementById("sKeyFinnhub")?.value || "").trim();
-      const ak = (document.getElementById("sKeyAlpha")?.value || "").trim();
-      const ok = (document.getElementById("sKeyOpenAI")?.value || "").trim();
-
-      if (!fk || !ok) {
-        alert("Please enter at least your Finnhub and OpenAI keys to continue.");
+  function waitForKeysAndRerender() {
+    let tries = 0;
+    const t = setInterval(() => {
+      tries++;
+      const cfg = window.STOCKS_CONFIG || {};
+      if (cfg.FINNHUB_KEY && cfg.FMP_KEY) {
+        clearInterval(t);
+        renderStocks();
         return;
       }
-
-      // Store in memory only — never written to Firestore or localStorage
-      window.__STOCKS_FINNHUB_KEY     = fk;
-      window.__STOCKS_ALPHAVANTAGE_KEY = ak || null;
-      window.__STOCKS_OPENAI_KEY      = ok;
-
-      console.log("[Stocks] API keys saved to memory.");
-      renderStocks(); // re-render with engine panel
-    });
+      if (tries > 60) {
+        clearInterval(t);
+        const content = document.getElementById("content");
+        if (content) content.innerHTML = `<div class="stocks-wrap"><div class="notice">\u26A0\uFE0F Could not load stock engine keys. Check Firebase Remote Config.</div></div>`;
+      }
+    }, 500);
   }
 
   // -----------------------------------------------------------
@@ -210,7 +190,7 @@
 
     runBtn.addEventListener("click", async () => {
       runBtn.disabled = true;
-      runBtn.textContent = "⏳ Scanning...";
+      runBtn.textContent = "\u23F3 Scanning...";
       setStatus("Running Tier 1 screener...", "active");
 
       try {
@@ -218,24 +198,23 @@
         if (!db) { alert("Firestore not ready. Try again in a moment."); return; }
 
         const candidates = await window.runTier1Screener(db);
-        setStatus(`Tier 1 complete — ${candidates.length} candidate(s) flagged. Running AI analysis...`, "active");
+        setStatus(`Tier 1 complete \u2014 ${candidates.length} candidate(s) flagged. Running AI analysis...`, "active");
 
         if (candidates.length === 0) {
           setStatus("No signals triggered. Markets may be quiet.", "idle");
         }
-        // Tier 2 listener fires automatically via Firestore onSnapshot
       } catch (e) {
         console.error("[Stocks] Screener error:", e);
         setStatus("Error running screener. Check console.", "error");
       } finally {
         runBtn.disabled = false;
-        runBtn.textContent = "▶ Run Screener Now";
+        runBtn.textContent = "\u25B6 Run Screener Now";
       }
     });
   }
 
   // -----------------------------------------------------------
-  // Listen to Firestore for new signal cards and render them
+  // Listen to Firestore for new signal cards
   // -----------------------------------------------------------
   let __signalListener = null;
 
@@ -245,14 +224,14 @@
     const db = getDb();
     if (!db) return;
 
-    const cfg = window.STOCKS_CONFIG;
+    const cfg = window.STOCKS_CONFIG || {};
 
-    // Also kick off Tier 2 listener
     if (typeof window.startTier2Listener === "function") {
       window.startTier2Listener(db);
     }
 
-    __signalListener = db.collection(cfg.SIGNALS_COLLECTION)
+    __signalListener = db
+      .collection(cfg.SIGNALS_COLLECTION || "stockSignals")
       .orderBy("generatedAt", "desc")
       .limit(50)
       .onSnapshot((snapshot) => {
@@ -265,10 +244,7 @@
         }
 
         const cards = [];
-        snapshot.forEach(doc => {
-          cards.push(renderSignalCard(doc.data()));
-        });
-
+        snapshot.forEach(doc => cards.push(renderSignalCard(doc.data())));
         list.innerHTML = cards.join("");
         setStatus(`${cards.length} active signal(s)`, "idle");
       }, (err) => {
@@ -280,8 +256,8 @@
   // Status bar helper
   // -----------------------------------------------------------
   function setStatus(msg, state) {
-    const txt  = document.getElementById("stocksStatusText");
-    const dot  = document.getElementById("stocksDot");
+    const txt = document.getElementById("stocksStatusText");
+    const dot = document.getElementById("stocksDot");
     if (txt) txt.textContent = msg;
     if (dot) dot.className = "stocks-status-dot" + (state ? " stocks-dot-" + state : "");
   }
@@ -294,8 +270,8 @@
     if (!badge) return;
     const open = typeof window.isMarketOpen === "function" ? window.isMarketOpen() : false;
     badge.innerHTML = open
-      ? `<span class="stocks-market-open">🟢 Market Open</span>`
-      : `<span class="stocks-market-closed">🔴 Market Closed — Signals reflect last session</span>`;
+      ? `<span class="stocks-market-open">\uD83D\uDFE2 Market Open</span>`
+      : `<span class="stocks-market-closed">\uD83D\uDD34 Market Closed \u2014 Signals reflect last session</span>`;
   }
 
   // -----------------------------------------------------------
@@ -310,7 +286,6 @@
     return null;
   }
 
-  // Expose
   window.renderStocks = renderStocks;
 
   console.log("[Stocks] Render module loaded.");
