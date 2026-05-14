@@ -1,12 +1,16 @@
 // stocks/stocks-signals.js
 // TIER 2 — LLM Signal Reasoning
 // Listens to Firestore for new Tier 1 candidates (tier2Processed: false)
-// and calls OpenAI to generate a structured signal card.
-// In production, this Firestore trigger runs as a Cloud Function.
-// For testing, this file polls Firestore from the browser.
+// and calls the stocksAISignal Cloud Function to generate a structured signal card.
+// The Cloud Function holds the OpenAI key in Secret Manager — key never touches the browser.
 
 (function () {
   "use strict";
+
+  // ============================================================
+  // Cloud Function URL — key lives in Google Secret Manager
+  // ============================================================
+  const AI_SIGNAL_URL = "https://us-central1-the-shop-chat.cloudfunctions.net/stocksAISignal";
 
   let __tier2Listener = null;
 
@@ -15,7 +19,7 @@
   // -----------------------------------------------------------
   async function fetchNewsHeadline(ticker) {
     try {
-      const key = window.__STOCKS_FINNHUB_KEY;
+      const key = (window.STOCKS_CONFIG || {}).FINNHUB_KEY || "";
       if (!key) return "No recent news found.";
 
       const to   = new Date();
@@ -27,7 +31,6 @@
       if (!res.ok) return "No recent news found.";
       const articles = await res.json();
       if (!articles || !articles.length) return "No recent news found.";
-      // Return the most recent headline
       return articles[0].headline || "No recent news found.";
     } catch {
       return "No recent news found.";
@@ -35,87 +38,39 @@
   }
 
   // -----------------------------------------------------------
-  // Build the prompt we send to OpenAI
-  // -----------------------------------------------------------
-  function buildPrompt(candidate, newsHeadline) {
-    const dir = candidate.changePct >= 0 ? "up" : "down";
-    const rsiNote = candidate.rsi !== null
-      ? `RSI: ${candidate.rsi} (${candidate.rsi > 70 ? "overbought" : candidate.rsi < 30 ? "oversold" : "neutral"})`
-      : "RSI: unavailable";
-    const macdNote = candidate.macdCrossed
-      ? `MACD: ${candidate.macdBullish ? "Bullish" : "Bearish"} crossover detected (histogram: ${candidate.macdHist})`
-      : "MACD: No crossover";
-
-    return `You are a professional stock trading analyst focused on short-term day trading opportunities.
-
-Analyze the following real-time market data and generate a structured signal report.
-
---- MARKET DATA ---
-Ticker: ${candidate.ticker}
-Current Price: $${candidate.price}
-Previous Close: $${candidate.prevClose}
-Price Change: ${candidate.changePct > 0 ? "+" : ""}${candidate.changePct}% (${dir})
-${rsiNote}
-${macdNote}
-Latest News: "${newsHeadline}"
-
---- YOUR TASK ---
-Respond ONLY with a valid JSON object (no markdown, no code blocks, just raw JSON) in this exact format:
-
-{
-  "direction": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "confidence": "HIGH" | "MEDIUM" | "LOW",
-  "signal_type": "Momentum Breakout" | "Oversold Bounce" | "MACD Crossover" | "News Catalyst" | "Overbought Reversal" | "Bearish Breakdown",
-  "entry_zone": "string (e.g. $168.20 - $168.80)",
-  "target": "string (e.g. $171.50 — +1.9%)",
-  "stop_loss": "string (e.g. $166.90 — -0.8%)",
-  "risk_reward": "string (e.g. 2.4:1)",
-  "time_horizon": "string (e.g. Same session, 2-4 hours)",
-  "reasoning": "2-3 sentence plain English analysis of why this signal fired and what to watch for.",
-  "news_impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "NONE",
-  "expires_note": "string (e.g. Signal valid until market close or reversal)"
-}
-
-Only output the JSON. No other text.`;
-  }
-
-  // -----------------------------------------------------------
-  // Call OpenAI API
+  // Call the stocksAISignal Cloud Function (OpenAI key is server-side)
   // Returns parsed signal object or null
   // -----------------------------------------------------------
-  async function callOpenAI(prompt) {
+  async function callAISignal(candidate, newsHeadline) {
     try {
-      const key = window.__STOCKS_OPENAI_KEY;
-      if (!key) { console.warn("[Stocks Tier2] OpenAI key not set."); return null; }
-
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch(AI_SIGNAL_URL, {
         method: "POST",
-        headers: {
-          "Authorization": "Bearer " + key,
-          "Content-Type":  "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.3,
-          max_tokens: 500
+          ticker:      candidate.ticker,
+          price:       candidate.price,
+          rsi:         candidate.rsi,
+          macd:        candidate.macdHist,
+          macdSignal:  candidate.macdBullish !== undefined ? (candidate.macdBullish ? "bullish" : "bearish") : null,
+          ema20:       candidate.ema20 || null,
+          ema50:       candidate.ema50 || null,
+          sentiment:   candidate.changePct || null,
+          pe:          candidate.pe || null,
+          earningsDate: candidate.earningsDate || "",
+          newsHeadline
         })
       });
 
       if (!res.ok) {
         const err = await res.text();
-        console.error("[Stocks Tier2] OpenAI error:", err);
+        console.error("[Stocks Tier2] Cloud Function error:", err);
         return null;
       }
 
       const data = await res.json();
-      const raw  = data?.choices?.[0]?.message?.content || "";
-
-      // Parse the JSON response
-      const signal = JSON.parse(raw.trim());
-      return signal;
+      return data?.analysis || null;
     } catch (e) {
-      console.error("[Stocks Tier2] callOpenAI failed:", e);
+      console.error("[Stocks Tier2] callAISignal failed:", e);
       return null;
     }
   }
@@ -125,7 +80,7 @@ Only output the JSON. No other text.`;
   // -----------------------------------------------------------
   async function writeSignalCard(db, candidate, signal, newsHeadline) {
     try {
-      const cfg = window.STOCKS_CONFIG;
+      const cfg = window.STOCKS_CONFIG || {};
 
       const card = {
         ticker:      candidate.ticker,
@@ -136,28 +91,26 @@ Only output the JSON. No other text.`;
         newsHeadline,
         generatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         // LLM output fields:
-        direction:    signal.direction,
+        direction:    signal.signal   || signal.direction   || "NEUTRAL",
         confidence:   signal.confidence,
-        signal_type:  signal.signal_type,
-        entry_zone:   signal.entry_zone,
-        target:       signal.target,
-        stop_loss:    signal.stop_loss,
-        risk_reward:  signal.risk_reward,
-        time_horizon: signal.time_horizon,
-        reasoning:    signal.reasoning,
-        news_impact:  signal.news_impact,
-        expires_note: signal.expires_note
+        signal_type:  signal.signal_type  || "",
+        entry_zone:   signal.entry_zone   || "",
+        target:       signal.target       || "",
+        stop_loss:    signal.stop_loss    || "",
+        risk_reward:  signal.risk_reward  || "",
+        time_horizon: signal.time_horizon || "",
+        reasoning:    signal.summary      || signal.reasoning || "",
+        news_impact:  signal.news_impact  || "NONE",
+        expires_note: signal.expires_note || ""
       };
 
-      // Write signal card
-      await db.collection(cfg.SIGNALS_COLLECTION).add(card);
+      await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").add(card);
 
-      // Mark candidate as processed so we don't re-run it
-      await db.collection(cfg.CANDIDATES_COLLECTION).doc(candidate.ticker).update({
+      await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(candidate.ticker).update({
         tier2Processed: true
       });
 
-      console.log(`[Stocks Tier2] ✅ Signal card written: ${candidate.ticker} — ${signal.direction} (${signal.confidence})`);
+      console.log(`[Stocks Tier2] \u2705 Signal card written: ${candidate.ticker} \u2014 ${card.direction} (${card.confidence})`);
     } catch (e) {
       console.error("[Stocks Tier2] writeSignalCard error:", e);
     }
@@ -170,8 +123,7 @@ Only output the JSON. No other text.`;
     console.log(`[Stocks Tier2] Processing: ${candidate.ticker}`);
 
     const newsHeadline = await fetchNewsHeadline(candidate.ticker);
-    const prompt       = buildPrompt(candidate, newsHeadline);
-    const signal       = await callOpenAI(prompt);
+    const signal       = await callAISignal(candidate, newsHeadline);
 
     if (!signal) {
       console.warn(`[Stocks Tier2] No signal returned for ${candidate.ticker}`);
@@ -187,15 +139,15 @@ Only output the JSON. No other text.`;
   // -----------------------------------------------------------
   function startTier2Listener(db) {
     if (__tier2Listener) {
-      __tier2Listener(); // unsubscribe existing
+      __tier2Listener();
       __tier2Listener = null;
     }
 
-    const cfg = window.STOCKS_CONFIG;
+    const cfg = window.STOCKS_CONFIG || {};
+    console.log("[Stocks Tier2] Listener started \u2014 watching for new candidates...");
 
-    console.log("[Stocks Tier2] Listener started — watching for new candidates...");
-
-    __tier2Listener = db.collection(cfg.CANDIDATES_COLLECTION)
+    __tier2Listener = db
+      .collection(cfg.CANDIDATES_COLLECTION || "stockCandidates")
       .where("tier2Processed", "==", false)
       .onSnapshot(async (snapshot) => {
         for (const change of snapshot.docChanges()) {
