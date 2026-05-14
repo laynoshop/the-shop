@@ -169,9 +169,17 @@
 
   <!-- =========================
        STOCKS MODULE
-       (data first, render second, init last)
+       Load order:
+         1. data    — static fallback universe + STOCKS_CONFIG shape
+         2. tier0   — dynamic watchlist builder, overwrites STOCKS_UNIVERSE
+         3. screener — Tier 1, uses STOCKS_UNIVERSE set by tier0
+         4. signals  — Tier 2 AI analysis
+         5. watchlist — Firestore live-read for the overlay
+         6. render   — UI
+         7. init     — boots Remote Config keys last
        ========================= -->
   <script src="stocks/stocks-data.js" defer onerror="__splitFail('stocks/stocks-data.js')"></script>
+  <script src="stocks/stocks-tier0.js" defer onerror="__splitFail('stocks/stocks-tier0.js')"></script>
   <script src="stocks/stocks-screener.js" defer onerror="__splitFail('stocks/stocks-screener.js')"></script>
   <script src="stocks/stocks-signals.js" defer onerror="__splitFail('stocks/stocks-signals.js')"></script>
   <script src="stocks/stocks-watchlist.js" defer onerror="__splitFail('stocks/stocks-watchlist.js')"></script>
