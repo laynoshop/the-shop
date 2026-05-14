@@ -1,9 +1,12 @@
 // stocks/stocks-render.js
-// Renders the Stocks tab UI.
+// Renders the Stocks tab UI — with day grouping, recurrence badges, and history overlay.
 
 (function () {
   "use strict";
 
+  // -----------------------------------------------------------
+  // Direction helpers
+  // -----------------------------------------------------------
   function normalizeDirection(raw) {
     if (!raw) return "NEUTRAL";
     const v = String(raw).toUpperCase().trim();
@@ -59,6 +62,29 @@
     } catch { return "--"; }
   }
 
+  // Return a YYYY-MM-DD string for grouping
+  function dayKey(ts) {
+    if (!ts) return "unknown";
+    try {
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toISOString().slice(0, 10);
+    } catch { return "unknown"; }
+  }
+
+  // Human-readable banner label for a day key
+  function dayLabel(key) {
+    if (key === "unknown") return "Unknown Date";
+    const today = new Date();
+    const todayKey = today.toISOString().slice(0, 10);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yKey = yesterday.toISOString().slice(0, 10);
+    if (key === todayKey) return "Today";
+    if (key === yKey)     return "Yesterday";
+    const d = new Date(key + "T12:00:00"); // noon to avoid TZ edge cases
+    return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+  }
+
   function field(signal, ...keys) {
     for (const k of keys) {
       const v = signal[k];
@@ -68,15 +94,110 @@
   }
 
   // -----------------------------------------------------------
-  // Show inline confirmation overlay on the card.
-  // Two outcomes: confirm → delete + animate out | cancel → restore card
+  // TICKER HISTORY OVERLAY
+  // Opens a slide-in panel showing all stored signals for a ticker
+  // -----------------------------------------------------------
+  function openHistoryOverlay(ticker, allSignals) {
+    // Remove any existing overlay
+    const existing = document.getElementById("ssc-history-overlay");
+    if (existing) existing.remove();
+
+    const tickerSignals = allSignals
+      .filter(s => (s.ticker || "").toUpperCase() === ticker.toUpperCase())
+      .sort((a, b) => {
+        const ta = a.generatedAt ? (a.generatedAt.toDate ? a.generatedAt.toDate() : new Date(a.generatedAt)) : 0;
+        const tb = b.generatedAt ? (b.generatedAt.toDate ? b.generatedAt.toDate() : new Date(b.generatedAt)) : 0;
+        return tb - ta; // newest first
+      });
+
+    const overlay = document.createElement("div");
+    overlay.id = "ssc-history-overlay";
+    overlay.className = "ssc-history-overlay";
+    overlay.innerHTML = `
+      <div class="ssc-history-backdrop"></div>
+      <div class="ssc-history-panel">
+        <div class="ssc-history-header">
+          <div class="ssc-history-title">
+            <span class="ssc-history-ticker">${ticker}</span>
+            <span class="ssc-history-subtitle">Signal History &mdash; Last 7 Days</span>
+          </div>
+          <button class="ssc-history-close" aria-label="Close history">&#x2715;</button>
+        </div>
+        <div class="ssc-history-count">${tickerSignals.length} signal${tickerSignals.length !== 1 ? "s" : ""} found</div>
+        <div class="ssc-history-scroll">
+          ${tickerSignals.map(s => renderHistoryCard(s)).join("")}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("ssc-history-visible"));
+
+    // Close on backdrop click or X button
+    overlay.querySelector(".ssc-history-backdrop").addEventListener("click", () => closeHistoryOverlay());
+    overlay.querySelector(".ssc-history-close").addEventListener("click",   () => closeHistoryOverlay());
+  }
+
+  function closeHistoryOverlay() {
+    const overlay = document.getElementById("ssc-history-overlay");
+    if (!overlay) return;
+    overlay.classList.remove("ssc-history-visible");
+    setTimeout(() => overlay.remove(), 280);
+  }
+
+  // A compact version of the signal card for use inside the history panel
+  function renderHistoryCard(signal) {
+    const rawDir    = signal.direction || signal.signal || "NEUTRAL";
+    const normDir   = normalizeDirection(rawDir);
+    const dir       = directionBadge(normDir);
+    const conf      = renderConfidence(signal.confidence);
+    const newsIcon  = newsImpactBadge(signal.news_impact);
+    const changeSign = (signal.changePct || 0) >= 0 ? "+" : "";
+
+    const entryZone  = field(signal, "entry_zone",  "entry",       "entryZone",  "entry_price");
+    const target     = field(signal, "target",      "take_profit",  "takeProfit", "target_price");
+    const stopLoss   = field(signal, "stop_loss",   "stopLoss",    "stop",       "stop_price");
+    const riskReward = field(signal, "risk_reward", "riskReward",  "r_r",        "rr");
+
+    const headline = signal.newsHeadline || "No recent news";
+    const newsUrl  = signal.newsUrl || signal.news_url || "";
+    const newsHtml = newsUrl
+      ? `<a href="${newsUrl}" target="_blank" rel="noopener noreferrer" class="ssc-news-link">${newsIcon} ${headline}</a>`
+      : `<span class="ssc-news-plain">${newsIcon} ${headline}</span>`;
+
+    return `
+      <div class="stock-signal-card ssc-history-card" data-direction="${normDir}">
+        <div class="ssc-header">
+          <div class="ssc-ticker">${signal.ticker}</div>
+          <div class="ssc-direction" style="color:${dir.color}">${dir.icon} ${dir.label}</div>
+          <div class="ssc-confidence" style="background:${conf.bg};color:${conf.color}">${conf.label}</div>
+        </div>
+        <div class="ssc-price-row">
+          <span class="ssc-price">$${signal.price || "--"}</span>
+          <span class="ssc-change" style="color:${(signal.changePct || 0) >= 0 ? "#22c55e" : "#ef4444"}">${changeSign}${signal.changePct || 0}%</span>
+          <span class="ssc-type">${field(signal, "signal_type", "signalType", "type")}</span>
+        </div>
+        <div class="ssc-grid">
+          <div class="ssc-cell"><div class="ssc-label">Entry Zone</div><div class="ssc-val">${entryZone}</div></div>
+          <div class="ssc-cell"><div class="ssc-label">Target</div><div class="ssc-val ssc-green">${target}</div></div>
+          <div class="ssc-cell"><div class="ssc-label">Stop Loss</div><div class="ssc-val ssc-red">${stopLoss}</div></div>
+          <div class="ssc-cell"><div class="ssc-label">Risk / Reward</div><div class="ssc-val">${riskReward}</div></div>
+        </div>
+        <div class="ssc-reasoning">${field(signal, "reasoning", "summary", "analysis", "reason")}</div>
+        <div class="ssc-footer">
+          <div class="ssc-news">${newsHtml}</div>
+          <span class="ssc-time">${fmtTimestamp(signal.generatedAt)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // -----------------------------------------------------------
+  // DISMISS CONFIRM
   // -----------------------------------------------------------
   function showDismissConfirm(card, docId) {
-    // Prevent double-overlays
     if (card.querySelector(".ssc-confirm-overlay")) return;
-
     const ticker = (card.querySelector(".ssc-ticker") || {}).textContent || "this signal";
-
     const overlay = document.createElement("div");
     overlay.className = "ssc-confirm-overlay";
     overlay.innerHTML = `
@@ -89,32 +210,24 @@
         </div>
       </div>
     `;
-
     card.appendChild(overlay);
-
-    // Trigger fade-in on next frame
     requestAnimationFrame(() => overlay.classList.add("ssc-confirm-visible"));
 
-    // Cancel
     overlay.querySelector(".ssc-confirm-cancel").addEventListener("click", (e) => {
       e.stopPropagation();
       overlay.classList.remove("ssc-confirm-visible");
       setTimeout(() => overlay.remove(), 220);
     });
 
-    // Confirm → delete
     overlay.querySelector(".ssc-confirm-yes").addEventListener("click", async (e) => {
       e.stopPropagation();
       overlay.classList.remove("ssc-confirm-visible");
-
-      // Animate card out
       card.style.transition = "opacity 0.25s ease, transform 0.25s ease, max-height 0.35s ease, margin-bottom 0.35s ease";
       card.style.overflow   = "hidden";
       card.style.opacity    = "0";
       card.style.transform  = "scale(0.97) translateY(-4px)";
       card.style.maxHeight  = card.offsetHeight + "px";
       setTimeout(() => { card.style.maxHeight = "0"; card.style.marginBottom = "0"; }, 30);
-
       try {
         const db  = getDb();
         const cfg = window.STOCKS_CONFIG || {};
@@ -122,20 +235,14 @@
         setTimeout(() => card.remove(), 400);
       } catch (err) {
         console.error("[Stocks] Dismiss error:", err);
-        // Roll back
-        card.style.opacity      = "1";
-        card.style.transform    = "none";
-        card.style.maxHeight    = "";
-        card.style.marginBottom = "";
+        card.style.opacity = "1"; card.style.transform = "none";
+        card.style.maxHeight = ""; card.style.marginBottom = "";
         setTimeout(() => overlay.remove(), 10);
         alert("Could not remove signal. Check permissions.");
       }
     });
   }
 
-  // -----------------------------------------------------------
-  // Bind dismiss buttons — opens inline confirm instead of deleting immediately
-  // -----------------------------------------------------------
   function bindDismissButtons() {
     document.querySelectorAll(".ssc-dismiss-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -149,9 +256,10 @@
   }
 
   // -----------------------------------------------------------
-  // Render a single signal card
+  // RENDER SINGLE SIGNAL CARD (main list)
+  // allSignals passed in so recurrence badge can count
   // -----------------------------------------------------------
-  function renderSignalCard(signal, docId) {
+  function renderSignalCard(signal, docId, allSignals) {
     const rawDir     = signal.direction || signal.signal || "NEUTRAL";
     const normDir    = normalizeDirection(rawDir);
     const dir        = directionBadge(normDir);
@@ -170,15 +278,25 @@
       ? `<a href="${newsUrl}" target="_blank" rel="noopener noreferrer" class="ssc-news-link">${newsIcon} ${headline}</a>`
       : `<span class="ssc-news-plain">${newsIcon} ${headline}</span>`;
 
+    // Recurrence badge: count how many times this ticker appears in allSignals
+    const ticker = (signal.ticker || "").toUpperCase();
+    const recurrenceCount = allSignals.filter(s => (s.ticker || "").toUpperCase() === ticker).length;
+    const recurrenceBadge = recurrenceCount > 1
+      ? `<button class="ssc-recurrence-btn" data-ticker="${ticker}" title="View full history for ${ticker}">
+           &#x21BA; ${recurrenceCount}${ordinal(recurrenceCount)} signal this week
+         </button>`
+      : "";
+
     return `
       <div class="stock-signal-card" data-direction="${normDir}">
-
         <div class="ssc-header">
           <div class="ssc-ticker">${signal.ticker}</div>
           <div class="ssc-direction" style="color:${dir.color}">${dir.icon} ${dir.label}</div>
           <div class="ssc-confidence" style="background:${conf.bg};color:${conf.color}">${conf.label}</div>
           <button class="ssc-dismiss-btn" data-docid="${docId}" title="Dismiss signal" aria-label="Dismiss signal">&#x2715;</button>
         </div>
+
+        ${recurrenceBadge}
 
         <div class="ssc-price-row">
           <span class="ssc-price">$${signal.price || "--"}</span>
@@ -187,22 +305,10 @@
         </div>
 
         <div class="ssc-grid">
-          <div class="ssc-cell">
-            <div class="ssc-label">Entry Zone</div>
-            <div class="ssc-val">${entryZone}</div>
-          </div>
-          <div class="ssc-cell">
-            <div class="ssc-label">Target</div>
-            <div class="ssc-val ssc-green">${target}</div>
-          </div>
-          <div class="ssc-cell">
-            <div class="ssc-label">Stop Loss</div>
-            <div class="ssc-val ssc-red">${stopLoss}</div>
-          </div>
-          <div class="ssc-cell">
-            <div class="ssc-label">Risk / Reward</div>
-            <div class="ssc-val">${riskReward}</div>
-          </div>
+          <div class="ssc-cell"><div class="ssc-label">Entry Zone</div><div class="ssc-val">${entryZone}</div></div>
+          <div class="ssc-cell"><div class="ssc-label">Target</div><div class="ssc-val ssc-green">${target}</div></div>
+          <div class="ssc-cell"><div class="ssc-label">Stop Loss</div><div class="ssc-val ssc-red">${stopLoss}</div></div>
+          <div class="ssc-cell"><div class="ssc-label">Risk / Reward</div><div class="ssc-val">${riskReward}</div></div>
         </div>
 
         <div class="ssc-reasoning">${field(signal, "reasoning", "summary", "analysis", "reason")}</div>
@@ -217,6 +323,126 @@
     `;
   }
 
+  // Ordinal suffix: 1st, 2nd, 3rd, 4th...
+  function ordinal(n) {
+    const s = ["th","st","nd","rd"];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+  }
+
+  // -----------------------------------------------------------
+  // GROUP signals by day, render day banners
+  // Today's signals: always expanded, no toggle
+  // Past days: collapsed banner, click to expand
+  // -----------------------------------------------------------
+  function renderGroupedSignals(allDocs, allSignals) {
+    const todayKey = new Date().toISOString().slice(0, 10);
+
+    // Group docs by day
+    const groups = {};
+    allDocs.forEach(({ data, id }) => {
+      const k = dayKey(data.generatedAt);
+      if (!groups[k]) groups[k] = [];
+      groups[k].push({ data, id });
+    });
+
+    // Sort groups: today first, then descending
+    const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+    let html = "";
+
+    sortedKeys.forEach(key => {
+      const isToday = key === todayKey;
+      const groupDocs = groups[key];
+      const label = dayLabel(key);
+      const count = groupDocs.length;
+
+      // Cards HTML for this day
+      const cardsHtml = groupDocs
+        .map(({ data, id }) => renderSignalCard(data, id, allSignals))
+        .join("");
+
+      if (isToday) {
+        // Today: no banner, just show cards
+        html += `
+          <div class="ssc-day-section" data-day="${key}">
+            <div class="ssc-today-label">&#x1F4C5; Today &mdash; ${count} signal${count !== 1 ? "s" : ""}</div>
+            <div class="ssc-day-cards">${cardsHtml}</div>
+          </div>
+        `;
+      } else {
+        // Past days: collapsible banner
+        const groupId = "ssc-group-" + key;
+        html += `
+          <div class="ssc-day-section" data-day="${key}">
+            <button class="ssc-day-banner" data-target="${groupId}" aria-expanded="false">
+              <span class="ssc-day-banner-left">
+                <span class="ssc-day-banner-icon">&#x1F4C5;</span>
+                <span class="ssc-day-banner-label">${label}</span>
+                <span class="ssc-day-banner-count">${count} signal${count !== 1 ? "s" : ""}</span>
+              </span>
+              <span class="ssc-day-banner-chevron">&#x25BC;</span>
+            </button>
+            <div class="ssc-day-cards ssc-day-collapsed" id="${groupId}">${cardsHtml}</div>
+          </div>
+        `;
+      }
+    });
+
+    return html;
+  }
+
+  // -----------------------------------------------------------
+  // Bind day banner toggles and recurrence buttons
+  // -----------------------------------------------------------
+  function bindGroupedInteractions(allSignals) {
+    // Day banner toggle
+    document.querySelectorAll(".ssc-day-banner").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.dataset.target;
+        const panel    = document.getElementById(targetId);
+        if (!panel) return;
+        const isOpen = btn.getAttribute("aria-expanded") === "true";
+        if (isOpen) {
+          panel.style.maxHeight = panel.scrollHeight + "px";
+          requestAnimationFrame(() => {
+            panel.style.maxHeight = "0";
+            panel.style.opacity   = "0";
+          });
+          btn.setAttribute("aria-expanded", "false");
+          btn.querySelector(".ssc-day-banner-chevron").style.transform = "rotate(0deg)";
+          setTimeout(() => panel.classList.add("ssc-day-collapsed"), 320);
+        } else {
+          panel.classList.remove("ssc-day-collapsed");
+          panel.style.maxHeight = "0";
+          panel.style.opacity   = "0";
+          requestAnimationFrame(() => {
+            panel.style.maxHeight = panel.scrollHeight + "px";
+            panel.style.opacity   = "1";
+          });
+          btn.setAttribute("aria-expanded", "true");
+          btn.querySelector(".ssc-day-banner-chevron").style.transform = "rotate(180deg)";
+          setTimeout(() => { panel.style.maxHeight = ""; }, 350);
+        }
+      });
+    });
+
+    // Recurrence badge → open history overlay
+    document.querySelectorAll(".ssc-recurrence-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const ticker = btn.dataset.ticker;
+        if (ticker) openHistoryOverlay(ticker, allSignals);
+      });
+    });
+
+    // Dismiss buttons
+    bindDismissButtons();
+  }
+
+  // -----------------------------------------------------------
+  // Loading skeleton
+  // -----------------------------------------------------------
   function renderLoadingSkeleton() {
     return `
       <div class="stocks-loading">
@@ -228,6 +454,9 @@
     `;
   }
 
+  // -----------------------------------------------------------
+  // Main render
+  // -----------------------------------------------------------
   function renderStocks() {
     const content = document.getElementById("content");
     if (!content) return;
@@ -321,7 +550,7 @@
     __signalListener = db
       .collection(cfg.SIGNALS_COLLECTION || "stockSignals")
       .orderBy("generatedAt", "desc")
-      .limit(50)
+      .limit(200) // increased limit to support history lookback
       .onSnapshot((snapshot) => {
         const list = document.getElementById("stocksSignalsList");
         if (!list) return;
@@ -331,11 +560,19 @@
           return;
         }
 
-        const cards = [];
-        snapshot.forEach(doc => cards.push(renderSignalCard(doc.data(), doc.id)));
-        list.innerHTML = cards.join("");
-        bindDismissButtons();
-        setStatus(`${cards.length} active signal(s)`, "idle");
+        // Build flat arrays for grouping + recurrence counting
+        const allDocs    = [];
+        const allSignals = [];
+        snapshot.forEach(doc => {
+          allDocs.push({ data: doc.data(), id: doc.id });
+          allSignals.push(doc.data());
+        });
+
+        const todayCount = allDocs.filter(({ data }) => dayKey(data.generatedAt) === new Date().toISOString().slice(0, 10)).length;
+
+        list.innerHTML = renderGroupedSignals(allDocs, allSignals);
+        bindGroupedInteractions(allSignals);
+        setStatus(`${todayCount} signal${todayCount !== 1 ? "s" : ""} today`, "idle");
       }, (err) => {
         console.error("[Stocks] Signal listener error:", err);
       });
