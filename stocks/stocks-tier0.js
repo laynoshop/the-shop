@@ -1,7 +1,7 @@
 // stocks/stocks-tier0.js
 // TIER 0 — Dynamic Watchlist Builder.
 // Quotes:          Finnhub /quote only — sequential, 1 req/sec (free plan = 60/min)
-// Movers+Earnings: FMP /api/v3 (paid plan)
+// Movers+Earnings: FMP /stable/ (replaces deprecated /api/v3/ routes)
 // News:            Finnhub /company-news
 // Writes results to Firestore dailyWatchlist/{date}/triggered/{ticker}
 
@@ -14,12 +14,13 @@
     MIN_VOLUME_RATIO:    1.5,
     EARNINGS_DAYS_AHEAD: 5,
     FIRESTORE_ROOT:      "dailyWatchlist",
-    QUOTE_DELAY_MS:      1100, // 1 req/sec = safe under Finnhub free 60/min
+    QUOTE_DELAY_MS:      1100,
     FMP_DELAY_MS:        500,
     NEWS_DELAY_MS:       1100
   };
 
-  var FMP_BASE     = "https://financialmodelingprep.com/api/v3";
+  // FMP migrated from /api/v3/ to /stable/ in 2024 — use /stable/ for all endpoints
+  var FMP_BASE     = "https://financialmodelingprep.com/stable";
   var FINNHUB_BASE = "https://finnhub.io/api/v1";
 
   var SEED_UNIVERSE = [
@@ -68,11 +69,7 @@
   function delay(ms)       { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   // -----------------------------------------------------------
-  // QUOTE — Finnhub /quote  (CORS-safe, real-time, 1 req per ticker)
-  // Returns c=current price, dp=change%, v=today volume
-  // Note: Finnhub /quote does not return avgVolume — volume_surge
-  // trigger is skipped when avgVolume is unavailable (ok, gap/earnings
-  // triggers are the primary signals anyway)
+  // QUOTE — Finnhub /quote  (CORS-safe, real-time)
   // -----------------------------------------------------------
   async function fetchSingleQuote(ticker) {
     var key = getFinnhubKey();
@@ -94,7 +91,7 @@
         price:             q.c,
         changesPercentage: parseFloat(changePct.toFixed(2)),
         volume:            q.v  || 0,
-        avgVolume:         0    // not available from Finnhub /quote
+        avgVolume:         0
       };
     } catch (e) {
       console.warn("[Tier0] Finnhub quote error " + ticker + ":", e.message);
@@ -103,7 +100,7 @@
   }
 
   // -----------------------------------------------------------
-  // STEP 1 — Sequential quote fetching, 1 per second
+  // STEP 1 — Sequential quote fetching
   // -----------------------------------------------------------
   async function fetchAllQuotes(tickers) {
     var key = getFinnhubKey();
@@ -116,46 +113,48 @@
         if (!logged) { console.log("[Tier0] Quote sample:", JSON.stringify(q)); logged = true; }
         results.push(q);
       }
-      // Always wait between quotes to respect 60 req/min
       if (i < tickers.length - 1) await delay(TIER0_CONFIG.QUOTE_DELAY_MS);
     }
     return results;
   }
 
   // -----------------------------------------------------------
-  // STEP 2 — FMP biggest gainers + losers
+  // STEP 2 — FMP biggest gainers + losers (/stable/ API)
   // -----------------------------------------------------------
   async function fetchFMPMovers() {
     var key = getFMPKey();
     if (!key) return [];
     var movers = [];
     try {
-      var g = await fetch(FMP_BASE + "/stock_market/gainers?apikey=" + key);
+      var g = await fetch(FMP_BASE + "/stock-gainers?apikey=" + key);
       if (g.ok) {
         var gd = await g.json();
-        if (Array.isArray(gd)) {
-          if (gd[0]) console.log("[Tier0] Gainer sample:", JSON.stringify(gd[0]).slice(0, 120));
-          movers = movers.concat(gd.slice(0, 15).map(function (m) {
-            return { symbol: m.symbol || m.ticker || "" };
-          }));
-        }
+        // /stable/ returns { gainers: [...] } or flat array depending on endpoint
+        var gainers = Array.isArray(gd) ? gd : (gd.gainers || []);
+        if (gainers[0]) console.log("[Tier0] Gainer sample:", JSON.stringify(gainers[0]).slice(0, 120));
+        movers = movers.concat(gainers.slice(0, 15).map(function (m) {
+          return { symbol: m.symbol || m.ticker || "" };
+        }));
+      } else {
+        console.warn("[Tier0] FMP gainers HTTP", g.status);
       }
       await delay(TIER0_CONFIG.FMP_DELAY_MS);
-      var l = await fetch(FMP_BASE + "/stock_market/losers?apikey=" + key);
+      var l = await fetch(FMP_BASE + "/stock-losers?apikey=" + key);
       if (l.ok) {
         var ld = await l.json();
-        if (Array.isArray(ld)) {
-          movers = movers.concat(ld.slice(0, 15).map(function (m) {
-            return { symbol: m.symbol || m.ticker || "" };
-          }));
-        }
+        var losers = Array.isArray(ld) ? ld : (ld.losers || []);
+        movers = movers.concat(losers.slice(0, 15).map(function (m) {
+          return { symbol: m.symbol || m.ticker || "" };
+        }));
+      } else {
+        console.warn("[Tier0] FMP losers HTTP", l.status);
       }
     } catch (e) { console.warn("[Tier0] FMP movers error:", e); }
     return movers;
   }
 
   // -----------------------------------------------------------
-  // STEP 3 — FMP earnings calendar
+  // STEP 3 — FMP earnings calendar (/stable/ API)
   // -----------------------------------------------------------
   async function fetchEarningsTickers() {
     var key = getFMPKey();
@@ -166,8 +165,11 @@
       future.setDate(today.getDate() + TIER0_CONFIG.EARNINGS_DAYS_AHEAD);
       var from = today.toISOString().slice(0, 10);
       var to   = future.toISOString().slice(0, 10);
-      var res  = await fetch(FMP_BASE + "/earning_calendar?from=" + from + "&to=" + to + "&apikey=" + key);
-      if (!res.ok) return new Set();
+      var res  = await fetch(FMP_BASE + "/earning-calendar?from=" + from + "&to=" + to + "&apikey=" + key);
+      if (!res.ok) {
+        console.warn("[Tier0] FMP earnings calendar HTTP", res.status);
+        return new Set();
+      }
       var data = await res.json();
       return Array.isArray(data) ? new Set(data.map(function (e) { return e.symbol || e.ticker || ""; })) : new Set();
     } catch (e) { console.warn("[Tier0] Earnings calendar error:", e); return new Set(); }
@@ -206,7 +208,6 @@
     if (changePct >=  TIER0_CONFIG.MIN_CHANGE_PCT) triggers.push("gap_up");
     if (changePct <= -TIER0_CONFIG.MIN_CHANGE_PCT) triggers.push("gap_down");
 
-    // Volume surge only fires when avgVolume is available
     var vol    = q.volume    || 0;
     var avgVol = q.avgVolume || 0;
     if (avgVol > 0 && vol >= avgVol * TIER0_CONFIG.MIN_VOLUME_RATIO) triggers.push("volume_surge");
@@ -378,7 +379,7 @@
         }
       }
 
-      console.log("[Tier0] No fresh watchlist \u2014 auto-building...");
+      console.log("[Tier0] No fresh watchlist — auto-building...");
       await runTier0(db);
     } catch (e) {
       console.warn("[Tier0] Auto-run error:", e.message || e);
