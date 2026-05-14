@@ -173,9 +173,11 @@
 /* ── Loading dots ── */
 .stocks-loading {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
+  gap: 10px;
   padding: 48px 24px;
 }
 
@@ -191,14 +193,6 @@
 .stocks-loading-dot:nth-child(1) { animation-delay: 0s; }
 .stocks-loading-dot:nth-child(2) { animation-delay: 0.18s; }
 .stocks-loading-dot:nth-child(3) { animation-delay: 0.36s; }
-
-/* Show all three dots on the same row */
-.stocks-loading {
-  flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-}
 
 .stocks-loading-text {
   width: 100%;
@@ -240,7 +234,7 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Direction-based left edge glow — same pattern as .game cards */
+/* Direction-based left edge glow */
 .stock-signal-card::before {
   content: "";
   position: absolute;
@@ -329,11 +323,10 @@
 
 .ssc-confidence {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 1000;
   letter-spacing: 0.8px;
-  text-transform: uppercase;
-  padding: 5px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
   flex-shrink: 0;
 }
@@ -418,14 +411,13 @@
 
 /* ── AI Reasoning ── */
 .ssc-reasoning {
-  padding-top: 4px;
+  padding-top: 12px;
   padding-bottom: 12px;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.5;
   color: rgba(255,255,255,0.72);
   border-top: 1px solid rgba(255,255,255,0.06);
-  padding-top: 12px;
 }
 
 /* ── Footer: news + timestamp ── */
@@ -437,17 +429,49 @@
   padding-top: 10px;
   padding-bottom: 12px;
   border-top: 1px solid rgba(255,255,255,0.06);
+  flex-wrap: wrap;
+}
+
+/* News section */
+.ssc-news {
+  flex: 1;
+  min-width: 0;
+}
+
+.ssc-news-link {
+  display: block;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.45;
+  color: rgba(255,255,255,0.60);
+  text-decoration: none;
+  transition: color 0.15s ease;
+  word-break: break-word;
+}
+
+.ssc-news-link:hover {
+  color: rgba(255,255,255,0.92);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ssc-news-plain {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
   color: rgba(255,255,255,0.50);
-  flex-wrap: wrap;
+  word-break: break-word;
 }
 
 .ssc-time {
   white-space: nowrap;
   flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: rgba(255,255,255,0.38);
+  padding-top: 2px;
 }
 
 /* ── Expires note ── */
