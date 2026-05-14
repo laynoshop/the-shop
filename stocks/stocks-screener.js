@@ -1,11 +1,10 @@
 // stocks/stocks-screener.js
-// TIER 1 — Client-side screener (for development/testing).
-// In production this logic runs in a Firebase Scheduled Cloud Function.
+// TIER 1 — Client-side screener.
 //
 // GATE LOGIC:
-//   A ticker is flagged if it passes MIN_PRICE_MOVE_PCT (default 1.5%).
-//   RSI + MACD are fetched as bonus signals and stored, but do NOT gate passage.
-//   This avoids silent failures when Alpha Vantage is unavailable/rate-limited.
+//   Uses Tier 0 changePct (already in Firestore) as the price-move gate.
+//   This avoids re-fetching and getting a stale intraday number.
+//   RSI + MACD are bonus signals stored on the candidate but do NOT gate.
 
 (function () {
   "use strict";
@@ -23,30 +22,28 @@
     const cfg = window.STOCKS_CONFIG || {};
     const openMins  = (cfg.MARKET_OPEN_HOUR  || 9)  * 60 + (cfg.MARKET_OPEN_MIN  || 30);
     const closeMins = (cfg.MARKET_CLOSE_HOUR || 16) * 60 + (cfg.MARKET_CLOSE_MIN || 0);
-    const nowMins   = h * 60 + m;
-    return nowMins >= openMins && nowMins < closeMins;
+    return (h * 60 + m) >= openMins && (h * 60 + m) < closeMins;
   }
 
   function delay(ms) { return new Promise(res => setTimeout(res, ms)); }
 
   // -----------------------------------------------------------
-  // Fetch live quote from Finnhub
+  // Fetch current price from Finnhub (for storing, NOT for gate)
   // -----------------------------------------------------------
-  async function fetchQuote(ticker) {
+  async function fetchLivePrice(ticker) {
     try {
       const key = getFinnhubKey();
-      if (!key) { console.warn("[Stocks] Finnhub key not set."); return null; }
+      if (!key) return null;
       const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${key}`);
       if (!res.ok) return null;
       const d = await res.json();
       if (!d || !d.c) return null;
-      const changePct = d.dp != null ? d.dp : (d.pc ? ((d.c - d.pc) / d.pc) * 100 : 0);
-      return { price: d.c, prevClose: d.pc, changePct };
+      return { price: d.c, prevClose: d.pc || null };
     } catch { return null; }
   }
 
   // -----------------------------------------------------------
-  // Fetch RSI from Alpha Vantage (optional bonus signal)
+  // RSI (Alpha Vantage) — bonus signal only
   // -----------------------------------------------------------
   async function fetchRSI(ticker) {
     try {
@@ -65,7 +62,7 @@
   }
 
   // -----------------------------------------------------------
-  // Fetch MACD from Alpha Vantage (optional bonus signal)
+  // MACD (Alpha Vantage) — bonus signal only
   // -----------------------------------------------------------
   async function fetchMACD(ticker) {
     try {
@@ -80,14 +77,11 @@
       if (!series) return null;
       const vals = Object.values(series);
       if (vals.length < 2) return null;
-      const latest = vals[0];
-      const prev   = vals[1];
-      const macdNow  = parseFloat(latest.MACD);
-      const sigNow   = parseFloat(latest.MACD_Signal);
-      const macdPrev = parseFloat(prev.MACD);
-      const sigPrev  = parseFloat(prev.MACD_Signal);
-      const crossedBullish = (macdPrev < sigPrev) && (macdNow >= sigNow);
-      const crossedBearish = (macdPrev > sigPrev) && (macdNow <= sigNow);
+      const latest = vals[0], prev = vals[1];
+      const macdNow  = parseFloat(latest.MACD),  sigNow  = parseFloat(latest.MACD_Signal);
+      const macdPrev = parseFloat(prev.MACD),    sigPrev = parseFloat(prev.MACD_Signal);
+      const crossedBullish = macdPrev < sigPrev && macdNow >= sigNow;
+      const crossedBearish = macdPrev > sigPrev && macdNow <= sigNow;
       return {
         macd: macdNow, signal: sigNow,
         histogram: parseFloat(latest.MACD_Hist),
@@ -102,53 +96,52 @@
   // -----------------------------------------------------------
   async function isInCooldown(db, ticker) {
     try {
-      const cfg  = window.STOCKS_CONFIG || {};
-      const doc  = await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).get();
+      const cfg    = window.STOCKS_CONFIG || {};
+      const doc    = await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).get();
       if (!doc.exists) return false;
-      const data = doc.data();
-      const lastAt = data.flaggedAt ? data.flaggedAt.toMillis() : 0;
+      const lastAt = doc.data().flaggedAt ? doc.data().flaggedAt.toMillis() : 0;
       return (Date.now() - lastAt) < (cfg.SIGNAL_COOLDOWN_MS || 3600000);
     } catch { return false; }
   }
 
   // -----------------------------------------------------------
-  // Write candidate to Firestore
+  // Write candidate
   // -----------------------------------------------------------
-  async function writeCandidate(db, ticker, quote, rsi, macd, tier0Entry) {
+  async function writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry) {
     try {
-      const cfg = window.STOCKS_CONFIG || {};
+      const cfg        = window.STOCKS_CONFIG || {};
+      const changePct  = tier0Entry.changePct || 0;
 
-      // Confidence score: base from price move + bonuses from RSI/MACD
-      let confidence = Math.min(Math.abs(quote.changePct) / 10, 1.0); // 0.0–1.0 from price
+      let confidence = Math.min(Math.abs(changePct) / 10, 1.0);
       if (rsi !== null && (rsi > (cfg.RSI_OVERBOUGHT || 70) || rsi < (cfg.RSI_OVERSOLD || 30))) confidence += 0.2;
       if (macd && macd.crossed) confidence += 0.2;
       confidence = parseFloat(Math.min(confidence, 1.0).toFixed(2));
 
       const candidate = {
         ticker,
-        price:          quote.price,
-        prevClose:      quote.prevClose,
-        changePct:      parseFloat(quote.changePct.toFixed(2)),
+        price:          livePrice ? livePrice.price     : tier0Entry.price,
+        prevClose:      livePrice ? livePrice.prevClose  : null,
+        changePct:      parseFloat(changePct.toFixed(2)),
         rsi:            rsi !== null ? parseFloat(rsi.toFixed(2)) : null,
         rsiOverbought:  rsi !== null && rsi > (cfg.RSI_OVERBOUGHT || 70),
         rsiOversold:    rsi !== null && rsi < (cfg.RSI_OVERSOLD   || 30),
-        macdCrossed:    macd ? macd.crossed           : false,
-        macdBullish:    macd ? macd.crossedBullish    : false,
-        macdBearish:    macd ? macd.crossedBearish    : false,
+        macdCrossed:    macd ? macd.crossed        : false,
+        macdBullish:    macd ? macd.crossedBullish : false,
+        macdBearish:    macd ? macd.crossedBearish : false,
         macdHist:       macd ? parseFloat(macd.histogram.toFixed(4)) : null,
         confidence,
-        tier0Triggers:  (tier0Entry && tier0Entry.triggers) ? tier0Entry.triggers : [],
-        tier0Score:     (tier0Entry && tier0Entry.score)    ? tier0Entry.score    : null,
-        sector:         (tier0Entry && tier0Entry.sector)   ? tier0Entry.sector   : "",
+        tier0Triggers:  tier0Entry.triggers || [],
+        tier0Score:     tier0Entry.score    || null,
+        sector:         tier0Entry.sector   || "",
         flaggedAt:      firebase.firestore.FieldValue.serverTimestamp(),
         tier2Processed: false
       };
 
       await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).set(candidate);
       console.log(
-        `[Stocks Tier1] \u2705 Flagged: ${ticker} | ${quote.changePct.toFixed(2)}%` +
+        `[Stocks Tier1] \u2705 Flagged: ${ticker} | ${changePct.toFixed(2)}%` +
         (rsi !== null ? ` | RSI:${rsi.toFixed(1)}` : "") +
-        (macd && macd.crossed ? ` | MACD cross` : "") +
+        (macd && macd.crossed ? ` | MACD✗` : "") +
         ` | conf:${confidence}`
       );
       return candidate;
@@ -164,18 +157,19 @@
   async function runTier1Screener(db) {
     if (!db) { console.warn("[Stocks] Firestore not available."); return []; }
 
-    const cfg        = window.STOCKS_CONFIG || {};
-    const universe   = window.STOCKS_UNIVERSE || [];
+    const cfg      = window.STOCKS_CONFIG || {};
+    const universe = window.STOCKS_UNIVERSE || [];
     const candidates = [];
 
-    // Optionally load Tier 0 data for enrichment (sector, triggers, score)
-    let tier0Map = {};
+    // Load Tier 0 Firestore data — this is the source of truth for changePct
+    const tier0Map = {};
     try {
-      const today    = new Date().toISOString().slice(0, 10);
-      const subSnap  = await db
+      const today   = new Date().toISOString().slice(0, 10);
+      const subSnap = await db
         .collection("dailyWatchlist").doc(today)
         .collection("triggered").get();
       subSnap.forEach(d => { tier0Map[d.id] = d.data(); });
+      console.log(`[Stocks Tier1] Loaded ${Object.keys(tier0Map).length} Tier 0 entries from Firestore.`);
     } catch (e) {
       console.warn("[Stocks Tier1] Could not load Tier 0 map:", e.message);
     }
@@ -183,20 +177,18 @@
     console.log(`[Stocks Tier1] Starting screener. Universe: ${universe.length} tickers. Market open: ${isMarketOpen()}`);
 
     for (let i = 0; i < universe.length; i++) {
-      const ticker = universe[i];
+      const ticker     = universe[i];
+      const tier0Entry = tier0Map[ticker];
 
-      // Gate 1: live price move
-      const quote = await fetchQuote(ticker);
-      await delay(1100); // respect Finnhub 60 req/min
-
-      if (!quote) {
-        console.warn(`[Stocks Tier1] No quote for ${ticker}`);
+      // Gate 1: need Tier 0 entry with a changePct
+      if (!tier0Entry) {
+        console.warn(`[Stocks Tier1] No Tier 0 entry for ${ticker} — skipping.`);
         continue;
       }
 
-      const absChange = Math.abs(quote.changePct);
+      const absChange = Math.abs(tier0Entry.changePct || 0);
       if (absChange < (cfg.MIN_PRICE_MOVE_PCT || 1.5)) {
-        // Quiet skip — expected for many tickers
+        // Expected quiet skip
         continue;
       }
 
@@ -207,12 +199,15 @@
         continue;
       }
 
-      // Bonus: RSI + MACD (fetched but do NOT gate)
+      // Fetch live price for storing current value (non-gating)
+      const livePrice = await fetchLivePrice(ticker);
+      await delay(1100);
+
+      // Bonus: RSI + MACD
       const rsi  = await fetchRSI(ticker);  await delay(250);
       const macd = await fetchMACD(ticker); await delay(250);
 
-      const tier0Entry = tier0Map[ticker] || null;
-      const c = await writeCandidate(db, ticker, quote, rsi, macd, tier0Entry);
+      const c = await writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry);
       if (c) candidates.push(c);
     }
 
