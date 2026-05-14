@@ -1,8 +1,8 @@
 // stocks/stocks-tier0.js
 // TIER 0 — Dynamic Watchlist Builder.
-// FMP Starter plan: uses /api/v3/quote/{symbol} (single-symbol, fetched in parallel groups).
-// /stable/batch-quote requires a higher plan — not used.
-// Finnhub free handles: recent news check.
+// Quotes: Yahoo Finance free API (no key needed, real-time).
+// Movers + Earnings: FMP /api/v3 (free plan key, limited endpoints).
+// Finnhub free: recent news check.
 // Writes results to Firestore dailyWatchlist/{date}/triggered/{ticker}
 
 (function () {
@@ -15,11 +15,13 @@
     EARNINGS_DAYS_AHEAD: 5,
     FIRESTORE_ROOT:      "dailyWatchlist",
     PARALLEL_SIZE:       10,   // fetch N quotes simultaneously
-    FMP_DELAY_MS:        200,  // pause between parallel groups
+    YAHOO_DELAY_MS:      300,  // pause between parallel groups (be polite)
+    FMP_DELAY_MS:        500,  // pause between FMP calls
     NEWS_DELAY_MS:       1100  // Finnhub free = 60 req/min
   };
 
-  var FMP_BASE = "https://financialmodelingprep.com/api/v3";
+  var FMP_BASE    = "https://financialmodelingprep.com/api/v3";
+  var YAHOO_BASE  = "https://query1.finance.yahoo.com/v8/finance/chart";
 
   var SEED_UNIVERSE = [
     "AAPL","MSFT","NVDA","AMZN","GOOGL","GOOG","META","TSLA","NFLX","ORCL",
@@ -67,41 +69,53 @@
   function todayStr()      { return new Date().toISOString().slice(0, 10); }
   function delay(ms)       { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-  // Fetch a single symbol: /api/v3/quote/{symbol}?apikey=KEY
-  // Returns a normalized quote object or null on failure.
-  async function fetchSingleQuote(ticker, key) {
+  // -----------------------------------------------------------
+  // QUOTE — Yahoo Finance (free, no key, real-time)
+  // GET /v8/finance/chart/{symbol}?interval=1d&range=2d
+  // -----------------------------------------------------------
+  async function fetchSingleQuote(ticker) {
     try {
-      var res = await fetch(FMP_BASE + "/quote/" + ticker + "?apikey=" + key);
+      var url = YAHOO_BASE + "/" + encodeURIComponent(ticker) +
+                "?interval=1d&range=2d&includePrePost=false";
+      var res = await fetch(url);
       if (!res.ok) {
-        if (res.status !== 402) console.warn("[Tier0] Quote " + ticker + " HTTP " + res.status);
+        console.warn("[Tier0] Yahoo quote " + ticker + " HTTP " + res.status);
         return null;
       }
-      var data = await res.json();
-      // /api/v3/quote/{symbol} returns an array with one object
-      var q = Array.isArray(data) ? data[0] : data;
-      if (!q || q["Error Message"]) return null;
+      var json = await res.json();
+      var meta = (json.chart && json.chart.result && json.chart.result[0])
+                 ? json.chart.result[0].meta : null;
+      if (!meta) return null;
+
+      var price      = meta.regularMarketPrice || meta.previousClose || 0;
+      var prevClose  = meta.previousClose || meta.chartPreviousClose || price;
+      var changePct  = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
+      var volume     = meta.regularMarketVolume || 0;
+      var avgVolume  = meta.averageDailyVolume3Month ||
+                       meta.averageDailyVolume10Day  || 0;
+
       return {
-        symbol:            q.symbol           || ticker,
-        price:             q.price            || q.lastPrice || 0,
-        changesPercentage: q.changesPercentage != null ? q.changesPercentage
-                           : (q.changePercentage != null ? q.changePercentage : 0),
-        volume:            q.volume           || 0,
-        avgVolume:         q.avgVolume        || q.averageVolume || 0
+        symbol:            meta.symbol || ticker,
+        price:             price,
+        changesPercentage: parseFloat(changePct.toFixed(2)),
+        volume:            volume,
+        avgVolume:         avgVolume
       };
-    } catch (e) { return null; }
+    } catch (e) {
+      console.warn("[Tier0] Yahoo quote error " + ticker + ":", e.message);
+      return null;
+    }
   }
 
   // -----------------------------------------------------------
-  // STEP 1 — Fetch all quotes in parallel groups of PARALLEL_SIZE
+  // STEP 1 — Fetch all quotes in parallel groups
   // -----------------------------------------------------------
   async function fetchAllQuotes(tickers) {
-    var key = getFMPKey();
-    if (!key) { console.warn("[Tier0] FMP key not set."); return []; }
     var results = [];
     var logged  = false;
     for (var i = 0; i < tickers.length; i += TIER0_CONFIG.PARALLEL_SIZE) {
       var group   = tickers.slice(i, i + TIER0_CONFIG.PARALLEL_SIZE);
-      var fetched = await Promise.all(group.map(function (t) { return fetchSingleQuote(t, key); }));
+      var fetched = await Promise.all(group.map(function (t) { return fetchSingleQuote(t); }));
       fetched.forEach(function (q) {
         if (q) {
           if (!logged) {
@@ -111,7 +125,9 @@
           results.push(q);
         }
       });
-      if (i + TIER0_CONFIG.PARALLEL_SIZE < tickers.length) await delay(TIER0_CONFIG.FMP_DELAY_MS);
+      if (i + TIER0_CONFIG.PARALLEL_SIZE < tickers.length) {
+        await delay(TIER0_CONFIG.YAHOO_DELAY_MS);
+      }
     }
     return results;
   }
