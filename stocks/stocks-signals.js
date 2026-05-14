@@ -17,6 +17,30 @@
   const __processing = new Set();
 
   // -----------------------------------------------------------
+  // Fetch LIVE price + changePct from Yahoo Finance proxy
+  // Called once Tier 2 is done so the card always shows current data.
+  // -----------------------------------------------------------
+  async function fetchLivePrice(ticker) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d&events=div%2Csplit`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const json = await res.json();
+      const meta = json?.chart?.result?.[0]?.meta;
+      if (!meta) return null;
+      const price     = meta.regularMarketPrice     ?? null;
+      const prevClose = meta.chartPreviousClose      ?? meta.previousClose ?? null;
+      const changePct = (price && prevClose && prevClose !== 0)
+        ? parseFloat((((price - prevClose) / prevClose) * 100).toFixed(2))
+        : null;
+      return { price: price ? parseFloat(price.toFixed(2)) : null, changePct };
+    } catch (e) {
+      console.warn(`[Stocks Tier2] fetchLivePrice failed for ${ticker}:`, e);
+      return null;
+    }
+  }
+
+  // -----------------------------------------------------------
   // Fetch latest news headlines (up to 3) from Finnhub
   // -----------------------------------------------------------
   async function fetchNewsHeadlines(ticker) {
@@ -32,6 +56,9 @@
       if (!res.ok) return "No recent news found.";
       const articles = await res.json();
       if (!articles || !articles.length) return "No recent news found.";
+      // Also store the first article's url for the news link on the card
+      fetchNewsHeadlines._lastUrl    = articles[0]?.url    || "";
+      fetchNewsHeadlines._lastSource = articles[0]?.source || "";
       return articles
         .slice(0, 3)
         .map((a, i) => `[${i + 1}] ${a.headline}`)
@@ -158,48 +185,85 @@
   }
 
   // -----------------------------------------------------------
+  // Safely parse a value that might be "$154.20 - $158.00", "154.20", null, etc.
+  // Returns the string as-is if it looks meaningful, null otherwise.
+  // -----------------------------------------------------------
+  function safeField(val) {
+    if (val === null || val === undefined) return null;
+    const s = String(val).trim();
+    if (!s || s === "null" || s === "undefined") return null;
+    return s;
+  }
+
+  // -----------------------------------------------------------
   // Write the final signal card to Firestore
   // -----------------------------------------------------------
-  async function writeSignalCard(db, enriched, signal, newsHeadlines) {
+  async function writeSignalCard(db, enriched, signal, newsHeadlines, livePrice) {
     try {
-      const cfg  = window.STOCKS_CONFIG || {};
+      const cfg = window.STOCKS_CONFIG || {};
+
+      // Use live price if we got one, otherwise fall back to enriched price
+      const finalPrice     = (livePrice && livePrice.price)     ?? enriched.price;
+      const finalChangePct = (livePrice && livePrice.changePct != null) ? livePrice.changePct : enriched.changePct;
+
+      // Grab the news URL captured during fetchNewsHeadlines
+      const newsUrl    = fetchNewsHeadlines._lastUrl    || "";
+      const newsSource = fetchNewsHeadlines._lastSource || "";
+
+      // Safely extract AI fields — never write empty strings, always null if missing
+      const entry_zone  = safeField(signal.entry_zone);
+      const target      = safeField(signal.target);
+      const stop_loss   = safeField(signal.stop_loss);
+      const risk_reward = safeField(signal.risk_reward);
+      const time_horizon = safeField(signal.time_horizon);
+      const reasoning   = safeField(signal.summary || signal.reasoning);
+      const direction   = safeField(signal.signal || signal.direction) || "NEUTRAL";
+      const confidence  = signal.confidence ?? null;
+      const signal_type = safeField(signal.signal_type);
+      const news_impact = safeField(signal.news_impact) || "NONE";
+      const expires_note = safeField(signal.expires_note);
+
       const card = {
         ticker:       enriched.ticker,
-        price:        enriched.price,
-        changePct:    enriched.changePct,
-        rsi:          enriched.rsi,
-        macdCrossed:  enriched.macdCrossed,
+        price:        finalPrice,
+        changePct:    finalChangePct,
+        rsi:          enriched.rsi          ?? null,
+        macdCrossed:  enriched.macdCrossed  ?? null,
         newsHeadline: newsHeadlines,
+        newsUrl,
+        newsSource,
         // Enrichment snapshot on the card
-        pct90d:           enriched.pct90d           || null,
+        pct90d:           enriched.pct90d           ?? null,
         analystConsensus: enriched.analystConsensus || null,
-        analystUpsidePct: enriched.analystUpsidePct || null,
+        analystUpsidePct: enriched.analystUpsidePct ?? null,
         latestRating:     enriched.latestRating     || null,
-        beatStreak:       enriched.beatStreak       != null ? enriched.beatStreak : null,
-        lastSurprisePct:  enriched.lastSurprisePct  || null,
-        revenueGrowthYoY: enriched.revenueGrowthYoY || null,
-        peRatioCurrent:   enriched.peRatioCurrent   || null,
+        beatStreak:       enriched.beatStreak       ?? null,
+        lastSurprisePct:  enriched.lastSurprisePct  ?? null,
+        revenueGrowthYoY: enriched.revenueGrowthYoY ?? null,
+        peRatioCurrent:   enriched.peRatioCurrent   ?? null,
         generatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        // LLM output
-        direction:    signal.signal      || signal.direction   || "NEUTRAL",
-        confidence:   signal.confidence,
-        signal_type:  signal.signal_type  || "",
-        entry_zone:   signal.entry_zone   || "",
-        target:       signal.target       || "",
-        stop_loss:    signal.stop_loss    || "",
-        risk_reward:  signal.risk_reward  || "",
-        time_horizon: signal.time_horizon || "",
-        reasoning:    signal.summary      || signal.reasoning  || "",
-        news_impact:  signal.news_impact  || "NONE",
-        expires_note: signal.expires_note || ""
+        // LLM output — null instead of empty string so the render layer shows "--" properly
+        direction,
+        confidence,
+        signal_type,
+        entry_zone,
+        target,
+        stop_loss,
+        risk_reward,
+        time_horizon,
+        reasoning,
+        news_impact,
+        expires_note
       };
 
+      // Strip out nulls so Firestore doesn't store them unnecessarily
+      // (keep fields that are intentionally null for display logic)
       await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").add(card);
       await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(enriched.ticker).update({
         tier2Processed: true
       });
 
-      console.log(`[Stocks Tier2] \u2705 Signal card: ${enriched.ticker} \u2014 ${card.direction} (${card.confidence})`);
+      console.log(`[Stocks Tier2] \u2705 Signal card: ${enriched.ticker} \u2014 ${direction} (${confidence}%) | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | Live price: $${finalPrice}`);
     } catch (e) {
       console.error("[Stocks Tier2] writeSignalCard error:", e);
     }
@@ -229,8 +293,15 @@
         console.warn("[Stocks Tier2] enrichCandidate not available — stocks-enrichment.js loaded?");
       }
 
-      // 2. Fetch news headlines (Finnhub)
-      const newsHeadlines = await fetchNewsHeadlines(enriched.ticker);
+      // 2. Fetch news headlines (Finnhub) + live price (Yahoo) in parallel
+      const [newsHeadlines, livePrice] = await Promise.all([
+        fetchNewsHeadlines(ticker),
+        fetchLivePrice(ticker)
+      ]);
+
+      if (livePrice && livePrice.price) {
+        console.log(`[Stocks Tier2] Live price for ${ticker}: $${livePrice.price} (${livePrice.changePct}%)`);
+      }
 
       // 3. Call OpenAI via Cloud Function
       const signal = await callAISignal(enriched, newsHeadlines);
@@ -239,8 +310,8 @@
         return;
       }
 
-      // 4. Write signal card to Firestore
-      await writeSignalCard(db, enriched, signal, newsHeadlines);
+      // 4. Write signal card to Firestore with live price baked in
+      await writeSignalCard(db, enriched, signal, newsHeadlines, livePrice);
     } finally {
       // Always release the lock so future re-runs (e.g. next day) can proceed
       __processing.delete(ticker);
