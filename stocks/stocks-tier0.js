@@ -1,8 +1,8 @@
 // stocks/stocks-tier0.js
 // TIER 0 — Dynamic Watchlist Builder.
-// Quotes: Yahoo Finance free API (no key needed, real-time).
-// Movers + Earnings: FMP /api/v3 (free plan key, limited endpoints).
-// Finnhub free: recent news check.
+// Quotes:          Finnhub /quote + /stock/metric (CORS-safe, existing key, real-time)
+// Movers+Earnings: FMP /api/v3 (paid plan, limited to non-real-time endpoints)
+// News:            Finnhub /company-news (existing key)
 // Writes results to Firestore dailyWatchlist/{date}/triggered/{ticker}
 
 (function () {
@@ -14,27 +14,26 @@
     MIN_VOLUME_RATIO:    1.5,
     EARNINGS_DAYS_AHEAD: 5,
     FIRESTORE_ROOT:      "dailyWatchlist",
-    PARALLEL_SIZE:       10,   // fetch N quotes simultaneously
-    YAHOO_DELAY_MS:      300,  // pause between parallel groups (be polite)
-    FMP_DELAY_MS:        500,  // pause between FMP calls
-    NEWS_DELAY_MS:       1100  // Finnhub free = 60 req/min
+    PARALLEL_SIZE:       5,    // Finnhub free = 60 req/min; keep groups small
+    QUOTE_DELAY_MS:      1200, // ~50 req/min to stay safe with quote+metric per ticker
+    FMP_DELAY_MS:        500,
+    NEWS_DELAY_MS:       1100
   };
 
-  var FMP_BASE    = "https://financialmodelingprep.com/api/v3";
-  var YAHOO_BASE  = "https://query1.finance.yahoo.com/v8/finance/chart";
+  var FMP_BASE     = "https://financialmodelingprep.com/api/v3";
+  var FINNHUB_BASE = "https://finnhub.io/api/v1";
 
   var SEED_UNIVERSE = [
-    "AAPL","MSFT","NVDA","AMZN","GOOGL","GOOG","META","TSLA","NFLX","ORCL",
-    "AMD","INTC","AVGO","QCOM","MU","AMAT","LRCX","KLAC","TXN","MRVL",
-    "CRM","NOW","ADBE","INTU","SNOW","DDOG","PANW","CRWD","ZS","OKTA",
+    "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","NFLX","ORCL","AMD",
+    "INTC","AVGO","QCOM","MU","AMAT","TXN","MRVL","CRM","NOW","ADBE",
+    "INTU","SNOW","DDOG","PANW","CRWD","ZS",
     "JPM","BAC","GS","MS","WFC","C","AXP","V","MA","BLK",
     "JNJ","UNH","PFE","ABBV","MRK","LLY","TMO","ABT","AMGN","GILD",
-    "XOM","CVX","COP","EOG","SLB","OXY","MPC","PSX","VLO","HAL",
-    "HD","MCD","NKE","SBUX","TGT","LOW","BKNG","MAR","HLT","ABNB",
-    "WMT","COST","PG","KO","PEP","PM","MO","CL","GIS","KHC",
-    "CAT","DE","HON","RTX","LMT","GE","BA","UPS","FDX","CSX",
-    "NEE","DUK","SO","D","AMT","PLD","EQIX","SPG","O","WELL",
-    "SPY","QQQ","IWM","DIA","XLF","XLK","XLE","XLV","XLI","XLY",
+    "XOM","CVX","COP","EOG","SLB","OXY",
+    "HD","MCD","NKE","SBUX","TGT","LOW","BKNG","WMT","COST",
+    "PG","KO","PEP","CAT","DE","HON","RTX","LMT","GE","BA","UPS","FDX",
+    "NEE","DUK","AMT","PLD","EQIX","SPG",
+    "SPY","QQQ","IWM","XLF","XLK","XLE","XLV","XLI","XLY",
     "MSTR","PLTR","COIN","HOOD","RBLX","SNAP","UBER","LYFT","RIVN","LCID"
   ];
 
@@ -70,39 +69,47 @@
   function delay(ms)       { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   // -----------------------------------------------------------
-  // QUOTE — Yahoo Finance (free, no key, real-time)
-  // GET /v8/finance/chart/{symbol}?interval=1d&range=2d
+  // QUOTE — Finnhub /quote  (CORS-safe, real-time)
+  // Returns: c=current, pc=prev close, dp=change%, v=volume (today)
+  // avgVolume comes from /stock/metric (52-week avg daily volume)
   // -----------------------------------------------------------
   async function fetchSingleQuote(ticker) {
+    var key = getFinnhubKey();
+    if (!key) return null;
     try {
-      var url = YAHOO_BASE + "/" + encodeURIComponent(ticker) +
-                "?interval=1d&range=2d&includePrePost=false";
-      var res = await fetch(url);
-      if (!res.ok) {
-        console.warn("[Tier0] Yahoo quote " + ticker + " HTTP " + res.status);
+      // Fetch quote and metric in parallel
+      var [qRes, mRes] = await Promise.all([
+        fetch(FINNHUB_BASE + "/quote?symbol=" + ticker + "&token=" + key),
+        fetch(FINNHUB_BASE + "/stock/metric?symbol=" + ticker + "&metric=all&token=" + key)
+      ]);
+
+      if (!qRes.ok) {
+        console.warn("[Tier0] Finnhub quote " + ticker + " HTTP " + qRes.status);
         return null;
       }
-      var json = await res.json();
-      var meta = (json.chart && json.chart.result && json.chart.result[0])
-                 ? json.chart.result[0].meta : null;
-      if (!meta) return null;
+      var q = await qRes.json();
+      if (!q || !q.c || q.c === 0) return null; // no price = bad symbol or market closed
 
-      var price      = meta.regularMarketPrice || meta.previousClose || 0;
-      var prevClose  = meta.previousClose || meta.chartPreviousClose || price;
-      var changePct  = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
-      var volume     = meta.regularMarketVolume || 0;
-      var avgVolume  = meta.averageDailyVolume3Month ||
-                       meta.averageDailyVolume10Day  || 0;
+      var avgVolume = 0;
+      if (mRes.ok) {
+        var m = await mRes.json();
+        // metric.10DayAverageTradingVolume is in millions; convert
+        if (m && m.metric) {
+          avgVolume = (m.metric["10DayAverageTradingVolume"] || 0) * 1e6;
+        }
+      }
+
+      var changePct = q.dp != null ? q.dp : (q.pc ? ((q.c - q.pc) / q.pc) * 100 : 0);
 
       return {
-        symbol:            meta.symbol || ticker,
-        price:             price,
+        symbol:            ticker,
+        price:             q.c,
         changesPercentage: parseFloat(changePct.toFixed(2)),
-        volume:            volume,
-        avgVolume:         avgVolume
+        volume:            q.v  || 0,
+        avgVolume:         Math.round(avgVolume)
       };
     } catch (e) {
-      console.warn("[Tier0] Yahoo quote error " + ticker + ":", e.message);
+      console.warn("[Tier0] Finnhub quote error " + ticker + ":", e.message);
       return null;
     }
   }
@@ -126,7 +133,7 @@
         }
       });
       if (i + TIER0_CONFIG.PARALLEL_SIZE < tickers.length) {
-        await delay(TIER0_CONFIG.YAHOO_DELAY_MS);
+        await delay(TIER0_CONFIG.QUOTE_DELAY_MS);
       }
     }
     return results;
@@ -196,7 +203,7 @@
       var from = yesterday.toISOString().slice(0, 10);
       var to   = today.toISOString().slice(0, 10);
       var res  = await fetch(
-        "https://finnhub.io/api/v1/company-news?symbol=" + ticker +
+        FINNHUB_BASE + "/company-news?symbol=" + ticker +
         "&from=" + from + "&to=" + to + "&token=" + key
       );
       if (!res.ok) return false;
