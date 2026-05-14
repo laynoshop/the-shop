@@ -1,6 +1,6 @@
 // stocks/stocks-tier0.js
 // TIER 0 — Dynamic Watchlist Builder.
-// FMP Starter plan: uses /stable/quote/{symbol} (single-symbol, fetched in parallel groups).
+// FMP Starter plan: uses /api/v3/quote/{symbol} (single-symbol, fetched in parallel groups).
 // /stable/batch-quote requires a higher plan — not used.
 // Finnhub free handles: recent news check.
 // Writes results to Firestore dailyWatchlist/{date}/triggered/{ticker}
@@ -19,7 +19,7 @@
     NEWS_DELAY_MS:       1100  // Finnhub free = 60 req/min
   };
 
-  var FMP_BASE = "https://financialmodelingprep.com/stable";
+  var FMP_BASE = "https://financialmodelingprep.com/api/v3";
 
   var SEED_UNIVERSE = [
     "AAPL","MSFT","NVDA","AMZN","GOOGL","GOOG","META","TSLA","NFLX","ORCL",
@@ -67,7 +67,7 @@
   function todayStr()      { return new Date().toISOString().slice(0, 10); }
   function delay(ms)       { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-  // Fetch a single symbol: /stable/quote/{symbol}?apikey=KEY
+  // Fetch a single symbol: /api/v3/quote/{symbol}?apikey=KEY
   // Returns a normalized quote object or null on failure.
   async function fetchSingleQuote(ticker, key) {
     try {
@@ -77,7 +77,7 @@
         return null;
       }
       var data = await res.json();
-      // /stable/quote/{symbol} returns an array with one object
+      // /api/v3/quote/{symbol} returns an array with one object
       var q = Array.isArray(data) ? data[0] : data;
       if (!q || q["Error Message"]) return null;
       return {
@@ -124,7 +124,7 @@
     if (!key) return [];
     var movers = [];
     try {
-      var g = await fetch(FMP_BASE + "/biggest-gainers?apikey=" + key);
+      var g = await fetch(FMP_BASE + "/stock_market/gainers?apikey=" + key);
       if (g.ok) {
         var gd = await g.json();
         if (Array.isArray(gd)) {
@@ -135,7 +135,7 @@
         }
       }
       await delay(TIER0_CONFIG.FMP_DELAY_MS);
-      var l = await fetch(FMP_BASE + "/biggest-losers?apikey=" + key);
+      var l = await fetch(FMP_BASE + "/stock_market/losers?apikey=" + key);
       if (l.ok) {
         var ld = await l.json();
         if (Array.isArray(ld)) {
@@ -160,7 +160,7 @@
       future.setDate(today.getDate() + TIER0_CONFIG.EARNINGS_DAYS_AHEAD);
       var from = today.toISOString().slice(0, 10);
       var to   = future.toISOString().slice(0, 10);
-      var res  = await fetch(FMP_BASE + "/earnings-calendar?from=" + from + "&to=" + to + "&apikey=" + key);
+      var res  = await fetch(FMP_BASE + "/earning_calendar?from=" + from + "&to=" + to + "&apikey=" + key);
       if (!res.ok) return new Set();
       var data = await res.json();
       return Array.isArray(data) ? new Set(data.map(function (e) { return e.symbol || e.ticker || ""; })) : new Set();
