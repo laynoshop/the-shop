@@ -1,0 +1,460 @@
+/* =========================
+   STOCKS PAGE — Premium Terminal Styles
+   matches stocks-render.js class names exactly
+   ========================= */
+
+/* ── Page wrapper ── */
+.stocks-wrap {
+  padding: 14px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Page header ── */
+.stocks-header {
+  padding: 4px 2px 2px;
+}
+
+.stocks-title {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stocks-subtitle {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+}
+
+/* ── Controls bar (status + run button) ── */
+.stocks-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+}
+
+/* Status pill */
+.stocks-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.80);
+  letter-spacing: 0.2px;
+}
+
+.stocks-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(156,163,175,0.55);
+  flex-shrink: 0;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stocks-status-dot.stocks-dot-active {
+  background: #f59e0b;
+  box-shadow: 0 0 10px rgba(245,158,11,0.50);
+  animation: stocksDotPulse 1.2s ease-in-out infinite;
+}
+
+.stocks-status-dot.stocks-dot-idle {
+  background: #22c55e;
+  box-shadow: 0 0 10px rgba(34,197,94,0.40);
+}
+
+.stocks-status-dot.stocks-dot-error {
+  background: #ef4444;
+  box-shadow: 0 0 10px rgba(239,68,68,0.45);
+}
+
+@keyframes stocksDotPulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.35); opacity: 0.75; }
+}
+
+/* Run Screener button */
+.stocks-run-btn {
+  padding: 10px 18px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 1000;
+  letter-spacing: 0.4px;
+  color: #fff;
+  background:
+    radial-gradient(500px 140px at 50% -40px, rgba(187,0,0,0.45), transparent 65%),
+    rgba(187,0,0,0.80);
+  border: 1px solid rgba(187,0,0,0.50);
+  box-shadow:
+    0 14px 32px rgba(187,0,0,0.24),
+    0 12px 22px rgba(0,0,0,0.35);
+  transition: transform 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease;
+  white-space: nowrap;
+}
+
+.stocks-run-btn:active {
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(1.08);
+}
+
+.stocks-run-btn:disabled {
+  opacity: 0.55;
+  filter: grayscale(0.3);
+  box-shadow: none;
+}
+
+/* ── Market badge ── */
+.stocks-market-badge {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  text-align: center;
+}
+
+.stocks-market-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(34,197,94,0.14);
+  border: 1px solid rgba(34,197,94,0.28);
+  color: #bbf7d0;
+}
+
+.stocks-market-closed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(156,163,175,0.10);
+  border: 1px solid rgba(156,163,175,0.20);
+  color: rgba(255,255,255,0.65);
+}
+
+/* ── Signals list ── */
+.stocks-signals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Empty state ── */
+.stocks-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.38);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(255,255,255,0.10);
+  letter-spacing: 0.2px;
+}
+
+/* ── Loading dots ── */
+.stocks-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 24px;
+}
+
+.stocks-loading-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(187,0,0,0.65);
+  display: inline-block;
+  animation: stocksBounceDot 1.2s ease-in-out infinite;
+}
+
+.stocks-loading-dot:nth-child(1) { animation-delay: 0s; }
+.stocks-loading-dot:nth-child(2) { animation-delay: 0.18s; }
+.stocks-loading-dot:nth-child(3) { animation-delay: 0.36s; }
+
+/* Show all three dots on the same row */
+.stocks-loading {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.stocks-loading-text {
+  width: 100%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.45);
+  letter-spacing: 0.4px;
+}
+
+@keyframes stocksBounceDot {
+  0%,80%,100% { transform: scale(0.75); opacity: 0.45; }
+  40%         { transform: scale(1.25); opacity: 1; }
+}
+
+/* =========================
+   SIGNAL CARD — stock-signal-card
+   ========================= */
+
+.stock-signal-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background:
+    radial-gradient(700px 200px at 50% -30px, rgba(255,255,255,0.04), transparent 60%),
+    rgba(38,38,38,0.90);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(255,255,255,0.04) inset;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 0;
+  animation: signalCardIn 320ms cubic-bezier(0.16,1,0.3,1) both;
+}
+
+@keyframes signalCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Direction-based left edge glow — same pattern as .game cards */
+.stock-signal-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 999px;
+  background: rgba(156,163,175,0.55);
+  box-shadow: 0 0 14px rgba(156,163,175,0.20);
+  opacity: 0.95;
+}
+
+.stock-signal-card[data-direction="BULLISH"]::before {
+  background: rgba(34,197,94,0.80);
+  box-shadow: 0 0 18px rgba(34,197,94,0.35);
+}
+
+.stock-signal-card[data-direction="BEARISH"]::before {
+  background: rgba(239,68,68,0.80);
+  box-shadow: 0 0 18px rgba(239,68,68,0.35);
+}
+
+.stock-signal-card[data-direction="NEUTRAL"]::before {
+  background: rgba(245,158,11,0.80);
+  box-shadow: 0 0 18px rgba(245,158,11,0.30);
+}
+
+/* Subtle direction-tinted top bloom */
+.stock-signal-card[data-direction="BULLISH"] {
+  background:
+    radial-gradient(700px 200px at 50% -30px, rgba(34,197,94,0.10), transparent 60%),
+    rgba(38,38,38,0.90);
+}
+.stock-signal-card[data-direction="BEARISH"] {
+  background:
+    radial-gradient(700px 200px at 50% -30px, rgba(239,68,68,0.10), transparent 60%),
+    rgba(38,38,38,0.90);
+}
+.stock-signal-card[data-direction="NEUTRAL"] {
+  background:
+    radial-gradient(700px 200px at 50% -30px, rgba(245,158,11,0.08), transparent 60%),
+    rgba(38,38,38,0.90);
+}
+
+/* Card inner padding (offset from left edge bar) */
+.ssc-header,
+.ssc-price-row,
+.ssc-grid,
+.ssc-reasoning,
+.ssc-footer,
+.ssc-expires {
+  padding-left: 20px;
+  padding-right: 16px;
+}
+
+/* ── Header row: ticker + direction + confidence ── */
+.ssc-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-wrap: wrap;
+}
+
+.ssc-ticker {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: 1px;
+  line-height: 1;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ssc-direction {
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.ssc-confidence {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* ── Price row: price, change%, signal type ── */
+.ssc-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-top: 12px;
+  padding-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.ssc-price {
+  font-size: 28px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ssc-change {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ssc-type {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.80);
+  flex-shrink: 0;
+}
+
+/* ── Data grid: Entry / Target / Stop / RR ── */
+.ssc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 4px;
+  padding-bottom: 12px;
+}
+
+.ssc-cell {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.ssc-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 5px;
+  line-height: 1;
+}
+
+.ssc-val {
+  font-size: 16px;
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.92);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.ssc-green { color: #4ade80; }
+.ssc-red   { color: #f87171; }
+
+/* ── AI Reasoning ── */
+.ssc-reasoning {
+  padding-top: 4px;
+  padding-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: rgba(255,255,255,0.72);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 12px;
+}
+
+/* ── Footer: news + timestamp ── */
+.ssc-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+  padding-bottom: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.50);
+  flex-wrap: wrap;
+}
+
+.ssc-time {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.38);
+}
+
+/* ── Expires note ── */
+.ssc-expires {
+  padding-bottom: 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: rgba(245,158,11,0.75);
+}
