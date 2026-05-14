@@ -119,17 +119,17 @@
   }
 
   // -----------------------------------------------------------
-  // STEP 2 — FMP biggest gainers + losers (/stable/ API)
+  // STEP 2 — FMP biggest gainers + losers
+  // Confirmed working endpoints: /stable/biggest-gainers, /stable/biggest-losers
   // -----------------------------------------------------------
   async function fetchFMPMovers() {
     var key = getFMPKey();
     if (!key) return [];
     var movers = [];
     try {
-      var g = await fetch(FMP_BASE + "/stock-gainers?apikey=" + key);
+      var g = await fetch(FMP_BASE + "/biggest-gainers?apikey=" + key);
       if (g.ok) {
         var gd = await g.json();
-        // /stable/ returns { gainers: [...] } or flat array depending on endpoint
         var gainers = Array.isArray(gd) ? gd : (gd.gainers || []);
         if (gainers[0]) console.log("[Tier0] Gainer sample:", JSON.stringify(gainers[0]).slice(0, 120));
         movers = movers.concat(gainers.slice(0, 15).map(function (m) {
@@ -139,7 +139,7 @@
         console.warn("[Tier0] FMP gainers HTTP", g.status);
       }
       await delay(TIER0_CONFIG.FMP_DELAY_MS);
-      var l = await fetch(FMP_BASE + "/stock-losers?apikey=" + key);
+      var l = await fetch(FMP_BASE + "/biggest-losers?apikey=" + key);
       if (l.ok) {
         var ld = await l.json();
         var losers = Array.isArray(ld) ? ld : (ld.losers || []);
@@ -154,7 +154,8 @@
   }
 
   // -----------------------------------------------------------
-  // STEP 3 — FMP earnings calendar (/stable/ API)
+  // STEP 3 — FMP earnings calendar
+  // Confirmed working endpoint: /stable/earnings-calendar
   // -----------------------------------------------------------
   async function fetchEarningsTickers() {
     var key = getFMPKey();
@@ -165,7 +166,7 @@
       future.setDate(today.getDate() + TIER0_CONFIG.EARNINGS_DAYS_AHEAD);
       var from = today.toISOString().slice(0, 10);
       var to   = future.toISOString().slice(0, 10);
-      var res  = await fetch(FMP_BASE + "/earning-calendar?from=" + from + "&to=" + to + "&apikey=" + key);
+      var res  = await fetch(FMP_BASE + "/earnings-calendar?from=" + from + "&to=" + to + "&apikey=" + key);
       if (!res.ok) {
         console.warn("[Tier0] FMP earnings calendar HTTP", res.status);
         return new Set();
