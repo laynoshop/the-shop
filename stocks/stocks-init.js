@@ -15,17 +15,11 @@
     CANDIDATES_COLLECTION: "stockCandidates"
   };
 
-  // ============================================================
-  // Wait for Firebase to be initialised (boot.js calls initializeApp)
-  // Then fetch Remote Config keys
-  // ============================================================
   async function loadStocksConfig() {
     try {
-      // ensureFirebaseChatReady is set by boot.js — waits for auth + Firestore
       if (typeof window.ensureFirebaseChatReady === "function") {
         await window.ensureFirebaseChatReady();
       } else {
-        // Fallback: poll until firebase.app() exists
         await new Promise((resolve) => {
           let tries = 0;
           const t = setInterval(() => {
@@ -42,7 +36,7 @@
       }
 
       const rc = firebase.remoteConfig();
-      rc.settings.minimumFetchIntervalMillis = 3600000; // 1 hour cache
+      rc.settings.minimumFetchIntervalMillis = 0; // Force fresh fetch every time (cache bust)
 
       rc.defaultConfig = {
         FINNHUB_KEY: "",
@@ -56,15 +50,12 @@
       window.STOCKS_CONFIG.FMP_KEY     = rc.getValue("FMP_KEY").asString();
       window.STOCKS_CONFIG.AV_KEY      = rc.getValue("AV_KEY").asString();
 
-      console.log("[Stocks] Remote Config loaded OK.");
+      console.log("[Stocks] Remote Config loaded OK. Finnhub key tail:", window.STOCKS_CONFIG.FINNHUB_KEY.slice(-6));
     } catch (err) {
       console.warn("[Stocks] Remote Config fetch failed — stocks features may be limited.", err);
     }
   }
 
-  // ============================================================
-  // Boot sequence — runs after DOM is ready
-  // ============================================================
   document.addEventListener("DOMContentLoaded", async () => {
     try {
       await loadStocksConfig();
