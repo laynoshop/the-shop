@@ -1,9 +1,6 @@
 // stocks/stocks-signals.js
 // TIER 2 — LLM Signal Reasoning
-// Listens to Firestore for new Tier 1 candidates (tier2Processed: false),
-// runs the Enrichment layer (FMP historical + fundamentals),
-// then calls the stocksAISignal Cloud Function with a full analyst brief.
-// The Cloud Function holds the OpenAI key in Secret Manager — key never touches the browser.
+// Field names aligned with enrichment output: rsi14, pct1m, pct3m, sma20, sma50, ema20.
 
 (function () {
   "use strict";
@@ -13,9 +10,6 @@
   let __tier2Listener = null;
   const __processing  = new Set();
 
-  // -----------------------------------------------------------
-  // Fetch LIVE price + changePct via Vercel proxy (bypasses Yahoo CORS block)
-  // -----------------------------------------------------------
   async function fetchLivePrice(ticker) {
     try {
       const url = `/api/price?ticker=${encodeURIComponent(ticker)}`;
@@ -36,9 +30,6 @@
     }
   }
 
-  // -----------------------------------------------------------
-  // Fetch latest news headlines (up to 3) from Finnhub
-  // -----------------------------------------------------------
   async function fetchNewsHeadlines(ticker) {
     try {
       const key = (window.STOCKS_CONFIG || {}).FINNHUB_KEY || "";
@@ -61,7 +52,8 @@
   }
 
   // -----------------------------------------------------------
-  // Build the enriched analyst brief string for the AI prompt
+  // Build analyst brief — uses correct enrichment field names:
+  //   rsi14, sma20, sma50, ema20, pct1m, pct3m, pct1d, pct5d
   // -----------------------------------------------------------
   function buildAnalystBrief(enriched, newsHeadlines) {
     const t = enriched;
@@ -69,43 +61,32 @@
 
     lines.push(`TICKER: ${t.ticker} | Price: $${t.price} | Today: ${t.changePct > 0 ? "+" : ""}${t.changePct}%`);
     if (t.pct5d  != null) lines.push(`5-day trend: ${t.pct5d > 0 ? "+" : ""}${t.pct5d}%`);
-    if (t.pct30d != null) lines.push(`30-day trend: ${t.pct30d > 0 ? "+" : ""}${t.pct30d}%`);
-    if (t.pct90d != null) lines.push(`90-day trend: ${t.pct90d > 0 ? "+" : ""}${t.pct90d}%`);
-    if (t.sma20  != null) lines.push(`SMA20: $${t.sma20} | SMA50: $${t.sma50 || "N/A"} | Price vs SMA20: ${t.price > t.sma20 ? "ABOVE" : "BELOW"}`);
-    if (t.aboveSMA20Streak != null && t.aboveSMA20Streak > 0) lines.push(`Days above SMA20 streak: ${t.aboveSMA20Streak}`);
-    if (t.high90d != null) lines.push(`90-day range: $${t.low90d} \u2013 $${t.high90d} | Current vs range: ${(((t.price - t.low90d) / (t.high90d - t.low90d)) * 100).toFixed(0)}% of range`);
-    if (t.volRatio5v20 != null) lines.push(`Volume ratio (5d vs 20d avg): ${t.volRatio5v20}x`);
-    if (t.rsi != null) lines.push(`RSI(14): ${t.rsi}${t.rsi > 70 ? " (OVERBOUGHT)" : t.rsi < 30 ? " (OVERSOLD)" : ""}`);
-    if (t.macdHist != null) {
-      const dir = t.macdBullish ? "BULLISH CROSS" : t.macdBearish ? "BEARISH CROSS" : "no cross";
-      lines.push(`MACD histogram: ${t.macdHist} | Signal: ${dir}`);
+    if (t.pct1m  != null) lines.push(`30-day trend: ${t.pct1m > 0 ? "+" : ""}${t.pct1m}%`);
+    if (t.pct3m  != null) lines.push(`90-day trend: ${t.pct3m > 0 ? "+" : ""}${t.pct3m}%`);
+    if (t.pct1y  != null) lines.push(`1-year trend: ${t.pct1y > 0 ? "+" : ""}${t.pct1y}%`);
+    if (t.sma20  != null) {
+      const vs = t.price > t.sma20 ? "ABOVE" : "BELOW";
+      lines.push(`SMA20: $${t.sma20} | SMA50: $${t.sma50 || "N/A"} | EMA20: $${t.ema20 || "N/A"} | Price vs SMA20: ${vs}`);
     }
-    if (t.analystConsensus) lines.push(`Analyst consensus: ${t.analystConsensus}`);
+    if (t.rsi14  != null) lines.push(`RSI(14): ${t.rsi14}${t.rsi14 >= 70 ? " (OVERBOUGHT)" : t.rsi14 <= 30 ? " (OVERSOLD)" : ""}`);
+    if (t.rsiSignal) lines.push(`RSI signal: ${t.rsiSignal}`);
+    if (t.analystConsensus)    lines.push(`Analyst consensus: ${t.analystConsensus}`);
     if (t.analystTargetMean != null) {
       lines.push(`Analyst price target: mean $${t.analystTargetMean}` +
         (t.analystUpsidePct != null ? ` (${t.analystUpsidePct > 0 ? "+" : ""}${t.analystUpsidePct}% upside)` : "") +
         (t.analystTargetHigh != null ? `, high $${t.analystTargetHigh}` : "")
       );
     }
-    if (t.latestRating) lines.push(`Latest analyst action: ${t.latestRating}`);
-    if (t.beatStreak != null) lines.push(`EPS beat streak: ${t.beatStreak} of last ${Math.min(t.earningsSurprises?.length || 0, 4)} quarters`);
-    if (t.lastSurprisePct != null) lines.push(`Most recent EPS surprise: ${t.lastSurprisePct > 0 ? "+" : ""}${t.lastSurprisePct}% vs estimate`);
-    if (t.earningsDate) lines.push(`Next earnings date: ${t.earningsDate}`);
-    if (t.peRatioCurrent != null) lines.push(`P/E ratio: ${t.peRatioCurrent}`);
-    if (t.debtToEquity   != null) lines.push(`Debt/Equity: ${t.debtToEquity}`);
-    if (t.roePct         != null) lines.push(`Return on Equity: ${t.roePct}%`);
-    if (t.grossMarginPct != null) lines.push(`Gross margin: ${t.grossMarginPct}%`);
+    if (t.peRatio       != null) lines.push(`P/E ratio: ${t.peRatio}`);
+    if (t.debtToEquity  != null) lines.push(`Debt/Equity: ${t.debtToEquity}`);
+    if (t.roe           != null) lines.push(`Return on Equity: ${t.roe}%`);
     if (t.revenueGrowthYoY != null) lines.push(`Revenue growth YoY: ${t.revenueGrowthYoY > 0 ? "+" : ""}${t.revenueGrowthYoY}%`);
+    if (t.sector)   lines.push(`Sector: ${t.sector}`);
+    if (t.beta != null) lines.push(`Beta: ${t.beta}`);
     lines.push(`Recent news: ${newsHeadlines}`);
     return lines.join("\n");
   }
 
-  // -----------------------------------------------------------
-  // Build the explicit AI prompt that asks for ALL fields
-  // including entry zone, target, stop loss, and risk/reward.
-  // This is sent as extra context to the Cloud Function so it
-  // can pass it straight through to OpenAI.
-  // -----------------------------------------------------------
   function buildFullPrompt(enriched, brief) {
     const price = enriched.price;
     return `You are a professional stock analyst generating a trade signal card.
@@ -123,13 +104,13 @@ Rules for trade levels:
 - risk_reward: The risk-to-reward ratio as a string (e.g. "2.5:1")
 - For BULLISH signals: target should be above entry, stop_loss below entry
 - For BEARISH signals: target should be below entry, stop_loss above entry
-- Base these levels on support/resistance implied by SMA20, SMA50, 90-day range, and RSI
+- Base these levels on support/resistance implied by SMA20, SMA50, and RSI
 - time_horizon should be "Intraday", "1-3 days", "1-2 weeks", or "1 month"
 - confidence should be a number 0-100
 
 Respond ONLY with valid JSON, no extra text:
 {
-  "signal": "BULLISH" | "BEARISH" | "NEUTRAL",
+  "signal": "BULLISH" | "BEARISH" | "NEUTRAL" | "WATCH",
   "confidence": <number 0-100>,
   "signal_type": "<momentum|reversal|breakout|breakdown|earnings_play|value>",
   "entry_zone": "<price range string>",
@@ -143,9 +124,6 @@ Respond ONLY with valid JSON, no extra text:
 }`;
   }
 
-  // -----------------------------------------------------------
-  // Call the stocksAISignal Cloud Function
-  // -----------------------------------------------------------
   async function callAISignal(enriched, newsHeadlines) {
     try {
       const brief      = buildAnalystBrief(enriched, newsHeadlines);
@@ -159,17 +137,19 @@ Respond ONLY with valid JSON, no extra text:
         body:    JSON.stringify({
           ticker:       enriched.ticker,
           price:        enriched.price,
-          rsi:          enriched.rsi,
-          macd:         enriched.macdHist,
-          macdSignal:   enriched.macdBullish ? "bullish" : enriched.macdBearish ? "bearish" : null,
-          ema20:        enriched.sma20,
-          ema50:        enriched.sma50,
+          rsi:          enriched.rsi14,        // ← was enriched.rsi (null)
+          sma20:        enriched.sma20,
+          sma50:        enriched.sma50,
+          ema20:        enriched.ema20,
+          rsiSignal:    enriched.rsiSignal,
+          pct1d:        enriched.pct1d,
+          pct5d:        enriched.pct5d,
+          pct1m:        enriched.pct1m,
+          pct3m:        enriched.pct3m,
           sentiment:    enriched.changePct,
-          pe:           enriched.peRatioCurrent,
-          earningsDate: enriched.earningsDate || "",
+          pe:           enriched.peRatio,
           newsHeadline: newsHeadlines,
           analystBrief: brief,
-          // Full structured prompt — Cloud Function should pass this as the user message to OpenAI
           fullPrompt
         })
       });
@@ -182,7 +162,6 @@ Respond ONLY with valid JSON, no extra text:
       const data = await res.json();
       console.log(`[Stocks Tier2] Raw response for ${enriched.ticker}:`, JSON.stringify(data));
 
-      // Support both { analysis: {...} } and flat { signal, entry_zone, ... } shapes
       const analysis = data?.analysis || data || null;
       if (!analysis || typeof analysis !== "object") {
         console.warn(`[Stocks Tier2] Unexpected response shape for ${enriched.ticker}:`, data);
@@ -195,9 +174,6 @@ Respond ONLY with valid JSON, no extra text:
     }
   }
 
-  // -----------------------------------------------------------
-  // Safely extract a string field — never write empty strings
-  // -----------------------------------------------------------
   function safeField(val) {
     if (val === null || val === undefined) return null;
     const s = String(val).trim();
@@ -205,40 +181,16 @@ Respond ONLY with valid JSON, no extra text:
     return s;
   }
 
-  // -----------------------------------------------------------
-  // Last-resort fallback: calculate trade levels from price.
-  // Only used if AI STILL doesn't return them after the explicit prompt.
-  // BULLISH: +5% target, -2.5% stop = 2:1 R/R
-  // BEARISH: -5% target, +2.5% stop = 2:1 R/R
-  // -----------------------------------------------------------
   function calcFallbackLevels(price, direction) {
     if (!price) return {};
     const p   = parseFloat(price);
     const dir = String(direction || "").toUpperCase();
     const fmt = n => "$" + n.toFixed(2);
-
-    if (dir === "BULLISH") {
-      return {
-        entry_zone:  fmt(p),
-        target:      fmt(p * 1.05),
-        stop_loss:   fmt(p * 0.975),
-        risk_reward: "2.0:1"
-      };
-    }
-    if (dir === "BEARISH") {
-      return {
-        entry_zone:  fmt(p),
-        target:      fmt(p * 0.95),
-        stop_loss:   fmt(p * 1.025),
-        risk_reward: "2.0:1"
-      };
-    }
+    if (dir === "BULLISH") return { entry_zone: fmt(p), target: fmt(p * 1.05), stop_loss: fmt(p * 0.975), risk_reward: "2.0:1" };
+    if (dir === "BEARISH") return { entry_zone: fmt(p), target: fmt(p * 0.95), stop_loss: fmt(p * 1.025), risk_reward: "2.0:1" };
     return { entry_zone: fmt(p) };
   }
 
-  // -----------------------------------------------------------
-  // Write the final signal card to Firestore
-  // -----------------------------------------------------------
   async function writeSignalCard(db, enriched, signal, newsHeadlines, livePrice) {
     try {
       const cfg = window.STOCKS_CONFIG || {};
@@ -250,7 +202,6 @@ Respond ONLY with valid JSON, no extra text:
       const direction      = safeField(signal.signal || signal.direction) || "NEUTRAL";
       const confidence     = signal.confidence ?? null;
 
-      // Use AI-provided levels, fall back to calculated if missing
       let entry_zone  = safeField(signal.entry_zone);
       let target      = safeField(signal.target);
       let stop_loss   = safeField(signal.stop_loss);
@@ -266,23 +217,26 @@ Respond ONLY with valid JSON, no extra text:
       }
 
       const card = {
-        ticker:       enriched.ticker,
-        price:        finalPrice,
-        changePct:    finalChangePct,
-        rsi:          enriched.rsi         ?? null,
-        macdCrossed:  enriched.macdCrossed ?? null,
-        newsHeadline: newsHeadlines,
+        ticker:           enriched.ticker,
+        price:            finalPrice,
+        changePct:        finalChangePct,
+        rsi14:            enriched.rsi14          ?? null,
+        rsiSignal:        enriched.rsiSignal       ?? null,
+        sma20:            enriched.sma20           ?? null,
+        sma50:            enriched.sma50           ?? null,
+        ema20:            enriched.ema20           ?? null,
+        pct1m:            enriched.pct1m           ?? null,
+        pct3m:            enriched.pct3m           ?? null,
+        newsHeadline:     newsHeadlines,
         newsUrl,
         newsSource,
-        pct90d:           enriched.pct90d           ?? null,
         analystConsensus: enriched.analystConsensus  || null,
         analystUpsidePct: enriched.analystUpsidePct  ?? null,
-        latestRating:     enriched.latestRating      || null,
-        beatStreak:       enriched.beatStreak        ?? null,
-        lastSurprisePct:  enriched.lastSurprisePct   ?? null,
         revenueGrowthYoY: enriched.revenueGrowthYoY  ?? null,
-        peRatioCurrent:   enriched.peRatioCurrent    ?? null,
-        generatedAt:  firebase.firestore.FieldValue.serverTimestamp(),
+        peRatio:          enriched.peRatio            ?? null,
+        sector:           enriched.sector             || null,
+        beta:             enriched.beta               ?? null,
+        generatedAt:      firebase.firestore.FieldValue.serverTimestamp(),
         direction,
         confidence,
         signal_type:  safeField(signal.signal_type),
@@ -301,15 +255,12 @@ Respond ONLY with valid JSON, no extra text:
         tier2Processed: true
       });
 
-      console.log(`[Stocks Tier2] \u2705 ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | RR: ${risk_reward} | $${finalPrice}`);
+      console.log(`[Stocks Tier2] ✅ ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | RR: ${risk_reward} | $${finalPrice}`);
     } catch (e) {
       console.error("[Stocks Tier2] writeSignalCard error:", e);
     }
   }
 
-  // -----------------------------------------------------------
-  // Process a single candidate through Enrichment + Tier 2
-  // -----------------------------------------------------------
   async function processCandidateTier2(db, candidate) {
     const ticker = candidate.ticker;
     if (__processing.has(ticker)) {
@@ -348,9 +299,6 @@ Respond ONLY with valid JSON, no extra text:
     }
   }
 
-  // -----------------------------------------------------------
-  // Start Tier 2 listener
-  // -----------------------------------------------------------
   function startTier2Listener(db) {
     if (__tier2Listener) { __tier2Listener(); __tier2Listener = null; }
     __processing.clear();
