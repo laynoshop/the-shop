@@ -1,7 +1,7 @@
 // stocks/stocks-enrichment.js
 // ENRICHMENT LAYER — FMP /stable/ API (post-August 2025 accounts).
 // All endpoints use: https://financialmodelingprep.com/stable/{endpoint}?symbol={ticker}&apikey={key}
-// Confirmed Starter-plan endpoints only.
+// technical-indicator: hyphenated, no /daily suffix — timeframe="daily" as a param
 
 (function () {
   "use strict";
@@ -125,14 +125,15 @@
 
   // -----------------------------------------------------------
   // 6. TECHNICAL INDICATORS — RSI(14), SMA(20), SMA(50), EMA(20)
-  //    GET /stable/technical_indicator/daily?symbol={ticker}&type=rsi&period=14&limit=5
+  //    GET /stable/technical-indicator?symbol={ticker}&type=rsi&period=14&timeframe=daily&limit=5
+  //    NOTE: hyphen in "technical-indicator", timeframe param (not /daily path suffix)
   // -----------------------------------------------------------
   async function fetchTechnicals(ticker) {
     const [rsiData, sma20Data, sma50Data, ema20Data] = await Promise.all([
-      fmpGet("technical_indicator/daily", { symbol: ticker, type: "rsi", period: 14, limit: 5 }),
-      fmpGet("technical_indicator/daily", { symbol: ticker, type: "sma", period: 20, limit: 5 }),
-      fmpGet("technical_indicator/daily", { symbol: ticker, type: "sma", period: 50, limit: 5 }),
-      fmpGet("technical_indicator/daily", { symbol: ticker, type: "ema", period: 20, limit: 5 })
+      fmpGet("technical-indicator", { symbol: ticker, type: "rsi", period: 14, timeframe: "daily", limit: 5 }),
+      fmpGet("technical-indicator", { symbol: ticker, type: "sma", period: 20, timeframe: "daily", limit: 5 }),
+      fmpGet("technical-indicator", { symbol: ticker, type: "sma", period: 50, timeframe: "daily", limit: 5 }),
+      fmpGet("technical-indicator", { symbol: ticker, type: "ema", period: 20, timeframe: "daily", limit: 5 })
     ]);
 
     const first = (arr) => Array.isArray(arr) && arr.length ? arr[0] : null;
@@ -283,7 +284,7 @@
         .doc(ticker)
         .update(payload);
 
-      console.log("[Enrichment] \u2705 " + ticker +
+      console.log("[Enrichment] ✅ " + ticker +
         " | RSI: " + (enriched.rsi14 ?? "null") + " (" + (enriched.rsiSignal || "?") + ")" +
         " | SMA20: $" + (enriched.sma20 ?? "null") +
         " | 1M: " + (enriched.pct1m ?? "null") + "%" +
