@@ -1,6 +1,7 @@
 // stocks/stocks-signals.js
 // TIER 2 — LLM Signal Reasoning
-// Field names aligned with enrichment output: rsi14, pct1m, pct3m, sma20, sma50, ema20.
+// Fix: mark tier2Processed=true immediately when we start processing
+// to prevent duplicate runs from Firestore snapshot re-fires.
 
 (function () {
   "use strict";
@@ -51,14 +52,9 @@
     }
   }
 
-  // -----------------------------------------------------------
-  // Build analyst brief — uses correct enrichment field names:
-  //   rsi14, sma20, sma50, ema20, pct1m, pct3m, pct1d, pct5d
-  // -----------------------------------------------------------
   function buildAnalystBrief(enriched, newsHeadlines) {
     const t = enriched;
     const lines = [];
-
     lines.push(`TICKER: ${t.ticker} | Price: $${t.price} | Today: ${t.changePct > 0 ? "+" : ""}${t.changePct}%`);
     if (t.pct5d  != null) lines.push(`5-day trend: ${t.pct5d > 0 ? "+" : ""}${t.pct5d}%`);
     if (t.pct1m  != null) lines.push(`30-day trend: ${t.pct1m > 0 ? "+" : ""}${t.pct1m}%`);
@@ -78,8 +74,6 @@
       );
     }
     if (t.peRatio       != null) lines.push(`P/E ratio: ${t.peRatio}`);
-    if (t.debtToEquity  != null) lines.push(`Debt/Equity: ${t.debtToEquity}`);
-    if (t.roe           != null) lines.push(`Return on Equity: ${t.roe}%`);
     if (t.revenueGrowthYoY != null) lines.push(`Revenue growth YoY: ${t.revenueGrowthYoY > 0 ? "+" : ""}${t.revenueGrowthYoY}%`);
     if (t.sector)   lines.push(`Sector: ${t.sector}`);
     if (t.beta != null) lines.push(`Beta: ${t.beta}`);
@@ -137,7 +131,7 @@ Respond ONLY with valid JSON, no extra text:
         body:    JSON.stringify({
           ticker:       enriched.ticker,
           price:        enriched.price,
-          rsi:          enriched.rsi14,        // ← was enriched.rsi (null)
+          rsi:          enriched.rsi14,
           sma20:        enriched.sma20,
           sma50:        enriched.sma50,
           ema20:        enriched.ema20,
@@ -251,9 +245,6 @@ Respond ONLY with valid JSON, no extra text:
       };
 
       await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").add(card);
-      await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(enriched.ticker).update({
-        tier2Processed: true
-      });
 
       console.log(`[Stocks Tier2] ✅ ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | RR: ${risk_reward} | $${finalPrice}`);
     } catch (e) {
@@ -268,6 +259,17 @@ Respond ONLY with valid JSON, no extra text:
       return;
     }
     __processing.add(ticker);
+
+    // Claim the doc immediately so Firestore snapshot re-fires don't re-queue this ticker
+    const cfg = window.STOCKS_CONFIG || {};
+    try {
+      await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).update({
+        tier2Processed: true
+      });
+    } catch (e) {
+      console.warn(`[Stocks Tier2] Could not pre-claim tier2Processed for ${ticker}:`, e.message);
+    }
+
     try {
       console.log(`[Stocks Tier2] Processing: ${ticker}`);
 
