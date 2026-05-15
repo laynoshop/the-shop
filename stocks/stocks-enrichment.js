@@ -1,7 +1,7 @@
 // stocks/stocks-enrichment.js
-// ENRICHMENT LAYER — FMP /stable/ API (post-August 2025 accounts).
-// All endpoints use: https://financialmodelingprep.com/stable/{endpoint}?symbol={ticker}&apikey={key}
-// technical-indicator: hyphenated, no /daily suffix — timeframe="daily" as a param
+// ENRICHMENT LAYER — FMP /stable/ API (post-August 2025 accounts, Starter plan).
+// RSI + SMA computed locally from /historical-price-eod/full (free).
+// Ratios from /key-metrics (free). Drops /technical-indicator, /rating, /financial-ratios (locked/ETF 404).
 
 (function () {
   "use strict";
@@ -15,8 +15,7 @@
     if (!key) return null;
     try {
       const qs = new URLSearchParams({ ...params, apikey: key }).toString();
-      const url = FMP_BASE + "/" + endpoint + "?" + qs;
-      const res = await fetch(url);
+      const res = await fetch(FMP_BASE + "/" + endpoint + "?" + qs);
       if (!res.ok) {
         console.warn("[Enrichment] FMP " + res.status + " on /" + endpoint + " for " + (params.symbol || ""));
         return null;
@@ -29,7 +28,40 @@
   }
 
   // -----------------------------------------------------------
-  // 1. COMPANY PROFILE
+  // HELPERS: compute RSI + SMA/EMA from a closes array (desc order)
+  // -----------------------------------------------------------
+  function computeRSI(closes, period) {
+    if (!closes || closes.length < period + 1) return null;
+    const c = closes.slice(0, period + 1).reverse(); // oldest first
+    let gains = 0, losses = 0;
+    for (let i = 1; i < c.length; i++) {
+      const d = c[i] - c[i - 1];
+      if (d > 0) gains += d; else losses -= d;
+    }
+    const avgG = gains / period;
+    const avgL = losses / period;
+    if (avgL === 0) return 100;
+    const rs = avgG / avgL;
+    return parseFloat((100 - 100 / (1 + rs)).toFixed(1));
+  }
+
+  function computeSMA(closes, period) {
+    if (!closes || closes.length < period) return null;
+    const slice = closes.slice(0, period);
+    return parseFloat((slice.reduce((a, b) => a + b, 0) / period).toFixed(2));
+  }
+
+  function computeEMA(closes, period) {
+    if (!closes || closes.length < period) return null;
+    const c = closes.slice(0, period * 2).reverse(); // oldest first, enough data
+    const k = 2 / (period + 1);
+    let ema = c.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    for (let i = period; i < c.length; i++) ema = c[i] * k + ema * (1 - k);
+    return parseFloat(ema.toFixed(2));
+  }
+
+  // -----------------------------------------------------------
+  // 1. COMPANY PROFILE — free
   //    GET /stable/profile?symbol={ticker}
   // -----------------------------------------------------------
   async function fetchProfile(ticker) {
@@ -40,15 +72,14 @@
       companyName: d.companyName || null,
       sector:      d.sector      || null,
       industry:    d.industry    || null,
-      beta:        d.beta        != null ? parseFloat(d.beta.toFixed(2)) : null,
+      beta:        d.beta        != null ? parseFloat(parseFloat(d.beta).toFixed(2)) : null,
       mktCap:      d.mktCap      || null,
-      exchange:    d.exchange    || null,
-      country:     d.country     || null
+      exchange:    d.exchange    || null
     };
   }
 
   // -----------------------------------------------------------
-  // 2. PRICE TARGET SUMMARY
+  // 2. PRICE TARGET SUMMARY — free on Starter
   //    GET /stable/price-target-summary?symbol={ticker}
   // -----------------------------------------------------------
   async function fetchPriceTarget(ticker) {
@@ -65,43 +96,24 @@
   }
 
   // -----------------------------------------------------------
-  // 3. ANALYST RATING
-  //    GET /stable/rating?symbol={ticker}
+  // 3. KEY METRICS — free (replaces /financial-ratios for ETFs/ADRs)
+  //    GET /stable/key-metrics?symbol={ticker}&period=quarter&limit=2
   // -----------------------------------------------------------
-  async function fetchRating(ticker) {
-    const data = await fmpGet("rating", { symbol: ticker });
-    const d = Array.isArray(data) ? data[0] : data;
-    if (!d) return null;
-    return {
-      rating:               d.rating                         || null,
-      ratingScore:          d.ratingScore                    != null ? d.ratingScore : null,
-      ratingRecommendation: d.ratingRecommendation           || null,
-      dcfScore:             d.ratingDetailsDCFScore          != null ? d.ratingDetailsDCFScore : null,
-      peRec:                d.ratingDetailsPERecommendation  || null
-    };
-  }
-
-  // -----------------------------------------------------------
-  // 4. FINANCIAL RATIOS
-  //    GET /stable/financial-ratios?symbol={ticker}&period=quarter&limit=2
-  // -----------------------------------------------------------
-  async function fetchRatios(ticker) {
-    const data = await fmpGet("financial-ratios", { symbol: ticker, period: "quarter", limit: 2 });
+  async function fetchKeyMetrics(ticker) {
+    const data = await fmpGet("key-metrics", { symbol: ticker, period: "quarter", limit: 2 });
     if (!Array.isArray(data) || !data.length) return null;
     const d = data[0];
     return {
-      peRatio:      d.priceEarningsRatio != null ? parseFloat(d.priceEarningsRatio.toFixed(1))        : null,
-      pbRatio:      d.priceToBookRatio   != null ? parseFloat(d.priceToBookRatio.toFixed(2))          : null,
-      debtToEquity: d.debtEquityRatio    != null ? parseFloat(d.debtEquityRatio.toFixed(2))           : null,
-      currentRatio: d.currentRatio       != null ? parseFloat(d.currentRatio.toFixed(2))              : null,
-      roe:          d.returnOnEquity     != null ? parseFloat((d.returnOnEquity * 100).toFixed(1))     : null,
-      grossMargin:  d.grossProfitMargin  != null ? parseFloat((d.grossProfitMargin * 100).toFixed(1)) : null,
-      netMargin:    d.netProfitMargin    != null ? parseFloat((d.netProfitMargin * 100).toFixed(1))   : null
+      peRatio:      d.peRatio         != null ? parseFloat(parseFloat(d.peRatio).toFixed(1))        : null,
+      pbRatio:      d.pbRatio         != null ? parseFloat(parseFloat(d.pbRatio).toFixed(2))        : null,
+      debtToEquity: d.debtToEquity    != null ? parseFloat(parseFloat(d.debtToEquity).toFixed(2))   : null,
+      roe:          d.roe             != null ? parseFloat((parseFloat(d.roe) * 100).toFixed(1))     : null,
+      eps:          d.netIncomePerShare != null ? parseFloat(parseFloat(d.netIncomePerShare).toFixed(2)) : null
     };
   }
 
   // -----------------------------------------------------------
-  // 5. INCOME STATEMENT
+  // 4. INCOME STATEMENT — free (stocks only; ETFs return empty)
   //    GET /stable/income-statement?symbol={ticker}&period=quarter&limit=4
   // -----------------------------------------------------------
   async function fetchIncome(ticker) {
@@ -111,8 +123,7 @@
       date:        q.date        || null,
       revenue:     q.revenue     || null,
       netIncome:   q.netIncome   || null,
-      grossProfit: q.grossProfit || null,
-      eps:         q.eps         != null ? parseFloat(q.eps.toFixed(2)) : null
+      eps:         q.eps         != null ? parseFloat(parseFloat(q.eps).toFixed(2)) : null
     }));
     let revenueGrowthYoY = null;
     if (quarters.length >= 4 && quarters[0].revenue && quarters[3].revenue) {
@@ -124,31 +135,29 @@
   }
 
   // -----------------------------------------------------------
-  // 6. TECHNICAL INDICATORS — RSI(14), SMA(20), SMA(50), EMA(20)
-  //    GET /stable/technical-indicator?symbol={ticker}&type=rsi&period=14&timeframe=daily&limit=5
-  //    NOTE: hyphen in "technical-indicator", timeframe param (not /daily path suffix)
+  // 5. TECHNICALS from EOD history — free
+  //    GET /stable/historical-price-eod/full?symbol={ticker}&limit=60
+  //    Computes RSI(14), SMA(20), SMA(50), EMA(20) locally
   // -----------------------------------------------------------
   async function fetchTechnicals(ticker) {
-    const [rsiData, sma20Data, sma50Data, ema20Data] = await Promise.all([
-      fmpGet("technical-indicator", { symbol: ticker, type: "rsi", period: 14, timeframe: "daily", limit: 5 }),
-      fmpGet("technical-indicator", { symbol: ticker, type: "sma", period: 20, timeframe: "daily", limit: 5 }),
-      fmpGet("technical-indicator", { symbol: ticker, type: "sma", period: 50, timeframe: "daily", limit: 5 }),
-      fmpGet("technical-indicator", { symbol: ticker, type: "ema", period: 20, timeframe: "daily", limit: 5 })
-    ]);
-
-    const first = (arr) => Array.isArray(arr) && arr.length ? arr[0] : null;
-    const rsi   = first(rsiData);
-    const sma20 = first(sma20Data);
-    const sma50 = first(sma50Data);
-    const ema20 = first(ema20Data);
-
-    const rsiVal = rsi ? parseFloat((rsi.rsi || rsi.value || 0).toFixed(1)) : null;
-
+    const data = await fmpGet("historical-price-eod/full", { symbol: ticker, limit: 60 });
+    // Response shape: { historical: [...] } or just an array
+    const hist = data?.historical || (Array.isArray(data) ? data : null);
+    if (!hist || hist.length < 20) {
+      console.warn("[Enrichment] Not enough EOD history for " + ticker + " (" + (hist?.length || 0) + " bars)");
+      return null;
+    }
+    // hist is desc (newest first); extract close prices
+    const closes = hist.map(d => parseFloat(d.close || d.adjClose || 0)).filter(v => v > 0);
+    const rsiVal  = computeRSI(closes, 14);
+    const sma20   = computeSMA(closes, 20);
+    const sma50   = computeSMA(closes, 50);
+    const ema20   = computeEMA(closes, 20);
     return {
       rsi14:     rsiVal,
-      sma20:     sma20 ? parseFloat((sma20.sma || sma20.value || 0).toFixed(2)) : null,
-      sma50:     sma50 ? parseFloat((sma50.sma || sma50.value || 0).toFixed(2)) : null,
-      ema20:     ema20 ? parseFloat((ema20.ema || ema20.value || 0).toFixed(2)) : null,
+      sma20,
+      sma50,
+      ema20,
       rsiSignal: rsiVal != null
         ? (rsiVal >= 70 ? "OVERBOUGHT" : rsiVal <= 30 ? "OVERSOLD" : "NEUTRAL")
         : null
@@ -156,14 +165,14 @@
   }
 
   // -----------------------------------------------------------
-  // 7. STOCK PRICE CHANGE — 1D, 5D, 1M, 3M, 6M, 1Y
+  // 6. STOCK PRICE CHANGE — free
   //    GET /stable/stock-price-change?symbol={ticker}
   // -----------------------------------------------------------
   async function fetchPriceChange(ticker) {
     const data = await fmpGet("stock-price-change", { symbol: ticker });
     const d = Array.isArray(data) ? data[0] : data;
     if (!d) return null;
-    const fmt = (v) => v != null ? parseFloat(v.toFixed(2)) : null;
+    const fmt = (v) => v != null ? parseFloat(parseFloat(v).toFixed(2)) : null;
     return {
       pct1d: fmt(d["1D"]),
       pct5d: fmt(d["5D"]),
@@ -188,23 +197,19 @@
 
     console.log("[Enrichment] Enriching " + ticker + "...");
 
-    const [profile, priceTarget, rating, ratios, income, technicals, priceChange] = await Promise.all([
+    const [profile, priceTarget, keyMetrics, income, technicals, priceChange] = await Promise.all([
       fetchProfile(ticker),
       fetchPriceTarget(ticker),
-      fetchRating(ticker),
-      fetchRatios(ticker),
+      fetchKeyMetrics(ticker),
       fetchIncome(ticker),
       fetchTechnicals(ticker),
       fetchPriceChange(ticker)
     ]);
 
-    // Derived: analyst upside %
     let analystUpsidePct = null;
     if (priceTarget?.targetMean && price > 0) {
       analystUpsidePct = parseFloat((((priceTarget.targetMean - price) / price) * 100).toFixed(1));
     }
-
-    // Derived: price vs SMA20
     const aboveSMA20 = (technicals?.sma20 && price > 0) ? price > technicals.sma20 : null;
 
     const enriched = {
@@ -232,17 +237,12 @@
       analystTargetLow:     priceTarget?.targetLow      ?? null,
       analystConsensus:     priceTarget?.consensus      ?? null,
       analystUpsidePct,
-      ratingRecommendation: rating?.ratingRecommendation ?? null,
-      ratingScore:          rating?.ratingScore         ?? null,
-      peRatio:              ratios?.peRatio             ?? null,
-      pbRatio:              ratios?.pbRatio             ?? null,
-      debtToEquity:         ratios?.debtToEquity        ?? null,
-      currentRatio:         ratios?.currentRatio        ?? null,
-      roe:                  ratios?.roe                 ?? null,
-      grossMarginPct:       ratios?.grossMargin         ?? null,
-      netMarginPct:         ratios?.netMargin           ?? null,
+      peRatio:              keyMetrics?.peRatio         ?? null,
+      pbRatio:              keyMetrics?.pbRatio         ?? null,
+      debtToEquity:         keyMetrics?.debtToEquity    ?? null,
+      roe:                  keyMetrics?.roe             ?? null,
+      latestEps:            income?.quarters?.[0]?.eps ?? keyMetrics?.eps ?? null,
       revenueGrowthYoY:     income?.revenueGrowthYoY   ?? null,
-      latestEps:            income?.quarters?.[0]?.eps  ?? null,
       enrichedAt:           new Date().toISOString()
     };
 
@@ -250,32 +250,28 @@
     try {
       const cfg = window.STOCKS_CONFIG || {};
       const payload = {
-        sector:               enriched.sector,
-        industry:             enriched.industry,
-        beta:                 enriched.beta,
-        pct1d:                enriched.pct1d,
-        pct5d:                enriched.pct5d,
-        pct1m:                enriched.pct1m,
-        pct3m:                enriched.pct3m,
-        rsi14:                enriched.rsi14,
-        rsiSignal:            enriched.rsiSignal,
-        sma20:                enriched.sma20,
-        sma50:                enriched.sma50,
-        ema20:                enriched.ema20,
-        aboveSMA20:           enriched.aboveSMA20,
-        analystTargetMean:    enriched.analystTargetMean,
-        analystUpsidePct:     enriched.analystUpsidePct,
-        analystConsensus:     enriched.analystConsensus,
-        ratingRecommendation: enriched.ratingRecommendation,
-        ratingScore:          enriched.ratingScore,
-        peRatio:              enriched.peRatio,
-        debtToEquity:         enriched.debtToEquity,
-        roe:                  enriched.roe,
-        grossMarginPct:       enriched.grossMarginPct,
-        netMarginPct:         enriched.netMarginPct,
-        revenueGrowthYoY:     enriched.revenueGrowthYoY,
-        latestEps:            enriched.latestEps,
-        enrichedAt:           firebase.firestore.FieldValue.serverTimestamp()
+        sector:            enriched.sector,
+        industry:          enriched.industry,
+        beta:              enriched.beta,
+        pct1d:             enriched.pct1d,
+        pct5d:             enriched.pct5d,
+        pct1m:             enriched.pct1m,
+        pct3m:             enriched.pct3m,
+        rsi14:             enriched.rsi14,
+        rsiSignal:         enriched.rsiSignal,
+        sma20:             enriched.sma20,
+        sma50:             enriched.sma50,
+        ema20:             enriched.ema20,
+        aboveSMA20:        enriched.aboveSMA20,
+        analystTargetMean: enriched.analystTargetMean,
+        analystUpsidePct:  enriched.analystUpsidePct,
+        analystConsensus:  enriched.analystConsensus,
+        peRatio:           enriched.peRatio,
+        debtToEquity:      enriched.debtToEquity,
+        roe:               enriched.roe,
+        revenueGrowthYoY:  enriched.revenueGrowthYoY,
+        latestEps:         enriched.latestEps,
+        enrichedAt:        firebase.firestore.FieldValue.serverTimestamp()
       };
       Object.keys(payload).forEach(k => { if (payload[k] == null) delete payload[k]; });
 
@@ -290,7 +286,7 @@
         " | 1M: " + (enriched.pct1m ?? "null") + "%" +
         " | target: $" + (enriched.analystTargetMean ?? "null") +
         " (" + (enriched.analystUpsidePct ?? "null") + "% upside)" +
-        " | rating: " + (enriched.ratingRecommendation || "none")
+        " | PE: " + (enriched.peRatio ?? "null")
       );
     } catch (e) {
       console.warn("[Enrichment] Firestore update error for " + ticker + ":", e.message);
