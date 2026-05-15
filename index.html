@@ -171,14 +171,16 @@
        STOCKS MODULE
        Load order:
          1. data       — static fallback universe + STOCKS_CONFIG shape
-         2. tier0      — dynamic watchlist builder, overwrites STOCKS_UNIVERSE
-         3. screener   — Tier 1, uses STOCKS_UNIVERSE set by tier0
-         4. enrichment — pulls FMP historical + fundamentals for each candidate
-         5. signals    — Tier 2 AI analysis (uses enrichment brief)
-         6. render     — UI (session-grouped by timestamp)
-         7. init       — boots Remote Config keys last
+         2. roster     — addToRoster / removeFromRoster / loadRoster (Firestore)
+         3. tier0      — dynamic watchlist builder, overwrites STOCKS_UNIVERSE
+         4. screener   — Tier 1, uses STOCKS_UNIVERSE set by tier0
+         5. enrichment — pulls FMP historical + fundamentals for each candidate
+         6. signals    — Tier 2 AI analysis (uses enrichment brief)
+         7. render     — UI (session-grouped by timestamp)
+         8. init       — boots Remote Config keys last
        ========================= -->
   <script src="stocks/stocks-data.js" defer onerror="__splitFail('stocks/stocks-data.js')"></script>
+  <script src="stocks/stocks-roster.js" defer onerror="__splitFail('stocks/stocks-roster.js')"></script>
   <script src="stocks/stocks-tier0.js" defer onerror="__splitFail('stocks/stocks-tier0.js')"></script>
   <script src="stocks/stocks-screener.js" defer onerror="__splitFail('stocks/stocks-screener.js')"></script>
   <script src="stocks/stocks-enrichment.js" defer onerror="__splitFail('stocks/stocks-enrichment.js')"></script>
