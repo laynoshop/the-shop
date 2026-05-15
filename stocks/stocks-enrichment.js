@@ -1,34 +1,27 @@
 // stocks/stocks-enrichment.js
-// ENRICHMENT LAYER — FMP Starter plan, confirmed-accessible endpoints only.
-// Base: /api/v3/ (Starter plan default), falls back to /stable/ on 404.
-// Endpoints: /profile, /ratios, /income-statement,
-//            /technical_indicator/daily (RSI/SMA/EMA),
-//            /rating, /price-target-summary, /stock-price-change
+// ENRICHMENT LAYER — FMP /stable/ API (post-August 2025 accounts).
+// All endpoints use: https://financialmodelingprep.com/stable/{endpoint}?symbol={ticker}&apikey={key}
+// Confirmed Starter-plan endpoints only.
 
 (function () {
   "use strict";
 
+  const FMP_BASE = "https://financialmodelingprep.com/stable";
+
   function getFMPKey() { return (window.STOCKS_CONFIG || {}).FMP_KEY || ""; }
 
-  // Try v3 first (Starter plan default), fall back to /stable/ on 404 only.
-  // 403 means truly no access — don't retry, just return null.
-  async function fmpGet(path) {
+  async function fmpGet(endpoint, params) {
     const key = getFMPKey();
     if (!key) return null;
-    const sep = path.includes("?") ? "&" : "?";
-    const v3     = "https://financialmodelingprep.com/api/v3";
-    const stable = "https://financialmodelingprep.com/stable";
     try {
-      let res = await fetch(v3 + path + sep + "apikey=" + key);
-      if (res.status === 404) {
-        res = await fetch(stable + path + sep + "apikey=" + key);
-      }
+      const qs = new URLSearchParams({ ...params, apikey: key }).toString();
+      const url = FMP_BASE + "/" + endpoint + "?" + qs;
+      const res = await fetch(url);
       if (!res.ok) {
-        console.warn("[Enrichment] FMP " + res.status + " on", path);
+        console.warn("[Enrichment] FMP " + res.status + " on /" + endpoint + " for " + (params.symbol || ""));
         return null;
       }
-      const json = await res.json();
-      return json || null;
+      return await res.json() || null;
     } catch (e) {
       console.warn("[Enrichment] fetch error:", e.message);
       return null;
@@ -37,30 +30,29 @@
 
   // -----------------------------------------------------------
   // 1. COMPANY PROFILE
-  //    GET /api/v3/profile/{ticker}
+  //    GET /stable/profile?symbol={ticker}
   // -----------------------------------------------------------
   async function fetchProfile(ticker) {
-    const data = await fmpGet("/profile/" + ticker);
+    const data = await fmpGet("profile", { symbol: ticker });
     const d = Array.isArray(data) ? data[0] : data;
     if (!d) return null;
     return {
-      companyName: d.companyName  || null,
-      sector:      d.sector       || null,
-      industry:    d.industry     || null,
-      beta:        d.beta         != null ? parseFloat(d.beta.toFixed(2))   : null,
-      mktCap:      d.mktCap       || null,
-      exchange:    d.exchange     || null,
-      country:     d.country      || null,
-      description: d.description  || null
+      companyName: d.companyName || null,
+      sector:      d.sector      || null,
+      industry:    d.industry    || null,
+      beta:        d.beta        != null ? parseFloat(d.beta.toFixed(2)) : null,
+      mktCap:      d.mktCap      || null,
+      exchange:    d.exchange    || null,
+      country:     d.country     || null
     };
   }
 
   // -----------------------------------------------------------
   // 2. PRICE TARGET SUMMARY
-  //    GET /api/v3/price-target-summary?symbol={ticker}
+  //    GET /stable/price-target-summary?symbol={ticker}
   // -----------------------------------------------------------
   async function fetchPriceTarget(ticker) {
-    const data = await fmpGet("/price-target-summary?symbol=" + ticker);
+    const data = await fmpGet("price-target-summary", { symbol: ticker });
     const d = Array.isArray(data) ? data[0] : data;
     if (!d) return null;
     return {
@@ -74,29 +66,27 @@
 
   // -----------------------------------------------------------
   // 3. ANALYST RATING
-  //    GET /api/v3/rating/{ticker}
+  //    GET /stable/rating?symbol={ticker}
   // -----------------------------------------------------------
   async function fetchRating(ticker) {
-    const data = await fmpGet("/rating/" + ticker);
+    const data = await fmpGet("rating", { symbol: ticker });
     const d = Array.isArray(data) ? data[0] : data;
     if (!d) return null;
     return {
-      rating:               d.rating                          || null,
-      ratingScore:          d.ratingScore                     != null ? d.ratingScore : null,
-      ratingRecommendation: d.ratingRecommendation            || null,
-      dcfScore:             d.ratingDetailsDCFScore           != null ? d.ratingDetailsDCFScore : null,
-      roeRec:               d.ratingDetailsROERecommendation  || null,
-      deRec:                d.ratingDetailsDERecommendation   || null,
-      peRec:                d.ratingDetailsPERecommendation   || null
+      rating:               d.rating                         || null,
+      ratingScore:          d.ratingScore                    != null ? d.ratingScore : null,
+      ratingRecommendation: d.ratingRecommendation           || null,
+      dcfScore:             d.ratingDetailsDCFScore          != null ? d.ratingDetailsDCFScore : null,
+      peRec:                d.ratingDetailsPERecommendation  || null
     };
   }
 
   // -----------------------------------------------------------
-  // 4. FINANCIAL RATIOS (quarterly)
-  //    GET /api/v3/ratios/{ticker}?limit=2&period=quarter
+  // 4. FINANCIAL RATIOS
+  //    GET /stable/financial-ratios?symbol={ticker}&period=quarter&limit=2
   // -----------------------------------------------------------
   async function fetchRatios(ticker) {
-    const data = await fmpGet("/ratios/" + ticker + "?limit=2&period=quarter");
+    const data = await fmpGet("financial-ratios", { symbol: ticker, period: "quarter", limit: 2 });
     if (!Array.isArray(data) || !data.length) return null;
     const d = data[0];
     return {
@@ -111,11 +101,11 @@
   }
 
   // -----------------------------------------------------------
-  // 5. INCOME STATEMENT (quarterly, last 4 quarters)
-  //    GET /api/v3/income-statement/{ticker}?limit=4&period=quarter
+  // 5. INCOME STATEMENT
+  //    GET /stable/income-statement?symbol={ticker}&period=quarter&limit=4
   // -----------------------------------------------------------
   async function fetchIncome(ticker) {
-    const data = await fmpGet("/income-statement/" + ticker + "?limit=4&period=quarter");
+    const data = await fmpGet("income-statement", { symbol: ticker, period: "quarter", limit: 4 });
     if (!Array.isArray(data) || !data.length) return null;
     const quarters = data.map(q => ({
       date:        q.date        || null,
@@ -135,15 +125,14 @@
 
   // -----------------------------------------------------------
   // 6. TECHNICAL INDICATORS — RSI(14), SMA(20), SMA(50), EMA(20)
-  //    GET /api/v3/technical_indicator/daily/{ticker}?type=rsi&period=14&limit=5
+  //    GET /stable/technical_indicator/daily?symbol={ticker}&type=rsi&period=14&limit=5
   // -----------------------------------------------------------
   async function fetchTechnicals(ticker) {
-    const base = "/technical_indicator/daily/" + ticker;
     const [rsiData, sma20Data, sma50Data, ema20Data] = await Promise.all([
-      fmpGet(base + "?type=rsi&period=14&limit=5"),
-      fmpGet(base + "?type=sma&period=20&limit=5"),
-      fmpGet(base + "?type=sma&period=50&limit=5"),
-      fmpGet(base + "?type=ema&period=20&limit=5")
+      fmpGet("technical_indicator/daily", { symbol: ticker, type: "rsi", period: 14, limit: 5 }),
+      fmpGet("technical_indicator/daily", { symbol: ticker, type: "sma", period: 20, limit: 5 }),
+      fmpGet("technical_indicator/daily", { symbol: ticker, type: "sma", period: 50, limit: 5 }),
+      fmpGet("technical_indicator/daily", { symbol: ticker, type: "ema", period: 20, limit: 5 })
     ]);
 
     const first = (arr) => Array.isArray(arr) && arr.length ? arr[0] : null;
@@ -152,13 +141,13 @@
     const sma50 = first(sma50Data);
     const ema20 = first(ema20Data);
 
-    const rsiVal = rsi ? parseFloat(((rsi.rsi || rsi.value || 0)).toFixed(1)) : null;
+    const rsiVal = rsi ? parseFloat((rsi.rsi || rsi.value || 0).toFixed(1)) : null;
 
     return {
       rsi14:     rsiVal,
-      sma20:     sma20 ? parseFloat(((sma20.sma || sma20.value || 0)).toFixed(2)) : null,
-      sma50:     sma50 ? parseFloat(((sma50.sma || sma50.value || 0)).toFixed(2)) : null,
-      ema20:     ema20 ? parseFloat(((ema20.ema || ema20.value || 0)).toFixed(2)) : null,
+      sma20:     sma20 ? parseFloat((sma20.sma || sma20.value || 0).toFixed(2)) : null,
+      sma50:     sma50 ? parseFloat((sma50.sma || sma50.value || 0).toFixed(2)) : null,
+      ema20:     ema20 ? parseFloat((ema20.ema || ema20.value || 0).toFixed(2)) : null,
       rsiSignal: rsiVal != null
         ? (rsiVal >= 70 ? "OVERBOUGHT" : rsiVal <= 30 ? "OVERSOLD" : "NEUTRAL")
         : null
@@ -167,10 +156,10 @@
 
   // -----------------------------------------------------------
   // 7. STOCK PRICE CHANGE — 1D, 5D, 1M, 3M, 6M, 1Y
-  //    GET /api/v3/stock-price-change/{ticker}
+  //    GET /stable/stock-price-change?symbol={ticker}
   // -----------------------------------------------------------
   async function fetchPriceChange(ticker) {
-    const data = await fmpGet("/stock-price-change/" + ticker);
+    const data = await fmpGet("stock-price-change", { symbol: ticker });
     const d = Array.isArray(data) ? data[0] : data;
     if (!d) return null;
     const fmt = (v) => v != null ? parseFloat(v.toFixed(2)) : null;
@@ -219,28 +208,24 @@
 
     const enriched = {
       ...candidate,
-      // Profile
       companyName:          profile?.companyName        ?? null,
       sector:               profile?.sector             ?? null,
       industry:             profile?.industry           ?? null,
       beta:                 profile?.beta               ?? null,
       mktCap:               profile?.mktCap             ?? null,
       exchange:             profile?.exchange           ?? null,
-      // Price momentum
       pct1d:                priceChange?.pct1d          ?? null,
       pct5d:                priceChange?.pct5d          ?? null,
       pct1m:                priceChange?.pct1m          ?? null,
       pct3m:                priceChange?.pct3m          ?? null,
       pct6m:                priceChange?.pct6m          ?? null,
       pct1y:                priceChange?.pct1y          ?? null,
-      // Technicals
       rsi14:                technicals?.rsi14           ?? null,
       rsiSignal:            technicals?.rsiSignal       ?? null,
       sma20:                technicals?.sma20           ?? null,
       sma50:                technicals?.sma50           ?? null,
       ema20:                technicals?.ema20           ?? null,
       aboveSMA20,
-      // Analyst
       analystTargetMean:    priceTarget?.targetMean     ?? null,
       analystTargetHigh:    priceTarget?.targetHigh     ?? null,
       analystTargetLow:     priceTarget?.targetLow      ?? null,
@@ -248,7 +233,6 @@
       analystUpsidePct,
       ratingRecommendation: rating?.ratingRecommendation ?? null,
       ratingScore:          rating?.ratingScore         ?? null,
-      // Fundamentals
       peRatio:              ratios?.peRatio             ?? null,
       pbRatio:              ratios?.pbRatio             ?? null,
       debtToEquity:         ratios?.debtToEquity        ?? null,
@@ -256,13 +240,12 @@
       roe:                  ratios?.roe                 ?? null,
       grossMarginPct:       ratios?.grossMargin         ?? null,
       netMarginPct:         ratios?.netMargin           ?? null,
-      // Income trend
       revenueGrowthYoY:     income?.revenueGrowthYoY   ?? null,
       latestEps:            income?.quarters?.[0]?.eps  ?? null,
       enrichedAt:           new Date().toISOString()
     };
 
-    // Persist to Firestore (strip nulls so we never clobber existing good data)
+    // Persist to Firestore (strip nulls)
     try {
       const cfg = window.STOCKS_CONFIG || {};
       const payload = {
