@@ -1,5 +1,5 @@
 // stocks/stocks-render.js
-// Renders the Stocks tab UI — day grouping, recurrence badges, history overlay, daily watchlist overlay.
+// Renders the Stocks tab UI — The Roster input, session grouping, history overlay.
 
 (function () {
   "use strict";
@@ -62,25 +62,29 @@
     } catch { return "--"; }
   }
 
-  function dayKey(ts) {
-    if (!ts) return "unknown";
+  // Format a timestamp into a session group label like:
+  // "Thu, May 14 \u2022 9:45 AM  \u2014  12 Signals"
+  function sessionLabel(ts, count) {
+    if (!ts) return "Unknown Session";
     try {
       const d = ts.toDate ? ts.toDate() : new Date(ts);
-      return d.toISOString().slice(0, 10);
-    } catch { return "unknown"; }
+      const datePart = d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+      const timePart = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const sigPart  = `${count} Signal${count !== 1 ? "s" : ""}`;
+      return `${datePart} \u2022 ${timePart}  \u2014  ${sigPart}`;
+    } catch { return "Unknown Session"; }
   }
 
-  function dayLabel(key) {
-    if (key === "unknown") return "Unknown Date";
-    const today = new Date();
-    const todayKey = today.toISOString().slice(0, 10);
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const yKey = yesterday.toISOString().slice(0, 10);
-    if (key === todayKey) return "Today";
-    if (key === yKey)     return "Yesterday";
-    const d = new Date(key + "T12:00:00");
-    return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+  // Group key = YYYY-MM-DDTHH:MM (minute-level bucket — sessions within ~1 min are grouped)
+  // In practice the Run button fires all in sequence so they share nearly the same server timestamp.
+  // We bucket by 10-minute window to keep sessions together cleanly.
+  function sessionKey(ts) {
+    if (!ts) return "unknown";
+    try {
+      const d  = ts.toDate ? ts.toDate() : new Date(ts);
+      const mm = Math.floor(d.getMinutes() / 10) * 10; // round down to 10-min bucket
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+    } catch { return "unknown"; }
   }
 
   function field(signal, ...keys) {
@@ -95,132 +99,6 @@
     const s = ["th","st","nd","rd"];
     const v = n % 100;
     return s[(v - 20) % 10] || s[v] || s[0];
-  }
-
-  // -----------------------------------------------------------
-  // TRIGGER CHIPS — pretty labels for what caused a ticker to be added
-  // -----------------------------------------------------------
-  const TRIGGER_META = {
-    volume_surge:        { label: "Volume Surge",       color: "#818cf8", icon: "\uD83D\uDCC8" },
-    gap_up:              { label: "Gap Up",              color: "#22c55e", icon: "\u2B06" },
-    gap_down:            { label: "Gap Down",            color: "#ef4444", icon: "\u2B07" },
-    earnings_proximity:  { label: "Earnings Near",       color: "#f59e0b", icon: "\uD83D\uDCC5" },
-    sector_momentum:     { label: "Sector Momentum",     color: "#38bdf8", icon: "\uD83C\uDFAF" },
-    news_activity:       { label: "News Activity",       color: "#fb923c", icon: "\uD83D\uDCF0" }
-  };
-
-  function triggerChip(triggerKey) {
-    const meta = TRIGGER_META[triggerKey] || { label: triggerKey, color: "rgba(255,255,255,0.55)", icon: "\u2022" };
-    return `<span class="ssc-trigger-chip" style="color:${meta.color};border-color:${meta.color}22;background:${meta.color}14">${meta.icon} ${meta.label}</span>`;
-  }
-
-  // -----------------------------------------------------------
-  // DAILY WATCHLIST OVERLAY
-  // -----------------------------------------------------------
-  let __watchlistUnsub = null;
-
-  function openWatchlistOverlay(db) {
-    const existing = document.getElementById("ssc-watchlist-overlay");
-    if (existing) existing.remove();
-
-    const overlay = document.createElement("div");
-    overlay.id = "ssc-watchlist-overlay";
-    overlay.className = "ssc-watchlist-overlay";
-    overlay.innerHTML = `
-      <div class="ssc-watchlist-backdrop"></div>
-      <div class="ssc-watchlist-panel">
-        <div class="ssc-watchlist-header">
-          <div class="ssc-watchlist-title">
-            <span class="ssc-watchlist-icon">\uD83D\uDCCB</span>
-            <div>
-              <div class="ssc-watchlist-heading">Today's Watchlist</div>
-              <div class="ssc-watchlist-sub">Built by Tier 0 at 9:00 AM &mdash; ${new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</div>
-            </div>
-          </div>
-          <button class="ssc-watchlist-close" aria-label="Close watchlist">&#x2715;</button>
-        </div>
-        <div class="ssc-watchlist-body" id="sscWatchlistBody">
-          <div class="ssc-watchlist-loading">\u23F3 Loading watchlist...</div>
-        </div>
-        <div class="ssc-watchlist-footer">
-          <button class="ssc-watchlist-rebuild-btn" id="sscWatchlistRebuildBtn">&#x21BB; Rebuild Now</button>
-          <span class="ssc-watchlist-footer-note">Tier 0 auto-runs at 9:00 AM ET weekdays</span>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add("ssc-watchlist-visible"));
-
-    overlay.querySelector(".ssc-watchlist-backdrop").addEventListener("click", () => closeWatchlistOverlay());
-    overlay.querySelector(".ssc-watchlist-close").addEventListener("click",    () => closeWatchlistOverlay());
-
-    const rebuildBtn = overlay.querySelector("#sscWatchlistRebuildBtn");
-    rebuildBtn.addEventListener("click", async () => {
-      rebuildBtn.disabled = true;
-      rebuildBtn.textContent = "\u23F3 Rebuilding...";
-      setStatus("Tier 0 running — rebuilding watchlist...", "active");
-      try {
-        await window.runTier0Manual();
-        setStatus("Watchlist rebuilt.", "idle");
-      } catch (e) {
-        setStatus("Tier 0 error. Check console.", "error");
-      } finally {
-        rebuildBtn.disabled = false;
-        rebuildBtn.innerHTML = "&#x21BB; Rebuild Now";  // FIX: innerHTML so the ↻ entity renders correctly
-      }
-    });
-
-    // Subscribe to live watchlist
-    if (__watchlistUnsub) { __watchlistUnsub(); __watchlistUnsub = null; }
-    __watchlistUnsub = window.subscribeTodaysWatchlist(db, (tickers) => {
-      const body = document.getElementById("sscWatchlistBody");
-      if (!body) return;
-      if (!tickers || tickers.length === 0) {
-        body.innerHTML = `
-          <div class="ssc-watchlist-empty">
-            <div class="ssc-watchlist-empty-icon">\uD83D\uDD0D</div>
-            <div class="ssc-watchlist-empty-msg">No watchlist built yet for today.</div>
-            <div class="ssc-watchlist-empty-sub">Tier 0 auto-runs at 9:00 AM ET, or tap Rebuild Now above.</div>
-          </div>
-        `;
-        return;
-      }
-
-      body.innerHTML = `
-        <div class="ssc-watchlist-count">${tickers.length} stock${tickers.length !== 1 ? "s" : ""} selected from S&amp;P 500 + Nasdaq</div>
-        <div class="ssc-watchlist-grid">
-          ${tickers.map(t => renderWatchlistRow(t)).join("")}
-        </div>
-      `;
-    });
-  }
-
-  function closeWatchlistOverlay() {
-    if (__watchlistUnsub) { __watchlistUnsub(); __watchlistUnsub = null; }
-    const overlay = document.getElementById("ssc-watchlist-overlay");
-    if (!overlay) return;
-    overlay.classList.remove("ssc-watchlist-visible");
-    setTimeout(() => overlay.remove(), 280);
-  }
-
-  function renderWatchlistRow(t) {
-    const triggers = (t.triggers || []).map(triggerChip).join("");
-    const changeSign = (t.changePct || 0) >= 0 ? "+" : "";
-    const changeColor = (t.changePct || 0) >= 0 ? "#22c55e" : "#ef4444";
-    return `
-      <div class="ssc-watchlist-row">
-        <div class="ssc-watchlist-row-left">
-          <span class="ssc-watchlist-row-ticker">${t.ticker}</span>
-          <span class="ssc-watchlist-row-sector">${t.sector || ""}</span>
-        </div>
-        <div class="ssc-watchlist-row-triggers">${triggers}</div>
-        <div class="ssc-watchlist-row-right">
-          ${t.price ? `<span class="ssc-watchlist-row-price">$${t.price}</span>` : ""}
-          ${t.changePct !== undefined ? `<span class="ssc-watchlist-row-change" style="color:${changeColor}">${changeSign}${t.changePct}%</span>` : ""}
-        </div>
-      </div>
-    `;
   }
 
   // -----------------------------------------------------------
@@ -247,7 +125,7 @@
         <div class="ssc-history-header">
           <div class="ssc-history-title">
             <span class="ssc-history-ticker">${ticker}</span>
-            <span class="ssc-history-subtitle">Signal History &mdash; Last 7 Days</span>
+            <span class="ssc-history-subtitle">Signal History</span>
           </div>
           <button class="ssc-history-close" aria-label="Close history">&#x2715;</button>
         </div>
@@ -325,7 +203,7 @@
     overlay.innerHTML = `
       <div class="ssc-confirm-box">
         <div class="ssc-confirm-icon">&#x1F5D1;</div>
-        <div class="ssc-confirm-msg">Remove <strong>${ticker}</strong> signal?<br><span class="ssc-confirm-sub">It can regenerate next time the screener runs.</span></div>
+        <div class="ssc-confirm-msg">Remove <strong>${ticker}</strong> signal?<br><span class="ssc-confirm-sub">It can be regenerated on the next run.</span></div>
         <div class="ssc-confirm-actions">
           <button class="ssc-confirm-cancel">Keep it</button>
           <button class="ssc-confirm-yes">Yes, remove</button>
@@ -397,7 +275,7 @@
     const ticker = (signal.ticker || "").toUpperCase();
     const recurrenceCount = allSignals.filter(s => (s.ticker || "").toUpperCase() === ticker).length;
     const recurrenceBadge = recurrenceCount > 1
-      ? `<button class="ssc-recurrence-btn" data-ticker="${ticker}" title="View full history for ${ticker}">&#x21BA; ${recurrenceCount}${ordinal(recurrenceCount)} signal this week</button>`
+      ? `<button class="ssc-recurrence-btn" data-ticker="${ticker}" title="View full history for ${ticker}">&#x21BA; ${recurrenceCount}${ordinal(recurrenceCount)} signal</button>`
       : "";
     return `
       <div class="stock-signal-card" data-direction="${normDir}">
@@ -430,39 +308,46 @@
   }
 
   // -----------------------------------------------------------
-  // DAY GROUPING
+  // SESSION GROUPING  (replaces old day grouping)
+  // Groups by 10-minute bucket so a run of 15 tickers all fired
+  // within seconds of each other appear under one session header.
   // -----------------------------------------------------------
-  function renderGroupedSignals(allDocs, allSignals) {
-    const todayKey = new Date().toISOString().slice(0, 10);
+  function renderSessionGroups(allDocs, allSignals) {
     const groups = {};
     allDocs.forEach(({ data, id }) => {
-      const k = dayKey(data.generatedAt);
-      if (!groups[k]) groups[k] = [];
-      groups[k].push({ data, id });
+      const k = sessionKey(data.generatedAt);
+      if (!groups[k]) groups[k] = { docs: [], firstTs: data.generatedAt };
+      groups[k].docs.push({ data, id });
     });
+
     const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
     let html = "";
-    sortedKeys.forEach(key => {
-      const isToday   = key === todayKey;
-      const groupDocs = groups[key];
-      const label     = dayLabel(key);
-      const count     = groupDocs.length;
-      const cardsHtml = groupDocs.map(({ data, id }) => renderSignalCard(data, id, allSignals)).join("");
-      if (isToday) {
+
+    sortedKeys.forEach((key, idx) => {
+      const group    = groups[key];
+      const count    = group.docs.length;
+      const label    = sessionLabel(group.firstTs, count);
+      const cardsHtml = group.docs.map(({ data, id }) => renderSignalCard(data, id, allSignals)).join("");
+      const isLatest = idx === 0;
+
+      if (isLatest) {
+        // Most recent session — expanded with a glowing "LATEST" pill
         html += `
-          <div class="ssc-day-section" data-day="${key}">
-            <div class="ssc-today-label">&#x1F4C5; Today &mdash; ${count} signal${count !== 1 ? "s" : ""}</div>
+          <div class="ssc-session-section" data-session="${key}">
+            <div class="ssc-session-latest-header">
+              <span class="ssc-session-latest-pill">&#x26A1; Latest Run</span>
+              <span class="ssc-session-latest-label">${label}</span>
+            </div>
             <div class="ssc-day-cards">${cardsHtml}</div>
           </div>`;
       } else {
-        const groupId = "ssc-group-" + key;
+        const groupId = "ssc-group-" + key.replace(/[^a-zA-Z0-9]/g, "-");
         html += `
-          <div class="ssc-day-section" data-day="${key}">
+          <div class="ssc-session-section" data-session="${key}">
             <button class="ssc-day-banner" data-target="${groupId}" aria-expanded="false">
               <span class="ssc-day-banner-left">
-                <span class="ssc-day-banner-icon">&#x1F4C5;</span>
+                <span class="ssc-day-banner-icon">&#x1F4CA;</span>
                 <span class="ssc-day-banner-label">${label}</span>
-                <span class="ssc-day-banner-count">${count} signal${count !== 1 ? "s" : ""}</span>
               </span>
               <span class="ssc-day-banner-chevron">&#x25BC;</span>
             </button>
@@ -507,6 +392,95 @@
   }
 
   // -----------------------------------------------------------
+  // THE ROSTER UI
+  // -----------------------------------------------------------
+  let __rosterTickers = [];
+
+  async function initRosterUI() {
+    __rosterTickers = (typeof window.loadRoster === "function") ? await window.loadRoster() : [];
+    renderRosterPills();
+    updateRunBtn();
+  }
+
+  function renderRosterPills() {
+    const container = document.getElementById("rosterPills");
+    const counter   = document.getElementById("rosterCounter");
+    if (!container) return;
+    const max = window.ROSTER_MAX || 20;
+    if (counter) counter.textContent = `${__rosterTickers.length} / ${max}`;
+    if (__rosterTickers.length === 0) {
+      container.innerHTML = `<span class="roster-empty-hint">Add tickers above to build your Roster \u2191</span>`;
+      return;
+    }
+    container.innerHTML = __rosterTickers.map(t => `
+      <span class="roster-pill">
+        <span class="roster-pill-ticker">${t}</span>
+        <button class="roster-pill-remove" data-ticker="${t}" title="Remove ${t}" aria-label="Remove ${t}">&#x2715;</button>
+      </span>
+    `).join("");
+    container.querySelectorAll(".roster-pill-remove").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const ticker = btn.dataset.ticker;
+        const result = await window.removeFromRoster(ticker);
+        if (result.ok) {
+          __rosterTickers = result.tickers;
+          renderRosterPills();
+          updateRunBtn();
+        }
+      });
+    });
+  }
+
+  function updateRunBtn() {
+    const btn = document.getElementById("stocksRunBtn");
+    if (!btn) return;
+    const empty = __rosterTickers.length === 0;
+    btn.disabled = empty;
+    btn.title = empty ? "Add tickers to The Roster first" : `Run deep analysis on ${__rosterTickers.length} ticker${__rosterTickers.length !== 1 ? "s" : ""}`;
+  }
+
+  function bindRosterInput() {
+    const input  = document.getElementById("rosterInput");
+    const addBtn = document.getElementById("rosterAddBtn");
+    if (!input || !addBtn) return;
+
+    async function tryAdd() {
+      const raw = input.value.trim();
+      if (!raw) return;
+      // Support comma-separated paste like "NVDA, AAPL, TSLA"
+      const tickers = raw.split(/[,\s]+/).filter(Boolean);
+      let added = 0, lastErr = "";
+      for (const t of tickers) {
+        const result = await window.addToRoster(t);
+        if (result.ok) {
+          __rosterTickers = result.tickers;
+          added++;
+        } else {
+          lastErr = result.reason;
+        }
+      }
+      input.value = "";
+      renderRosterPills();
+      updateRunBtn();
+      if (added === 0 && lastErr) showRosterError(lastErr);
+    }
+
+    addBtn.addEventListener("click", tryAdd);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); tryAdd(); }
+    });
+  }
+
+  function showRosterError(msg) {
+    let err = document.getElementById("rosterError");
+    if (!err) return;
+    err.textContent = msg;
+    err.style.opacity = "1";
+    clearTimeout(err.__t);
+    err.__t = setTimeout(() => { err.style.opacity = "0"; }, 3000);
+  }
+
+  // -----------------------------------------------------------
   // MAIN RENDER
   // -----------------------------------------------------------
   function renderStocks() {
@@ -520,10 +494,42 @@
         <div class="stocks-header">
           <div class="stocks-title-row">
             <div>
-              <div class="stocks-title">\uD83D\uDCC8 Stock Signals</div>
-              <div class="stocks-subtitle">AI-powered Tier 0 &rarr; Tier 1 &rarr; Tier 2 engine</div>
+              <div class="stocks-title">&#x1F4C8; Stock Signals</div>
+              <div class="stocks-subtitle">Deep Analysis Engine &mdash; FMP + AI</div>
             </div>
-            <button class="stocks-watchlist-btn" id="stocksWatchlistBtn" title="View today's watchlist">\uD83D\uDCCB Daily Watchlist</button>
+          </div>
+        </div>
+
+        <!-- THE ROSTER -->
+        <div class="roster-panel">
+          <div class="roster-panel-header">
+            <div class="roster-panel-title">
+              <span class="roster-icon">&#x1F3AF;</span>
+              <div>
+                <div class="roster-heading">The Roster</div>
+                <div class="roster-sub">Your master ticker list &mdash; add up to 20 stocks for deep FMP analysis</div>
+              </div>
+            </div>
+            <span class="roster-counter" id="rosterCounter">0 / 20</span>
+          </div>
+
+          <div class="roster-input-row">
+            <input
+              id="rosterInput"
+              class="roster-input"
+              type="text"
+              placeholder="Add ticker or paste a list (NVDA, AAPL, TSLA...)"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              maxlength="200"
+            />
+            <button class="roster-add-btn" id="rosterAddBtn" type="button">+ Add</button>
+          </div>
+          <div class="roster-error" id="rosterError"></div>
+
+          <div class="roster-pills" id="rosterPills">
+            <span class="roster-empty-hint">Add tickers above to build your Roster &#x2191;</span>
           </div>
         </div>
 
@@ -535,30 +541,27 @@
           <div class="stocks-controls">
             <div class="stocks-status" id="stocksStatus">
               <span class="stocks-status-dot" id="stocksDot"></span>
-              <span id="stocksStatusText">Engine ready</span>
+              <span id="stocksStatusText">Ready</span>
             </div>
-            <button class="stocks-run-btn" id="stocksRunBtn" type="button">&#x25B6; Run Screener Now</button>
+            <button class="stocks-run-btn" id="stocksRunBtn" type="button" disabled title="Add tickers to The Roster first">&#x25B6; Run Deep Analysis</button>
           </div>
           <div class="stocks-market-badge" id="stocksMarketBadge"></div>
           <div class="stocks-signals-list" id="stocksSignalsList">
-            <div class="stocks-empty">No signals yet. Run the screener or wait for the next auto-scan.</div>
+            <div class="stocks-empty">No signals yet. Build your Roster and run analysis.</div>
           </div>
         `}
       </div>
     `;
 
-    // Watchlist button always binds regardless of keys
-    document.getElementById("stocksWatchlistBtn").addEventListener("click", () => {
-      const db = getDb();
-      if (db) openWatchlistOverlay(db);
-    });
-
     if (!keysSet) {
       waitForKeysAndRerender();
     } else {
-      bindControls();
-      updateMarketBadge();
-      startSignalListener();
+      initRosterUI().then(() => {
+        bindRosterInput();
+        bindRunBtn();
+        updateMarketBadge();
+        startSignalListener();
+      });
     }
   }
 
@@ -576,25 +579,40 @@
     }, 500);
   }
 
-  function bindControls() {
+  function bindRunBtn() {
     const runBtn = document.getElementById("stocksRunBtn");
     if (!runBtn) return;
     runBtn.addEventListener("click", async () => {
+      if (__rosterTickers.length === 0) return;
       runBtn.disabled = true;
-      runBtn.textContent = "\u23F3 Scanning...";
-      setStatus("Running Tier 1 screener...", "active");
+      runBtn.textContent = "\u23F3 Analyzing...";
+      setStatus(`Running deep analysis on ${__rosterTickers.length} ticker${__rosterTickers.length !== 1 ? "s" : ""}...`, "active");
       try {
         const db = getDb();
         if (!db) { alert("Firestore not ready."); return; }
-        const candidates = await window.runTier1Screener(db);
-        setStatus(`Tier 1 complete \u2014 ${candidates.length} candidate(s) flagged. Running AI analysis...`, "active");
-        if (candidates.length === 0) setStatus("No signals triggered. Markets may be quiet.", "idle");
+        // Write each roster ticker directly as a Tier2-ready candidate
+        // (skip Tier 1 screener — roster tickers go straight to enrichment + AI)
+        const cfg = window.STOCKS_CONFIG || {};
+        const col = cfg.CANDIDATES_COLLECTION || "stockCandidates";
+        const batch = db.batch();
+        __rosterTickers.forEach(ticker => {
+          const ref = db.collection(col).doc(ticker);
+          batch.set(ref, {
+            ticker,
+            source: "roster",
+            tier2Processed: false,
+            addedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: false });
+        });
+        await batch.commit();
+        setStatus(`Roster sent to analysis engine \u2014 signals incoming...`, "active");
       } catch (e) {
-        console.error("[Stocks] Screener error:", e);
-        setStatus("Error running screener. Check console.", "error");
+        console.error("[Stocks] Run error:", e);
+        setStatus("Error starting analysis. Check console.", "error");
       } finally {
         runBtn.disabled = false;
-        runBtn.textContent = "\u25B6 Run Screener Now";
+        runBtn.textContent = "\u25B6 Run Deep Analysis";
+        updateRunBtn();
       }
     });
   }
@@ -610,20 +628,20 @@
     __signalListener = db
       .collection(cfg.SIGNALS_COLLECTION || "stockSignals")
       .orderBy("generatedAt", "desc")
-      .limit(200)
+      .limit(300)
       .onSnapshot((snapshot) => {
         const list = document.getElementById("stocksSignalsList");
         if (!list) return;
         if (snapshot.empty) {
-          list.innerHTML = `<div class="stocks-empty">No signals yet. Run the screener or wait for the next auto-scan.</div>`;
+          list.innerHTML = `<div class="stocks-empty">No signals yet. Build your Roster and run analysis.</div>`;
           return;
         }
         const allDocs = [], allSignals = [];
         snapshot.forEach(doc => { allDocs.push({ data: doc.data(), id: doc.id }); allSignals.push(doc.data()); });
-        const todayCount = allDocs.filter(({ data }) => dayKey(data.generatedAt) === new Date().toISOString().slice(0, 10)).length;
-        list.innerHTML = renderGroupedSignals(allDocs, allSignals);
+        list.innerHTML = renderSessionGroups(allDocs, allSignals);
         bindGroupedInteractions(allSignals);
-        setStatus(`${todayCount} signal${todayCount !== 1 ? "s" : ""} today`, "idle");
+        const latestCount = allDocs.filter(({ data }) => sessionKey(data.generatedAt) === sessionKey(allDocs[0].data.generatedAt)).length;
+        setStatus(`${latestCount} signal${latestCount !== 1 ? "s" : ""} in latest run`, "idle");
       }, err => console.error("[Stocks] Signal listener error:", err));
   }
 

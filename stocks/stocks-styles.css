@@ -35,31 +35,6 @@
   color: rgba(255,255,255,0.45);
 }
 
-/* Daily Watchlist button */
-.stocks-watchlist-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 16px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.3px;
-  color: rgba(255,255,255,0.85);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.20);
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
-}
-.stocks-watchlist-btn:hover {
-  background: rgba(255,255,255,0.10);
-  border-color: rgba(255,255,255,0.20);
-}
-.stocks-watchlist-btn:active { transform: scale(0.97); }
-
 .stocks-controls {
   display: flex;
   align-items: center;
@@ -113,7 +88,7 @@
   white-space: nowrap;
 }
 .stocks-run-btn:active   { transform: translateY(1px) scale(0.99); filter: brightness(1.08); }
-.stocks-run-btn:disabled { opacity: 0.55; filter: grayscale(0.3); box-shadow: none; }
+.stocks-run-btn:disabled { opacity: 0.40; filter: grayscale(0.3); box-shadow: none; cursor: not-allowed; }
 
 .stocks-market-badge { font-size: 13px; font-weight: 900; letter-spacing: 0.3px; text-align: center; }
 .stocks-market-open   { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.28); color: #bbf7d0; }
@@ -144,15 +119,212 @@
 @keyframes stocksBounceDot { 0%,80%,100% { transform: scale(0.75); opacity: 0.45; } 40% { transform: scale(1.25); opacity: 1; } }
 
 /* =========================
-   DAY GROUP SECTIONS
+   THE ROSTER PANEL
    ========================= */
 
-.ssc-day-section { display: flex; flex-direction: column; gap: 12px; }
+.roster-panel {
+  border-radius: 20px;
+  background: radial-gradient(600px 180px at 50% 0px, rgba(220,38,38,0.08), transparent 60%), rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.28);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-.ssc-today-label {
-  font-size: 12px; font-weight: 900; letter-spacing: 0.8px; text-transform: uppercase;
-  color: rgba(255,255,255,0.50); padding: 6px 4px 2px;
-  border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 2px;
+.roster-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.roster-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.roster-icon { font-size: 22px; flex-shrink: 0; }
+
+.roster-heading {
+  font-size: 17px;
+  font-weight: 1000;
+  letter-spacing: 0.4px;
+  color: #fff;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+
+.roster-sub {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.38);
+}
+
+.roster-counter {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.55);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.roster-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.roster-input {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 13px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  text-transform: uppercase;
+}
+.roster-input::placeholder { color: rgba(255,255,255,0.28); font-weight: 700; text-transform: none; letter-spacing: 0.2px; }
+.roster-input:focus {
+  border-color: rgba(220,38,38,0.55);
+  background: rgba(255,255,255,0.07);
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.12);
+}
+
+.roster-add-btn {
+  padding: 11px 18px;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: 0.4px;
+  color: #fff;
+  background: rgba(220,38,38,0.75);
+  border: 1px solid rgba(220,38,38,0.45);
+  box-shadow: 0 6px 18px rgba(220,38,38,0.22);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.14s ease, transform 0.12s ease, box-shadow 0.14s ease;
+}
+.roster-add-btn:hover  { background: rgba(220,38,38,0.92); box-shadow: 0 8px 22px rgba(220,38,38,0.35); }
+.roster-add-btn:active { transform: scale(0.97); }
+
+.roster-error {
+  font-size: 12px;
+  font-weight: 800;
+  color: #f87171;
+  letter-spacing: 0.3px;
+  min-height: 16px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  padding: 0 2px;
+}
+
+.roster-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 32px;
+  align-items: center;
+}
+
+.roster-empty-hint {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.28);
+  letter-spacing: 0.3px;
+  font-style: italic;
+}
+
+.roster-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 13px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.13);
+  animation: pillIn 220ms cubic-bezier(0.16,1,0.3,1) both;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.roster-pill:hover { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.20); }
+@keyframes pillIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+
+.roster-pill-ticker {
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: 0.8px;
+  color: #fff;
+}
+
+.roster-pill-remove {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.45);
+  font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.13s ease, color 0.13s ease, transform 0.11s ease;
+  line-height: 1;
+  padding: 0;
+}
+.roster-pill-remove:hover  { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.40); color: #f87171; transform: scale(1.12); }
+.roster-pill-remove:active { transform: scale(0.95); }
+
+/* =========================
+   SESSION GROUP SECTIONS
+   ========================= */
+
+.ssc-session-section { display: flex; flex-direction: column; gap: 12px; }
+
+.ssc-session-latest-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 2px;
+  flex-wrap: wrap;
+}
+
+.ssc-session-latest-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.28);
+  box-shadow: 0 0 14px rgba(251,191,36,0.15);
+  flex-shrink: 0;
+}
+
+.ssc-session-latest-label {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.50);
 }
 
 .ssc-day-banner {
@@ -165,8 +337,7 @@
 .ssc-day-banner:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.14); }
 .ssc-day-banner-left  { display: flex; align-items: center; gap: 10px; }
 .ssc-day-banner-icon  { font-size: 16px; }
-.ssc-day-banner-label { font-size: 14px; font-weight: 900; letter-spacing: 0.3px; color: rgba(255,255,255,0.85); }
-.ssc-day-banner-count { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.10); color: rgba(255,255,255,0.60); letter-spacing: 0.3px; }
+.ssc-day-banner-label { font-size: 13px; font-weight: 900; letter-spacing: 0.3px; color: rgba(255,255,255,0.75); }
 .ssc-day-banner-chevron { font-size: 11px; color: rgba(255,255,255,0.40); transition: transform 0.28s cubic-bezier(0.16,1,0.3,1); }
 
 .ssc-day-cards { display: flex; flex-direction: column; gap: 12px; overflow: hidden; transition: max-height 0.32s cubic-bezier(0.16,1,0.3,1), opacity 0.28s ease; }
@@ -231,17 +402,6 @@
 .ssc-expires    { padding-bottom: 14px; font-size: 11px; font-weight: 800; letter-spacing: 0.3px; color: rgba(245,158,11,0.75); }
 
 /* =========================
-   TRIGGER CHIPS
-   ========================= */
-.ssc-trigger-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 9px; border-radius: 999px;
-  font-size: 11px; font-weight: 900; letter-spacing: 0.3px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-
-/* =========================
    DISMISS CONFIRMATION OVERLAY
    ========================= */
 .ssc-confirm-overlay { position: absolute; inset: 0; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: rgba(10,10,10,0.82); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 10; opacity: 0; transition: opacity 0.2s ease; padding: 20px; }
@@ -258,93 +418,6 @@
 .ssc-confirm-yes { padding: 9px 18px; border-radius: 12px; font-size: 13px; font-weight: 900; letter-spacing: 0.3px; color: #fff; background: rgba(239,68,68,0.75); border: 1px solid rgba(239,68,68,0.50); cursor: pointer; box-shadow: 0 6px 18px rgba(239,68,68,0.25); transition: background 0.14s ease, box-shadow 0.14s ease, transform 0.12s ease; }
 .ssc-confirm-yes:hover  { background: rgba(239,68,68,0.92); box-shadow: 0 8px 22px rgba(239,68,68,0.38); }
 .ssc-confirm-yes:active { transform: scale(0.97); }
-
-/* =========================
-   DAILY WATCHLIST OVERLAY
-   ========================= */
-.ssc-watchlist-overlay {
-  position: fixed; inset: 0; z-index: 1000;
-  display: flex; align-items: flex-end; justify-content: center;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.26s ease;
-}
-.ssc-watchlist-overlay.ssc-watchlist-visible { opacity: 1; pointer-events: all; }
-
-.ssc-watchlist-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.60); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-
-.ssc-watchlist-panel {
-  position: relative; z-index: 1;
-  width: 100%; max-width: 560px; max-height: 90vh;
-  display: flex; flex-direction: column;
-  border-radius: 24px 24px 0 0;
-  background: radial-gradient(800px 220px at 50% 0px, rgba(129,140,248,0.07), transparent 55%), rgba(18,18,18,0.98);
-  border: 1px solid rgba(255,255,255,0.10); border-bottom: none;
-  box-shadow: 0 -20px 60px rgba(0,0,0,0.60);
-  transform: translateY(40px);
-  transition: transform 0.30s cubic-bezier(0.16,1,0.3,1);
-}
-.ssc-watchlist-overlay.ssc-watchlist-visible .ssc-watchlist-panel { transform: translateY(0); }
-
-.ssc-watchlist-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
-  flex-shrink: 0;
-}
-.ssc-watchlist-title  { display: flex; align-items: center; gap: 12px; }
-.ssc-watchlist-icon   { font-size: 24px; }
-.ssc-watchlist-heading { font-size: 18px; font-weight: 1000; letter-spacing: 0.3px; color: #fff; line-height: 1; margin-bottom: 4px; }
-.ssc-watchlist-sub    { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: rgba(255,255,255,0.40); }
-.ssc-watchlist-close  { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.55); font-size: 15px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.14s ease, color 0.14s ease; }
-.ssc-watchlist-close:hover { background: rgba(239,68,68,0.18); color: #f87171; border-color: rgba(239,68,68,0.30); }
-
-.ssc-watchlist-body { overflow-y: auto; flex: 1; padding: 8px 0 0; -webkit-overflow-scrolling: touch; }
-
-.ssc-watchlist-count { padding: 8px 20px 4px; font-size: 12px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; color: rgba(129,140,248,0.80); flex-shrink: 0; }
-
-.ssc-watchlist-grid { display: flex; flex-direction: column; }
-
-.ssc-watchlist-row {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 11px 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  transition: background 0.12s ease;
-}
-.ssc-watchlist-row:hover { background: rgba(255,255,255,0.03); }
-.ssc-watchlist-row:last-child { border-bottom: none; }
-
-.ssc-watchlist-row-left { display: flex; flex-direction: column; gap: 3px; min-width: 60px; }
-.ssc-watchlist-row-ticker { font-size: 15px; font-weight: 1000; letter-spacing: 0.5px; color: #fff; }
-.ssc-watchlist-row-sector { font-size: 10px; font-weight: 800; letter-spacing: 0.4px; color: rgba(255,255,255,0.40); text-transform: uppercase; }
-
-.ssc-watchlist-row-triggers { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
-
-.ssc-watchlist-row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
-.ssc-watchlist-row-price  { font-size: 14px; font-weight: 900; font-variant-numeric: tabular-nums; color: rgba(255,255,255,0.85); }
-.ssc-watchlist-row-change { font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; }
-
-.ssc-watchlist-loading { padding: 48px 24px; text-align: center; font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.40); }
-
-.ssc-watchlist-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 48px 24px; gap: 10px; }
-.ssc-watchlist-empty-icon { font-size: 32px; }
-.ssc-watchlist-empty-msg  { font-size: 15px; font-weight: 900; color: rgba(255,255,255,0.75); }
-.ssc-watchlist-empty-sub  { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.38); max-width: 280px; line-height: 1.5; }
-
-.ssc-watchlist-footer {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 20px 18px;
-  border-top: 1px solid rgba(255,255,255,0.07);
-  flex-shrink: 0;
-}
-.ssc-watchlist-rebuild-btn {
-  padding: 9px 18px; border-radius: 12px; font-size: 13px; font-weight: 900; letter-spacing: 0.3px;
-  color: #fff; background: rgba(129,140,248,0.18); border: 1px solid rgba(129,140,248,0.30);
-  cursor: pointer; transition: background 0.14s ease, transform 0.12s ease;
-}
-.ssc-watchlist-rebuild-btn:hover  { background: rgba(129,140,248,0.28); }
-.ssc-watchlist-rebuild-btn:active { transform: scale(0.97); }
-.ssc-watchlist-rebuild-btn:disabled { opacity: 0.50; }
-.ssc-watchlist-footer-note { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.30); letter-spacing: 0.2px; text-align: right; }
 
 /* =========================
    TICKER HISTORY OVERLAY
