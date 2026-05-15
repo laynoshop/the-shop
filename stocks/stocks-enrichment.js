@@ -1,156 +1,188 @@
 // stocks/stocks-enrichment.js
-// ENRICHMENT LAYER — sits between Tier 1 and Tier 2.
-// Updated endpoint paths to FMP /stable/ API (replaces deprecated /v3/ routes
-// that return 403 on paid plans after FMP's 2024 API migration).
+// ENRICHMENT LAYER — rewritten for FMP Starter plan endpoints only.
+// Uses: /profile, /ratios, /income-statement, /technical_indicator/daily (SMA/RSI),
+//       /rating, /price-target-summary, /stock-price-change
+// All confirmed full-access on Starter plan.
 
 (function () {
   "use strict";
 
   function getFMPKey() { return (window.STOCKS_CONFIG || {}).FMP_KEY || ""; }
-  function delay(ms)   { return new Promise(r => setTimeout(r, ms)); }
 
-  // Small helper — fetch JSON from FMP, return null on any error
-  // Uses /stable/ base which works for Starter plan and above
+  // Fetch from FMP /stable/ base, fall back to /api/v3/ on 404
   async function fmpGet(path) {
     const key = getFMPKey();
     if (!key) return null;
     try {
-      // Try /stable/ first (new FMP API), fall back to /api/v3/ if 404
-      const baseStable = "https://financialmodelingprep.com/stable";
-      const baseV3     = "https://financialmodelingprep.com/api/v3";
-      const sep        = path.includes("?") ? "&" : "?";
+      const stable = "https://financialmodelingprep.com/stable";
+      const v3     = "https://financialmodelingprep.com/api/v3";
+      const sep    = path.includes("?") ? "&" : "?";
 
-      let res = await fetch(baseStable + path + sep + "apikey=" + key);
+      let res = await fetch(stable + path + sep + "apikey=" + key);
       if (res.status === 404) {
-        // Endpoint not on /stable/ yet — fall back to v3
-        res = await fetch(baseV3 + path + sep + "apikey=" + key);
+        res = await fetch(v3 + path + sep + "apikey=" + key);
       }
       if (!res.ok) {
-        console.warn("[Enrichment] FMP 403/error on", path, "status:", res.status);
+        console.warn("[Enrichment] FMP error on", path, "status:", res.status);
         return null;
       }
-      const data = await res.json();
-      return data || null;
+      return await res.json() || null;
     } catch (e) {
-      console.warn("[Enrichment] fmpGet fetch error:", e.message);
+      console.warn("[Enrichment] fetch error:", e.message);
       return null;
     }
   }
 
   // -----------------------------------------------------------
-  // 1. PRICE CONTEXT — 90-day history for trend + avg comparison
+  // 1. COMPANY PROFILE — sector, beta, mktCap, analyst target, description
+  //    Endpoint: /profile/{ticker}  [Full Access on Starter]
   // -----------------------------------------------------------
-  async function fetchPriceContext(ticker, currentPrice) {
-    const data = await fmpGet("/historical-price-full/" + ticker + "?timeseries=90");
-    if (!data || !data.historical || data.historical.length < 5) return null;
-
-    const history = data.historical; // newest first
-    const prices  = history.map(d => d.close);
-
-    const high90  = Math.max(...prices);
-    const low90   = Math.min(...prices);
-    const pct90   = prices.length >= 90 ? (((currentPrice - prices[89]) / prices[89]) * 100).toFixed(1) : null;
-    const pct30   = prices.length >= 30 ? (((currentPrice - prices[29]) / prices[29]) * 100).toFixed(1) : null;
-    const pct5    = prices.length >= 5  ? (((currentPrice - prices[4])  / prices[4])  * 100).toFixed(1) : null;
-
-    const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
-    const sma20 = prices.length >= 20 ? parseFloat(avg(prices.slice(0, 20)).toFixed(2)) : null;
-    const sma50 = prices.length >= 50 ? parseFloat(avg(prices.slice(0, 50)).toFixed(2)) : null;
-
-    let aboveSMA20Streak = 0;
-    if (sma20) {
-      for (let i = 0; i < Math.min(prices.length, 30); i++) {
-        if (prices[i] > sma20) aboveSMA20Streak++;
-        else break;
-      }
-    }
-
-    const vols     = history.map(d => d.volume || 0);
-    const vol5avg  = vols.length >= 5  ? parseFloat(avg(vols.slice(0, 5)).toFixed(0))  : null;
-    const vol20avg = vols.length >= 20 ? parseFloat(avg(vols.slice(0, 20)).toFixed(0)) : null;
-    const volRatio = (vol5avg && vol20avg && vol20avg > 0) ? parseFloat((vol5avg / vol20avg).toFixed(2)) : null;
-
-    return { high90, low90, pct5, pct30, pct90, sma20, sma50, aboveSMA20Streak, vol5avg, vol20avg, volRatio };
-  }
-
-  // -----------------------------------------------------------
-  // 2. ANALYST TARGETS
-  // -----------------------------------------------------------
-  async function fetchAnalystTargets(ticker) {
-    const data = await fmpGet("/price-target-consensus?symbol=" + ticker);
-    if (!data) return null;
+  async function fetchProfile(ticker) {
+    const data = await fmpGet("/profile/" + ticker);
     const d = Array.isArray(data) ? data[0] : data;
     if (!d) return null;
     return {
-      targetHigh:   d.targetHigh   || null,
-      targetLow:    d.targetLow    || null,
-      targetMean:   d.targetMean   || null,
-      targetMedian: d.targetMedian || null,
+      companyName:    d.companyName   || null,
+      sector:         d.sector        || null,
+      industry:       d.industry      || null,
+      beta:           d.beta          != null ? parseFloat(d.beta.toFixed(2))             : null,
+      mktCap:         d.mktCap        || null,
+      analystTarget:  d.dcfDiff       != null ? parseFloat(d.dcf.toFixed(2))              : null,
+      priceTarget:    d.price         != null ? parseFloat(d.price.toFixed(2))             : null,
+      description:    d.description   || null,
+      exchange:       d.exchange      || null,
+      country:        d.country       || null
+    };
+  }
+
+  // -----------------------------------------------------------
+  // 2. PRICE TARGET SUMMARY — analyst consensus target
+  //    Endpoint: /price-target-summary?symbol={ticker}  [Full Access on Starter]
+  // -----------------------------------------------------------
+  async function fetchPriceTarget(ticker) {
+    const data = await fmpGet("/price-target-summary?symbol=" + ticker);
+    const d = Array.isArray(data) ? data[0] : data;
+    if (!d) return null;
+    return {
+      targetHigh:   d.targetHigh   != null ? parseFloat(d.targetHigh.toFixed(2))   : null,
+      targetLow:    d.targetLow    != null ? parseFloat(d.targetLow.toFixed(2))    : null,
+      targetMean:   d.targetMean   != null ? parseFloat(d.targetMean.toFixed(2))   : null,
+      targetMedian: d.targetMedian != null ? parseFloat(d.targetMedian.toFixed(2)) : null,
       consensus:    d.consensus    || null
     };
   }
 
   // -----------------------------------------------------------
-  // 3. UPGRADES / DOWNGRADES
+  // 3. ANALYST RATINGS — buy/hold/sell score
+  //    Endpoint: /rating/{ticker}  [Full Access on Starter]
   // -----------------------------------------------------------
-  async function fetchRatingChanges(ticker) {
-    const data = await fmpGet("/upgrades-downgrades?symbol=" + ticker + "&limit=5");
-    if (!Array.isArray(data) || !data.length) return [];
-    return data.slice(0, 5).map(r => ({
-      date:      r.publishedDate ? r.publishedDate.slice(0, 10) : "",
-      firm:      r.gradingCompany || "",
-      action:    r.action || "",
-      fromGrade: r.previousGrade || "",
-      toGrade:   r.newGrade || ""
-    }));
+  async function fetchRating(ticker) {
+    const data = await fmpGet("/rating/" + ticker);
+    const d = Array.isArray(data) ? data[0] : data;
+    if (!d) return null;
+    return {
+      rating:           d.rating           || null,  // "S", "A", "B", etc.
+      ratingScore:      d.ratingScore       != null ? d.ratingScore       : null,  // 1-5
+      ratingRecommendation: d.ratingRecommendation || null,  // "Strong Buy", "Buy", etc.
+      dcfScore:         d.ratingDetailsDCFScore           != null ? d.ratingDetailsDCFScore           : null,
+      roeScore:         d.ratingDetailsROEScore           != null ? d.ratingDetailsROEScore           : null,
+      roeRec:           d.ratingDetailsROERecommendation  || null,
+      deRec:            d.ratingDetailsDERecommendation   || null,
+      peRec:            d.ratingDetailsPERecommendation   || null,
+      pbRec:            d.ratingDetailsPBRecommendation   || null
+    };
   }
 
   // -----------------------------------------------------------
-  // 4. KEY METRICS
+  // 4. FINANCIAL RATIOS — PE, debt/equity, ROE, current ratio
+  //    Endpoint: /ratios/{ticker}?limit=2&period=quarter  [Full Access on Starter]
   // -----------------------------------------------------------
-  async function fetchKeyMetrics(ticker) {
-    const data = await fmpGet("/key-metrics?symbol=" + ticker + "&limit=4&period=quarter");
-    if (!Array.isArray(data) || !data.length) return [];
-    return data.map(q => ({
-      date:              q.date || "",
-      peRatio:           q.peRatio           != null ? parseFloat(q.peRatio.toFixed(1))           : null,
-      priceToSales:      q.priceToSalesRatio != null ? parseFloat(q.priceToSalesRatio.toFixed(2)) : null,
-      debtToEquity:      q.debtToEquity      != null ? parseFloat(q.debtToEquity.toFixed(2))      : null,
-      returnOnEquity:    q.roe               != null ? parseFloat((q.roe * 100).toFixed(1))        : null,
-      freeCashFlowYield: q.freeCashFlowYield != null ? parseFloat((q.freeCashFlowYield * 100).toFixed(2)) : null
-    }));
+  async function fetchRatios(ticker) {
+    const data = await fmpGet("/ratios/" + ticker + "?limit=2&period=quarter");
+    if (!Array.isArray(data) || !data.length) return null;
+    const d = data[0];
+    return {
+      peRatio:        d.priceEarningsRatio    != null ? parseFloat(d.priceEarningsRatio.toFixed(1))    : null,
+      pbRatio:        d.priceToBookRatio      != null ? parseFloat(d.priceToBookRatio.toFixed(2))      : null,
+      psRatio:        d.priceToSalesRatio     != null ? parseFloat(d.priceToSalesRatio.toFixed(2))     : null,
+      debtToEquity:   d.debtEquityRatio       != null ? parseFloat(d.debtEquityRatio.toFixed(2))       : null,
+      currentRatio:   d.currentRatio          != null ? parseFloat(d.currentRatio.toFixed(2))          : null,
+      roe:            d.returnOnEquity        != null ? parseFloat((d.returnOnEquity * 100).toFixed(1)) : null,
+      roa:            d.returnOnAssets        != null ? parseFloat((d.returnOnAssets * 100).toFixed(1)) : null,
+      grossMargin:    d.grossProfitMargin     != null ? parseFloat((d.grossProfitMargin * 100).toFixed(1)) : null,
+      netMargin:      d.netProfitMargin       != null ? parseFloat((d.netProfitMargin * 100).toFixed(1))  : null,
+      date:           d.date                 || null
+    };
   }
 
   // -----------------------------------------------------------
-  // 5. EARNINGS SURPRISES
+  // 5. INCOME STATEMENT — revenue trend, net income
+  //    Endpoint: /income-statement/{ticker}?limit=4&period=quarter  [Full Access on Starter]
   // -----------------------------------------------------------
-  async function fetchEarningsSurprises(ticker) {
-    const data = await fmpGet("/earnings-surprises?symbol=" + ticker);
-    if (!Array.isArray(data) || !data.length) return [];
-    return data.slice(0, 4).map(e => ({
-      date:        e.date || "",
-      estimated:   e.estimatedEps != null ? parseFloat(e.estimatedEps.toFixed(2)) : null,
-      actual:      e.actualEps    != null ? parseFloat(e.actualEps.toFixed(2))    : null,
-      surprisePct: (e.estimatedEps && e.estimatedEps !== 0)
-                     ? parseFloat((((e.actualEps - e.estimatedEps) / Math.abs(e.estimatedEps)) * 100).toFixed(1))
-                     : null,
-      beat: e.actualEps != null && e.estimatedEps != null && e.actualEps > e.estimatedEps
+  async function fetchIncome(ticker) {
+    const data = await fmpGet("/income-statement/" + ticker + "?limit=4&period=quarter");
+    if (!Array.isArray(data) || !data.length) return null;
+    const quarters = data.map(q => ({
+      date:         q.date       || null,
+      revenue:      q.revenue    || null,
+      netIncome:    q.netIncome  || null,
+      grossProfit:  q.grossProfit || null,
+      eps:          q.eps        != null ? parseFloat(q.eps.toFixed(2)) : null
     }));
+    // YoY revenue growth (Q1 this year vs Q1 last year)
+    let revenueGrowthYoY = null;
+    if (quarters.length >= 4 && quarters[0].revenue && quarters[3].revenue) {
+      revenueGrowthYoY = parseFloat((((quarters[0].revenue - quarters[3].revenue) / Math.abs(quarters[3].revenue)) * 100).toFixed(1));
+    }
+    return { quarters, revenueGrowthYoY };
   }
 
   // -----------------------------------------------------------
-  // 6. INCOME TREND
+  // 6. TECHNICAL INDICATORS — RSI(14), SMA(20), SMA(50), EMA(20)
+  //    Endpoint: /technical_indicator/daily/{ticker}?type=rsi&period=14  [Full Access on Starter]
   // -----------------------------------------------------------
-  async function fetchIncomeTrend(ticker) {
-    const data = await fmpGet("/income-statement?symbol=" + ticker + "&limit=4&period=quarter");
-    if (!Array.isArray(data) || !data.length) return [];
-    return data.map(q => ({
-      date:             q.date      || "",
-      revenue:          q.revenue   || null,
-      netIncome:        q.netIncome || null,
-      grossMarginPct:   q.grossProfit && q.revenue ? parseFloat(((q.grossProfit / q.revenue) * 100).toFixed(1)) : null,
-      revenueGrowthYoY: null
-    }));
+  async function fetchTechnicals(ticker) {
+    const [rsiData, sma20Data, sma50Data, ema20Data] = await Promise.all([
+      fmpGet("/technical_indicator/daily/" + ticker + "?type=rsi&period=14&limit=5"),
+      fmpGet("/technical_indicator/daily/" + ticker + "?type=sma&period=20&limit=5"),
+      fmpGet("/technical_indicator/daily/" + ticker + "?type=sma&period=50&limit=5"),
+      fmpGet("/technical_indicator/daily/" + ticker + "?type=ema&period=20&limit=5")
+    ]);
+
+    const latest = (arr) => Array.isArray(arr) && arr.length ? arr[0] : null;
+    const rsi   = latest(rsiData);
+    const sma20 = latest(sma20Data);
+    const sma50 = latest(sma50Data);
+    const ema20 = latest(ema20Data);
+
+    return {
+      rsi14:      rsi   ? parseFloat((rsi.rsi   || rsi.value   || 0).toFixed(1)) : null,
+      sma20:      sma20 ? parseFloat((sma20.sma || sma20.value || 0).toFixed(2)) : null,
+      sma50:      sma50 ? parseFloat((sma50.sma || sma50.value || 0).toFixed(2)) : null,
+      ema20:      ema20 ? parseFloat((ema20.ema || ema20.value || 0).toFixed(2)) : null,
+      rsiSignal:  rsi ? (
+        (rsi.rsi || rsi.value || 50) >= 70 ? "OVERBOUGHT" :
+        (rsi.rsi || rsi.value || 50) <= 30 ? "OVERSOLD" : "NEUTRAL"
+      ) : null
+    };
+  }
+
+  // -----------------------------------------------------------
+  // 7. STOCK PRICE CHANGE — 1D, 5D, 1M, 3M, 6M, 1Y % changes
+  //    Endpoint: /stock-price-change/{ticker}  [Full Access on Starter]
+  // -----------------------------------------------------------
+  async function fetchPriceChange(ticker) {
+    const data = await fmpGet("/stock-price-change/" + ticker);
+    const d = Array.isArray(data) ? data[0] : data;
+    if (!d) return null;
+    return {
+      pct1d:  d["1D"]  != null ? parseFloat(d["1D"].toFixed(2))  : null,
+      pct5d:  d["5D"]  != null ? parseFloat(d["5D"].toFixed(2))  : null,
+      pct1m:  d["1M"]  != null ? parseFloat(d["1M"].toFixed(2))  : null,
+      pct3m:  d["3M"]  != null ? parseFloat(d["3M"].toFixed(2))  : null,
+      pct6m:  d["6M"]  != null ? parseFloat(d["6M"].toFixed(2))  : null,
+      pct1y:  d["1Y"]  != null ? parseFloat(d["1Y"].toFixed(2))  : null
+    };
   }
 
   // -----------------------------------------------------------
@@ -162,115 +194,127 @@
     const key    = getFMPKey();
 
     if (!key) {
-      console.warn("[Enrichment] FMP key not set — skipping enrichment for " + ticker);
+      console.warn("[Enrichment] FMP key not set — skipping " + ticker);
       return candidate;
     }
 
     console.log("[Enrichment] Enriching " + ticker + "...");
 
-    const [priceCtx, targets, ratings, metrics, surprises, income] = await Promise.all([
-      fetchPriceContext(ticker, price),
-      fetchAnalystTargets(ticker),
-      fetchRatingChanges(ticker),
-      fetchKeyMetrics(ticker),
-      fetchEarningsSurprises(ticker),
-      fetchIncomeTrend(ticker)
+    const [profile, priceTarget, rating, ratios, income, technicals, priceChange] = await Promise.all([
+      fetchProfile(ticker),
+      fetchPriceTarget(ticker),
+      fetchRating(ticker),
+      fetchRatios(ticker),
+      fetchIncome(ticker),
+      fetchTechnicals(ticker),
+      fetchPriceChange(ticker)
     ]);
 
-    if (income && income.length === 4 && income[0].revenue && income[3].revenue) {
-      const yoyGrowth = (((income[0].revenue - income[3].revenue) / Math.abs(income[3].revenue)) * 100).toFixed(1);
-      income[0].revenueGrowthYoY = parseFloat(yoyGrowth);
-    }
-
+    // Analyst upside %
     let analystUpsidePct = null;
-    if (targets && targets.targetMean && price > 0) {
-      analystUpsidePct = parseFloat((((targets.targetMean - price) / price) * 100).toFixed(1));
+    if (priceTarget && priceTarget.targetMean && price > 0) {
+      analystUpsidePct = parseFloat((((priceTarget.targetMean - price) / price) * 100).toFixed(1));
     }
 
-    let beatStreak = 0;
-    if (surprises && surprises.length) {
-      for (const s of surprises) {
-        if (s.beat) beatStreak++;
-        else break;
-      }
-    }
-
-    let latestRating = null;
-    if (ratings && ratings.length) {
-      const r = ratings[0];
-      latestRating = r.firm + " " + r.action + " \u2192 " + r.toGrade + " (" + r.date + ")";
-    }
+    // Above/below SMA20
+    const aboveSMA20 = (technicals && technicals.sma20 && price > 0)
+      ? price > technicals.sma20
+      : null;
 
     const enriched = {
       ...candidate,
-      sma20:            priceCtx?.sma20            ?? null,
-      sma50:            priceCtx?.sma50            ?? null,
-      pct5d:            priceCtx?.pct5             ?? null,
-      pct30d:           priceCtx?.pct30            ?? null,
-      pct90d:           priceCtx?.pct90            ?? null,
-      high90d:          priceCtx?.high90           ?? null,
-      low90d:           priceCtx?.low90            ?? null,
-      aboveSMA20Streak: priceCtx?.aboveSMA20Streak ?? null,
-      volRatio5v20:     priceCtx?.volRatio         ?? null,
-      analystTargetMean:  targets?.targetMean  ?? null,
-      analystTargetHigh:  targets?.targetHigh  ?? null,
-      analystConsensus:   targets?.consensus   ?? null,
+      // Profile
+      companyName:        profile?.companyName        ?? null,
+      sector:             profile?.sector             ?? null,
+      industry:           profile?.industry           ?? null,
+      beta:               profile?.beta               ?? null,
+      mktCap:             profile?.mktCap             ?? null,
+      exchange:           profile?.exchange           ?? null,
+      // Price changes
+      pct1d:              priceChange?.pct1d          ?? null,
+      pct5d:              priceChange?.pct5d          ?? null,
+      pct1m:              priceChange?.pct1m          ?? null,
+      pct3m:              priceChange?.pct3m          ?? null,
+      pct6m:              priceChange?.pct6m          ?? null,
+      pct1y:              priceChange?.pct1y          ?? null,
+      // Technicals
+      rsi14:              technicals?.rsi14           ?? null,
+      rsiSignal:          technicals?.rsiSignal       ?? null,
+      sma20:              technicals?.sma20           ?? null,
+      sma50:              technicals?.sma50           ?? null,
+      ema20:              technicals?.ema20           ?? null,
+      aboveSMA20,
+      // Analyst
+      analystTargetMean:  priceTarget?.targetMean     ?? null,
+      analystTargetHigh:  priceTarget?.targetHigh     ?? null,
+      analystTargetLow:   priceTarget?.targetLow      ?? null,
+      analystConsensus:   priceTarget?.consensus      ?? null,
       analystUpsidePct,
-      latestRating,
-      ratingChanges:      ratings  || [],
-      keyMetrics:         metrics  || [],
-      peRatioCurrent:     metrics && metrics[0] ? metrics[0].peRatio      : null,
-      debtToEquity:       metrics && metrics[0] ? metrics[0].debtToEquity : null,
-      roePct:             metrics && metrics[0] ? metrics[0].returnOnEquity : null,
-      earningsSurprises:  surprises || [],
-      beatStreak,
-      lastSurprisePct:    surprises && surprises[0] ? surprises[0].surprisePct : null,
-      incomeTrend:        income   || [],
-      revenueGrowthYoY:   income && income[0] ? income[0].revenueGrowthYoY : null,
-      grossMarginPct:     income && income[0] ? income[0].grossMarginPct   : null,
-      enrichedAt: new Date().toISOString()
+      ratingRecommendation: rating?.ratingRecommendation ?? null,
+      ratingScore:        rating?.ratingScore         ?? null,
+      // Fundamentals
+      peRatio:            ratios?.peRatio             ?? null,
+      pbRatio:            ratios?.pbRatio             ?? null,
+      debtToEquity:       ratios?.debtToEquity        ?? null,
+      currentRatio:       ratios?.currentRatio        ?? null,
+      roe:                ratios?.roe                 ?? null,
+      grossMarginPct:     ratios?.grossMargin         ?? null,
+      netMarginPct:       ratios?.netMargin           ?? null,
+      // Income trend
+      revenueGrowthYoY:   income?.revenueGrowthYoY   ?? null,
+      latestEps:          income?.quarters?.[0]?.eps  ?? null,
+      enrichedAt:         new Date().toISOString()
     };
 
+    // Persist enrichment back to Firestore
     try {
       const cfg = window.STOCKS_CONFIG || {};
-      const updatePayload = {
-        sma20:             enriched.sma20,
-        sma50:             enriched.sma50,
-        pct5d:             enriched.pct5d,
-        pct30d:            enriched.pct30d,
-        pct90d:            enriched.pct90d,
-        aboveSMA20Streak:  enriched.aboveSMA20Streak,
-        volRatio5v20:      enriched.volRatio5v20,
-        analystTargetMean: enriched.analystTargetMean,
-        analystUpsidePct:  enriched.analystUpsidePct,
-        analystConsensus:  enriched.analystConsensus,
-        latestRating:      enriched.latestRating,
-        peRatioCurrent:    enriched.peRatioCurrent,
-        debtToEquity:      enriched.debtToEquity,
-        roePct:            enriched.roePct,
-        beatStreak:        enriched.beatStreak,
-        lastSurprisePct:   enriched.lastSurprisePct,
-        revenueGrowthYoY:  enriched.revenueGrowthYoY,
-        grossMarginPct:    enriched.grossMarginPct,
-        enrichedAt:        firebase.firestore.FieldValue.serverTimestamp()
+      const payload = {
+        sector:               enriched.sector,
+        industry:             enriched.industry,
+        beta:                 enriched.beta,
+        pct1d:                enriched.pct1d,
+        pct5d:                enriched.pct5d,
+        pct1m:                enriched.pct1m,
+        pct3m:                enriched.pct3m,
+        rsi14:                enriched.rsi14,
+        rsiSignal:            enriched.rsiSignal,
+        sma20:                enriched.sma20,
+        sma50:                enriched.sma50,
+        ema20:                enriched.ema20,
+        aboveSMA20:           enriched.aboveSMA20,
+        analystTargetMean:    enriched.analystTargetMean,
+        analystUpsidePct:     enriched.analystUpsidePct,
+        analystConsensus:     enriched.analystConsensus,
+        ratingRecommendation: enriched.ratingRecommendation,
+        ratingScore:          enriched.ratingScore,
+        peRatio:              enriched.peRatio,
+        debtToEquity:         enriched.debtToEquity,
+        roe:                  enriched.roe,
+        grossMarginPct:       enriched.grossMarginPct,
+        netMarginPct:         enriched.netMarginPct,
+        revenueGrowthYoY:     enriched.revenueGrowthYoY,
+        latestEps:            enriched.latestEps,
+        enrichedAt:           firebase.firestore.FieldValue.serverTimestamp()
       };
 
-      Object.keys(updatePayload).forEach(k => { if (updatePayload[k] == null) delete updatePayload[k]; });
+      // Strip nulls so we don't overwrite existing data with null
+      Object.keys(payload).forEach(k => { if (payload[k] == null) delete payload[k]; });
 
       await db
         .collection(cfg.CANDIDATES_COLLECTION || "stockCandidates")
         .doc(ticker)
-        .update(updatePayload);
+        .update(payload);
 
       console.log("[Enrichment] \u2705 " + ticker + " enriched | " +
-        "90d: " + enriched.pct90d + "% | " +
+        "RSI: " + enriched.rsi14 + " (" + (enriched.rsiSignal || "?") + ") | " +
         "SMA20: $" + enriched.sma20 + " | " +
+        "1M: " + enriched.pct1m + "% | " +
         "analyst target: $" + enriched.analystTargetMean + " (" + enriched.analystUpsidePct + "% upside) | " +
-        "beat streak: " + enriched.beatStreak + " | " +
-        "latest rating: " + (enriched.latestRating || "none")
+        "rating: " + (enriched.ratingRecommendation || "none")
       );
     } catch (e) {
-      console.warn("[Enrichment] Firestore update error for " + ticker + ":", e);
+      console.warn("[Enrichment] Firestore update error for " + ticker + ":", e.message);
     }
 
     return enriched;
