@@ -27,9 +27,6 @@
 
   function delay(ms) { return new Promise(res => setTimeout(res, ms)); }
 
-  // -----------------------------------------------------------
-  // Fetch current price from Finnhub (for storing, NOT for gate)
-  // -----------------------------------------------------------
   async function fetchLivePrice(ticker) {
     try {
       const key = getFinnhubKey();
@@ -42,9 +39,6 @@
     } catch { return null; }
   }
 
-  // -----------------------------------------------------------
-  // RSI (Alpha Vantage) — bonus signal only
-  // -----------------------------------------------------------
   async function fetchRSI(ticker) {
     try {
       const key = getAVKey();
@@ -61,9 +55,6 @@
     } catch { return null; }
   }
 
-  // -----------------------------------------------------------
-  // MACD (Alpha Vantage) — bonus signal only
-  // -----------------------------------------------------------
   async function fetchMACD(ticker) {
     try {
       const key = getAVKey();
@@ -91,9 +82,6 @@
     } catch { return null; }
   }
 
-  // -----------------------------------------------------------
-  // Cooldown check
-  // -----------------------------------------------------------
   async function isInCooldown(db, ticker) {
     try {
       const cfg    = window.STOCKS_CONFIG || {};
@@ -104,18 +92,22 @@
     } catch { return false; }
   }
 
-  // -----------------------------------------------------------
-  // Write candidate
-  // -----------------------------------------------------------
   async function writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry) {
     try {
-      const cfg        = window.STOCKS_CONFIG || {};
-      const changePct  = tier0Entry.changePct || 0;
+      const cfg       = window.STOCKS_CONFIG || {};
+      const changePct = tier0Entry.changePct || 0;
 
       let confidence = Math.min(Math.abs(changePct) / 10, 1.0);
       if (rsi !== null && (rsi > (cfg.RSI_OVERBOUGHT || 70) || rsi < (cfg.RSI_OVERSOLD || 30))) confidence += 0.2;
       if (macd && macd.crossed) confidence += 0.2;
       confidence = parseFloat(Math.min(confidence, 1.0).toFixed(2));
+
+      // Check if already processed — never reset tier2Processed back to false
+      let alreadyProcessed = false;
+      try {
+        const existing = await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).get();
+        if (existing.exists) alreadyProcessed = existing.data().tier2Processed === true;
+      } catch { /* ignore */ }
 
       const candidate = {
         ticker,
@@ -134,15 +126,17 @@
         tier0Score:     tier0Entry.score    || null,
         sector:         tier0Entry.sector   || "",
         flaggedAt:      firebase.firestore.FieldValue.serverTimestamp(),
-        tier2Processed: false
+        // CRITICAL: never reset to false if already processed
+        tier2Processed: alreadyProcessed ? true : false
       };
 
       await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).set(candidate);
       console.log(
         `[Stocks Tier1] \u2705 Flagged: ${ticker} | ${changePct.toFixed(2)}%` +
         (rsi !== null ? ` | RSI:${rsi.toFixed(1)}` : "") +
-        (macd && macd.crossed ? ` | MACD✗` : "") +
-        ` | conf:${confidence}`
+        (macd && macd.crossed ? ` | MACD\u2717` : "") +
+        ` | conf:${confidence}` +
+        (alreadyProcessed ? " | [tier2 already done, preserved]" : "")
       );
       return candidate;
     } catch (e) {
@@ -151,9 +145,6 @@
     }
   }
 
-  // -----------------------------------------------------------
-  // RUN TIER 1
-  // -----------------------------------------------------------
   async function runTier1Screener(db) {
     if (!db) { console.warn("[Stocks] Firestore not available."); return []; }
 
@@ -161,7 +152,6 @@
     const universe = window.STOCKS_UNIVERSE || [];
     const candidates = [];
 
-    // Load Tier 0 Firestore data — this is the source of truth for changePct
     const tier0Map = {};
     try {
       const today   = new Date().toISOString().slice(0, 10);
@@ -180,30 +170,23 @@
       const ticker     = universe[i];
       const tier0Entry = tier0Map[ticker];
 
-      // Gate 1: need Tier 0 entry with a changePct
       if (!tier0Entry) {
         console.warn(`[Stocks Tier1] No Tier 0 entry for ${ticker} — skipping.`);
         continue;
       }
 
       const absChange = Math.abs(tier0Entry.changePct || 0);
-      if (absChange < (cfg.MIN_PRICE_MOVE_PCT || 1.5)) {
-        // Expected quiet skip
-        continue;
-      }
+      if (absChange < (cfg.MIN_PRICE_MOVE_PCT || 1.5)) continue;
 
-      // Gate 2: cooldown
       const coolingDown = await isInCooldown(db, ticker);
       if (coolingDown) {
         console.log(`[Stocks Tier1] \u23f3 Cooldown: ${ticker}`);
         continue;
       }
 
-      // Fetch live price for storing current value (non-gating)
       const livePrice = await fetchLivePrice(ticker);
       await delay(1100);
 
-      // Bonus: RSI + MACD
       const rsi  = await fetchRSI(ticker);  await delay(250);
       const macd = await fetchMACD(ticker); await delay(250);
 

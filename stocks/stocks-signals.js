@@ -1,6 +1,7 @@
 // stocks/stocks-signals.js
 // TIER 2 — LLM Signal Reasoning
-// Now calls /api/stocks-signal (Vercel + GPT-4o web search) instead of Firebase Cloud Function.
+// Calls /api/stocks-signal (Vercel + GPT-4o web search).
+// Only fires on 'added' changes — never re-processes existing candidates.
 
 (function () {
   "use strict";
@@ -83,7 +84,6 @@
         return null;
       }
 
-      // Merge any web-search-enriched fields back onto enriched for writeSignalCard
       if (analysis.analystConsensus)  enriched.analystConsensus  = analysis.analystConsensus;
       if (analysis.analystTargetMean) enriched.analystTargetMean = analysis.analystTargetMean;
       if (analysis.analystUpsidePct)  enriched.analystUpsidePct  = analysis.analystUpsidePct;
@@ -182,7 +182,7 @@
 
       await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").add(card);
 
-      console.log(`[Stocks Tier2] ✅ ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | RR: ${risk_reward} | $${finalPrice}`);
+      console.log(`[Stocks Tier2] \u2705 ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | RR: ${risk_reward} | $${finalPrice}`);
     } catch (e) {
       console.error("[Stocks Tier2] writeSignalCard error:", e);
     }
@@ -247,7 +247,8 @@
       .where("tier2Processed", "==", false)
       .onSnapshot(async (snapshot) => {
         for (const change of snapshot.docChanges()) {
-          if (change.type === "added" || change.type === "modified") {
+          // ONLY process brand-new candidates — never re-fire on updates
+          if (change.type === "added") {
             const data = change.doc.data();
             if (!data.tier2Processed) await processCandidateTier2(db, data);
           }
