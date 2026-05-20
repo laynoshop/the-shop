@@ -1,7 +1,7 @@
 // stocks/stocks-signals.js
 // TIER 2 — LLM Signal Reasoning
 // Calls /api/stocks-signal (Vercel + GPT-4o web search).
-// Only fires on 'added' changes — never re-processes existing candidates.
+// Deletes candidate docs after processing so they never replay on next page load.
 
 (function () {
   "use strict";
@@ -188,7 +188,7 @@
     }
   }
 
-  async function processCandidateTier2(db, candidate) {
+  async function processCandidateTier2(db, candidate, docId) {
     const ticker = candidate.ticker;
     if (__processing.has(ticker)) {
       console.log(`[Stocks Tier2] Skipping ${ticker} — already processing.`);
@@ -197,13 +197,6 @@
     __processing.add(ticker);
 
     const cfg = window.STOCKS_CONFIG || {};
-    try {
-      await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).update({
-        tier2Processed: true
-      });
-    } catch (e) {
-      console.warn(`[Stocks Tier2] Could not pre-claim tier2Processed for ${ticker}:`, e.message);
-    }
 
     try {
       console.log(`[Stocks Tier2] Processing: ${ticker}`);
@@ -231,6 +224,16 @@
       }
 
       await writeSignalCard(db, enriched, signal, newsHeadlines, livePrice);
+
+      // Delete the candidate doc so it never replays on next page load.
+      // This is safer than flipping tier2Processed because server timestamps
+      // can be null in the local pending-write state, defeating flag checks.
+      try {
+        await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(docId || ticker).delete();
+        console.log(`[Stocks Tier2] 🗑 Candidate ${ticker} removed after processing.`);
+      } catch (delErr) {
+        console.warn(`[Stocks Tier2] Could not delete candidate ${ticker}:`, delErr.message);
+      }
     } finally {
       __processing.delete(ticker);
     }
@@ -242,30 +245,15 @@
     const cfg = window.STOCKS_CONFIG || {};
     console.log("[Stocks Tier2] Listener started.");
 
-    // Guard: record when this listener attached so we can ignore Firestore's
-    // initial snapshot replay of pre-existing docs (all arrive as "added").
-    // Any candidate whose addedAt is more than 5 seconds before we attached
-    // belongs to a previous session and should NOT be re-processed.
-    const listenerAttachedAt = Date.now();
-
     __tier2Listener = db
       .collection(cfg.CANDIDATES_COLLECTION || "stockCandidates")
       .where("tier2Processed", "==", false)
       .onSnapshot(async (snapshot) => {
         for (const change of snapshot.docChanges()) {
           if (change.type === "added") {
-            const data = change.doc.data();
-            if (data.tier2Processed) continue;
-
-            // Skip stale candidates from previous runs — Firestore replays ALL
-            // matching docs as "added" when the listener first attaches.
-            const addedAt = data.addedAt?.toMillis?.() ?? 0;
-            if (addedAt > 0 && addedAt < listenerAttachedAt - 5000) {
-              console.log(`[Stocks Tier2] Skipping stale candidate ${data.ticker} — written before this session.`);
-              continue;
-            }
-
-            await processCandidateTier2(db, data);
+            const data  = change.doc.data();
+            const docId = change.doc.id;
+            if (!data.tier2Processed) await processCandidateTier2(db, data, docId);
           }
         }
       }, (err) => console.error("[Stocks Tier2] Listener error:", err));
