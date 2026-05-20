@@ -182,7 +182,7 @@
 
       await db.collection(cfg.SIGNALS_COLLECTION || "stockSignals").add(card);
 
-      console.log(`[Stocks Tier2] \u2705 ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | RR: ${risk_reward} | $${finalPrice}`);
+      console.log(`[Stocks Tier2] ✅ ${enriched.ticker} | ${direction} ${confidence}% | Entry: ${entry_zone} | Target: ${target} | Stop: ${stop_loss} | RR: ${risk_reward} | $${finalPrice}`);
     } catch (e) {
       console.error("[Stocks Tier2] writeSignalCard error:", e);
     }
@@ -242,15 +242,30 @@
     const cfg = window.STOCKS_CONFIG || {};
     console.log("[Stocks Tier2] Listener started.");
 
+    // Guard: record when this listener attached so we can ignore Firestore's
+    // initial snapshot replay of pre-existing docs (all arrive as "added").
+    // Any candidate whose addedAt is more than 5 seconds before we attached
+    // belongs to a previous session and should NOT be re-processed.
+    const listenerAttachedAt = Date.now();
+
     __tier2Listener = db
       .collection(cfg.CANDIDATES_COLLECTION || "stockCandidates")
       .where("tier2Processed", "==", false)
       .onSnapshot(async (snapshot) => {
         for (const change of snapshot.docChanges()) {
-          // ONLY process brand-new candidates — never re-fire on updates
           if (change.type === "added") {
             const data = change.doc.data();
-            if (!data.tier2Processed) await processCandidateTier2(db, data);
+            if (data.tier2Processed) continue;
+
+            // Skip stale candidates from previous runs — Firestore replays ALL
+            // matching docs as "added" when the listener first attaches.
+            const addedAt = data.addedAt?.toMillis?.() ?? 0;
+            if (addedAt > 0 && addedAt < listenerAttachedAt - 5000) {
+              console.log(`[Stocks Tier2] Skipping stale candidate ${data.ticker} — written before this session.`);
+              continue;
+            }
+
+            await processCandidateTier2(db, data);
           }
         }
       }, (err) => console.error("[Stocks Tier2] Listener error:", err));
