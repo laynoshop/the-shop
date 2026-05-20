@@ -40,9 +40,10 @@
     }
   }
 
-  // Add a ticker — returns { ok, reason } 
+  // Add a ticker — returns { ok, reason }
+  // Allows letters, numbers, dots, and hyphens (e.g. XRP-USD, BRK-B)
   async function addToRoster(ticker) {
-    const clean = ticker.trim().toUpperCase().replace(/[^A-Z0-9.]/g, "");
+    const clean = ticker.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
     if (!clean) return { ok: false, reason: "Invalid ticker" };
     const current = await loadRoster();
     if (current.includes(clean)) return { ok: false, reason: `${clean} is already on The Roster` };
