@@ -1,12 +1,11 @@
 // stocks/stocks-signals.js
 // TIER 2 — LLM Signal Reasoning
-// Fix: mark tier2Processed=true immediately when we start processing
-// to prevent duplicate runs from Firestore snapshot re-fires.
+// Now calls /api/stocks-signal (Vercel + GPT-4o web search) instead of Firebase Cloud Function.
 
 (function () {
   "use strict";
 
-  const AI_SIGNAL_URL = "https://us-central1-the-shop-chat.cloudfunctions.net/stocksAISignal";
+  const AI_SIGNAL_URL = "/api/stocks-signal";
 
   let __tier2Listener = null;
   const __processing  = new Set();
@@ -52,104 +51,26 @@
     }
   }
 
-  function buildAnalystBrief(enriched, newsHeadlines) {
-    const t = enriched;
-    const lines = [];
-    lines.push(`TICKER: ${t.ticker} | Price: $${t.price} | Today: ${t.changePct > 0 ? "+" : ""}${t.changePct}%`);
-    if (t.pct5d  != null) lines.push(`5-day trend: ${t.pct5d > 0 ? "+" : ""}${t.pct5d}%`);
-    if (t.pct1m  != null) lines.push(`30-day trend: ${t.pct1m > 0 ? "+" : ""}${t.pct1m}%`);
-    if (t.pct3m  != null) lines.push(`90-day trend: ${t.pct3m > 0 ? "+" : ""}${t.pct3m}%`);
-    if (t.pct1y  != null) lines.push(`1-year trend: ${t.pct1y > 0 ? "+" : ""}${t.pct1y}%`);
-    if (t.sma20  != null) {
-      const vs = t.price > t.sma20 ? "ABOVE" : "BELOW";
-      lines.push(`SMA20: $${t.sma20} | SMA50: $${t.sma50 || "N/A"} | EMA20: $${t.ema20 || "N/A"} | Price vs SMA20: ${vs}`);
-    }
-    if (t.rsi14  != null) lines.push(`RSI(14): ${t.rsi14}${t.rsi14 >= 70 ? " (OVERBOUGHT)" : t.rsi14 <= 30 ? " (OVERSOLD)" : ""}`);
-    if (t.rsiSignal) lines.push(`RSI signal: ${t.rsiSignal}`);
-    if (t.analystConsensus)    lines.push(`Analyst consensus: ${t.analystConsensus}`);
-    if (t.analystTargetMean != null) {
-      lines.push(`Analyst price target: mean $${t.analystTargetMean}` +
-        (t.analystUpsidePct != null ? ` (${t.analystUpsidePct > 0 ? "+" : ""}${t.analystUpsidePct}% upside)` : "") +
-        (t.analystTargetHigh != null ? `, high $${t.analystTargetHigh}` : "")
-      );
-    }
-    if (t.peRatio       != null) lines.push(`P/E ratio: ${t.peRatio}`);
-    if (t.revenueGrowthYoY != null) lines.push(`Revenue growth YoY: ${t.revenueGrowthYoY > 0 ? "+" : ""}${t.revenueGrowthYoY}%`);
-    if (t.sector)   lines.push(`Sector: ${t.sector}`);
-    if (t.beta != null) lines.push(`Beta: ${t.beta}`);
-    lines.push(`Recent news: ${newsHeadlines}`);
-    return lines.join("\n");
-  }
-
-  function buildFullPrompt(enriched, brief) {
-    const price = enriched.price;
-    return `You are a professional stock analyst generating a trade signal card.
-
-Here is the data for this stock:
-${brief}
-
-Based on all of the above data, provide a complete trade signal in the following JSON format.
-You MUST calculate and fill in entry_zone, target, stop_loss, and risk_reward based on the current price of $${price} and the technical/fundamental context. Do NOT leave these blank.
-
-Rules for trade levels:
-- entry_zone: The recommended price range to enter the trade (e.g. "$152.00 - $154.00")
-- target: The price target where you would take profit (e.g. "$165.00")
-- stop_loss: The price where the trade thesis is invalidated and you exit (e.g. "$148.50")
-- risk_reward: The risk-to-reward ratio as a string (e.g. "2.5:1")
-- For BULLISH signals: target should be above entry, stop_loss below entry
-- For BEARISH signals: target should be below entry, stop_loss above entry
-- Base these levels on support/resistance implied by SMA20, SMA50, and RSI
-- time_horizon should be "Intraday", "1-3 days", "1-2 weeks", or "1 month"
-- confidence should be a number 0-100
-
-Respond ONLY with valid JSON, no extra text:
-{
-  "signal": "BULLISH" | "BEARISH" | "NEUTRAL" | "WATCH",
-  "confidence": <number 0-100>,
-  "signal_type": "<momentum|reversal|breakout|breakdown|earnings_play|value>",
-  "entry_zone": "<price range string>",
-  "target": "<price string>",
-  "stop_loss": "<price string>",
-  "risk_reward": "<ratio string like 2.5:1>",
-  "time_horizon": "<timeframe string>",
-  "summary": "<2-3 sentence reasoning using the actual data points above>",
-  "news_impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "NONE",
-  "expires_note": "<optional string, e.g. 'Before earnings on May 20'>"
-}`;
-  }
-
   async function callAISignal(enriched, newsHeadlines) {
     try {
-      const brief      = buildAnalystBrief(enriched, newsHeadlines);
-      const fullPrompt = buildFullPrompt(enriched, brief);
-
       console.log(`[Stocks Tier2] Sending AI request for ${enriched.ticker}...`);
 
       const res = await fetch(AI_SIGNAL_URL, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
-          ticker:       enriched.ticker,
-          price:        enriched.price,
-          rsi:          enriched.rsi14,
-          sma20:        enriched.sma20,
-          sma50:        enriched.sma50,
-          ema20:        enriched.ema20,
-          rsiSignal:    enriched.rsiSignal,
-          pct1d:        enriched.pct1d,
-          pct5d:        enriched.pct5d,
-          pct1m:        enriched.pct1m,
-          pct3m:        enriched.pct3m,
-          sentiment:    enriched.changePct,
-          pe:           enriched.peRatio,
-          newsHeadline: newsHeadlines,
-          analystBrief: brief,
-          fullPrompt
+          ticker:    enriched.ticker,
+          price:     enriched.price,
+          rsi14:     enriched.rsi14,
+          sma20:     enriched.sma20,
+          sma50:     enriched.sma50,
+          ema20:     enriched.ema20,
+          rsiSignal: enriched.rsiSignal
         })
       });
 
       if (!res.ok) {
-        console.error("[Stocks Tier2] Cloud Function HTTP error:", res.status, await res.text());
+        console.error("[Stocks Tier2] API error:", res.status, await res.text());
         return null;
       }
 
@@ -161,6 +82,19 @@ Respond ONLY with valid JSON, no extra text:
         console.warn(`[Stocks Tier2] Unexpected response shape for ${enriched.ticker}:`, data);
         return null;
       }
+
+      // Merge any web-search-enriched fields back onto enriched for writeSignalCard
+      if (analysis.analystConsensus)  enriched.analystConsensus  = analysis.analystConsensus;
+      if (analysis.analystTargetMean) enriched.analystTargetMean = analysis.analystTargetMean;
+      if (analysis.analystUpsidePct)  enriched.analystUpsidePct  = analysis.analystUpsidePct;
+      if (analysis.sector)            enriched.sector            = analysis.sector;
+      if (analysis.pe)                enriched.peRatio           = analysis.pe;
+      if (analysis.earningsDate)      enriched.earningsDate      = analysis.earningsDate;
+      if (analysis.newsHeadline && newsHeadlines === "No recent news found.") {
+        fetchNewsHeadlines._lastUrl = "";
+        return { ...analysis, _newsFromAI: true };
+      }
+
       return analysis;
     } catch (e) {
       console.error("[Stocks Tier2] callAISignal failed:", e);
@@ -214,22 +148,24 @@ Respond ONLY with valid JSON, no extra text:
         ticker:           enriched.ticker,
         price:            finalPrice,
         changePct:        finalChangePct,
-        rsi14:            enriched.rsi14          ?? null,
-        rsiSignal:        enriched.rsiSignal       ?? null,
-        sma20:            enriched.sma20           ?? null,
-        sma50:            enriched.sma50           ?? null,
-        ema20:            enriched.ema20           ?? null,
-        pct1m:            enriched.pct1m           ?? null,
-        pct3m:            enriched.pct3m           ?? null,
-        newsHeadline:     newsHeadlines,
+        rsi14:            enriched.rsi14             ?? null,
+        rsiSignal:        enriched.rsiSignal          ?? null,
+        sma20:            enriched.sma20              ?? null,
+        sma50:            enriched.sma50              ?? null,
+        ema20:            enriched.ema20              ?? null,
+        pct1m:            enriched.pct1m              ?? null,
+        pct3m:            enriched.pct3m              ?? null,
+        newsHeadline:     signal._newsFromAI ? signal.newsHeadline : newsHeadlines,
         newsUrl,
         newsSource,
-        analystConsensus: enriched.analystConsensus  || null,
-        analystUpsidePct: enriched.analystUpsidePct  ?? null,
-        revenueGrowthYoY: enriched.revenueGrowthYoY  ?? null,
-        peRatio:          enriched.peRatio            ?? null,
-        sector:           enriched.sector             || null,
-        beta:             enriched.beta               ?? null,
+        analystConsensus: enriched.analystConsensus   || null,
+        analystTargetMean:enriched.analystTargetMean  ?? null,
+        analystUpsidePct: enriched.analystUpsidePct   ?? null,
+        revenueGrowthYoY: enriched.revenueGrowthYoY   ?? null,
+        peRatio:          enriched.peRatio             ?? null,
+        earningsDate:     enriched.earningsDate        || null,
+        sector:           enriched.sector              || null,
+        beta:             enriched.beta                ?? null,
         generatedAt:      firebase.firestore.FieldValue.serverTimestamp(),
         direction,
         confidence,
@@ -260,7 +196,6 @@ Respond ONLY with valid JSON, no extra text:
     }
     __processing.add(ticker);
 
-    // Claim the doc immediately so Firestore snapshot re-fires don't re-queue this ticker
     const cfg = window.STOCKS_CONFIG || {};
     try {
       await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).update({
