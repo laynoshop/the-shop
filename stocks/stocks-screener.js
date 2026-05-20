@@ -6,8 +6,9 @@
 //   RSI + MACD are bonus signals stored on the candidate but do NOT gate.
 //
 // COOLDOWN:
-//   flaggedAt is ONLY written on the first flag — never overwritten.
-//   This ensures the 2-hour cooldown window is respected across re-runs.
+//   Checks flaggedAt first, then falls back to addedAt/enrichedAt.
+//   Docs seeded by the roster pre-population (source=roster) are treated
+//   as cooldown-exempt but get a fresh flaggedAt written on first screen.
 
 (function () {
   "use strict";
@@ -85,18 +86,40 @@
     } catch { return null; }
   }
 
-  // Returns { inCooldown, existingData } — single read shared by both cooldown check and writeCandidate
+  // Helper: get a Firestore Timestamp field as millis, or null
+  function tsMillis(val) {
+    if (!val) return null;
+    if (typeof val.toMillis === "function") return val.toMillis();
+    if (typeof val === "string") { const d = Date.parse(val); return isNaN(d) ? null : d; }
+    if (typeof val === "number") return val;
+    return null;
+  }
+
+  // Single Firestore read — returns cooldown state + existing doc data
   async function getExistingCandidate(db, ticker) {
     try {
       const cfg = window.STOCKS_CONFIG || {};
       const doc = await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).get();
-      if (!doc.exists) return { inCooldown: false, existingData: null };
-      const data    = doc.data();
-      const lastAt  = data.flaggedAt ? data.flaggedAt.toMillis() : 0;
+      if (!doc.exists) return { inCooldown: false, existingData: null, wasScreened: false };
+
+      const data = doc.data();
+
+      // Docs written by roster pre-seeder (source=roster) have never been screened.
+      // Don't honour their addedAt as a cooldown — let the screener run them fresh.
+      const wasScreened = !!data.flaggedAt;
+
+      if (!wasScreened) {
+        return { inCooldown: false, existingData: data, wasScreened: false };
+      }
+
+      const lastAt     = tsMillis(data.flaggedAt);
       const cooldownMs = cfg.SIGNAL_COOLDOWN_MS || 3600000;
-      const inCooldown = (Date.now() - lastAt) < cooldownMs;
-      return { inCooldown, existingData: data };
-    } catch { return { inCooldown: false, existingData: null }; }
+      const inCooldown = lastAt !== null && (Date.now() - lastAt) < cooldownMs;
+
+      return { inCooldown, existingData: data, wasScreened: true };
+    } catch {
+      return { inCooldown: false, existingData: null, wasScreened: false };
+    }
   }
 
   async function writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry, existingData) {
@@ -109,9 +132,8 @@
       if (macd && macd.crossed) confidence += 0.2;
       confidence = parseFloat(Math.min(confidence, 1.0).toFixed(2));
 
-      // Preserve tier2Processed from existing doc — never reset to false
+      // Preserve tier2Processed if already true — never reset to false
       const alreadyProcessed = existingData ? existingData.tier2Processed === true : false;
-      const isNewDoc         = !existingData;
 
       const candidate = {
         ticker,
@@ -129,17 +151,12 @@
         tier0Triggers:  tier0Entry.triggers || [],
         tier0Score:     tier0Entry.score    || null,
         sector:         tier0Entry.sector   || "",
-        tier2Processed: alreadyProcessed
-        // NOTE: flaggedAt is intentionally omitted here if doc already exists
-        // so we don't reset the cooldown clock on re-runs
+        tier2Processed: alreadyProcessed,
+        // Always write flaggedAt — this is what the cooldown key checks
+        flaggedAt:      firebase.firestore.FieldValue.serverTimestamp()
       };
 
-      // Only set flaggedAt on brand-new candidates
-      if (isNewDoc) {
-        candidate.flaggedAt = firebase.firestore.FieldValue.serverTimestamp();
-      }
-
-      // merge:true ensures we never accidentally wipe fields we didn't include
+      // merge:true so we don’t wipe enrichment fields (rsi14, sma20, etc.) set by enrichment module
       await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates")
         .doc(ticker)
         .set(candidate, { merge: true });
@@ -147,10 +164,9 @@
       console.log(
         `[Stocks Tier1] ✅ Flagged: ${ticker} | ${changePct.toFixed(2)}%` +
         (rsi !== null ? ` | RSI:${rsi.toFixed(1)}` : "") +
-        (macd && macd.crossed ? ` | MACD✗` : "") +
+        (macd && macd.crossed ? " | MACD✗" : "") +
         ` | conf:${confidence}` +
-        (alreadyProcessed ? " | [tier2 preserved]" : "") +
-        (isNewDoc ? " | [NEW]" : " | [UPDATE — flaggedAt unchanged]")
+        (alreadyProcessed ? " | [tier2 preserved]" : "")
       );
       return candidate;
     } catch (e) {
@@ -192,14 +208,20 @@
       const absChange = Math.abs(tier0Entry.changePct || 0);
       if (absChange < (cfg.MIN_PRICE_MOVE_PCT || 1.5)) continue;
 
-      // Single read — used for both cooldown gate AND writeCandidate
-      const { inCooldown, existingData } = await getExistingCandidate(db, ticker);
+      // Single read — shared by cooldown check + writeCandidate
+      const { inCooldown, existingData, wasScreened } = await getExistingCandidate(db, ticker);
+
       if (inCooldown) {
-        const remaining = existingData?.flaggedAt
-          ? Math.round(((cfg.SIGNAL_COOLDOWN_MS || 3600000) - (Date.now() - existingData.flaggedAt.toMillis())) / 60000)
+        const lastAt    = tsMillis(existingData?.flaggedAt);
+        const remaining = lastAt
+          ? Math.round(((cfg.SIGNAL_COOLDOWN_MS || 3600000) - (Date.now() - lastAt)) / 60000)
           : "?";
         console.log(`[Stocks Tier1] ⏳ Cooldown: ${ticker} (${remaining}m remaining)`);
         continue;
+      }
+
+      if (!wasScreened) {
+        console.log(`[Stocks Tier1] 🆕 First screen: ${ticker} (roster-seeded doc, no flaggedAt yet)`);
       }
 
       const livePrice = await fetchLivePrice(ticker);
