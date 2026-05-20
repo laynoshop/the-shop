@@ -3,8 +3,11 @@
 //
 // GATE LOGIC:
 //   Uses Tier 0 changePct (already in Firestore) as the price-move gate.
-//   This avoids re-fetching and getting a stale intraday number.
 //   RSI + MACD are bonus signals stored on the candidate but do NOT gate.
+//
+// COOLDOWN:
+//   flaggedAt is ONLY written on the first flag — never overwritten.
+//   This ensures the 2-hour cooldown window is respected across re-runs.
 
 (function () {
   "use strict";
@@ -82,17 +85,21 @@
     } catch { return null; }
   }
 
-  async function isInCooldown(db, ticker) {
+  // Returns { inCooldown, existingData } — single read shared by both cooldown check and writeCandidate
+  async function getExistingCandidate(db, ticker) {
     try {
-      const cfg    = window.STOCKS_CONFIG || {};
-      const doc    = await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).get();
-      if (!doc.exists) return false;
-      const lastAt = doc.data().flaggedAt ? doc.data().flaggedAt.toMillis() : 0;
-      return (Date.now() - lastAt) < (cfg.SIGNAL_COOLDOWN_MS || 3600000);
-    } catch { return false; }
+      const cfg = window.STOCKS_CONFIG || {};
+      const doc = await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).get();
+      if (!doc.exists) return { inCooldown: false, existingData: null };
+      const data    = doc.data();
+      const lastAt  = data.flaggedAt ? data.flaggedAt.toMillis() : 0;
+      const cooldownMs = cfg.SIGNAL_COOLDOWN_MS || 3600000;
+      const inCooldown = (Date.now() - lastAt) < cooldownMs;
+      return { inCooldown, existingData: data };
+    } catch { return { inCooldown: false, existingData: null }; }
   }
 
-  async function writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry) {
+  async function writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry, existingData) {
     try {
       const cfg       = window.STOCKS_CONFIG || {};
       const changePct = tier0Entry.changePct || 0;
@@ -102,17 +109,14 @@
       if (macd && macd.crossed) confidence += 0.2;
       confidence = parseFloat(Math.min(confidence, 1.0).toFixed(2));
 
-      // Check if already processed — never reset tier2Processed back to false
-      let alreadyProcessed = false;
-      try {
-        const existing = await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).get();
-        if (existing.exists) alreadyProcessed = existing.data().tier2Processed === true;
-      } catch { /* ignore */ }
+      // Preserve tier2Processed from existing doc — never reset to false
+      const alreadyProcessed = existingData ? existingData.tier2Processed === true : false;
+      const isNewDoc         = !existingData;
 
       const candidate = {
         ticker,
-        price:          livePrice ? livePrice.price     : tier0Entry.price,
-        prevClose:      livePrice ? livePrice.prevClose  : null,
+        price:          livePrice ? livePrice.price    : tier0Entry.price,
+        prevClose:      livePrice ? livePrice.prevClose : null,
         changePct:      parseFloat(changePct.toFixed(2)),
         rsi:            rsi !== null ? parseFloat(rsi.toFixed(2)) : null,
         rsiOverbought:  rsi !== null && rsi > (cfg.RSI_OVERBOUGHT || 70),
@@ -125,18 +129,28 @@
         tier0Triggers:  tier0Entry.triggers || [],
         tier0Score:     tier0Entry.score    || null,
         sector:         tier0Entry.sector   || "",
-        flaggedAt:      firebase.firestore.FieldValue.serverTimestamp(),
-        // CRITICAL: never reset to false if already processed
-        tier2Processed: alreadyProcessed ? true : false
+        tier2Processed: alreadyProcessed
+        // NOTE: flaggedAt is intentionally omitted here if doc already exists
+        // so we don't reset the cooldown clock on re-runs
       };
 
-      await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(ticker).set(candidate);
+      // Only set flaggedAt on brand-new candidates
+      if (isNewDoc) {
+        candidate.flaggedAt = firebase.firestore.FieldValue.serverTimestamp();
+      }
+
+      // merge:true ensures we never accidentally wipe fields we didn't include
+      await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates")
+        .doc(ticker)
+        .set(candidate, { merge: true });
+
       console.log(
-        `[Stocks Tier1] \u2705 Flagged: ${ticker} | ${changePct.toFixed(2)}%` +
+        `[Stocks Tier1] ✅ Flagged: ${ticker} | ${changePct.toFixed(2)}%` +
         (rsi !== null ? ` | RSI:${rsi.toFixed(1)}` : "") +
-        (macd && macd.crossed ? ` | MACD\u2717` : "") +
+        (macd && macd.crossed ? ` | MACD✗` : "") +
         ` | conf:${confidence}` +
-        (alreadyProcessed ? " | [tier2 already done, preserved]" : "")
+        (alreadyProcessed ? " | [tier2 preserved]" : "") +
+        (isNewDoc ? " | [NEW]" : " | [UPDATE — flaggedAt unchanged]")
       );
       return candidate;
     } catch (e) {
@@ -148,8 +162,8 @@
   async function runTier1Screener(db) {
     if (!db) { console.warn("[Stocks] Firestore not available."); return []; }
 
-    const cfg      = window.STOCKS_CONFIG || {};
-    const universe = window.STOCKS_UNIVERSE || [];
+    const cfg        = window.STOCKS_CONFIG || {};
+    const universe   = window.STOCKS_UNIVERSE || [];
     const candidates = [];
 
     const tier0Map = {};
@@ -178,9 +192,13 @@
       const absChange = Math.abs(tier0Entry.changePct || 0);
       if (absChange < (cfg.MIN_PRICE_MOVE_PCT || 1.5)) continue;
 
-      const coolingDown = await isInCooldown(db, ticker);
-      if (coolingDown) {
-        console.log(`[Stocks Tier1] \u23f3 Cooldown: ${ticker}`);
+      // Single read — used for both cooldown gate AND writeCandidate
+      const { inCooldown, existingData } = await getExistingCandidate(db, ticker);
+      if (inCooldown) {
+        const remaining = existingData?.flaggedAt
+          ? Math.round(((cfg.SIGNAL_COOLDOWN_MS || 3600000) - (Date.now() - existingData.flaggedAt.toMillis())) / 60000)
+          : "?";
+        console.log(`[Stocks Tier1] ⏳ Cooldown: ${ticker} (${remaining}m remaining)`);
         continue;
       }
 
@@ -190,7 +208,7 @@
       const rsi  = await fetchRSI(ticker);  await delay(250);
       const macd = await fetchMACD(ticker); await delay(250);
 
-      const c = await writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry);
+      const c = await writeCandidate(db, ticker, livePrice, rsi, macd, tier0Entry, existingData);
       if (c) candidates.push(c);
     }
 
