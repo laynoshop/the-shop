@@ -1,8 +1,5 @@
 // api/stocks-signal.js
 // Vercel serverless function — GPT-4o with web_search_preview
-// Replaces the Firebase stocksAISignal function.
-// Called by stocks-signals.js with ticker + local technicals.
-//
 // POST /api/stocks-signal
 // Body: { ticker, price, rsi14, sma20, sma50, ema20, rsiSignal }
 
@@ -59,7 +56,7 @@ CRITICAL RULES for trade levels — you MUST calculate real numbers, do NOT leav
 - time_horizon: "Intraday" | "1-3 days" | "1-2 weeks" | "1 month"
 - signal: "BULLISH" | "BEARISH" | "NEUTRAL" | "WATCH"
 
-Respond with ONLY valid JSON, no markdown, no extra text:
+IMPORTANT: Respond with ONLY the raw JSON object below — no markdown, no explanation, no text before or after the JSON:
 {
   "signal": "BULLISH" | "BEARISH" | "NEUTRAL" | "WATCH",
   "confidence": <0-100>,
@@ -111,8 +108,9 @@ Respond with ONLY valid JSON, no markdown, no extra text:
       ?.map(c => c.text)
       ?.join("") || "{}";
 
-    // Strip markdown code fences if present
-    const cleaned = outputText.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+    // Grab the first {...} block — handles pre-fence markdown text GPT sometimes prepends
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/);
+    const cleaned   = jsonMatch ? jsonMatch[0].trim() : "{}";
 
     let parsed;
     try {
