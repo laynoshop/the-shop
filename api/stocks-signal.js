@@ -15,12 +15,12 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const {
-    ticker   = "",
-    price    = null,
-    rsi14    = null,
-    sma20    = null,
-    sma50    = null,
-    ema20    = null,
+    ticker    = "",
+    price     = null,
+    rsi14     = null,
+    sma20     = null,
+    sma50     = null,
+    ema20     = null,
     rsiSignal = null
   } = req.body || {};
 
@@ -29,28 +29,50 @@ export default async function handler(req, res) {
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
   if (!OPENAI_KEY) return res.status(500).json({ error: "OpenAI key not configured" });
 
+  const priceNum = parseFloat(price) || 0;
+  const vsS20    = price && sma20 ? (price > sma20 ? "ABOVE (bullish)" : "BELOW (bearish)") : "N/A";
+
   const prompt = `
-You are a professional stock analyst. Use your web search tool to look up CURRENT data for ${ticker} right now, then return a signal.
+You are a professional stock analyst. Use your web search tool to look up CURRENT data for ${ticker}, then produce a complete trade signal card.
 
-Search for:
-1. Current analyst price targets and consensus (Buy/Hold/Sell)
-2. Recent news in the last 7 days
+STEP 1 — Search for:
+1. Current analyst consensus (Buy/Hold/Sell) and mean price target
+2. Most impactful news headline in the last 7 days
 3. Current P/E ratio and sector
-4. Any earnings coming up in the next 30 days
+4. Next earnings date (if within 60 days)
 
-Local technicals already computed (trust these numbers):
-- Current Price: $${price ?? "unknown"}
+STEP 2 — Using the search results AND the technicals below, fill in ALL fields.
+
+Local technicals (trust these exact numbers):
+- Current Price: $${priceNum}
 - RSI(14): ${rsi14 ?? "N/A"} → ${rsiSignal ?? "N/A"}
 - SMA20: $${sma20 ?? "N/A"} | SMA50: $${sma50 ?? "N/A"} | EMA20: $${ema20 ?? "N/A"}
-- Price vs SMA20: ${price && sma20 ? (price > sma20 ? "ABOVE (bullish)" : "BELOW (bearish)") : "N/A"}
+- Price vs SMA20: ${vsS20}
 
-After searching, respond with ONLY valid JSON in this exact shape:
+CRITICAL RULES for trade levels — you MUST calculate real numbers, do NOT leave null:
+- entry_zone: price range to enter, e.g. "$562.00 - $566.00" (use current price ± 0.3%)
+- target: profit-take price based on next resistance / analyst target, e.g. "$595.00"
+- stop_loss: invalidation price based on SMA20 or recent support, e.g. "$548.00"
+- risk_reward: ratio string, e.g. "2.1:1" — calculate as (target-entry)/(entry-stop)
+- For BULLISH/WATCH: target > entry > stop_loss
+- For BEARISH: target < entry < stop_loss
+- time_horizon: "Intraday" | "1-3 days" | "1-2 weeks" | "1 month"
+- signal: "BULLISH" | "BEARISH" | "NEUTRAL" | "WATCH"
+
+Respond with ONLY valid JSON, no markdown, no extra text:
 {
-  "signal": "BUY" | "SELL" | "WATCH",
+  "signal": "BULLISH" | "BEARISH" | "NEUTRAL" | "WATCH",
   "confidence": <0-100>,
-  "summary": "2-3 sentences max, practical and specific",
-  "reasons": ["reason 1", "reason 2", "reason 3"],
-  "analystConsensus": "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell" | null,
+  "signal_type": "<momentum|reversal|breakout|breakdown|earnings_play|value>",
+  "entry_zone": "<price range string — REQUIRED>",
+  "target": "<price string — REQUIRED>",
+  "stop_loss": "<price string — REQUIRED>",
+  "risk_reward": "<ratio string — REQUIRED>",
+  "time_horizon": "<timeframe string>",
+  "summary": "<2-3 sentences using the actual data points>",
+  "news_impact": "POSITIVE" | "NEGATIVE" | "NEUTRAL" | "NONE",
+  "expires_note": "<optional, e.g. 'Before earnings May 21'>",
+  "analystConsensus": "<Strong Buy|Buy|Hold|Sell|Strong Sell|null>",
   "analystTargetMean": <number or null>,
   "analystUpsidePct": <number or null>,
   "sector": "<sector string or null>",
