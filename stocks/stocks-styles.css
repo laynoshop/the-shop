@@ -393,12 +393,92 @@
 .ssc-red    { color: #f87171; }
 
 .ssc-reasoning { padding-top: 12px; padding-bottom: 12px; font-size: 13px; font-weight: 700; line-height: 1.5; color: rgba(255,255,255,0.72); border-top: 1px solid rgba(255,255,255,0.06); }
-.ssc-footer     { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-top: 10px; padding-bottom: 12px; border-top: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap; }
-.ssc-news       { flex: 1; min-width: 0; }
-.ssc-news-link  { display: block; font-size: 12px; font-weight: 700; line-height: 1.45; color: rgba(255,255,255,0.60); text-decoration: none; transition: color 0.15s ease; word-break: break-word; }
-.ssc-news-link:hover { color: rgba(255,255,255,0.92); text-decoration: underline; text-underline-offset: 3px; }
-.ssc-news-plain { display: block; font-size: 12px; font-weight: 700; line-height: 1.45; color: rgba(255,255,255,0.50); word-break: break-word; }
-.ssc-time       { flex-shrink: 0; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: rgba(255,255,255,0.35); white-space: normal; text-align: right; padding-top: 2px; max-width: 160px; line-height: 1.35; }
+
+/* =========================
+   NEWS PILLS (footer)
+   ========================= */
+
+.ssc-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  padding-bottom: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.ssc-news-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  padding: 0 2px;
+}
+
+.ssc-news {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ssc-news-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: rgba(255,255,255,0.70);
+  text-decoration: none;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.ssc-news-link::before {
+  content: "↗";
+  font-size: 10px;
+  flex-shrink: 0;
+  color: rgba(255,255,255,0.35);
+}
+.ssc-news-link:hover {
+  background: rgba(255,255,255,0.11);
+  border-color: rgba(255,255,255,0.20);
+  color: #fff;
+}
+
+.ssc-news-plain {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: rgba(255,255,255,0.40);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.ssc-time {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.30);
+  padding: 0 2px;
+  line-height: 1.35;
+}
+
 .ssc-expires    { padding-bottom: 14px; font-size: 11px; font-weight: 800; letter-spacing: 0.3px; color: rgba(245,158,11,0.75); }
 
 /* =========================
