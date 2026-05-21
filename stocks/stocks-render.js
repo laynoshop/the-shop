@@ -62,8 +62,6 @@
     } catch { return "--"; }
   }
 
-  // Format a timestamp into a session group label like:
-  // "Thu, May 14 \u2022 9:45 AM  \u2014  12 Signals"
   function sessionLabel(ts, count) {
     if (!ts) return "Unknown Session";
     try {
@@ -75,14 +73,11 @@
     } catch { return "Unknown Session"; }
   }
 
-  // Group key = YYYY-MM-DDTHH:MM (minute-level bucket — sessions within ~1 min are grouped)
-  // In practice the Run button fires all in sequence so they share nearly the same server timestamp.
-  // We bucket by 10-minute window to keep sessions together cleanly.
   function sessionKey(ts) {
     if (!ts) return "unknown";
     try {
       const d  = ts.toDate ? ts.toDate() : new Date(ts);
-      const mm = Math.floor(d.getMinutes() / 10) * 10; // round down to 10-min bucket
+      const mm = Math.floor(d.getMinutes() / 10) * 10;
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
     } catch { return "unknown"; }
   }
@@ -99,6 +94,64 @@
     const s = ["th","st","nd","rd"];
     const v = n % 100;
     return s[(v - 20) % 10] || s[v] || s[0];
+  }
+
+  // -----------------------------------------------------------
+  // NEWS STORIES — renders individual clickable pills
+  // Supports new newsArticles[] array OR legacy newsHeadline/newsUrl string
+  // -----------------------------------------------------------
+  function renderNewsPills(signal) {
+    const newsIcon = newsImpactBadge(signal.news_impact);
+
+    // New format: array of {headline, url, source}
+    if (Array.isArray(signal.newsArticles) && signal.newsArticles.length > 0) {
+      const pills = signal.newsArticles.map((article, i) => {
+        const label = article.headline || `Story ${i + 1}`;
+        const source = article.source ? `<span class="ssc-news-source">${article.source}</span>` : "";
+        if (article.url) {
+          return `<a href="${article.url}" target="_blank" rel="noopener noreferrer" class="ssc-news-pill">
+            <span class="ssc-news-pill-num">${i + 1}</span>
+            <span class="ssc-news-pill-text">${label}</span>
+            ${source}
+          </a>`;
+        }
+        return `<span class="ssc-news-pill ssc-news-pill-nolink">
+          <span class="ssc-news-pill-num">${i + 1}</span>
+          <span class="ssc-news-pill-text">${label}</span>
+          ${source}
+        </span>`;
+      });
+      return `
+        <div class="ssc-news-header">${newsIcon} Recent News</div>
+        <div class="ssc-news-pills">${pills.join("")}</div>
+      `;
+    }
+
+    // Legacy format: single headline string + single url
+    const headline = signal.newsHeadline || "No recent news";
+    const url      = signal.newsUrl || signal.news_url || "";
+    if (!headline || headline === "No recent news found." || headline === "No recent news") {
+      return `<div class="ssc-news-header">${newsIcon} No recent news</div>`;
+    }
+    if (url) {
+      return `
+        <div class="ssc-news-header">${newsIcon} Recent News</div>
+        <div class="ssc-news-pills">
+          <a href="${url}" target="_blank" rel="noopener noreferrer" class="ssc-news-pill">
+            <span class="ssc-news-pill-num">1</span>
+            <span class="ssc-news-pill-text">${headline}</span>
+          </a>
+        </div>
+      `;
+    }
+    return `
+      <div class="ssc-news-header">${newsIcon} Recent News</div>
+      <div class="ssc-news-pills">
+        <span class="ssc-news-pill ssc-news-pill-nolink">
+          <span class="ssc-news-pill-text">${headline}</span>
+        </span>
+      </div>
+    `;
   }
 
   // -----------------------------------------------------------
@@ -154,17 +207,11 @@
     const normDir   = normalizeDirection(rawDir);
     const dir       = directionBadge(normDir);
     const conf      = renderConfidence(signal.confidence);
-    const newsIcon  = newsImpactBadge(signal.news_impact);
     const changeSign = (signal.changePct || 0) >= 0 ? "+" : "";
     const entryZone  = field(signal, "entry_zone", "entry", "entryZone", "entry_price");
     const target     = field(signal, "target", "take_profit", "takeProfit", "target_price");
     const stopLoss   = field(signal, "stop_loss", "stopLoss", "stop", "stop_price");
     const riskReward = field(signal, "risk_reward", "riskReward", "r_r", "rr");
-    const headline   = signal.newsHeadline || "No recent news";
-    const newsUrl    = signal.newsUrl || signal.news_url || "";
-    const newsHtml   = newsUrl
-      ? `<a href="${newsUrl}" target="_blank" rel="noopener noreferrer" class="ssc-news-link">${newsIcon} ${headline}</a>`
-      : `<span class="ssc-news-plain">${newsIcon} ${headline}</span>`;
     return `
       <div class="stock-signal-card ssc-history-card" data-direction="${normDir}">
         <div class="ssc-header">
@@ -185,7 +232,7 @@
         </div>
         <div class="ssc-reasoning">${field(signal, "reasoning", "summary", "analysis", "reason")}</div>
         <div class="ssc-footer">
-          <div class="ssc-news">${newsHtml}</div>
+          <div class="ssc-news-block">${renderNewsPills(signal)}</div>
           <span class="ssc-time">${fmtTimestamp(signal.generatedAt)}</span>
         </div>
       </div>
@@ -261,17 +308,11 @@
     const normDir    = normalizeDirection(rawDir);
     const dir        = directionBadge(normDir);
     const conf       = renderConfidence(signal.confidence);
-    const newsIcon   = newsImpactBadge(signal.news_impact);
     const changeSign = (signal.changePct || 0) >= 0 ? "+" : "";
     const entryZone  = field(signal, "entry_zone", "entry", "entryZone", "entry_price");
     const target     = field(signal, "target", "take_profit", "takeProfit", "target_price");
     const stopLoss   = field(signal, "stop_loss", "stopLoss", "stop", "stop_price");
     const riskReward = field(signal, "risk_reward", "riskReward", "r_r", "rr");
-    const headline   = signal.newsHeadline || "No recent news";
-    const newsUrl    = signal.newsUrl || signal.news_url || "";
-    const newsHtml   = newsUrl
-      ? `<a href="${newsUrl}" target="_blank" rel="noopener noreferrer" class="ssc-news-link">${newsIcon} ${headline}</a>`
-      : `<span class="ssc-news-plain">${newsIcon} ${headline}</span>`;
     const ticker = (signal.ticker || "").toUpperCase();
     const recurrenceCount = allSignals.filter(s => (s.ticker || "").toUpperCase() === ticker).length;
     const recurrenceBadge = recurrenceCount > 1
@@ -299,7 +340,7 @@
         </div>
         <div class="ssc-reasoning">${field(signal, "reasoning", "summary", "analysis", "reason")}</div>
         <div class="ssc-footer">
-          <div class="ssc-news">${newsHtml}</div>
+          <div class="ssc-news-block">${renderNewsPills(signal)}</div>
           <span class="ssc-time">${fmtTimestamp(signal.generatedAt)}</span>
         </div>
         ${signal.expires_note ? `<div class="ssc-expires">${signal.expires_note}</div>` : ""}
@@ -308,9 +349,7 @@
   }
 
   // -----------------------------------------------------------
-  // SESSION GROUPING  (replaces old day grouping)
-  // Groups by 10-minute bucket so a run of 15 tickers all fired
-  // within seconds of each other appear under one session header.
+  // SESSION GROUPING
   // -----------------------------------------------------------
   function renderSessionGroups(allDocs, allSignals) {
     const groups = {};
@@ -331,7 +370,6 @@
       const isLatest = idx === 0;
 
       if (isLatest) {
-        // Most recent session — expanded with a glowing "LATEST" pill
         html += `
           <div class="ssc-session-section" data-session="${key}">
             <div class="ssc-session-latest-header">
@@ -447,7 +485,6 @@
     async function tryAdd() {
       const raw = input.value.trim();
       if (!raw) return;
-      // Support comma-separated paste like "NVDA, AAPL, TSLA"
       const tickers = raw.split(/[,\s]+/).filter(Boolean);
       let added = 0, lastErr = "";
       for (const t of tickers) {
@@ -590,8 +627,6 @@
       try {
         const db = getDb();
         if (!db) { alert("Firestore not ready."); return; }
-        // Write each roster ticker directly as a Tier2-ready candidate
-        // (skip Tier 1 screener — roster tickers go straight to enrichment + AI)
         const cfg = window.STOCKS_CONFIG || {};
         const col = cfg.CANDIDATES_COLLECTION || "stockCandidates";
         const batch = db.batch();

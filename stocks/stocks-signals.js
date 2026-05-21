@@ -31,24 +31,26 @@
     }
   }
 
+  // Returns { headlines: string, articles: [{headline, url, source}] }
   async function fetchNewsHeadlines(ticker) {
     try {
       const key = (window.STOCKS_CONFIG || {}).FINNHUB_KEY || "";
-      if (!key) return "No recent news found.";
+      if (!key) return { headlines: "No recent news found.", articles: [] };
       const to   = new Date();
       const from = new Date(Date.now() - 48 * 60 * 60 * 1000);
       const fmt  = d => d.toISOString().split("T")[0];
       const res  = await fetch(
         `https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${fmt(from)}&to=${fmt(to)}&token=${key}`
       );
-      if (!res.ok) return "No recent news found.";
-      const articles = await res.json();
-      if (!articles || !articles.length) return "No recent news found.";
-      fetchNewsHeadlines._lastUrl    = articles[0]?.url    || "";
-      fetchNewsHeadlines._lastSource = articles[0]?.source || "";
-      return articles.slice(0, 3).map((a, i) => `[${i + 1}] ${a.headline}`).join(" | ");
+      if (!res.ok) return { headlines: "No recent news found.", articles: [] };
+      const raw = await res.json();
+      if (!raw || !raw.length) return { headlines: "No recent news found.", articles: [] };
+      const top      = raw.slice(0, 3);
+      const articles = top.map(a => ({ headline: a.headline || "", url: a.url || "", source: a.source || "" }));
+      const headlines = articles.map((a, i) => `[${i + 1}] ${a.headline}`).join(" | ");
+      return { headlines, articles };
     } catch {
-      return "No recent news found.";
+      return { headlines: "No recent news found.", articles: [] };
     }
   }
 
@@ -91,7 +93,6 @@
       if (analysis.pe)                enriched.peRatio           = analysis.pe;
       if (analysis.earningsDate)      enriched.earningsDate      = analysis.earningsDate;
       if (analysis.newsHeadline && newsHeadlines === "No recent news found.") {
-        fetchNewsHeadlines._lastUrl = "";
         return { ...analysis, _newsFromAI: true };
       }
 
@@ -119,16 +120,20 @@
     return { entry_zone: fmt(p) };
   }
 
-  async function writeSignalCard(db, enriched, signal, newsHeadlines, livePrice) {
+  async function writeSignalCard(db, enriched, signal, newsData, livePrice) {
     try {
       const cfg = window.STOCKS_CONFIG || {};
 
       const finalPrice     = (livePrice?.price)     ?? enriched.price;
       const finalChangePct = (livePrice?.changePct != null) ? livePrice.changePct : enriched.changePct;
-      const newsUrl        = fetchNewsHeadlines._lastUrl    || "";
-      const newsSource     = fetchNewsHeadlines._lastSource || "";
       const direction      = safeField(signal.signal || signal.direction) || "NEUTRAL";
       const confidence     = signal.confidence ?? null;
+
+      // Support both new array format and legacy string format
+      const newsArticles   = newsData.articles || [];
+      const newsHeadline   = signal._newsFromAI ? signal.newsHeadline : newsData.headlines;
+      const newsUrl        = newsArticles[0]?.url    || "";
+      const newsSource     = newsArticles[0]?.source || "";
 
       let entry_zone  = safeField(signal.entry_zone);
       let target      = safeField(signal.target);
@@ -155,9 +160,12 @@
         ema20:            enriched.ema20              ?? null,
         pct1m:            enriched.pct1m              ?? null,
         pct3m:            enriched.pct3m              ?? null,
-        newsHeadline:     signal._newsFromAI ? signal.newsHeadline : newsHeadlines,
+        // Legacy single-headline fields (kept for backward compat)
+        newsHeadline,
         newsUrl,
         newsSource,
+        // New: full articles array for multi-story rendering
+        newsArticles,
         analystConsensus: enriched.analystConsensus   || null,
         analystTargetMean:enriched.analystTargetMean  ?? null,
         analystUpsidePct: enriched.analystUpsidePct   ?? null,
@@ -208,7 +216,7 @@
         console.warn("[Stocks Tier2] enrichCandidate not available.");
       }
 
-      const [newsHeadlines, livePrice] = await Promise.all([
+      const [newsData, livePrice] = await Promise.all([
         fetchNewsHeadlines(ticker),
         fetchLivePrice(ticker)
       ]);
@@ -217,17 +225,15 @@
         console.log(`[Stocks Tier2] Live price: ${ticker} $${livePrice.price} (${livePrice.changePct}%)`);
       }
 
-      const signal = await callAISignal(enriched, newsHeadlines);
+      const signal = await callAISignal(enriched, newsData.headlines);
       if (!signal) {
         console.warn(`[Stocks Tier2] No signal returned for ${ticker}`);
         return;
       }
 
-      await writeSignalCard(db, enriched, signal, newsHeadlines, livePrice);
+      await writeSignalCard(db, enriched, signal, newsData, livePrice);
 
       // Delete the candidate doc so it never replays on next page load.
-      // This is safer than flipping tier2Processed because server timestamps
-      // can be null in the local pending-write state, defeating flag checks.
       try {
         await db.collection(cfg.CANDIDATES_COLLECTION || "stockCandidates").doc(docId || ticker).delete();
         console.log(`[Stocks Tier2] 🗑 Candidate ${ticker} removed after processing.`);
