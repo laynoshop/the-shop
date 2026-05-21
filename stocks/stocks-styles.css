@@ -395,7 +395,7 @@
 .ssc-reasoning { padding-top: 12px; padding-bottom: 12px; font-size: 13px; font-weight: 700; line-height: 1.5; color: rgba(255,255,255,0.72); border-top: 1px solid rgba(255,255,255,0.06); }
 
 /* =========================
-   NEWS PILLS (footer)
+   SIGNAL CARD FOOTER & NEWS PILLS
    ========================= */
 
 .ssc-footer {
@@ -407,68 +407,96 @@
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 
-.ssc-news-label {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.35);
-  padding: 0 2px;
+.ssc-news-block {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
-.ssc-news {
+.ssc-news-header {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.40);
+}
+
+.ssc-news-pills {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.ssc-news-link {
-  display: inline-flex;
+/* Clickable news pill */
+.ssc-news-pill {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 7px 12px;
   border-radius: 999px;
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.10);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: rgba(255,255,255,0.70);
   text-decoration: none;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-  white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
 }
-.ssc-news-link::before {
-  content: "↗";
-  font-size: 10px;
-  flex-shrink: 0;
-  color: rgba(255,255,255,0.35);
-}
-.ssc-news-link:hover {
+a.ssc-news-pill:hover {
   background: rgba(255,255,255,0.11);
   border-color: rgba(255,255,255,0.20);
-  color: #fff;
 }
 
-.ssc-news-plain {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: 999px;
+/* Non-link pill */
+.ssc-news-pill-nolink {
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.07);
+  cursor: default;
+}
+
+.ssc-news-pill-num {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.ssc-news-pill-text {
+  flex: 1;
   font-size: 12px;
   font-weight: 700;
-  line-height: 1.3;
-  color: rgba(255,255,255,0.40);
+  color: rgba(255,255,255,0.70);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  line-height: 1.3;
 }
+a.ssc-news-pill:hover .ssc-news-pill-text { color: #fff; }
+
+.ssc-news-source {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.30);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Legacy class support — kept so old signals still render */
+.ssc-news       { display: flex; flex-direction: column; gap: 6px; }
+.ssc-news-link  { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.70); text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; transition: background 0.14s ease; }
+.ssc-news-link:hover { background: rgba(255,255,255,0.11); color: #fff; }
+.ssc-news-plain { display: flex; align-items: center; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.40); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 .ssc-time {
   font-size: 11px;
