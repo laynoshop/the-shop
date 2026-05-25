@@ -91,7 +91,10 @@
     try { localStorage.setItem(LEAGUE_KEY, k); } catch {}
   }
   function getSavedDateYYYYMMDD() {
-    try { return localStorage.getItem(DATE_KEY) || todayYYYYMMDD(); } catch { return todayYYYYMMDD(); }
+    // Always default to today in EST so the scores page never shows a stale date on load.
+    // The user can still navigate to other dates — those changes are applied in-session
+    // via setSavedDateYYYYMMDD but are not persisted across page loads.
+    return todayYYYYMMDD();
   }
   function setSavedDateYYYYMMDD(d) {
     try { localStorage.setItem(DATE_KEY, d); } catch {}
@@ -121,11 +124,11 @@
 
   // ─── Date helpers ──────────────────────────────────────────────────────────
   function todayYYYYMMDD() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}${m}${day}`;
+    // Use EST (America/New_York) so the date matches the Eastern time zone.
+    const estStr = new Date().toLocaleDateString("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+    // estStr is MM/DD/YYYY
+    const [m, d, y] = estStr.split("/");
+    return `${y}${m}${d}`;
   }
   function yyyymmddToPretty(s) {
     if (!s || s.length !== 8) return s;
