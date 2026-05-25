@@ -91,14 +91,18 @@
     try { localStorage.setItem(LEAGUE_KEY, k); } catch {}
   }
   function getSavedDateYYYYMMDD() {
-    // Always default to today in EST so the scores page never shows a stale date on load.
-    // The user can still navigate to other dates — those changes are applied in-session
-    // via setSavedDateYYYYMMDD but are not persisted across page loads.
-    return todayYYYYMMDD();
+    try { return localStorage.getItem(DATE_KEY) || todayYYYYMMDD(); } catch { return todayYYYYMMDD(); }
   }
   function setSavedDateYYYYMMDD(d) {
     try { localStorage.setItem(DATE_KEY, d); } catch {}
   }
+
+  // Reset the stored date to today (EST) every time the page loads,
+  // so users always land on today. In-session navigation still works
+  // because setSavedDateYYYYMMDD updates localStorage as the user browses.
+  (function resetDateOnLoad() {
+    try { localStorage.setItem(DATE_KEY, todayYYYYMMDD()); } catch {}
+  })();
 
   // ─── Conference filter storage ─────────────────────────────────────────────
   function confFilterKey(leagueKey) { return `scoresConf_${leagueKey}`; }
@@ -124,7 +128,7 @@
 
   // ─── Date helpers ──────────────────────────────────────────────────────────
   function todayYYYYMMDD() {
-    // Use EST (America/New_York) so the date matches the Eastern time zone.
+    // Use EST (America/New_York) so the date always reflects Eastern time.
     const estStr = new Date().toLocaleDateString("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
     // estStr is MM/DD/YYYY
     const [m, d, y] = estStr.split("/");
