@@ -1,12 +1,14 @@
 /* split/news.js
    =========================
-   TOP NEWS (ESPN) — UPGRADED
+   TOP NEWS (ESPN + OSU) — UPGRADED
    - Hero card (first story, full-width with image background)
    - Thumbnail cards (remaining stories, image left + text right)
    - Sport color tags / badges (Buckeyes=scarlet, CFB=gold, NFL=green, MLB=navy, NHL=blue)
    - Staggered fade+slide-in entrance animation
    - Shimmer skeleton loader
    - Filter chips with filled active state
+   - NEW: ESPN Ohio State team feed (team ID 194) — Buckeye-specific articles
+   - NEW: Eleven Warriors RSS feed (elevenwarriors.com) — Buckeye-specific articles
    - ESPN JSON -> ESPN RSS -> AllOrigins RSS fallback
    - Caching (localStorage) w/ background refresh
    - TTUN text sanitization
@@ -348,6 +350,15 @@
         letter-spacing: 0.2px;
       }
 
+      /* ── Source indicator ── */
+      .newsSourceDot {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.4px;
+        color: rgba(255,255,255,0.30);
+        text-transform: uppercase;
+      }
+
       /* ── Shared entrance animation ── */
       @keyframes newsCardIn {
         from { opacity: 0; transform: translateY(16px); }
@@ -397,8 +408,11 @@
       t.includes("ohio state") ||
       t.includes("buckeyes") ||
       t.includes("ryan day") ||
-      (t.includes("columbus") && t.includes("buckeyes")) ||
-      t.includes("osu ")
+      t.includes("eleven warriors") ||
+      (t.includes("columbus") && t.includes("football")) ||
+      t.includes("osu ") ||
+      it?.source === "Eleven Warriors" ||
+      it?._osuFeed === true
     ) tags.push("buckeyes");
 
     if (
@@ -430,6 +444,7 @@
     const ts = Number(it?.publishedTs || 0);
     if (ts) score += Math.min(100, Math.floor((ts / 1000) % 100));
     if (tags.includes("buckeyes")) score += 10000;
+    if (it?._osuFeed === true)     score += 5000;  // Extra boost for dedicated OSU sources
     if (tags.includes("cfb"))      score += 2000;
     if (tags.includes("nfl"))      score += 800;
     if (tags.includes("mlb"))      score += 500;
@@ -495,28 +510,32 @@
   }
 
   // -----------------------------
+  // Fetch helpers
+  // -----------------------------
+  async function fetchJsonWithTimeout(url, ms = 9000) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
+    try {
+      const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    } finally { clearTimeout(t); }
+  }
+
+  async function fetchTextWithTimeout(url, ms = 9000) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
+    try {
+      const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.text();
+    } finally { clearTimeout(t); }
+  }
+
+  // -----------------------------
   // ESPN fetch
   // -----------------------------
   async function fetchTopNewsItemsFromESPN() {
-    async function fetchJsonWithTimeout(url, ms = 9000) {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), ms);
-      try {
-        const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        return await resp.json();
-      } finally { clearTimeout(t); }
-    }
-
-    async function fetchTextWithTimeout(url, ms = 9000) {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), ms);
-      try {
-        const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        return await resp.text();
-      } finally { clearTimeout(t); }
-    }
 
     function ensureLinkOrSearch(it) {
       if (it.link) return it.link;
@@ -544,23 +563,24 @@
       return cleaned.find(u => u.startsWith("https://")) || cleaned[0] || "";
     }
 
-    function normalizeItem(a) {
+    function normalizeItem(a, opts = {}) {
       const publishedIso = a?.published || a?.publishedAt || "";
       const publishedTs  = Date.parse(publishedIso);
       const item = {
         headline:     sanitizeTTUNText(a?.headline || a?.title || ""),
         description:  sanitizeTTUNText(a?.description || a?.summary || ""),
-        source:       sanitizeTTUNText(a?.source || "ESPN"),
+        source:       sanitizeTTUNText(opts.source || a?.source || "ESPN"),
         publishedIso,
         publishedTs:  Number.isFinite(publishedTs) ? publishedTs : 0,
         link:         a?.links?.web?.href || a?.links?.[0]?.href || a?.url || "",
-        imageUrl:     pickBestImageUrlFromESPNArticle(a) || ""
+        imageUrl:     pickBestImageUrlFromESPNArticle(a) || "",
+        _osuFeed:     opts._osuFeed || false
       };
       item.link = ensureLinkOrSearch(item);
       return item;
     }
 
-    function parseRssItems(xmlText) {
+    function parseRssItems(xmlText, opts = {}) {
       const doc   = new DOMParser().parseFromString(xmlText, "text/xml");
       const items = Array.from(doc.querySelectorAll("item")).slice(0, 30);
 
@@ -595,67 +615,105 @@
         const it = {
           headline:    sanitizeTTUNText(title),
           description: sanitizeTTUNText(String(desc || "").replace(/<[^>]*>/g, "").trim()),
-          source:      "ESPN",
+          source:      opts.source || "ESPN",
           publishedIso: pub,
           publishedTs:  Number.isFinite(publishedTs) ? publishedTs : 0,
           link:         link || "",
-          imageUrl:     rssImageUrl(node) || ""
+          imageUrl:     rssImageUrl(node) || "",
+          _osuFeed:     opts._osuFeed || false
         };
         it.link = ensureLinkOrSearch(it);
         return it;
       }).filter(x => x.headline);
     }
 
-    const jsonBases = [
-      "https://site.api.espn.com/apis/v2/sports/news?limit=50",
-      "https://site.api.espn.com/apis/site/v2/sports/news?limit=50",
-      "https://site.api.espn.com/apis/v2/sports/news",
-      "https://site.api.espn.com/apis/site/v2/sports/news"
-    ];
-
-    const jsonUrls = [];
-    for (const u of jsonBases) {
-      jsonUrls.push(u);
-      jsonUrls.push(withLangRegion(u));
+    // ── 1. ESPN Ohio State CFB team feed (team ID 194) ──
+    async function fetchOSUTeamFeed() {
+      const urls = [
+        "https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=194&limit=20",
+        "https://site.api.espn.com/apis/v2/sports/football/college-football/news?team=194&limit=20"
+      ];
+      for (const url of urls) {
+        try {
+          const data = await fetchJsonWithTimeout(url, 8000);
+          const articles = Array.isArray(data?.articles) ? data.articles : [];
+          if (articles.length) {
+            return articles.slice(0, 20).map(a => normalizeItem(a, { source: "ESPN · OSU", _osuFeed: true })).filter(x => x.headline);
+          }
+        } catch { /* try next */ }
+      }
+      return [];
     }
 
-    let lastErr = null;
+    // ── 2. Eleven Warriors RSS ──
+    async function fetchElevenWarriors() {
+      const ewUrl = "https://www.elevenwarriors.com/ohio-state-football/rss";
+      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(ewUrl)}`;
+      // Try direct first, then proxied
+      for (const url of [ewUrl, proxied]) {
+        try {
+          const xml = await fetchTextWithTimeout(url, 8000);
+          const items = parseRssItems(xml, { source: "Eleven Warriors", _osuFeed: true });
+          if (items.length) return items;
+        } catch { /* try next */ }
+      }
+      return [];
+    }
 
-    for (const url of jsonUrls) {
+    // ── 3. General ESPN feed (existing fallback chain) ──
+    async function fetchGeneralESPN() {
+      const jsonBases = [
+        "https://site.api.espn.com/apis/v2/sports/news?limit=50",
+        "https://site.api.espn.com/apis/site/v2/sports/news?limit=50",
+        "https://site.api.espn.com/apis/v2/sports/news",
+        "https://site.api.espn.com/apis/site/v2/sports/news"
+      ];
+
+      const jsonUrls = [];
+      for (const u of jsonBases) {
+        jsonUrls.push(u);
+        jsonUrls.push(withLangRegion(u));
+      }
+
+      for (const url of jsonUrls) {
+        try {
+          const data     = await fetchJsonWithTimeout(url, 9000);
+          const articles = Array.isArray(data?.articles) ? data.articles : [];
+          if (articles.length) {
+            return articles.slice(0, 30).map(a => normalizeItem(a)).filter(x => x.headline);
+          }
+        } catch { /* try next */ }
+      }
+
+      const rssUrl = "https://www.espn.com/espn/rss/news";
       try {
-        const data     = await fetchJsonWithTimeout(url, 9000);
-        const articles = Array.isArray(data?.articles) ? data.articles : [];
-        if (articles.length) {
-          const items  = articles.slice(0, 30).map(normalizeItem).filter(x => x.headline);
-          const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
-          const deduped = dedupeNewsItems(tagged);
-          deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
-          return deduped.slice(0, 12);
-        }
-      } catch (e) { lastErr = e; }
+        const xml = await fetchTextWithTimeout(rssUrl, 9000);
+        return parseRssItems(xml);
+      } catch { /* try proxy */ }
+
+      try {
+        const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
+        const xml     = await fetchTextWithTimeout(proxied, 9000);
+        return parseRssItems(xml);
+      } catch { /* all failed */ }
+
+      return [];
     }
 
-    const rssUrl = "https://www.espn.com/espn/rss/news";
-    try {
-      const xml    = await fetchTextWithTimeout(rssUrl, 9000);
-      const items  = parseRssItems(xml);
-      const tagged = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
-      const deduped = dedupeNewsItems(tagged);
-      deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
-      return deduped.slice(0, 12);
-    } catch (e) { lastErr = e; }
+    // ── Merge all three sources in parallel ──
+    const [osuItems, ewItems, generalItems] = await Promise.allSettled([
+      fetchOSUTeamFeed(),
+      fetchElevenWarriors(),
+      fetchGeneralESPN()
+    ]).then(results => results.map(r => r.status === "fulfilled" ? r.value : []));
 
-    try {
-      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
-      const xml     = await fetchTextWithTimeout(proxied, 9000);
-      const items   = parseRssItems(xml);
-      const tagged  = items.map(it => ({ ...it, tags: tagNewsItem(it) }));
-      const deduped = dedupeNewsItems(tagged);
-      deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
-      return deduped.slice(0, 12);
-    } catch (e) { lastErr = e; }
+    const allRaw = [...osuItems, ...ewItems, ...generalItems];
+    if (!allRaw.length) throw new Error("All news sources failed");
 
-    throw (lastErr || new Error("News fetch failed"));
+    const tagged  = allRaw.map(it => ({ ...it, tags: tagNewsItem(it) }));
+    const deduped = dedupeNewsItems(tagged);
+    deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
+    return deduped.slice(0, 15); // bumped to 15 since we have more sources
   }
 
   // -----------------------------
@@ -692,6 +750,7 @@
       const primaryTag  = getPrimaryTag(heroItem?.tags || []);
       const tagBadge    = buildTagBadge(primaryTag);
       const imgUrl      = heroItem?.imageUrl || "";
+      const srcLabel    = heroItem?.source ? escapeHtml(heroItem.source) : "";
 
       const imgTag      = imgUrl
         ? `<img class="newsHeroImg" src="${escapeHtml(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none'">`
@@ -706,6 +765,7 @@
             <div class="newsHeroMeta">
               ${tagBadge}
               ${when ? `<span class="newsHeroWhen">${when}</span>` : ""}
+              ${srcLabel ? `<span class="newsHeroWhen" style="opacity:0.45;">${srcLabel}</span>` : ""}
             </div>
             <div class="newsHeroHeadline">${title}</div>
             ${desc ? `<div class="newsHeroDesc">${desc}</div>` : ""}
@@ -723,10 +783,11 @@
       const primaryTag = getPrimaryTag(it?.tags || []);
       const tagBadge   = buildTagBadge(primaryTag);
       const imgUrl     = it?.imageUrl || "";
+      const srcLabel   = it?.source ? escapeHtml(it.source) : "";
       const delay      = (idx * 55) + 120;
 
       const thumbEl = imgUrl
-        ? `<img class="newsListThumb" src="${escapeHtml(imgUrl)}" alt="" loading="lazy" onerror="this.parentElement.querySelector('.newsListThumb')&&(this.style.display='none')">`
+        ? `<img class="newsListThumb" src="${escapeHtml(imgUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='flex')">`
         : `<div class="newsListThumbFallback">${sportEmoji(it?.tags || [])}</div>`;
 
       return `
@@ -739,6 +800,7 @@
               <div class="newsListMeta">
                 ${tagBadge}
                 ${when ? `<span class="newsListWhen">${when}</span>` : ""}
+                ${srcLabel ? `<span class="newsSourceDot">${srcLabel}</span>` : ""}
               </div>
             </div>
           </div>
@@ -755,7 +817,7 @@
         <div class="headerTop">
           <div class="brand">
             <h2 style="margin:0;">Top News</h2>
-            <span class="badge">ESPN</span>
+            <span class="badge">ESPN + OSU</span>
           </div>
           <button class="smallBtn" data-newsaction="refresh">Refresh</button>
         </div>
@@ -815,7 +877,7 @@
         <div class="headerTop">
           <div class="brand">
             <h2 style="margin:0;">Top News</h2>
-            <span class="badge">ESPN</span>
+            <span class="badge">ESPN + OSU</span>
           </div>
           <button class="smallBtn" data-newsaction="refresh">Refresh</button>
         </div>
@@ -870,7 +932,7 @@
           <div class="headerTop">
             <div class="brand">
               <h2 style="margin:0;">Top News</h2>
-              <span class="badge">ESPN</span>
+              <span class="badge">ESPN + OSU</span>
             </div>
             <button class="smallBtn" data-newsaction="refresh">Retry</button>
           </div>
@@ -886,21 +948,21 @@
         </div>
       `;
     }
+  }
 
-    async function refreshTopNewsInBackground() {
-      try {
-        const fresh      = await fetchTopNewsItemsFromESPN();
-        const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-        saveNewsCache(fresh, cacheLabel);
+  async function refreshTopNewsInBackground() {
+    try {
+      const fresh      = await fetchTopNewsItemsFromESPN();
+      const cacheLabel = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      saveNewsCache(fresh, cacheLabel);
 
-        const tab = window.__activeTab || window.currentTab || "";
-        if (String(tab) === "news") {
-          const headerUpdated2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-          renderNewsList(fresh, headerUpdated2, cacheLabel);
-        }
-      } catch {
-        // silent
+      const tab = window.__activeTab || window.currentTab || "";
+      if (String(tab) === "news") {
+        const headerUpdated2 = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        renderNewsList(fresh, headerUpdated2, cacheLabel);
       }
+    } catch {
+      // silent
     }
   }
 
