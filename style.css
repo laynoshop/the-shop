@@ -428,7 +428,7 @@ body.entryMode::before{
   filter: saturate(1.1);
 }
 
-/* Stop "float scroll" on Entry */
+/* Entry scroll fix */
 body.entryMode{
   height: 100%;
   overflow: hidden;
@@ -436,7 +436,7 @@ body.entryMode{
 }
 
 .entryScreen{
-  min-height: 100svh;
+  height: 100svh;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -893,9 +893,9 @@ html, body { overscroll-behavior: none; }
   flex-wrap: wrap;
 }
 
-/* ——————————————————————————————————————
+/* ————————————————————————————————————————
    GAME CLOCK  (replaces "TV: …" for live games)
-   —————————————————————————————————————— */
+   ———————————————————————————————————————— */
 
 .gameClock {
   font-size: 11px;
@@ -906,9 +906,9 @@ html, body { overscroll-behavior: none; }
   white-space: nowrap;
 }
 
-/* ——————————————————————————————————————
+/* ————————————————————————————————————————
    LIVE DOT  (pulsing green circle)
-   —————————————————————————————————————— */
+   ———————————————————————————————————————— */
 
 .liveDot {
   display: inline-block;
@@ -1159,7 +1159,7 @@ html, body { overscroll-behavior: none; }
 }
 
 .gdStatTable table{
-  width: 100%;
+  width: 100%
   border-collapse: collapse;
 }
 
