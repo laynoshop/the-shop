@@ -8,7 +8,7 @@
    - Shimmer skeleton loader
    - Filter chips with filled active state
    - NEW: ESPN Ohio State team feed (team ID 194) — Buckeye-specific articles
-   - NEW: Eleven Warriors RSS feed (elevenwarriors.com) — Buckeye-specific articles
+   - NEW: Eleven Warriors RSS feed (elevenwarriors.com/rss.xml) — Buckeye-specific articles
    - ESPN JSON -> ESPN RSS -> AllOrigins RSS fallback
    - Caching (localStorage) w/ background refresh
    - TTUN text sanitization
@@ -22,7 +22,7 @@
   // -----------------------------
   // Safe helpers / fallbacks
   // -----------------------------
-  const NEWS_CACHE_KEY = "theShopTopNewsCache_v1";
+  const NEWS_CACHE_KEY = "theShopTopNewsCache_v2"; // bumped version to bust old cache
   const NEWS_FILTER_KEY = "theShopTopNewsFilter_v1";
   const NEWS_CACHE_TTL_MS = 7 * 60 * 1000; // 7 minutes
 
@@ -329,7 +329,7 @@
       .newsListHeadline {
         font-size: 14px;
         font-weight: 900;
-        line-height: 1.28;
+          line-height: 1.28;
         color: rgba(255,255,255,0.95);
         display: -webkit-box;
         -webkit-line-clamp: 3;
@@ -533,7 +533,7 @@
   }
 
   // -----------------------------
-  // ESPN fetch
+  // ESPN + OSU fetch
   // -----------------------------
   async function fetchTopNewsItemsFromESPN() {
 
@@ -646,11 +646,18 @@
     }
 
     // ── 2. Eleven Warriors RSS ──
+    // Correct URL: elevenwarriors.com/rss.xml (NOT /ohio-state-football/rss)
     async function fetchElevenWarriors() {
-      const ewUrl = "https://www.elevenwarriors.com/ohio-state-football/rss";
-      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(ewUrl)}`;
-      // Try direct first, then proxied
-      for (const url of [ewUrl, proxied]) {
+      const ewUrls = [
+        "https://www.elevenwarriors.com/rss.xml",
+        "https://elevenwarriors.com/rss.xml"
+      ];
+      // Try direct URLs first, then AllOrigins proxy for each
+      const allAttempts = [
+        ...ewUrls,
+        ...ewUrls.map(u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`)
+      ];
+      for (const url of allAttempts) {
         try {
           const xml = await fetchTextWithTimeout(url, 8000);
           const items = parseRssItems(xml, { source: "Eleven Warriors", _osuFeed: true });
@@ -713,7 +720,7 @@
     const tagged  = allRaw.map(it => ({ ...it, tags: tagNewsItem(it) }));
     const deduped = dedupeNewsItems(tagged);
     deduped.sort((a, b) => scoreNewsItemForBuckeyeBoost(b) - scoreNewsItemForBuckeyeBoost(a));
-    return deduped.slice(0, 15); // bumped to 15 since we have more sources
+    return deduped.slice(0, 15);
   }
 
   // -----------------------------
