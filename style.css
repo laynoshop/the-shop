@@ -431,7 +431,7 @@ body.entryMode::before{
 /* Stop "float scroll" on Entry */
 body.entryMode{
   height: 100%;
-  overflow: clip;
+  overflow-x: hidden;
   overscroll-behavior: none;
 }
 
