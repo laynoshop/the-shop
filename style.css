@@ -446,9 +446,9 @@ body.entryMode{
   position: relative;
   z-index: 1;
 
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
 }
 
 .entryWrap{
@@ -678,1672 +678,2080 @@ html, body { overscroll-behavior: none; }
 
 /* quick I-O flash when unlocking */
 .chantFlashIO .chantIO{
-  animation: ioFlash 420ms ease-out both;
+  opacity: 1;
+  border-color: rgba(187,0,0,0.35);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.45), 0 0 22px rgba(187,0,0,0.22);
 }
 
-@keyframes ioFlash{
-  0%  { opacity: 0.8; transform: scale(0.97); }
-  55% { opacity: 1;   transform: scale(1.04) translateY(-2px); filter: brightness(1.14); }
-  100%{ opacity: 1;   transform: scale(1); }
+button {
+  padding: 12px 16px;
+  font-size: 16px;
+  background: var(--scarlet);
+  color: white;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 700;
 }
 
-/* ===========================
-   APP SHELL
-   =========================== */
+/* LOGIN BUTTON SPACING FIX */
+.login-btn {
+  margin-top: 30px;
+}
 
+/* ✅ IMPORTANT FIX:
+   Remove static bottom padding here.
+   The JS (positionRivalryBanner) already pads #content based on banner+tabs height.
+*/
+#app {
+  padding-bottom: 0;
+}
+
+/* HEADER */
 .header {
-  height: 52px;
+  padding: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(18,18,18,0.90);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.headerTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
-  background: rgba(18,18,18,0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
-.headerLeft{
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(187,0,0,0.15);
+  border: 1px solid rgba(187,0,0,0.35);
+  color: #ffd9d9;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.25);
+}
+
+.smallBtn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+/* Subline row */
+.subline {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  align-items: center;
+}
+
+.sublineLeft {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.headerLogo{
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  object-fit: cover;
+/* League dropdown */
+.leagueSelect {
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: white;
+  outline: none;
+  max-width: 240px;
 }
 
-.headerTitle{
-  font-size: 16px;
+.iconBtn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 8px 10px;
+  border-radius: 12px;
   font-weight: 900;
-  letter-spacing: 0.2px;
-  color: var(--scarlet);
-}
-
-/* small back-arrow button  */
-.backBtn{
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 22px;
+  color: white;
   line-height: 1;
-  padding: 4px 6px;
-  cursor: pointer;
-  display: none;     /* shown by JS when needed */
 }
 
-.tabs {
-  position: fixed;
-  bottom: 0;
-  left: 0; right: 0;
-  height: calc(var(--tabsH) + env(safe-area-inset-bottom));
-  display: flex;
-  background: rgba(18,18,18,0.95);
+/* GRID */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  padding: 14px;
+}
+
+@media (min-width: 520px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ===== Native date picker (iOS-safe) ===== */
+.datePickerWrap{
+  position: relative;
+  display: inline-block;
+}
+
+/* Invisible input sits ON TOP of the 📅 button so iOS opens picker reliably */
+.datePickerWrap .nativeDateInput{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* =========================
+   GAME CARDS (Sexy Upgrades)
+   ========================= */
+
+/* GAME CARDS */
+.game {
+  position: relative;
+  overflow: hidden;
+
+  background:
+    radial-gradient(700px 220px at 50% -40px, rgba(187,0,0,0.18), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.00) 38%),
+    var(--card);
+
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 20px;
+  padding: 16px;
+
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(255,255,255,0.04) inset;
+
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Left "accent edge" (defaults to scarlet) */
+.game::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:12px;
+  bottom:12px;
+  width:4px;
+  border-radius: 999px;
+  background: rgba(187,0,0,0.65);
+  box-shadow: 0 0 16px var(--glowScarlet);
+  opacity: 0.95;
+}
+
+/* If you add these classes in JS to the card, the edge matches status */
+.game.statusLive::before{  background: rgba(34,197,94,0.75);  box-shadow: 0 0 16px var(--glowLive); }
+.game.statusPre::before{   background: rgba(245,158,11,0.80);  box-shadow: 0 0 16px var(--glowGold); }
+.game.statusFinal::before{ background: rgba(156,163,175,0.60); box-shadow: 0 0 16px var(--glowGray); }
+
+/* Optional: if you later add edge-direction classes, this wins (more "betting" vibe) */
+.game.edgeHome::before{ background: rgba(34,197,94,0.70); box-shadow: 0 0 18px var(--glowLive); }
+.game.edgeAway::before{ background: rgba(245,158,11,0.75); box-shadow: 0 0 18px var(--glowGold); }
+.game.edgeNone::before{ background: rgba(156,163,175,0.55); box-shadow: 0 0 16px var(--glowGray); }
+
+.gameHeader {
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:12px;
+}
+
+/* Status pill: tighter + glossy + pop */
+.statusPill {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.35);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid var(--line);
-  z-index: 10;
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  border: none;
-  background: none;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  padding: 6px 4px 2px;
-  cursor: pointer;
-  transition: color .15s ease;
+.status-live   { background: rgba(34,197,94,0.18);  color: #bbf7d0; border: 1px solid rgba(34,197,94,0.28); }
+.status-final  { background: rgba(156,163,175,0.16); color: #e5e7eb; border: 1px solid rgba(156,163,175,0.22); }
+.status-up     { background: rgba(245,158,11,0.16);  color: #fde68a; border: 1px solid rgba(245,158,11,0.26); }
+.status-other  { background: rgba(255,255,255,0.08); color: #e5e7eb; border: 1px solid rgba(255,255,255,0.14); }
+
+/* ===== Scores: plain (non-bubble) venue + odds lines ===== */
+.gameMetaTopPlain,
+.gameMetaOddsPlain{
+  margin-top: 2px;
+  margin-bottom: 8px;
+
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.72);
+
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+
+  white-space: normal;
+  word-break: break-word;
 }
 
-.tab svg { width: 22px; height: 22px; }
-
-.tab.active { color: var(--scarlet); }
-
-.tab:active { opacity: 0.7; }
-
-#content {
-  padding-bottom: calc(var(--tabsH) + env(safe-area-inset-bottom) + 8px);
-}
-
-/* ============================================================
-   PAGE SCAFFOLD  (used by scores, picks, beat, etc.)
-   ============================================================ */
-.page{
-  padding: 16px 14px 8px;
-  max-width: 680px;
-  margin: 0 auto;
-}
-
-.pageTitle{
-  font-size: 22px;
-  font-weight: 1000;
-  letter-spacing: 0.3px;
-  color: var(--text);
-  margin: 0 0 16px;
-}
-
-/* ============================================================
-   SCORES
-   ============================================================ */
-.gameCard{
-  background: var(--card);
-  border-radius: 16px;
-  padding: 14px 14px 10px;
-  margin-bottom: 12px;
-  border: 1px solid var(--line);
-}
-
-.gameHeader{
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.gameMetaOddsPlain{
+  color: rgba(255,255,255,0.70);
   margin-bottom: 10px;
 }
 
-.leagueTag{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
+/* Legacy "bubble" lines kept (in case other tabs still use them) */
+.gameMetaTopLine {
+  margin-top: -4px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
 
-.statusBadge{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 20px;
-}
-
-.statusBadge.live   { background: rgba(34,197,94,.15);  color: var(--live); }
-.statusBadge.final  { background: rgba(156,163,175,.12); color: var(--final); }
-.statusBadge.upcoming{ background: rgba(245,158,11,.12); color: var(--upcoming); }
-
-.teamsWrap{
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.teamRow{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.teamLogo{
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  object-fit: contain;
-  background: var(--panel);
-  flex-shrink: 0;
-}
-
-.teamName{
-  flex: 1;
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.teamScore{
-  font-size: 22px;
-  font-weight: 1000;
-  min-width: 32px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.teamRow.winner .teamName,
-.teamRow.winner .teamScore{
-  color: #fff;
-}
-
-.teamRow:not(.winner) .teamName,
-.teamRow:not(.winner) .teamScore{
-  color: var(--muted);
-}
-
-.gameFooter{
-  margin-top: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: 0.3px;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-/* ——————————————————————————————————————
-   GAME CLOCK  (replaces "TV: …" for live games)
-   —————————————————————————————————————— */
-
-.gameClock {
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--live);
-  white-space: nowrap;
-}
-
-/* ——————————————————————————————————————
-   LIVE DOT  (pulsing green circle)
-   —————————————————————————————————————— */
-
-.liveDot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--live);
-  vertical-align: middle;
-  margin-right: 4px;
-  animation: livePulse 1.4s ease-in-out infinite;
-}
-
-@keyframes livePulse {
-  0%, 100% { opacity: 1;   transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.75); }
-}
-
-/* ============================================================
-   SCORES HEADER  — filters + refresh
-   ============================================================ */
-
-.scoresControls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.scoresFilterWrap {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  flex: 1;
-}
-
-.scoresFilter {
-  padding: 6px 14px;
-  border-radius: 20px;
   font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
+  line-height: 1.25;
+  font-weight: 800;
+  color: rgba(255,255,255,0.72);
+
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
 }
 
-.scoresFilter.active {
-  background: var(--scarlet);
-  color: #fff;
-  border-color: var(--scarlet);
+.gameMetaOddsLine {
+  margin-top: -2px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: rgba(255,255,255,0.68);
+
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
 }
 
-.scoresFilter:active {
-  opacity: 0.75;
+/* ===== AI line (clean + aligned with odds) ===== */
+.gameMetaAIPlain{
+  margin-top: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
-.scoresRefreshBtn {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-  flex-shrink: 0;
+.aiRow{
+  font-weight: 1000;
+  letter-spacing: 0.35px;
+  opacity: 0.96;
+  text-shadow: 0 6px 18px rgba(0,0,0,0.35);
 }
 
-.scoresRefreshBtn:active {
-  opacity: 0.7;
+.aiConfidenceRow{
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.72;
 }
 
-.scoresRefreshBtn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.scoresRefreshBtn.spinning svg {
-  animation: spinOnce 0.6s linear;
-}
-
-@keyframes spinOnce {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-/* ============================================================
-   SECTION HEADER (e.g., NFL — Week 17)
-   ============================================================ */
-.sectionHeader{
+.aiTag{
+  display:inline-flex;
+  align-items:center;
+  padding: 3px 8px;
+  border-radius: 999px;
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin: 18px 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-weight: 1000;
+  letter-spacing: 0.35px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
 }
 
-.sectionHeader::after{
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--line);
+/* GAME ROWS */
+.teamRow {
+  display:flex;
+  justify-content:space-between;
+
+  padding: 10px 12px;
+  border-radius: 16px;
+
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.07),
+    0 10px 24px rgba(0,0,0,0.22);
+
+  margin-top: 10px;
+  margin-bottom: 0;
 }
 
-/* ============================================================
-   NO GAMES EMPTY STATE
-   ============================================================ */
-.emptyState{
-  text-align: center;
-  padding: 48px 20px;
-  color: var(--muted);
-}
+.teamLeft { display:flex; flex-direction:column; gap:4px; }
 
-.emptyState p{
-  font-size: 15px;
-  font-weight: 700;
-  margin: 0;
-}
-
-/* ============================================================
-   GAME DETAIL OVERLAY
-   ============================================================ */
-.gameDetail{
-  position: fixed;
-  inset: 0;
-  background: var(--bg);
-  z-index: 20;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
-}
-
-.gdHeader{
-  display: flex;
-  align-items: center;
-  padding: 12px 14px;
-  gap: 10px;
-  border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
-  background: var(--bg);
-  z-index: 1;
-}
-
-.gdBackBtn{
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 24px;
-  line-height: 1;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-
-.gdTitle{
-  font-size: 16px;
-  font-weight: 900;
+.teamName {
+  font-size: 17px;
+  font-weight: 1000;
   letter-spacing: 0.2px;
 }
 
-.gdBody{
-  padding: 16px 14px;
-  max-width: 600px;
-  margin: 0 auto;
-  width: 100%;
+.teamMeta {
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
 }
 
-.gdMatchup{
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 8px;
+.score {
+  font-size: 30px;
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+}
+
+/* LOGO LAYER */
+.teamLine {
+  display: flex;
   align-items: center;
-  margin-bottom: 18px;
+  gap: 10px;
 }
 
-.gdTeam{
+.teamText {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  text-align: center;
-}
-
-.gdTeam:last-child{ text-align: right; align-items: flex-end; }
-
-.gdTeamLogo{
-  width: 52px;
-  height: 52px;
-  border-radius: 10px;
-  object-fit: contain;
-  background: var(--panel);
-}
-
-.gdTeamName{
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.gdScore{
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: 4px;
 }
 
-.gdScoreNums{
-  font-size: 36px;
-  font-weight: 1000;
-  letter-spacing: 2px;
-  font-variant-numeric: tabular-nums;
-}
-
-.gdStatus{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--live);
-}
-
-.gdInfoRow{
-  display: flex;
-  gap: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-
-.gdStatTable{
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  margin-bottom: 14px;
-}
-
-.gdStatTable table{
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.gdStatTable th, .gdStatTable td{
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: right;
-  border-bottom: 1px solid var(--line);
-}
-
-.gdStatTable th:first-child,
-.gdStatTable td:first-child{
-  text-align: left;
-}
-
-.gdStatTable tr:last-child td{ border-bottom: none; }
-
-.gdStatTable th{
-  background: var(--panel);
-  font-size: 11px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-/* overflow: visible — let long team names show */
-.gdStatTable th,
-.gdStatTable td{
-  overflow: visible;
-  text-overflow: unset;
-  white-space: normal;
-}
-
-.gdPlaysTitle{
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.gdPlay{
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.gdPlay:last-child{ border-bottom: none; }
-
-.gdPlayMeta{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  color: var(--muted);
-  margin-top: 3px;
-}
-
-/* overflow: visible — fixes score truncation on play-by-play */
-.gdStatTable th,
-.gdStatTable td{
-  overflow: visible;
-  text-overflow: unset;
-  white-space: normal;
-}
-
-/* ============================================================
-   NEWS PAGE
-   ============================================================ */
-.newsCard{
-  background: var(--card);
-  border-radius: 14px;
-  padding: 14px;
-  margin-bottom: 12px;
-  border: 1px solid var(--line);
-  display: flex;
-  gap: 12px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.newsThumb{
-  width: 72px;
-  height: 72px;
+.teamLogo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
   border-radius: 10px;
-  object-fit: cover;
-  flex-shrink: 0;
-  background: var(--panel);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 3px;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.25);
 }
 
-.newsBody{
-  flex: 1;
-  min-width: 0;
-}
-
-.newsSource{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--scarlet);
-  margin-bottom: 4px;
-}
-
-.newsHeadline{
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.35;
-  color: var(--text);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.newsTime{
-  margin-top: 5px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-/* ============================================================
-   PICKS PAGE
-   ============================================================ */
-.pickCard{
-  background: var(--card);
-  border-radius: 16px;
-  padding: 14px;
-  margin-bottom: 12px;
-  border: 1px solid var(--line);
-}
-
-.pickMeta{
-  display: flex;
-  justify-content: space-between;
+.teamLogoFallback {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 10px;
-}
-
-.pickLeague{
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.85);
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.pickResult{
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  padding: 3px 9px;
-  border-radius: 20px;
-}
-
-.pickResult.W{ background: rgba(34,197,94,.15); color: var(--live); }
-.pickResult.L{ background: rgba(239,68,68,.12); color: #ef4444; }
-.pickResult.P{ background: rgba(156,163,175,.10); color: var(--muted); }
-
-.pickGame{
-  font-size: 15px;
-  font-weight: 900;
-  margin-bottom: 4px;
-}
-
-.pickLine{
-  font-size: 14px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.pickChoice{
-  font-size: 16px;
   font-weight: 1000;
-  color: #fff;
-}
-
-.pickNotes{
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-/* ============================================================
-   PICKS — GROUP PICKS
-   ============================================================ */
-
-/* page scaffold uses .page and .pageTitle already defined */
-
-/* week selector row */
-.gpWeekRow{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.gpWeekBtn{
-  width: 36px; height: 36px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-size: 20px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background .15s, border-color .15s;
-}
-
-.gpWeekBtn:active{ background: var(--panel); }
-.gpWeekBtn:disabled{ opacity: 0.3; pointer-events: none; }
-
-.gpWeekLabel{
-  flex: 1;
-  text-align: center;
-  font-size: 15px;
-  font-weight: 900;
   letter-spacing: 0.3px;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.22);
 }
 
-/* game block */
-.gpGame{
-  background: var(--card);
-  border-radius: 16px;
-  padding: 14px;
-  margin-bottom: 14px;
-  border: 1px solid var(--line);
+.favChip{
+  display:inline-flex;
+  align-items:center;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: 0.35px;
+  background: rgba(245,158,11,0.16);
+  border: 1px solid rgba(245,158,11,0.28);
+  color: #fde68a;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.25);
 }
 
-.gpGameHeader{
+/* ===== PGA tweaks ===== */
+.golfCard .teamName { font-size: 16px; }
+
+.scoreCol {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  min-width: 62px;
 }
 
-.gpGameTitle{
-  font-size: 14px;
+.scoreMeta {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.65);
+  line-height: 1;
+}
+
+/* ===== Wagers ===== */
+.wagersLine{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.wagerActions{
+  display:flex;
+  gap:10px;
+  margin-top:6px;
+  margin-bottom:10px;
+}
+
+.wagerBtn{ flex:1; }
+
+.wagerPicksLine{
+  margin-top: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: rgba(255,255,255,0.68);
+
+  white-space: normal;
+  word-break: break-word;
+}
+
+.leaderboardTitle{ margin-bottom: 8px; }
+.leaderboardRow{ margin-top: 6px; }
+
+.notice {
+  padding: 14px;
+  color: rgba(255,255,255,0.75);
+}
+
+.tabs{
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: auto !important;
+
+  /* tabs sit above banner */
+  bottom: var(--bannerH) !important;
+
+  display: flex;
+  width: 100%;
+
+  /* ✅ visible bar stays tight */
+  height: var(--tabsH);
+
+  padding: 0;
+  margin: 0;
+
+  background: rgba(22,22,22,0.96);
+  border-top: 1px solid rgba(255,255,255,0.08);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  z-index: 1000;
+}
+
+/* ✅ safe-area "behind" tabs so it doesn't inflate the bar */
+.tabs::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:100%;
+  height: env(safe-area-inset-bottom);
+  background: rgba(22,22,22,0.96);
+}
+
+.tabs button{
+  flex: 1;
+  background: none;
+  color: #fff;
   font-weight: 900;
   letter-spacing: 0.2px;
-  line-height: 1.25;
-}
 
-.gpGameLine{
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 700;
-  flex-shrink: 0;
-  margin-left: 8px;
-}
+  /* underline anchor */
+  position: relative;
 
-/* pick buttons row */
-.gpPickRow{
-  display: flex;
-  gap: 8px;
-}
+  /* ✅ fill the tabs bar (don't re-define height here) */
+  height: 100%;
 
-.gpPickBtn{
-  flex: 1;
-  height: 52px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.3px;
-  cursor: pointer;
-  text-align: center;
-  line-height: 1.25;
-  padding: 6px 6px;
-  transition: background .15s, border-color .15s, color .15s, transform .12s;
+  /* ✅ tighter */
+  padding: 3px 0 0 0;
+  margin: 0;
+
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
+
+  gap: 1px;
+  line-height: 1.0;
+  font-size: 12px;
 }
 
-.gpPickBtn:active{ transform: scale(0.97); }
+.tabs button.active::after{
+  content:"";
+  position:absolute;
 
-.gpPickBtn.selected{
+  /* ✅ nicer width */
+  left: 24%;
+  right: 24%;
+
+  /* ✅ keep it tight to the bottom */
+  bottom: 3px;
+
+  height: 3px;
+  border-radius: 999px;
   background: var(--scarlet);
-  border-color: var(--scarlet);
-  color: #fff;
 }
 
-/* result badge inside pick row */
-.gpResultBadge{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  padding: 2px 8px;
+/* =========================
+   BEAT TTUN — Tunnel Entrance Mode
+   ========================= */
+
+/* ===== Tunnel Hero Container ===== */
+.beatHero{
+  margin: 14px;
+  padding: 18px 16px;
   border-radius: 20px;
-  margin-left: 4px;
+  border: 1px solid rgba(255,255,255,0.14);
+
+  background:
+    radial-gradient(900px 500px at 50% -10%, rgba(187,0,0,0.35), transparent 60%),
+    linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0.25)),
+    rgba(255,255,255,0.04);
+
+  box-shadow:
+    0 20px 50px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(187,0,0,0.18) inset;
+
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.gpResultBadge.W{ background: rgba(34,197,94,.15); color: var(--live); }
-.gpResultBadge.L{ background: rgba(239,68,68,.12); color: #ef4444; }
-.gpResultBadge.P{ background: rgba(156,163,175,.10); color: var(--muted); }
-
-/* pick tally row */
-.gpTallyRow{
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
+.beatHero.gameWeek{
+  border-color: rgba(187,0,0,0.45);
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.55),
+    0 0 30px rgba(187,0,0,0.35),
+    0 0 0 1px rgba(187,0,0,0.30) inset;
 }
 
-.gpTallyItem{
-  flex: 1;
-  text-align: center;
+.beatHeroTop{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-bottom:14px;
+}
+
+.beatHeroTitle{
+  font-weight: 1000;
+  letter-spacing: 1px;
+  font-size: 15px;
+  text-transform: uppercase;
+}
+
+.beatHeroSub{
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.3;
+}
+
+.beatBig{
+  display:flex;
+  align-items:baseline;
+  gap:12px;
+  margin-top: 4px;
+}
+
+.beatBigDays{
+  font-size: 72px;
+  font-weight: 1000;
+  line-height: 0.9;
+  letter-spacing: 2px;
+  text-shadow:
+    0 0 25px rgba(187,0,0,0.45),
+    0 0 45px rgba(187,0,0,0.25);
+}
+
+.beatBigLabel{
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  opacity: 0.8;
+}
+
+.beatHmsRow{
+  display:flex;
+  gap:12px;
+  margin-top: 16px;
+}
+
+.beatHmsUnit{
+  flex:1;
+  padding: 12px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  text-align:center;
+  transition: transform 0.2s ease;
+}
+
+.beatHmsUnit span{
+  display:block;
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: 1px;
+}
+
+.beatHmsUnit small{
+  display:block;
+  margin-top: 3px;
   font-size: 11px;
   font-weight: 900;
-  color: var(--muted);
-  letter-spacing: 0.3px;
+  letter-spacing: 1px;
+  opacity: 0.75;
 }
 
-.gpTallyNum{
-  display: block;
-  font-size: 18px;
+.beatDivider{
+  height: 1px;
+  margin: 16px 0 14px 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255,255,255,0.25),
+    transparent
+  );
+}
+
+.beatHypeLine{
+  font-size: 15px;
   font-weight: 1000;
-  color: var(--text);
-}
-
-/* leaderboard table */
-.gpLeaderCard{
-  background: var(--card);
+  letter-spacing: 1px;
+  text-align:center;
+  padding: 12px;
   border-radius: 16px;
-  border: 1px solid var(--line);
-  overflow: hidden;
-  margin-top: 6px;
+
+  background: rgba(187,0,0,0.18);
+  border: 1px solid rgba(187,0,0,0.30);
+
+  box-shadow: 0 0 20px rgba(187,0,0,0.25);
 }
 
-.gpLeaderRow{
+.beatStreak{
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-align:center;
+  opacity: 0.9;
+}
+
+.beatStreak.osu{
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(34,197,94,0.25);
+}
+
+.beatStreak.ttun{
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(187,0,0,0.35);
+}
+
+.rivalRecordRow{
+  margin-top:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+}
+
+.rivalTeam{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 8px 12px;
+  border-radius: 14px;
+}
+
+.rivalLogo{
+  width:22px;
+  height:22px;
+  object-fit:contain;
+}
+
+.rivalTie{
+  opacity:0.9;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 8px 12px;
+  border-radius: 14px;
+}
+
+.last10List{
+  margin-top:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.last10Row{
+  display:flex;
+  gap:12px;
+  align-items:baseline;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.last10Year{
+  width:56px;
+  font-weight:900;
+  opacity:0.9;
+}
+
+.last10Winner{
+  flex:1;
+  font-weight:800;
+}
+
+.last10Score{
+  font-weight:900;
+  opacity:0.95;
+  white-space:nowrap;
+}
+
+/* ✅ banner also: visible height only */
+.rivalryBanner{
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: auto !important;
+  bottom: 0 !important;
+
+  height: var(--bannerH);
+  padding: 0 12px;
+
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(0,0,0,0.75);
+  border-top: 1px solid rgba(255,255,255,0.14);
+
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  text-align: center;
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  z-index: 1100;
+  font-size: 15px;
+}
+
+/* ✅ separate safe-area "spacer" below the banner too */
+.rivalryBanner::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:100%;
+  height: env(safe-area-inset-bottom);
+  background: rgba(0,0,0,0.75);
+  border-top: 1px solid rgba(255,255,255,0.14);
+}
+
+/* ✅ CONTENT SAFE SPACE so nothing gets covered */
+#content{
+  padding-bottom: calc(var(--tabsH) + var(--bannerH) + env(safe-area-inset-bottom) + 12px) !important;
+}
+
+/* =========================
+   SHOP CHAT (CLEAN + iMessage-like)
+   ========================= */
+
+/* Prevent iOS zoom on focus */
+#chatInput{
+  font-size: 16px;
+}
+
+/* Title row: "THE Chat • (dot) Connected" */
+.chatRoomTitle{
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin: 8px 0 12px 0;
+  font-size: 14px;
   display: flex;
   align-items: center;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  gap: 10px;
-}
-
-.gpLeaderRow:last-child{ border-bottom: none; }
-
-.gpLeaderRank{
-  font-size: 13px;
-  font-weight: 900;
-  color: var(--muted);
-  width: 22px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.gpLeaderName{
-  flex: 1;
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.gpLeaderRecord{
-  font-size: 13px;
-  font-weight: 900;
-  color: var(--muted);
-}
-
-.gpLeaderPct{
-  font-size: 15px;
-  font-weight: 1000;
-  min-width: 44px;
-  text-align: right;
-}
-
-/* season toggle chips */
-.gpSeasonRow{
-  display: flex;
   gap: 6px;
-  margin-bottom: 18px;
   flex-wrap: wrap;
 }
 
-.gpSeasonChip{
-  padding: 5px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
-}
-
-.gpSeasonChip.active{
-  background: var(--scarlet);
-  color: #fff;
-  border-color: var(--scarlet);
-}
-
-/* ============================================================
-   SHOP PAGE
-   ============================================================ */
-.shopGrid{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.shopItem{
-  background: var(--card);
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-}
-
-.shopImg{
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-  background: var(--panel);
-}
-
-.shopInfo{
-  padding: 10px;
-}
-
-.shopName{
-  font-size: 14px;
-  font-weight: 900;
-  margin-bottom: 4px;
-}
-
-.shopPrice{
-  font-size: 15px;
-  font-weight: 1000;
-  color: var(--scarlet);
-}
-
-/* ============================================================
-   BEAT TTUN
-   ============================================================ */
-
-/* ===== HEADER AREA ===== */
-.beatHeader{
-  text-align: center;
-  padding: 16px 0 10px;
-}
-
-.beatTitle{
-  font-size: 26px;
-  font-weight: 1000;
-  letter-spacing: 0.5px;
-  line-height: 1.1;
-  margin-bottom: 4px;
-}
-
-.beatSub{
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: 0.4px;
-}
-
-/* ===== STAT GRID ===== */
-.beatGrid{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.beatStat{
-  background: var(--card);
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  padding: 14px 12px;
-  text-align: center;
-}
-
-.beatStatNum{
-  font-size: 32px;
-  font-weight: 1000;
-  letter-spacing: 0.5px;
-  line-height: 1;
-  color: var(--scarlet);
-  font-variant-numeric: tabular-nums;
-}
-
-.beatStatLab{
-  margin-top: 4px;
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-/* ===== SCHEDULE SECTION ===== */
-.beatSection{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin: 0 0 10px;
-}
-
-.beatGame{
-  background: var(--card);
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  display: flex;
+.chatStatusWrap{
+  font-weight: 600;
+  opacity: 0.85;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
 }
 
-.beatGameInfo{
+.chatStatusDot{
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.chatStatusDot.online{ background: #2ecc71; }
+.chatStatusDot.offline{ background: #e74c3c; }
+
+/* Each message group (name + bubble) */
+.chatMsgWrap{
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  margin: 8px 0; /* space between message groups */
 }
 
-.beatGameTitle{
-  font-size: 15px;
-  font-weight: 900;
-}
+.chatMsgWrap.mine{ align-items: flex-end; }
+.chatMsgWrap:not(.mine){ align-items: flex-start; }
 
-.beatGameDate{
+/* Name sits just above bubble */
+.chatMsgName{
   font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
+  opacity: 0.7;
+  margin: 0 0 2px 0;  /* tight above bubble */
+  padding: 0 8px;     /* slight inset like iMessage */
 }
 
-.beatGameResult{
+/* Bubble itself */
+.chatMsgBubble{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 12px 14px;
+  max-width: 75%;
+  margin: 0; /* prevent extra vertical gaps */
+}
+
+.chatMsgBubble.mine{
+  background: rgba(187,0,0,0.18);
+  border-color: rgba(187,0,0,0.45);
+}
+
+/* Message text */
+.chatMsgText{
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+/* Time inside the bubble, aligned right */
+.chatMsgTime{
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.6;
+  text-align: right;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ===== Header buttons: make Refresh + Log Out match exactly ===== */
+.headerActions .smallBtn{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  font-weight: 600;
+  opacity: 0.88;
+}
+
+/* (Kept for backwards compatibility in case any JS still uses these) */
+.aiLine1{
+  margin-top:10px;
+  font-weight:800;
+  letter-spacing:0.3px;
+}
+
+.aiLine2{
+  margin-top:4px;
+  opacity:0.8;
+  font-size:13px;
+}
+
+/* =========================
+   GROUP PICKS — Sportsbook Sexy (OSU)
+   Paste at END of style.css
+   ========================= */
+
+/* Container row */
+.gpGameRow{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.gpGameRow:first-of-type{
+  margin-top: 10px;
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* Matchup header */
+.gpMatchup{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 10px;
+}
+.gpTeams{
   font-size: 16px;
   font-weight: 1000;
-  letter-spacing: 0.5px;
-  flex-shrink: 0;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
 }
-
-.beatGameResult.W{ color: var(--live); }
-.beatGameResult.L{ color: #ef4444; }
-
-/* Upcoming next-game highlight card */
-.beatNextGame{
-  background:
-    radial-gradient(600px 200px at 50% -40px, rgba(187,0,0,0.28), transparent 60%),
-    var(--card);
-  border: 1px solid rgba(187,0,0,0.38);
-  border-radius: 14px;
-  padding: 14px;
-  margin-bottom: 18px;
-  text-align: center;
-}
-
-.beatNextLabel{
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.beatNextTitle{
-  font-size: 20px;
-  font-weight: 1000;
-  margin-bottom: 4px;
-}
-
-.beatNextDate{
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-/* ===== RIVALRY BANNER ===== */
-.rivalryBanner{
-  position: fixed;
-  bottom: calc(var(--tabsH) + env(safe-area-inset-bottom));
-  left: 0; right: 0;
-  height: var(--bannerH);
-  z-index: 9;
-  background: rgba(18,18,18,0.85);
-  border-top: 1px solid var(--line);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-
-  overflow: hidden;
-}
-
-.rivalryBanner.hidden{ display: none; }
-
-.rvItem{
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.gpMatchup .muted{
   font-size: 12px;
-  font-weight: 900;
-  flex-shrink: 0;
-}
-
-.rvTeam{ color: var(--text); }
-.rvScore{ font-variant-numeric: tabular-nums; }
-
-.rvDot{
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: var(--line);
-  flex-shrink: 0;
-}
-
-.rvWin{ color: var(--live); }
-.rvLoss{ color: #ef4444; }
-
-/* scroll ticker */
-@keyframes rvScroll{
-  from{ transform: translateX(0); }
-  to{ transform: translateX(-50%); }
-}
-
-.rvTrack{
-  display: flex;
-  gap: 20px;
-  animation: rvScroll 36s linear infinite;
+  font-weight: 800;
+  opacity: 0.75;
   white-space: nowrap;
 }
 
-/* ============================================================
-   GOLF / PUTT PUTT
-   ============================================================ */
+/* Button row becomes "market tiles" */
+.gpButtons{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+  margin-bottom: 8px;
+}
 
-/* scorecard table */
-.golf-sc-wrap {
-  background: var(--card);
+/* Base tile */
+.gpBtn{
+  width: 100%;
+  border-radius: 16px;
+  padding: 14px 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.92);
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  line-height: 1.1;
+  box-shadow:
+    0 14px 34px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: transform .14s ease, border-color .14s ease, filter .14s ease, box-shadow .14s ease;
+}
+
+/* Press */
+.gpBtn:active{
+  transform: translateY(1px) scale(0.995);
+  filter: brightness(1.07);
+}
+
+/* Active selection = scarlet edge + glow */
+.gpBtn.gpBtnActive{
+  border-color: rgba(187,0,0,0.65);
+  background:
+    radial-gradient(520px 160px at 50% -40px, rgba(187,0,0,0.28), transparent 60%),
+    rgba(255,255,255,0.05);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.45),
+    0 0 0 2px rgba(187,0,0,0.22) inset,
+    0 0 18px rgba(187,0,0,0.18);
+}
+
+/* Locked state feels like a book */
+.gpBtn:disabled{
+  opacity: 0.55;
+  filter: grayscale(0.2);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Details / everyone picks */
+.gpEveryone{
+  margin-top: 8px;
+  padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid var(--line);
-  margin-bottom: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.18);
+}
+.gpEveryoneSummary{
+  cursor: pointer;
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  font-size: 13px;
+  opacity: 0.92;
+}
+.gpEveryoneBody{
+  margin-top: 10px;
+}
+.gpPickLine{
+  padding: 8px 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 13px;
+  line-height: 1.25;
+}
+.gpPickLine:first-child{ border-top: none; }
+
+/* Save bar -> "Bet slip" */
+[data-gpsavecount="1"]{
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  opacity: 0.75;
+}
+button[data-gpsave="1"]{
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-weight: 1000;
+}
+
+/* Make save bar feel like a sticky slip inside the card */
+.game .gpSlipBar{
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+
+  margin: 10px 0 12px 0;
+  padding: 10px 12px;
+  border-radius: 16px;
+
+  border: 1px solid rgba(255,255,255,0.10);
+  background:
+    radial-gradient(700px 180px at 50% -60px, rgba(187,0,0,0.18), transparent 60%),
+    rgba(0,0,0,0.22);
+
+  box-shadow:
+    0 16px 38px rgba(0,0,0,0.45),
+    0 0 18px rgba(187,0,0,0.10);
+
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* When no pending picks, visually "settled" */
+.game .gpSlipBar.isClean{
+  background: rgba(0,0,0,0.18);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.40);
+}
+
+/* =========================
+   PICKS — Sportsbook polish
+   ========================= */
+
+.gpGameRow{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.gpGameRow:first-child{
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.gpMatchup .gpTeams{
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  font-size: 16px;
+}
+
+.gpButtons{
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* sportsbook buttons */
+.gpBtn{
+  width: 100%;
+  border-radius: 16px;
+  padding: 12px 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  font-weight: 1000;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+  box-shadow: 0 14px 28px rgba(0,0,0,0.28);
+  transition: transform .12s ease, filter .12s ease, border-color .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+
+.gpBtn:active{
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(1.08);
+}
+
+.gpBtn[disabled]{
+  opacity: 0.55;
+  filter: grayscale(0.25);
+  box-shadow: none;
+}
+
+/* selected = scarlet book slip */
+.gpBtnActive{
+  border-color: rgba(187,0,0,0.65);
+  background: rgba(187,0,0,0.22);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.35),
+    0 0 0 3px rgba(187,0,0,0.16);
+}
+
+/* when one is active, dim the other */
+.gpButtons.hasPick .gpBtn:not(.gpBtnActive){
+  opacity: 0.70;
+}
+
+/* micro labels under buttons */
+.gpMetaRow{
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.72);
+}
+
+.gpCounts{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.gpYouPicked{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(187,0,0,0.16);
+  border: 1px solid rgba(187,0,0,0.30);
+  color: rgba(255,255,255,0.90);
+}
+
+.gpLockLine{
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gpLockCountdown{
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.gpLockCountdown.warn{
+  background: rgba(245,158,11,0.14);
+  border-color: rgba(245,158,11,0.26);
+  color: #fde68a;
+}
+
+.gpLockCountdown.danger{
+  background: rgba(187,0,0,0.16);
+  border-color: rgba(187,0,0,0.32);
+  color: #ffd9d9;
+}
+
+/* Group Picks: make each selected game look like a Scores-style card */
+.gpGameCard {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.gpGameTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.gpGameTitle {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.gpGameTime {
+  font-size: 14px;
+  opacity: 0.75;
+  white-space: nowrap;
+  padding-top: 4px;
+}
+
+.gpMetaRow {
+  margin-top: 10px;
+}
+
+.gpEveryone {
+  margin-top: 10px;
+}
+
+.gpButtons {
+  margin-top: 10px;
+}
+
+.gpFaded { opacity: 0.45; }
+
+.gpEveryone { margin-top: 10px; }
+.gpEveryoneSummary { cursor: pointer; font-weight: 600; }
+.gpEveryoneBody { margin-top: 8px; }
+.gpPickLine { padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.08); }
+.gpPickLine:first-child { border-top: none; }
+
+/* =========================
+   THE PUTT SHOP — Golf Page Styles
+   ========================= */
+
+/* ── Shared vs-par colours ── */
+.vpar-under { color: #4ade80; }
+.vpar-over  { color: #f87171; }
+.vpar-even  { color: rgba(255,255,255,0.75); }
+
+/* ── Page wrapper ── */
+.golf-wrap {
+  padding: 14px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Page header row ── */
+.golf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.golf-header h2 {
+  font-size: 20px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.golf-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.golf-hole-badge {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(187,0,0,0.18);
+  border: 1px solid rgba(187,0,0,0.35);
+  color: #ffd9d9;
+}
+
+/* ── Back button ── */
+.golf-back {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 12px;
+  letter-spacing: 0.2px;
+}
+
+/* ── Buttons (primary / secondary / ghost / danger) ── */
+.golf-btn {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+  transition: transform .14s ease, filter .14s ease, box-shadow .14s ease;
+  text-align: center;
+}
+
+.golf-btn:active {
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(1.08);
+}
+
+.golf-btn-primary {
+  background:
+    radial-gradient(600px 160px at 50% -40px, rgba(187,0,0,0.45), transparent 65%),
+    rgba(187,0,0,0.85);
+  border-color: rgba(187,0,0,0.55);
+  color: #fff;
+  box-shadow:
+    0 16px 36px rgba(187,0,0,0.28),
+    0 14px 26px rgba(0,0,0,0.40);
+}
+
+.golf-btn-secondary {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.90);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+}
+
+.golf-btn-ghost {
+  background: transparent;
+  border-color: rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.75);
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.golf-btn-danger {
+  background: rgba(239,68,68,0.20);
+  border-color: rgba(239,68,68,0.45);
+  color: #fca5a5;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.30);
+}
+
+/* ── Home button group ── */
+.golf-home-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Form fields ── */
+.golf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.golf-label {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+}
+
+.golf-input {
+  width: 100%;
+  font-size: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.golf-input:focus {
+  border-color: rgba(187,0,0,0.50);
+  box-shadow: 0 0 0 3px rgba(187,0,0,0.14);
+}
+
+.golf-select {
+  width: 100%;
+  font-size: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(30,30,30,0.95);
+  color: #fff;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* ── Player list ── */
+.golf-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.golf-player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.golf-player-row .golf-input {
+  flex: 1;
+}
+
+.golf-remove-player {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.30);
+  color: #fca5a5;
+  font-size: 14px;
+  font-weight: 900;
+  padding: 10px 12px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ── Regulars chips ── */
+.golf-regulars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.golf-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.88);
+  letter-spacing: 0.2px;
+  transition: background .14s ease, border-color .14s ease;
+}
+
+.golf-chip:active {
+  background: rgba(187,0,0,0.22);
+  border-color: rgba(187,0,0,0.45);
+}
+
+/* ── Par line above scoring ── */
+.golf-par-line {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+  padding: 8px 0 2px;
+}
+
+/* ── Live scoring rows ── */
+.golf-score-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.golf-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background:
+    radial-gradient(600px 140px at 50% -40px, rgba(255,255,255,0.04), transparent 60%),
+    rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+}
+
+.golf-score-name {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Stepper ── */
+.golf-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.golf-step-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.80);
+  font-size: 16px;
+  font-weight: 900;
+  padding: 10px 14px;
+  line-height: 1;
+  transition: background .12s ease, color .12s ease;
+}
+
+.golf-step-btn:active {
+  background: rgba(187,0,0,0.25);
+  color: #fff;
+}
+
+.golf-step-val {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  min-width: 36px;
+  text-align: center;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Running total (vs par) ── */
+.golf-score-total {
+  font-size: 16px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ── Scoring nav (Prev / Next / End) ── */
+.golf-scoring-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.golf-scoring-nav .golf-btn {
+  flex: 1;
+}
+
+/* ── Winner banner ── */
+.golf-winner-banner {
+  text-align: center;
+  padding: 28px 16px 22px;
+  border-radius: 22px;
+  border: 1px solid rgba(187,0,0,0.35);
+  background:
+    radial-gradient(800px 300px at 50% -20px, rgba(187,0,0,0.35), transparent 60%),
+    rgba(0,0,0,0.30);
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.55),
+    0 0 30px rgba(187,0,0,0.30);
+}
+
+.golf-trophy {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 18px rgba(245,158,11,0.45));
+}
+
+.golf-winner-name {
+  font-size: 26px;
+  font-weight: 1000;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 24px rgba(187,0,0,0.35);
+}
+
+.golf-winner-score {
+  font-size: 20px;
+  font-weight: 1000;
+  margin-top: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Scorecard ── */
+.golf-scorecard-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.golf-sc-course {
+  font-size: 15px;
+  font-weight: 1000;
+  letter-spacing: 0.3px;
+  opacity: 0.85;
+  padding: 0 2px;
 }
 
 .golf-sc-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
 }
 
-.golf-sc-table {
+.golf-scorecard {
+  width: 100%;
   border-collapse: collapse;
-  min-width: 100%;
   font-size: 13px;
-}
-
-.golf-sc-table th,
-.golf-sc-table td {
-  padding: 8px 10px;
-  text-align: center;
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.golf-sc-table th:last-child,
-.golf-sc-table td:last-child { border-right: none; }
-.golf-sc-table tr:last-child td { border-bottom: none; }
-
-.golf-sc-table th {
-  background: var(--panel);
+.golf-scorecard thead tr:first-child th {
+  padding: 10px 12px;
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--muted);
+  color: rgba(255,255,255,0.55);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  text-align: center;
 }
 
-.golf-sc-table td {
+.golf-scorecard thead tr:first-child th:first-child {
+  text-align: left;
+}
+
+.golf-sc-par-row td {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.50);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: center;
+}
+
+.golf-sc-par-row td:first-child {
+  text-align: left;
+}
+
+.golf-scorecard tbody tr td {
+  padding: 10px 12px;
+  text-align: center;
   font-weight: 700;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-/* player name col */
+.golf-scorecard tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .golf-sc-name {
   text-align: left !important;
-  font-weight: 900 !important;
-  min-width: 80px;
-}
-
-/* totals col */
-.golf-sc-total {
-  font-weight: 1000 !important;
-  color: var(--scarlet);
-}
-
-/* ── score chip colours ── */
-.sc-ace   { background: #7c3aed; color: #fff; border-radius: 6px; padding: 2px 5px; }
-.sc-eagle { background: #d97706; color: #fff; border-radius: 6px; padding: 2px 5px; }
-.sc-birdie{ background: var(--live); color: #fff; border-radius: 6px; padding: 2px 5px; }
-.sc-par   { color: var(--text); }
-.sc-bogey { color: #ef4444; }
-.sc-double{ color: #dc2626; font-weight:900; }
-
-/* Add Round button */
-.golf-addRound-btn {
-  display: block;
-  width: 100%;
-  padding: 14px;
-  background: var(--card);
-  border: 1px dashed var(--line);
-  border-radius: 14px;
-  color: var(--muted);
-  font-size: 15px;
   font-weight: 900;
-  letter-spacing: 0.3px;
-  cursor: pointer;
-  text-align: center;
-  transition: background .15s, color .15s;
-  margin-bottom: 16px;
+  font-size: 14px;
+  color: rgba(255,255,255,0.92);
 }
 
-.golf-addRound-btn:active { background: var(--panel); }
+.golf-sc-par   { color: rgba(255,255,255,0.50); }
+.golf-sc-empty { color: rgba(255,255,255,0.25); }
+.golf-sc-under { color: #4ade80; font-weight: 900; }
+.golf-sc-over  { color: #f87171; font-weight: 900; }
+.golf-sc-even  { color: rgba(255,255,255,0.80); }
 
-/* round accordion */
-.golf-round{
-  background: var(--card);
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  margin-bottom: 12px;
-  overflow: hidden;
+.golf-sc-total {
+  font-weight: 1000;
+  font-size: 14px;
 }
 
-.golf-round-header{
-  padding: 14px;
+/* ── History list ── */
+.golf-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.golf-history-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.22);
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+  transition: background .14s ease, border-color .14s ease;
 }
 
-.golf-round-title{
-  font-size: 15px;
-  font-weight: 900;
+.golf-history-row:active {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.14);
 }
 
-.golf-round-badge{
-  font-size: 12px;
-  font-weight: 900;
-  color: var(--muted);
-}
-
-.golf-round-body{
-  border-top: 1px solid var(--line);
-  padding: 12px;
-}
-
-/* Add Round modal (reuse existing modal styles) */
-.golf-modal-overlay{
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  z-index: 30;
+.golf-history-left {
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
-.golf-modal{
-  background: var(--panel);
-  border-radius: 22px 22px 0 0;
-  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
-  width: 100%;
-  max-width: 500px;
-  max-height: 85vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.golf-modal-title{
-  font-size: 18px;
-  font-weight: 1000;
-  margin-bottom: 16px;
-  text-align: center;
-}
-
-/* player score inputs */
-.golf-scoreRow{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.golf-scoreLabel{
-  flex: 1;
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.golf-scoreInput{
-  width: 60px;
-  height: 40px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--text);
+.golf-history-course {
   font-size: 16px;
   font-weight: 900;
-  text-align: center;
-  outline: none;
-  -moz-appearance: textfield;
-}
-
-.golf-scoreInput::-webkit-inner-spin-button,
-.golf-scoreInput::-webkit-outer-spin-button { -webkit-appearance: none; }
-
-.golf-modal-save{
-  display: block;
-  width: 100%;
-  padding: 14px;
-  border-radius: 14px;
-  background: var(--scarlet);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 1000;
-  letter-spacing: 0.3px;
-  border: 0;
-  cursor: pointer;
-  margin-top: 8px;
-  transition: filter .14s;
-}
-
-.golf-modal-save:active{ filter: brightness(1.1); }
-
-/* 2024 Leaderboard title */
-.golf-lb-title{
-  font-size: 18px;
-  font-weight: 1000;
-  margin-bottom: 16px;
-}
-
-/* leaderboard card */
-.golf-lb-card{
-  background: var(--card);
-  border-radius: 14px;
-  border: 1px solid var(--line);
+  white-space: nowrap;
   overflow: hidden;
-  margin-bottom: 16px;
+  text-overflow: ellipsis;
 }
 
-.golf-lb-row{
-  display: flex;
-  align-items: center;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  gap: 10px;
+.golf-history-meta {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.golf-lb-row:last-child{ border-bottom: none; }
-
-.golf-lb-rank{
-  font-size: 13px;
-  font-weight: 900;
-  color: var(--muted);
-  width: 22px;
-  text-align: center;
+.golf-history-right {
   flex-shrink: 0;
 }
 
-.golf-lb-name{
-  flex: 1;
-  font-size: 15px;
+.golf-badge-complete {
+  font-size: 11px;
   font-weight: 900;
-}
-
-.golf-lb-avg{
-  font-size: 15px;
-  font-weight: 1000;
-  color: var(--scarlet);
-  min-width: 44px;
-  text-align: right;
-}
-
-/* ============================================================
-   FUN PAGE
-   ============================================================ */
-
-.funPage{
-  padding: 16px 14px;
-  max-width: 680px;
-  margin: 0 auto;
-}
-
-.funBlock{
-  background: var(--card);
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
-.funBlockTitle{
-  font-size: 14px;
-  font-weight: 900;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.28);
+  color: #86efac;
 }
 
-/* Wheel of Fortune style spinner */
-.funWheelWrap{
+.golf-badge-active {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(245,158,11,0.15);
+  border: 1px solid rgba(245,158,11,0.28);
+  color: #fde68a;
+}
+
+/* ── Stats ── */
+.golf-stat-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.golf-stat-card {
+  padding: 16px 14px;
+  border-radius: 18px;
+  background:
+    radial-gradient(500px 140px at 50% -30px, rgba(187,0,0,0.14), transparent 65%),
+    rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  gap: 6px;
 }
 
-.funWheelCanvas{
-  border-radius: 50%;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-}
-
-.funSpinBtn{
-  padding: 12px 28px;
-  border-radius: 14px;
-  background: var(--scarlet);
-  color: #fff;
-  font-size: 16px;
+.golf-stat-num {
+  font-size: 26px;
   font-weight: 1000;
   letter-spacing: 0.3px;
-  border: 0;
-  cursor: pointer;
-  transition: filter .14s;
+  line-height: 1;
 }
 
-.funSpinBtn:active{ filter: brightness(1.1); }
-
-.funSpinResult{
-  font-size: 22px;
-  font-weight: 1000;
-  text-align: center;
-  min-height: 32px;
-  color: var(--scarlet);
+.golf-stat-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.3;
 }
 
-/* Trivia */
-.funTriviaQ{
-  font-size: 17px;
-  font-weight: 900;
-  line-height: 1.4;
-  margin-bottom: 12px;
-}
-
-.funTriviaOpts{
+/* ── Hole-in-one list ── */
+.golf-hio-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.funTriviaBtn{
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 900;
-  text-align: left;
-  cursor: pointer;
-  transition: background .15s, border-color .15s;
-}
-
-.funTriviaBtn.correct{ background: rgba(34,197,94,.18); border-color: var(--live); color: var(--live); }
-.funTriviaBtn.wrong  { background: rgba(239,68,68,.12); border-color: #ef4444; color: #ef4444; }
-
-.funTriviaFeedback{
-  margin-top: 10px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.funNextBtn{
-  margin-top: 12px;
-  width: 100%;
-  padding: 13px;
-  border-radius: 12px;
-  background: var(--scarlet);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 1000;
-  border: 0;
-  cursor: pointer;
-  transition: filter .14s;
-}
-
-.funNextBtn:active{ filter: brightness(1.1); }
-
-/* Score tracker */
-.funScore{
-  font-size: 16px;
-  font-weight: 900;
-  margin-bottom: 12px;
-  color: var(--muted);
-}
-
-.funScore span{
-  color: var(--text);
-}
-
-/* ============================================================
-   ADMIN / EDIT PICKS MODAL
-   ============================================================ */
-
-.gpAdminOverlay{
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.75);
-  z-index: 30;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.gpAdminSheet{
-  background: var(--panel);
-  border-radius: 22px 22px 0 0;
-  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
-  width: 100%;
-  max-width: 500px;
-  max-height: 85vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.gpAdminTitle{
-  font-size: 18px;
-  font-weight: 1000;
-  margin-bottom: 16px;
-  text-align: center;
-}
-
-.gpAdminRow{
+.golf-hio-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
-.gpAdminLabel{
-  flex: 1;
-  font-size: 14px;
-  font-weight: 900;
-  min-width: 100px;
-}
-
-.gpAdminInput{
-  width: 100%;
-  padding: 11px 12px;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 700;
-  outline: none;
-  margin-bottom: 10px;
-}
-
-.gpAdminInput:focus{
-  border-color: var(--scarlet);
-  box-shadow: 0 0 0 2px rgba(187,0,0,0.18);
-}
-
-.gpAdminSelect{
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
-  min-width: 80px;
-}
-
-.gpAdminSave{
-  display: block;
-  width: 100%;
-  padding: 14px;
+  padding: 10px 14px;
   border-radius: 14px;
-  background: var(--scarlet);
-  color: #fff;
-  font-size: 16px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.18);
+}
+
+.golf-hio-player {
+  font-weight: 900;
+  font-size: 14px;
+  flex: 1;
+}
+
+.golf-hio-hole {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fde68a;
+}
+
+.golf-hio-date {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 600;
+}
+
+/* ── Leaderboard table ── */
+.golf-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+}
+
+.golf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.golf-table thead th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.50);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  text-align: left;
+}
+
+.golf-table tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-weight: 700;
+  color: rgba(255,255,255,0.88);
+}
+
+.golf-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Section titles ── */
+.golf-section-title {
+  font-size: 14px;
+  font-weight: 1000;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.60);
+  margin: 0 0 2px;
+}
+
+/* ── Admin section ── */
+.golf-admin-section {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* =========================
+   SCORES TAB — Premium Header + State Styles
+   (required by split/scores.js)
+   ========================= */
+
+/* Scores-specific header wrapper */
+.scoresHeader {
+  padding: 12px 14px 10px;
+}
+
+/* Top row: brand left, actions right */
+.scoresHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* Brand: "Scores" title + badge */
+.scoresHeaderBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scoresHeaderTitle {
+  font-size: 20px;
   font-weight: 1000;
   letter-spacing: 0.3px;
-  border: 0;
-  cursor: pointer;
-  margin-top: 8px;
-  transition: filter .14s;
+  line-height: 1;
 }
 
-.gpAdminSave:active{ filter: brightness(1.1); }
-
-/* ============================================================
-   GLOBAL TOAST / SNACKBAR
-   ============================================================ */
-
-.gpToast{
-  position: fixed;
-  bottom: calc(var(--tabsH) + env(safe-area-inset-bottom) + 12px);
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: rgba(30,30,30,0.96);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 900;
-  letter-spacing: 0.3px;
-  padding: 11px 20px;
-  border-radius: 22px;
-  border: 1px solid var(--line);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 16px 36px rgba(0,0,0,0.45);
-  opacity: 0;
-  transition: opacity .22s ease, transform .22s ease;
-  z-index: 50;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.gpToast.visible{
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-/* ============================================================
-   PICKS — tab chips  (My Picks / Group Picks / Leaderboard)
-   ============================================================ */
-
-.picksTabRow{
+/* Action buttons row */
+.scoresHeaderActions {
   display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Individual action button (Refresh / Log Out) */
+.scoresActionBtn {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  margin-bottom: 18px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.88);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+  line-height: 1;
+}
+
+.scoresActionBtn:active {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* Log Out variant: slightly muted */
+.scoresActionBtnLogout {
+  opacity: 0.80;
+}
+
+.scoresActionBtnLogout:active {
+  opacity: 1;
+}
+
+/* Control row: league select + date picker on left, meta label on right */
+.scoresControlRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.scoresControlLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
-.picksTab{
-  padding: 6px 16px;
-  border-radius: 20px;
+/* Updated date / "Loading…" label */
+.scoresMetaLabel {
   font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+/* Conference filter row (college leagues only) */
+.scoresConfRow {
+  margin-top: 8px;
+}
+
+/* =========================
+   SCORES TAB — State / Empty / Error Screens
+   ========================= */
+
+.scoresStateWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px 32px;
+  gap: 10px;
+}
+
+.scoresStateIcon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.40);
+  margin-bottom: 4px;
+}
+
+/* Spinning refresh icon for loading state */
+@keyframes scoresSpinAnim {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.scoresStateIconSpin {
+  animation: scoresSpinAnim 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scoresStateIconSpin {
+    animation: none;
+  }
+}
+
+.scoresStateText {
+  font-size: 16px;
   font-weight: 900;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.85);
 }
 
-.picksTab.active{
-  background: var(--scarlet);
-  color: #fff;
-  border-color: var(--scarlet);
+.scoresStateSubtext {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.50);
+  max-width: 280px;
 }
 
-/* ============================================================
-   STOCKS MODULE STYLES
-   ============================================================ */
+.scoresStateMeta {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.30);
+  letter-spacing: 0.3px;
+}
