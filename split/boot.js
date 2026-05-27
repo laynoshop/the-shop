@@ -630,12 +630,13 @@
     // LOGOUT:     Call window.__fabLock() to revert to the
     //             pre-login state.
     //
-    // Arc angles (80°–230°):
-    //   80°  = upper-right (Coin Flip)
-    //   130° = upper-left  (Weather)
-    //   155° = left        (Domino's 🍕)
-    //   180° = straight left (Log Out)
-    //   230° = lower-left  (Debug)
+    // Arc angles (70°–240°) — evenly spaced at ~42.5° apart,
+    // RADIUS bumped to 115px so 44px buttons never overlap:
+    //   70°  = upper-right  (Coin Flip)
+    //   112° = upper        (Weather)
+    //   155° = left         (Domino's 🍕)
+    //   197° = lower-left   (Log Out)
+    //   240° = lower        (Debug)
     // =========================================================
 
     // ---- Pre-login standalone debug button ----
@@ -751,15 +752,17 @@
       fabMain.appendChild(badgeEl);
       fabWrap.appendChild(fabMain);
 
+      // Arc angles evenly distributed 70°–240° (42.5° apart), RADIUS=115px
+      // ensures no two 44px buttons overlap (min arc gap ~85px at r=115).
       var ringItems = [
-        { id: "__fab_coinflip", icon: "\uD83E\uDE99", label: "Coin Flip",   angle: 80,  action: openCoinFlip },
-        { id: "__fab_weather",  icon: "\u26C5",       label: "Weather",     angle: 130, action: openWeather },
-        { id: "__fab_dominos",  icon: "\uD83C\uDF55", label: "Domino's",    angle: 155, action: openDominos },
-        { id: "__fab_logout",   icon: "\uD83D\uDD13", label: "Log Out",     angle: 180, action: openLogoutDialog },
-        { id: "__fab_debug",    icon: "\uD83D\uDC1E", label: "Debug",       angle: 230, action: openDebug }
+        { id: "__fab_coinflip", icon: "\uD83E\uDE99", label: "Coin Flip",  angle: 70,  action: openCoinFlip },
+        { id: "__fab_weather",  icon: "\u26C5",       label: "Weather",    angle: 112, action: openWeather },
+        { id: "__fab_dominos",  icon: "\uD83C\uDF55", label: "Domino's",   angle: 155, action: openDominos },
+        { id: "__fab_logout",   icon: "\uD83D\uDD13", label: "Log Out",    angle: 197, action: openLogoutDialog },
+        { id: "__fab_debug",    icon: "\uD83D\uDC1E", label: "Debug",      angle: 240, action: openDebug }
       ];
 
-      var RADIUS = 90;
+      var RADIUS = 115;
 
       ringItems.forEach(function(item) {
         var btn = document.createElement("button");
