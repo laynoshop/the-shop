@@ -591,34 +591,46 @@
     // DOMINOS PIZZA SHORTCUT
     // =========================================================
     function openDominos() {
-      // Try the Domino's app deep link first; fall back to the website
-      var appLink  = "dominos://";
-      var webLink  = "https://www.dominos.com";
-      var start    = Date.now();
-      var fallback = setTimeout(function() {
-        if (Date.now() - start < 2000) {
-          window.open(webLink, "_blank");
+      // Strategy:
+      // 1. Attempt the deep link via window.location.href (preserves user-gesture
+      //    chain so the browser allows it without treating it as a popup).
+      // 2. After 1.5s, if the page is still visible (app not installed / not iOS),
+      //    open the Domino's website as a fallback.
+      // 3. A visibilitychange listener cancels the fallback if the app launched
+      //    and the browser backgrounded the page.
+      //
+      // This replaces the old iframe approach which modern iOS/Android silently
+      // block, causing the fallback window.open (inside a setTimeout) to be
+      // treated as a popup and also blocked.
+
+      var webLink = "https://www.dominos.com";
+      var cancelled = false;
+
+      // Cancel web fallback if the app launched and took over (page hidden)
+      function onVisibilityChange() {
+        if (document.hidden) {
+          cancelled = true;
+          document.removeEventListener("visibilitychange", onVisibilityChange);
         }
-      }, 1200);
-      // Attempt to launch the app via an invisible iframe
-      var iframe = document.createElement("iframe");
-      iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden;";
-      iframe.src = appLink;
-      document.body.appendChild(iframe);
+      }
+      document.addEventListener("visibilitychange", onVisibilityChange);
+
+      // Attempt deep link — stays in the user-gesture call stack
+      window.location.href = "dominos://";
+
+      // Fallback: open website if app didn’t launch within 1.5s
       setTimeout(function() {
-        try { document.body.removeChild(iframe); } catch(e) {}
-      }, 2000);
-      // If the page loses focus the app opened — cancel the web fallback
-      window.addEventListener("blur", function onBlur() {
-        clearTimeout(fallback);
-        window.removeEventListener("blur", onBlur);
-      }, { once: true });
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        if (!cancelled) {
+          window.location.href = webLink;
+        }
+      }, 1500);
     }
 
     // =========================================================
     // RADIAL FAB
     //
-    // PRE-LOGIN:  Only a small standalone 🐛 debug button is
+    // PRE-LOGIN:  Only a small standalone \uD83D\uDC1E debug button is
     //             shown (bottom-right corner). The full Buckeye
     //             FAB stays hidden so the login screen is clean.
     //
@@ -634,7 +646,7 @@
     // RADIUS bumped to 115px so 44px buttons never overlap:
     //   70°  = upper-right  (Coin Flip)
     //   112° = upper        (Weather)
-    //   155° = left         (Domino's 🍕)
+    //   155° = left         (Domino's \uD83C\uDF55)
     //   197° = lower-left   (Log Out)
     //   240° = lower        (Debug)
     // =========================================================
