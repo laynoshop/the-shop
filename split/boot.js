@@ -763,6 +763,7 @@
       ];
 
       var RADIUS = 115;
+      var EDGE_SAFE = 14; // keeps buttons from bleeding off-screen
 
       ringItems.forEach(function(item) {
         var btn = document.createElement("button");
@@ -776,6 +777,9 @@
 
         var rightPx  = -22 - dx;
         var bottomPx = -22 + dy;
+
+        // Clamp so no button ever goes past the right edge
+        rightPx = Math.max(rightPx, -44 + EDGE_SAFE);
 
         btn.style.cssText = [
           "position:absolute",
