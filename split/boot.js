@@ -222,9 +222,7 @@
     }
 
     function closeWeather() {
-      if (weatherOverlayEl) {
-        weatherOverlayEl.style.display = "none";
-      }
+      if (weatherOverlayEl) weatherOverlayEl.style.display = "none";
     }
 
     function openWeather() {
@@ -239,20 +237,12 @@
     function fetchWeather() {
       var body = document.getElementById("__weather_body");
       if (body) body.innerHTML = "<div style='text-align:center;padding:30px;color:#666;'>Loading weather…</div>";
-
-      // Marysville, OH
-      var lat = 40.2365;
-      var lon = -83.3677;
+      var lat = 40.2365, lon = -83.3677;
       var url = "https://api.open-meteo.com/v1/forecast" +
-        "?latitude=" + lat +
-        "&longitude=" + lon +
+        "?latitude=" + lat + "&longitude=" + lon +
         "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m" +
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max" +
-        "&temperature_unit=fahrenheit" +
-        "&wind_speed_unit=mph" +
-        "&forecast_days=6" +
-        "&timezone=America%2FNew_York";
-
+        "&temperature_unit=fahrenheit&wind_speed_unit=mph&forecast_days=6&timezone=America%2FNew_York";
       fetch(url)
         .then(function(r){ return r.json(); })
         .then(function(data){ renderWeather(data); })
@@ -262,10 +252,7 @@
     function renderWeather(data) {
       var body = document.getElementById("__weather_body");
       if (!body) return;
-
-      var cur = data.current || {};
-      var daily = data.daily || {};
-
+      var cur = data.current || {}, daily = data.daily || {};
       var curWmo = wmo(cur.weather_code);
       var curTemp = Math.round(cur.temperature_2m || 0);
       var feelsLike = Math.round(cur.apparent_temperature || 0);
@@ -273,7 +260,6 @@
       var windSpeed = Math.round(cur.wind_speed_10m || 0);
       var hiToday = Math.round((daily.temperature_2m_max || [])[0] || 0);
       var loToday = Math.round((daily.temperature_2m_min || [])[0] || 0);
-
       var html = [
         "<div style='text-align:center;margin-bottom:16px;'>",
           "<div style='font-size:13px;color:#bb0000;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;'>Marysville, OH</div>",
@@ -281,7 +267,6 @@
           "<div style='font-size:48px;font-weight:800;color:#fff;line-height:1;'>" + curTemp + "°F</div>",
           "<div style='font-size:15px;color:#aaa;margin-top:6px;'>" + curWmo.label + "</div>",
         "</div>",
-
         "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;'>",
           metaTile("🌡️ Feels Like", feelsLike + "°F"),
           metaTile("📈 High", hiToday + "°F"),
@@ -289,11 +274,9 @@
           metaTile("💧 Humidity", humidity + "%"),
           metaTile("💨 Wind", windSpeed + " mph"),
         "</div>",
-
         "<div style='border-top:1px solid #333;padding-top:14px;'>",
           "<div style='font-size:11px;color:#666;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;'>5-Day Forecast</div>"
       ].join("");
-
       var dates = daily.time || [];
       for (var i = 1; i <= 5; i++) {
         if (!dates[i]) continue;
@@ -302,7 +285,6 @@
         var lo = Math.round((daily.temperature_2m_min || [])[i] || 0);
         var precip = (daily.precipitation_probability_max || [])[i] || 0;
         var wind = Math.round((daily.wind_speed_10m_max || [])[i] || 0);
-
         html += "<div style='display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #222;'>" +
           "<span style='font-size:22px;width:32px;text-align:center;'>" + dWmo.icon + "</span>" +
           "<div style='flex:1;'>" +
@@ -312,10 +294,8 @@
           "<div style='text-align:right;'>" +
             "<span style='font-size:14px;font-weight:700;color:#fff;'>" + hi + "°</span>" +
             "<span style='font-size:13px;color:#666;margin-left:4px;'>" + lo + "°</span>" +
-          "</div>" +
-          "</div>";
+          "</div></div>";
       }
-
       html += "</div>";
       body.innerHTML = html;
     }
@@ -323,8 +303,7 @@
     function metaTile(label, value) {
       return "<div style='background:#111;border-radius:10px;padding:10px 12px;text-align:center;'>" +
         "<div style='font-size:11px;color:#666;margin-bottom:2px;'>" + label + "</div>" +
-        "<div style='font-size:16px;font-weight:700;color:#fff;'>" + value + "</div>" +
-        "</div>";
+        "<div style='font-size:16px;font-weight:700;color:#fff;'>" + value + "</div></div>";
     }
 
     function renderWeatherError(err) {
@@ -333,22 +312,102 @@
     }
 
     // =========================================================
+    // LOGOUT CONFIRM DIALOG
+    // =========================================================
+    var logoutDialogEl = null;
+
+    function buildLogoutDialog() {
+      logoutDialogEl = document.createElement("div");
+      logoutDialogEl.id = "__logout_dialog";
+      logoutDialogEl.style.cssText = [
+        "position:fixed","inset:0","z-index:100000",
+        "display:flex","align-items:center","justify-content:center",
+        "background:rgba(0,0,0,0.65)","backdrop-filter:blur(4px)"
+      ].join(";");
+
+      logoutDialogEl.innerHTML =
+        "<div style='" + [
+          "background:#1a1a2e","border:1px solid #444","border-radius:16px",
+          "width:min(88vw,320px)","padding:28px 24px 20px",
+          "box-shadow:0 8px 40px rgba(0,0,0,0.8)",
+          "font-family:-apple-system,system-ui,sans-serif",
+          "text-align:center","color:#e0e0e0"
+        ].join(";") + "'>" +
+          "<div style='font-size:40px;margin-bottom:12px;'>🔓</div>" +
+          "<div style='font-size:17px;font-weight:700;color:#fff;margin-bottom:8px;'>Leave The Shop?</div>" +
+          "<div style='font-size:14px;color:#888;margin-bottom:24px;line-height:1.5;'>You'll need to re-enter<br>the Scarlet Key to get back in.</div>" +
+          "<div style='display:flex;gap:10px;'>" +
+            "<button id='__logout_cancel' style='" + [
+              "flex:1","padding:11px 0","border-radius:10px",
+              "background:#2a2a3e","color:#ccc",
+              "border:1px solid #444","font-size:15px",
+              "cursor:pointer","font-weight:600"
+            ].join(";") + "'>Stay</button>" +
+            "<button id='__logout_confirm' style='" + [
+              "flex:1","padding:11px 0","border-radius:10px",
+              "background:#bb0000","color:#fff",
+              "border:none","font-size:15px",
+              "cursor:pointer","font-weight:700"
+            ].join(";") + "'>Log Out</button>" +
+          "</div>" +
+        "</div>";
+
+      document.body.appendChild(logoutDialogEl);
+
+      document.getElementById("__logout_cancel").addEventListener("click", closeLogoutDialog);
+      document.getElementById("__logout_confirm").addEventListener("click", function() {
+        closeLogoutDialog();
+        if (typeof window.doLogout === "function") {
+          window.doLogout();
+        } else if (typeof window.logout === "function") {
+          window.logout();
+        } else {
+          // Hard fallback: just reload to login screen
+          try {
+            var login = document.getElementById("login");
+            var entry = document.getElementById("entry");
+            var app   = document.getElementById("app");
+            if (app)   app.style.display   = "none";
+            if (entry) entry.style.display = "none";
+            if (login) login.style.display = "block";
+            var code = document.getElementById("code");
+            if (code) code.value = "";
+          } catch(e) { window.location.reload(); }
+        }
+      });
+
+      // Tap outside to cancel
+      logoutDialogEl.addEventListener("click", function(e) {
+        if (e.target === logoutDialogEl) closeLogoutDialog();
+      });
+    }
+
+    function closeLogoutDialog() {
+      if (logoutDialogEl) logoutDialogEl.style.display = "none";
+    }
+
+    function openLogoutDialog() {
+      if (!logoutDialogEl) {
+        buildLogoutDialog();
+      } else {
+        logoutDialogEl.style.display = "flex";
+      }
+    }
+
+    // =========================================================
     // RADIAL FAB
     // =========================================================
     function buildFAB() {
-      // Inject keyframe CSS for ring animation
       var style = document.createElement("style");
       style.textContent = [
         "@keyframes __fab_ring_in {",
-          "from { opacity:0; transform: scale(0.5) translate(0,0); }",
-          "to   { opacity:1; }",
-        "}",
-        "@keyframes __fab_spin_in {",
-          "from { transform: rotate(-90deg) scale(0.8); }",
-          "to   { transform: rotate(0deg) scale(1); }",
+          "from { opacity:0; transform: scale(0.5); }",
+          "to   { opacity:1; transform: scale(1); }",
         "}",
         "#__fab_main:hover { transform: scale(1.08); }",
-        "#__fab_main { transition: transform 0.15s ease; }"
+        "#__fab_main { transition: transform 0.15s ease; }",
+        "#__logout_cancel:hover { background:#333 !important; }",
+        "#__logout_confirm:hover { background:#990000 !important; }"
       ].join("\n");
       document.head.appendChild(style);
 
@@ -368,13 +427,11 @@
         "padding:0","overflow:hidden"
       ].join(";");
 
-      // Buckeye leaf image (already in repo)
       var img = document.createElement("img");
       img.src = "buckeye-leaf.png";
       img.alt = "Menu";
       img.style.cssText = "width:28px;height:28px;object-fit:contain;pointer-events:none;";
       img.onerror = function() {
-        // fallback to text O if image fails
         fab.innerHTML = "";
         fab.textContent = "O";
         fab.style.fontWeight = "900";
@@ -382,7 +439,6 @@
       };
       fab.appendChild(img);
 
-      // Error badge (on main FAB)
       badgeEl = document.createElement("span");
       badgeEl.style.cssText = [
         "position:absolute","top:-4px","right:-4px",
@@ -393,33 +449,32 @@
         "font-weight:bold","pointer-events:none"
       ].join(";");
       fab.appendChild(badgeEl);
-
       document.body.appendChild(fab);
 
-      // Ring buttons config
-      // Positions: arrange in a semicircle above+left of main FAB
-      // We'll place 2 buttons at angles: 135deg (top-left), 90deg (up)
+      // Ring buttons — 3 items now, spread in a tighter arc
+      // Angles: 150deg (debug, top-left), 90deg (weather, straight up), 30deg (logout, top-right)
       var ringItems = [
-        { id: "__fab_debug",   icon: "\uD83D\uDC1E", label: "Debug",   angle: 125, action: openDebug },
-        { id: "__fab_weather", icon: "\u26C5",       label: "Weather", angle: 60,  action: openWeather }
+        { id: "__fab_debug",   icon: "\uD83D\uDC1E", label: "Debug",   angle: 150, action: openDebug,         bg: "#1a1a2e" },
+        { id: "__fab_weather", icon: "\u26C5",       label: "Weather", angle: 90,  action: openWeather,       bg: "#1a1a2e" },
+        { id: "__fab_logout",  icon: "\uD83D\uDD13", label: "Log Out", angle: 30,  action: openLogoutDialog,  bg: "#1a1a2e" }
       ];
 
-      var RADIUS = 64; // px from center of main FAB
+      var RADIUS = 68;
 
       ringItems.forEach(function(item) {
         var btn = document.createElement("button");
         btn.id = item.id;
         btn.setAttribute("aria-label", item.label);
         var rad = item.angle * Math.PI / 180;
-        var offsetX = Math.round(-Math.cos(rad) * RADIUS);  // negative = left
-        var offsetY = Math.round(-Math.sin(rad) * RADIUS);  // negative = up
+        var offsetX = Math.round(-Math.cos(rad) * RADIUS);
+        var offsetY = Math.round(-Math.sin(rad) * RADIUS);
 
         btn.style.cssText = [
           "position:fixed",
-          "bottom:" + (80 + 22 - offsetY) + "px",  // 80+22 = center of main FAB
+          "bottom:" + (80 + 22 - offsetY) + "px",
           "right:" + (14 + 22 - offsetX) + "px",
           "width:44px","height:44px",
-          "background:#1a1a2e","color:#fff",
+          "background:" + item.bg,"color:#fff",
           "border:2px solid #444","border-radius:50%",
           "font-size:20px","cursor:pointer",
           "z-index:99997","display:none",
@@ -429,8 +484,10 @@
         ].join(";");
         btn.textContent = item.icon;
 
-        btn.addEventListener("mouseenter", function(){ btn.style.background = "#bb0000"; });
-        btn.addEventListener("mouseleave", function(){ btn.style.background = "#1a1a2e"; });
+        // Logout gets a red hover, others get scarlet
+        var hoverColor = (item.id === "__fab_logout") ? "#8b0000" : "#bb0000";
+        btn.addEventListener("mouseenter", function(){ btn.style.background = hoverColor; });
+        btn.addEventListener("mouseleave", function(){ btn.style.background = item.bg; });
 
         btn.addEventListener("click", function(e) {
           e.stopPropagation();
@@ -442,16 +499,11 @@
         ringEls.push(btn);
       });
 
-      fab.addEventListener("click", function (e) {
+      fab.addEventListener("click", function(e) {
         e.stopPropagation();
-        if (ringOpen) {
-          closeRing();
-        } else {
-          openRing();
-        }
+        if (ringOpen) { closeRing(); } else { openRing(); }
       });
 
-      // Close ring on outside click
       document.addEventListener("click", function() {
         if (ringOpen) closeRing();
       });
@@ -461,10 +513,11 @@
       ringOpen = true;
       ringEls.forEach(function(btn, i) {
         btn.style.display = "flex";
-        btn.style.animation = "__fab_ring_in 0.2s ease forwards";
-        btn.style.animationDelay = (i * 0.05) + "s";
         btn.style.opacity = "0";
-        setTimeout(function(){ btn.style.opacity = "1"; }, 20 + i * 50);
+        btn.style.animation = "none";
+        setTimeout(function() {
+          btn.style.animation = "__fab_ring_in 0.18s ease forwards";
+        }, i * 40);
       });
     }
 
@@ -481,10 +534,9 @@
       if (!panelEl) buildPanel();
       panelEl.style.display = "flex";
       renderLogs();
-      setTimeout(function () { if (listEl) listEl.scrollTop = 0; }, 50);
+      setTimeout(function() { if (listEl) listEl.scrollTop = 0; }, 50);
     }
 
-    // Wait for DOM then build the FAB
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", buildFAB);
     } else {
@@ -497,7 +549,7 @@
   // END DEBUG CONSOLE + FAB
   // =========================================================
 
-  // Firebase config (used by chat + picks)
+  // Firebase config
   window.FIREBASE_CONFIG = {
     apiKey: "AIzaSyBK09tMYLKcDLTMLVn2gYpsezCJAax0Y9Y",
     authDomain: "the-shop-chat.firebaseapp.com",
@@ -520,7 +572,6 @@
     };
   })();
 
-  // Optional build stamp (helps confirm deploy)
   window.__SCARLETKEY_BUILD = "split-boot-OK";
   try { console.log("Boot OK:", window.__SCARLETKEY_BUILD); } catch {}
 })();
