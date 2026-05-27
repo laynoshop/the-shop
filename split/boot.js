@@ -277,9 +277,9 @@
     var coinFlipHistory   = [];   // session history, max 5
     var coinFlipping      = false;
 
-    // ---- Firebase helpers — use firebase.firestore() directly (compat SDK) ----
-    // The app never sets window.db; it always calls firebase.firestore() inline.
-    // We follow the same pattern used by gp-data.js and all other modules.
+    // ---- Firebase helpers ----
+    // Use the existing signed-in user from the Scarlet Key login.
+    // Never attempt anonymous sign-in — Firestore rules block anonymous users.
 
     function cfGetDB() {
       try {
@@ -290,38 +290,51 @@
       return null;
     }
 
+    // Wait up to 3s for an already-authenticated user.
+    // If no user is signed in after the wait, bail out gracefully — never sign in anonymously.
     function cfEnsureFirebase() {
-      // If ensureFirebaseChatReady is available (set by gp-data.js), use it.
-      // Otherwise fall back to a simple anonymous-auth bootstrap identical to
-      // the one in gp-data.js ensureFirebaseReadySafe().
-      if (typeof window.ensureFirebaseChatReady === "function") {
-        return window.ensureFirebaseChatReady();
-      }
-      if (typeof window.ensureFirebaseReadySafe === "function") {
-        return window.ensureFirebaseReadySafe();
-      }
-      // Minimal bootstrap: init + anonymous sign-in
-      return new Promise(function(resolve) {
+      return new Promise(function(resolve, reject) {
         try {
-          if (window.firebase && window.FIREBASE_CONFIG) {
-            if (!firebase.apps || !firebase.apps.length) {
+          if (!window.firebase) { reject(new Error("Firebase not loaded")); return; }
+
+          // If Firebase isn't initialized yet, wait for it
+          if (!firebase.apps || !firebase.apps.length) {
+            if (window.FIREBASE_CONFIG) {
               firebase.initializeApp(window.FIREBASE_CONFIG);
+            } else {
+              reject(new Error("No Firebase config")); return;
             }
-            var auth = firebase.auth();
-            var done = false;
-            var finish = function() { if (!done) { done = true; resolve(); } };
-            var t = setTimeout(finish, 3000);
-            auth.onAuthStateChanged(function(user) {
-              if (done) return;
-              if (user) { clearTimeout(t); finish(); }
-              else {
-                auth.signInAnonymously().then(finish).catch(finish);
-              }
-            });
-          } else {
-            resolve();
           }
-        } catch(e) { resolve(); }
+
+          var auth = firebase.auth();
+
+          // If there's already a signed-in user, we're done immediately
+          if (auth.currentUser) { resolve(); return; }
+
+          // Otherwise wait for auth state to settle (user is logging in)
+          var done = false;
+          var timer = setTimeout(function() {
+            if (done) return;
+            done = true;
+            try { unsub(); } catch(e) {}
+            var u = auth.currentUser;
+            if (u) { resolve(); }
+            else { reject(new Error("No authenticated user — coin flip requires Scarlet Key login")); }
+          }, 3000);
+
+          var unsub = auth.onAuthStateChanged(function(user) {
+            if (done) return;
+            if (user) {
+              done = true;
+              clearTimeout(timer);
+              try { unsub(); } catch(e) {}
+              resolve();
+            }
+            // If user is null, keep waiting for the timer — don't sign in anonymously
+          });
+        } catch(e) {
+          reject(e);
+        }
       });
     }
 
@@ -342,7 +355,7 @@
             cfFetchRecord();
           }).catch(function(e) { console.warn("CF increment err:", e); });
         } catch(e) { console.warn("CF Firebase err:", e); }
-      }).catch(function(e) { console.warn("CF ensureFirebase err:", e); });
+      }).catch(function(e) { console.warn("CF skipping Firebase (not authed):", e.message); });
     }
 
     function cfFetchRecord() {
@@ -364,7 +377,7 @@
           renderCFRecord(null);
         }
       }).catch(function(e) {
-        console.warn("CF ensureFirebase err:", e);
+        console.warn("CF skipping record fetch (not authed):", e.message);
         renderCFRecord(null);
       });
     }
