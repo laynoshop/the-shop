@@ -274,64 +274,67 @@
     // RADIAL FAB  — container-based so it never clips edges
     //
     // Layout strategy:
-    //  • fabWrap sits at bottom-right (resting position) as a
-    //    zero-size anchor point. The main FAB button is absolutely
-    //    positioned inside it at (0,0) = bottom-right corner.
-    //  • Ring buttons are also absolute children, offset by the
-    //    RADIUS in polar coords relative to the FAB center.
-    //  • On open, fabWrap translates UP and LEFT so the whole
-    //    group moves away from edges and the nav bar — always
-    //    fully visible regardless of how many buttons exist.
+    //  • fabWrap sits at bottom-right as a zero-size anchor.
+    //    The main FAB is centered on that anchor point.
+    //  • Ring buttons are absolute children offset by RADIUS
+    //    in polar coords relative to the FAB center.
+    //  • Resting bottom is high enough that the FAB fully
+    //    clears the bottom tab bar + browser chrome.
+    //  • On open, fabWrap translates only a small nudge —
+    //    the buttons fan out purely via their polar offsets,
+    //    so no overlap regardless of count.
+    //
+    // Arc design (angles from positive-X axis, CCW):
+    //   100° = mostly up, slight left   (Weather)
+    //   158° = upper-left diagonal      (Log Out)
+    //   216° = lower-left diagonal      (Debug)
+    //
+    //  RADIUS = 90px gives plenty of breathing room between
+    //  the 44px buttons (centres are 90px apart, edges ~46px).
     // =========================================================
     function buildFAB() {
       // --- Styles ---
       var style = document.createElement("style");
       style.textContent = [
-        // Ring button pop-in: scale up from 0 at its own position
         "@keyframes __fab_pop_in {",
           "from { opacity:0; transform:scale(0.3); }",
           "to   { opacity:1; transform:scale(1); }",
         "}",
-        // Wrapper slides: smooth translate on open/close
         "#__fab_wrap {",
           "transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1);",
         "}",
-        // Main FAB subtle scale on hover/active
         "#__fab_main:hover  { transform:scale(1.08); }",
         "#__fab_main:active { transform:scale(0.95); }",
         "#__fab_main { transition:transform 0.15s ease; }",
-        // Ring btn hover
         ".__fab_ring_btn:hover  { filter:brightness(1.3); }",
         ".__fab_ring_btn:active { transform:scale(0.92) !important; }",
-        // Logout dialog button hovers
         "#__logout_cancel:hover  { background:#333 !important; }",
         "#__logout_confirm:hover { background:#990000 !important; }"
       ].join("\n");
       document.head.appendChild(style);
 
       // --- Wrapper (fixed anchor, zero visual size) ---
-      // Sits at bottom-right. transform moves entire group on open.
+      // bottom:110px keeps the FAB fully above the ~80px bottom nav
+      // plus the browser URL bar on mobile Safari/Chrome.
       fabWrap = document.createElement("div");
       fabWrap.id = "__fab_wrap";
       fabWrap.style.cssText = [
         "position:fixed",
-        // Resting anchor: bottom-right, just above the nav bar
-        "bottom:88px",   // above the ~64px bottom nav + 24px buffer
+        "bottom:110px",   // clear tab bar (80px) + browser chrome + 10px buffer
         "right:18px",
-        "width:0","height:0",  // zero size — children use absolute positioning
+        "width:0","height:0",
         "z-index:99998",
-        "pointer-events:none"  // children re-enable their own pointer events
+        "pointer-events:none"
       ].join(";");
       document.body.appendChild(fabWrap);
 
-      // --- Main FAB button (lives inside wrapper at origin) ---
+      // --- Main FAB button ---
       fabMain = document.createElement("button");
       fabMain.id = "__fab_main";
       fabMain.setAttribute("aria-label", "Open shop menu");
       fabMain.style.cssText = [
         "position:absolute",
-        // Center the 44px button on the wrap origin (bottom-right)
-        "bottom:-22px","right:-22px",
+        "bottom:-22px","right:-22px",   // center 44px button on wrap origin
         "width:44px","height:44px",
         "background:#bb0000","color:#fff",
         "border:2px solid rgba(255,255,255,0.18)","border-radius:50%",
@@ -354,7 +357,6 @@
       };
       fabMain.appendChild(img);
 
-      // Error badge
       badgeEl = document.createElement("span");
       badgeEl.style.cssText = [
         "position:absolute","top:-5px","right:-5px",
@@ -368,20 +370,19 @@
       fabWrap.appendChild(fabMain);
 
       // --- Ring button definitions ---
-      // Angles measured from positive-X axis (right), going counter-clockwise.
-      // 90° = straight up, 180° = left, etc.
-      // With 3 buttons we use 90° (up), 135° (upper-left), 180° (left).
-      // This keeps ALL buttons above and to the LEFT of the FAB — always away
-      // from both the right edge and the bottom nav. Add more buttons by
-      // extending this arc (e.g. 225° for a 4th button).
+      // Angles from positive-X axis, counter-clockwise.
+      // Arc spans 100°–216° so all buttons stay above and to the
+      // left of the FAB — away from the right edge and nav bar.
+      // 58° of arc spread across 3 buttons = ~58px centre-to-centre
+      // at RADIUS 90, giving clear visual separation.
       var ringItems = [
-        { id: "__fab_weather", icon: "\u26C5",       label: "Weather", angle: 90,  action: openWeather },
-        { id: "__fab_logout",  icon: "\uD83D\uDD13", label: "Log Out", angle: 148, action: openLogoutDialog },
-        { id: "__fab_debug",   icon: "\uD83D\uDC1E", label: "Debug",   angle: 180, action: openDebug }
+        { id: "__fab_weather", icon: "\u26C5",       label: "Weather", angle: 100, action: openWeather },
+        { id: "__fab_logout",  icon: "\uD83D\uDD13", label: "Log Out", angle: 158, action: openLogoutDialog },
+        { id: "__fab_debug",   icon: "\uD83D\uDC1E", label: "Debug",   angle: 216, action: openDebug }
       ];
 
-      // How far each ring button sits from the FAB center
-      var RADIUS = 70; // px
+      // Radius of the ring — enough that 44px buttons don't visually touch
+      var RADIUS = 90; // px
 
       ringItems.forEach(function(item, i) {
         var btn = document.createElement("button");
@@ -389,16 +390,13 @@
         btn.className = "__fab_ring_btn";
         btn.setAttribute("aria-label", item.label);
 
-        // Polar → cartesian offset from wrap origin (which == FAB center)
         var rad = item.angle * Math.PI / 180;
-        // positive X = right, positive Y = up (CSS bottom axis)
-        var dx = Math.round(Math.cos(rad) * RADIUS); // + = right, - = left
-        var dy = Math.round(Math.sin(rad) * RADIUS); // + = up,   - = down
+        var dx = Math.round(Math.cos(rad) * RADIUS); // +right / -left
+        var dy = Math.round(Math.sin(rad) * RADIUS); // +up   / -down
 
-        // Position relative to wrap origin:
-        // right: -22 is FAB center; subtract dx to move left when dx is negative
-        var rightPx  = -22 - dx;  // more negative dx → further right; more positive dx → further left
-        var bottomPx = -22 + dy;  // dy positive = button goes up
+        // Position relative to wrap origin (= FAB centre at bottom:-22, right:-22)
+        var rightPx  = -22 - dx;
+        var bottomPx = -22 + dy;
 
         btn.style.cssText = [
           "position:absolute",
@@ -439,18 +437,14 @@
 
     function openRing() {
       ringOpen = true;
-      // Slide the whole wrapper UP and LEFT so buttons
-      // clear the bottom nav and the right edge.
-      // Translate values: negative Y = up, negative X = left.
-      // These are tuned for 3 buttons; if you add more, increase translateX.
-      fabWrap.style.transform = "translate(-60px, -90px)";
+      // Small nudge so the 216° (lower-left) button doesn't dip
+      // too close to the nav bar. The main arc spread does the work.
+      fabWrap.style.transform = "translate(-10px, -10px)";
 
       ringEls.forEach(function(btn, i) {
         btn.style.display = "flex";
         btn.style.opacity = "0";
-        // Stagger each button's pop-in
         btn.style.animation = "none";
-        // Force reflow so animation restarts
         void btn.offsetWidth;
         btn.style.animationDelay = (i * 55) + "ms";
         btn.style.animation = "__fab_pop_in 0.2s cubic-bezier(0.34,1.56,0.64,1) forwards";
@@ -459,7 +453,6 @@
 
     function closeRing() {
       ringOpen = false;
-      // Snap wrapper back to resting position
       fabWrap.style.transform = "translate(0, 0)";
 
       ringEls.forEach(function(btn) {
