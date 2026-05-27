@@ -390,8 +390,9 @@
       var t = data.tails || 0;
       var hLeading = h > t;
       var tLeading = t > h;
-      var hStyle = hLeading ? "color:#ff4444;font-weight:900;font-size:16px;" : "color:#aaa;font-weight:700;font-size:15px;";
-      var tStyle = tLeading ? "color:#aaa;font-weight:900;font-size:16px;" : "color:#555;font-weight:700;font-size:15px;";
+      // Heads always scarlet, tails always gray — bold the leader
+      var hStyle = "color:#bb0000;font-weight:" + (hLeading ? "900" : "700") + ";font-size:" + (hLeading ? "16" : "15") + "px;";
+      var tStyle = "color:#aaaaaa;font-weight:" + (tLeading ? "900" : "700") + ";font-size:" + (tLeading ? "16" : "15") + "px;";
       var dashStyle = "color:#444;font-size:13px;margin:0 6px;";
       el.innerHTML =
         "<span style='" + hStyle + "'>Heads " + h + "</span>" +
@@ -438,7 +439,7 @@
           "</div>" +
 
           // Result label
-          "<div id='__cf_result' style='font-size:28px;font-weight:900;color:#fff;min-height:36px;margin-bottom:6px;letter-spacing:1px;'>&nbsp;</div>" +
+          "<div id='__cf_result' style='font-size:28px;font-weight:900;min-height:36px;margin-bottom:6px;letter-spacing:1px;'>&nbsp;</div>" +
           "<div id='__cf_sub' style='font-size:13px;color:#666;margin-bottom:22px;min-height:18px;'>&nbsp;</div>" +
 
           // Flip button
@@ -504,7 +505,12 @@
           coinEl.style.borderColor  = borderColor;
           coinEl.style.boxShadow    = shadowColor;
         }
-        if (resultEl) resultEl.textContent = label;
+
+        // HEADS = scarlet, TAILS = gray
+        if (resultEl) {
+          resultEl.style.color = isHeads ? "#bb0000" : "#aaaaaa";
+          resultEl.textContent = label;
+        }
 
         // Increment Firebase record
         cfIncrement(isHeads ? "heads" : "tails");
@@ -556,7 +562,7 @@
       var btn      = document.getElementById("__cf_flip_btn");
       var coinImg  = document.getElementById("__cf_coin_img");
       var coinEl   = document.getElementById("__cf_coin");
-      if (resultEl) resultEl.innerHTML = "&nbsp;";
+      if (resultEl) { resultEl.innerHTML = "&nbsp;"; resultEl.style.color = "#fff"; }
       if (subEl)    subEl.innerHTML    = "&nbsp;";
       if (btn)      { btn.disabled = false; btn.style.opacity = "1"; btn.textContent = "FLIP"; }
       if (coinImg)  { coinImg.src = "buckeye-O.png"; coinImg.alt = "Heads"; coinImg.style.opacity = "1"; }
