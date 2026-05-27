@@ -210,18 +210,9 @@
     return (it?.tags||[]).includes(filterKey);
   }
 
-  function scoreItem(it) {
-    const tags = it?.tags||[];
-    let s = 0;
-    const ts = Number(it?.publishedTs||0);
-    if (ts) s += Math.min(100, Math.floor((ts/1000)%100));
-    if (tags.includes("buckeyes")) s += 10000;
-    if (it?._osuFeed===true)       s += 5000;
-    if (tags.includes("cfb"))      s += 2000;
-    if (tags.includes("nfl"))      s += 800;
-    if (tags.includes("mlb"))      s += 500;
-    if (tags.includes("nhl"))      s += 500;
-    return s;
+  // Sort purely by publish time — newest first, no sport boosts
+  function sortByNewest(items) {
+    return [...(items||[])].sort((a, b) => (Number(b.publishedTs||0)) - (Number(a.publishedTs||0)));
   }
 
   function dedupeNewsItems(items) {
@@ -490,8 +481,9 @@
 
     const tagged  = allRaw.map(it => ({...it, tags: tagNewsItem(it)}));
     const deduped = dedupeNewsItems(tagged);
-    deduped.sort((a,b) => scoreItem(b) - scoreItem(a));
-    return deduped.slice(0, 15);
+    // Sort purely newest → oldest (no sport score boosts)
+    const sorted  = sortByNewest(deduped);
+    return sorted.slice(0, 15);
   }
 
   // -----------------------------
@@ -512,9 +504,10 @@
     if (!content) return;
     injectNewsStyles();
 
-    const filtered = (items||[]).filter(it => passesNewsFilter(it, currentNewsFilter));
+    // Filter first, then sort newest→oldest within the filtered set
+    const filtered = sortByNewest((items||[]).filter(it => passesNewsFilter(it, currentNewsFilter)));
 
-    // Hero card
+    // Hero card — always the single most-recent article
     let heroHTML = "";
     const hero = filtered[0];
     if (hero) {
@@ -544,7 +537,7 @@
         </a>`;
     }
 
-    // List cards
+    // List cards — remaining articles, already sorted newest→oldest
     const listHTML = filtered.slice(1).map((it,idx) => {
       const title    = escapeHtml(sanitizeTTUNText(it?.headline||""));
       const when     = it?.publishedTs ? escapeHtml(timeAgoLabel(it.publishedTs)) : "";
