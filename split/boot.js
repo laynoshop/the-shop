@@ -9,8 +9,6 @@
 
   // =========================================================
   // MOBILE DEBUG CONSOLE
-  // Intercepts all console output + errors so you can
-  // copy/paste logs on your phone instead of using DevTools.
   // =========================================================
   (function initDebugConsole() {
     var __logs = [];
@@ -50,7 +48,6 @@
       __logs.push({ level: "error", msg: "\uD83D\uDEA8 UNCAUGHT: " + msg, time: ts() });
       if (__logs.length > MAX_LOGS) __logs.shift();
       refreshPanel();
-      try { alert("JS ERROR: " + (e.message || e)); } catch {}
     });
 
     window.addEventListener("unhandledrejection", function (e) {
@@ -58,7 +55,6 @@
       __logs.push({ level: "error", msg: "\uD83D\uDEA8 PROMISE: " + reason, time: ts() });
       if (__logs.length > MAX_LOGS) __logs.shift();
       refreshPanel();
-      try { alert("PROMISE ERROR: " + reason); } catch {}
     });
 
     // -- UI --
@@ -66,10 +62,10 @@
     var panelEl   = null;
     var listEl    = null;
     var badgeEl   = null;
-    var errorCount = 0;
+    var ringOpen  = false;
+    var ringEls   = [];
 
     function refreshPanel() {
-      // Update error badge on button
       var newErrors = __logs.filter(function(l){ return l.level === "error" || l.level === "warn"; }).length;
       if (badgeEl) {
         badgeEl.textContent = newErrors > 0 ? newErrors : "";
@@ -150,21 +146,243 @@
       });
     }
 
+    // =========================================================
+    // WEATHER OVERLAY
+    // Marysville, OH coords: 40.2365, -83.3677
+    // Uses Open-Meteo (free, no API key needed)
+    // =========================================================
+    var weatherOverlayEl = null;
+
+    var WMO_CODES = {
+      0: { label: "Clear Sky", icon: "☀️" },
+      1: { label: "Mainly Clear", icon: "🌤️" },
+      2: { label: "Partly Cloudy", icon: "⛅" },
+      3: { label: "Overcast", icon: "☁️" },
+      45: { label: "Foggy", icon: "🌫️" },
+      48: { label: "Icy Fog", icon: "🌫️" },
+      51: { label: "Light Drizzle", icon: "🌦️" },
+      53: { label: "Drizzle", icon: "🌦️" },
+      55: { label: "Heavy Drizzle", icon: "🌧️" },
+      61: { label: "Light Rain", icon: "🌧️" },
+      63: { label: "Rain", icon: "🌧️" },
+      65: { label: "Heavy Rain", icon: "🌧️" },
+      71: { label: "Light Snow", icon: "🌨️" },
+      73: { label: "Snow", icon: "❄️" },
+      75: { label: "Heavy Snow", icon: "❄️" },
+      77: { label: "Snow Grains", icon: "🌨️" },
+      80: { label: "Rain Showers", icon: "🌦️" },
+      81: { label: "Rain Showers", icon: "🌧️" },
+      82: { label: "Heavy Showers", icon: "⛈️" },
+      85: { label: "Snow Showers", icon: "🌨️" },
+      86: { label: "Heavy Snow Showers", icon: "❄️" },
+      95: { label: "Thunderstorm", icon: "⛈️" },
+      96: { label: "Thunderstorm w/ Hail", icon: "⛈️" },
+      99: { label: "Thunderstorm w/ Heavy Hail", icon: "⛈️" }
+    };
+
+    function wmo(code) {
+      return WMO_CODES[code] || { label: "Unknown", icon: "🌡️" };
+    }
+
+    function dayLabel(dateStr, i) {
+      if (i === 0) return "Today";
+      if (i === 1) return "Tomorrow";
+      var d = new Date(dateStr + "T12:00:00");
+      return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    }
+
+    function buildWeatherOverlay() {
+      weatherOverlayEl = document.createElement("div");
+      weatherOverlayEl.id = "__weather_overlay";
+      weatherOverlayEl.style.cssText = [
+        "position:fixed","inset:0","z-index:99997",
+        "display:flex","align-items:center","justify-content:center",
+        "background:rgba(0,0,0,0.55)","backdrop-filter:blur(4px)"
+      ].join(";");
+
+      weatherOverlayEl.innerHTML =
+        "<div id='__weather_card' style='" + [
+          "background:#1a1a2e","border:1px solid #333","border-radius:16px",
+          "width:min(92vw,400px)","max-height:85vh","overflow-y:auto",
+          "padding:20px","position:relative","box-shadow:0 8px 32px rgba(0,0,0,0.7)",
+          "font-family:-apple-system,system-ui,sans-serif","color:#e0e0e0"
+        ].join(";") + "'>" +
+        "<button id='__weather_close' style='position:absolute;top:12px;right:14px;background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;'>✕</button>" +
+        "<div id='__weather_body'><div style='text-align:center;padding:30px;color:#666;'>Loading weather…</div></div>" +
+        "</div>";
+
+      document.body.appendChild(weatherOverlayEl);
+
+      document.getElementById("__weather_close").addEventListener("click", closeWeather);
+      weatherOverlayEl.addEventListener("click", function(e) {
+        if (e.target === weatherOverlayEl) closeWeather();
+      });
+
+      fetchWeather();
+    }
+
+    function closeWeather() {
+      if (weatherOverlayEl) {
+        weatherOverlayEl.style.display = "none";
+      }
+    }
+
+    function openWeather() {
+      if (!weatherOverlayEl) {
+        buildWeatherOverlay();
+      } else {
+        weatherOverlayEl.style.display = "flex";
+        fetchWeather();
+      }
+    }
+
+    function fetchWeather() {
+      var body = document.getElementById("__weather_body");
+      if (body) body.innerHTML = "<div style='text-align:center;padding:30px;color:#666;'>Loading weather…</div>";
+
+      // Marysville, OH
+      var lat = 40.2365;
+      var lon = -83.3677;
+      var url = "https://api.open-meteo.com/v1/forecast" +
+        "?latitude=" + lat +
+        "&longitude=" + lon +
+        "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m" +
+        "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max" +
+        "&temperature_unit=fahrenheit" +
+        "&wind_speed_unit=mph" +
+        "&forecast_days=6" +
+        "&timezone=America%2FNew_York";
+
+      fetch(url)
+        .then(function(r){ return r.json(); })
+        .then(function(data){ renderWeather(data); })
+        .catch(function(err){ renderWeatherError(err); });
+    }
+
+    function renderWeather(data) {
+      var body = document.getElementById("__weather_body");
+      if (!body) return;
+
+      var cur = data.current || {};
+      var daily = data.daily || {};
+
+      var curWmo = wmo(cur.weather_code);
+      var curTemp = Math.round(cur.temperature_2m || 0);
+      var feelsLike = Math.round(cur.apparent_temperature || 0);
+      var humidity = Math.round(cur.relative_humidity_2m || 0);
+      var windSpeed = Math.round(cur.wind_speed_10m || 0);
+      var hiToday = Math.round((daily.temperature_2m_max || [])[0] || 0);
+      var loToday = Math.round((daily.temperature_2m_min || [])[0] || 0);
+
+      var html = [
+        "<div style='text-align:center;margin-bottom:16px;'>",
+          "<div style='font-size:13px;color:#bb0000;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;'>Marysville, OH</div>",
+          "<div style='font-size:64px;line-height:1;margin-bottom:4px;'>" + curWmo.icon + "</div>",
+          "<div style='font-size:48px;font-weight:800;color:#fff;line-height:1;'>" + curTemp + "°F</div>",
+          "<div style='font-size:15px;color:#aaa;margin-top:6px;'>" + curWmo.label + "</div>",
+        "</div>",
+
+        "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;'>",
+          metaTile("🌡️ Feels Like", feelsLike + "°F"),
+          metaTile("📈 High", hiToday + "°F"),
+          metaTile("📉 Low", loToday + "°F"),
+          metaTile("💧 Humidity", humidity + "%"),
+          metaTile("💨 Wind", windSpeed + " mph"),
+        "</div>",
+
+        "<div style='border-top:1px solid #333;padding-top:14px;'>",
+          "<div style='font-size:11px;color:#666;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;'>5-Day Forecast</div>"
+      ].join("");
+
+      var dates = daily.time || [];
+      for (var i = 1; i <= 5; i++) {
+        if (!dates[i]) continue;
+        var dWmo = wmo((daily.weather_code || [])[i]);
+        var hi = Math.round((daily.temperature_2m_max || [])[i] || 0);
+        var lo = Math.round((daily.temperature_2m_min || [])[i] || 0);
+        var precip = (daily.precipitation_probability_max || [])[i] || 0;
+        var wind = Math.round((daily.wind_speed_10m_max || [])[i] || 0);
+
+        html += "<div style='display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #222;'>" +
+          "<span style='font-size:22px;width:32px;text-align:center;'>" + dWmo.icon + "</span>" +
+          "<div style='flex:1;'>" +
+            "<div style='font-size:13px;font-weight:600;color:#e0e0e0;'>" + dayLabel(dates[i], i) + "</div>" +
+            "<div style='font-size:11px;color:#888;'>" + dWmo.label + (precip > 0 ? " · 💧 " + precip + "%" : "") + " · 💨 " + wind + " mph</div>" +
+          "</div>" +
+          "<div style='text-align:right;'>" +
+            "<span style='font-size:14px;font-weight:700;color:#fff;'>" + hi + "°</span>" +
+            "<span style='font-size:13px;color:#666;margin-left:4px;'>" + lo + "°</span>" +
+          "</div>" +
+          "</div>";
+      }
+
+      html += "</div>";
+      body.innerHTML = html;
+    }
+
+    function metaTile(label, value) {
+      return "<div style='background:#111;border-radius:10px;padding:10px 12px;text-align:center;'>" +
+        "<div style='font-size:11px;color:#666;margin-bottom:2px;'>" + label + "</div>" +
+        "<div style='font-size:16px;font-weight:700;color:#fff;'>" + value + "</div>" +
+        "</div>";
+    }
+
+    function renderWeatherError(err) {
+      var body = document.getElementById("__weather_body");
+      if (body) body.innerHTML = "<div style='text-align:center;padding:30px;color:#f59e0b;'>⚠️ Could not load weather.<br><small style='color:#666;'>" + (err && err.message ? err.message : "Network error") + "</small></div>";
+    }
+
+    // =========================================================
+    // RADIAL FAB
+    // =========================================================
     function buildFAB() {
+      // Inject keyframe CSS for ring animation
+      var style = document.createElement("style");
+      style.textContent = [
+        "@keyframes __fab_ring_in {",
+          "from { opacity:0; transform: scale(0.5) translate(0,0); }",
+          "to   { opacity:1; }",
+        "}",
+        "@keyframes __fab_spin_in {",
+          "from { transform: rotate(-90deg) scale(0.8); }",
+          "to   { transform: rotate(0deg) scale(1); }",
+        "}",
+        "#__fab_main:hover { transform: scale(1.08); }",
+        "#__fab_main { transition: transform 0.15s ease; }"
+      ].join("\n");
+      document.head.appendChild(style);
+
+      // Main FAB
       var fab = document.createElement("button");
-      fab.id = "__debug_fab";
-      fab.innerHTML = "\uD83D\uDC1E";
+      fab.id = "__fab_main";
+      fab.setAttribute("aria-label", "Open shop menu");
       fab.style.cssText = [
         "position:fixed","bottom:80px","right:14px",
         "width:44px","height:44px",
-        "background:#1a1a2e","color:#fff",
-        "border:2px solid #333","border-radius:50%",
+        "background:#bb0000","color:#fff",
+        "border:2px solid rgba(255,255,255,0.15)","border-radius:50%",
         "font-size:20px","cursor:pointer",
         "z-index:99998","display:flex",
         "align-items:center","justify-content:center",
-        "box-shadow:0 2px 12px rgba(0,0,0,0.6)"
+        "box-shadow:0 2px 12px rgba(0,0,0,0.6)",
+        "padding:0","overflow:hidden"
       ].join(";");
 
+      // Buckeye leaf image (already in repo)
+      var img = document.createElement("img");
+      img.src = "buckeye-leaf.png";
+      img.alt = "Menu";
+      img.style.cssText = "width:28px;height:28px;object-fit:contain;pointer-events:none;";
+      img.onerror = function() {
+        // fallback to text O if image fails
+        fab.innerHTML = "";
+        fab.textContent = "O";
+        fab.style.fontWeight = "900";
+        fab.style.fontFamily = "serif";
+      };
+      fab.appendChild(img);
+
+      // Error badge (on main FAB)
       badgeEl = document.createElement("span");
       badgeEl.style.cssText = [
         "position:absolute","top:-4px","right:-4px",
@@ -176,15 +394,94 @@
       ].join(";");
       fab.appendChild(badgeEl);
 
-      fab.addEventListener("click", function () {
-        panelOpen = true;
-        if (!panelEl) buildPanel();
-        panelEl.style.display = "flex";
-        renderLogs();
-        setTimeout(function () { if (listEl) listEl.scrollTop = 0; }, 50);
+      document.body.appendChild(fab);
+
+      // Ring buttons config
+      // Positions: arrange in a semicircle above+left of main FAB
+      // We'll place 2 buttons at angles: 135deg (top-left), 90deg (up)
+      var ringItems = [
+        { id: "__fab_debug",   icon: "\uD83D\uDC1E", label: "Debug",   angle: 125, action: openDebug },
+        { id: "__fab_weather", icon: "\u26C5",       label: "Weather", angle: 60,  action: openWeather }
+      ];
+
+      var RADIUS = 64; // px from center of main FAB
+
+      ringItems.forEach(function(item) {
+        var btn = document.createElement("button");
+        btn.id = item.id;
+        btn.setAttribute("aria-label", item.label);
+        var rad = item.angle * Math.PI / 180;
+        var offsetX = Math.round(-Math.cos(rad) * RADIUS);  // negative = left
+        var offsetY = Math.round(-Math.sin(rad) * RADIUS);  // negative = up
+
+        btn.style.cssText = [
+          "position:fixed",
+          "bottom:" + (80 + 22 - offsetY) + "px",  // 80+22 = center of main FAB
+          "right:" + (14 + 22 - offsetX) + "px",
+          "width:44px","height:44px",
+          "background:#1a1a2e","color:#fff",
+          "border:2px solid #444","border-radius:50%",
+          "font-size:20px","cursor:pointer",
+          "z-index:99997","display:none",
+          "align-items:center","justify-content:center",
+          "box-shadow:0 2px 10px rgba(0,0,0,0.5)",
+          "transition:background 0.15s ease"
+        ].join(";");
+        btn.textContent = item.icon;
+
+        btn.addEventListener("mouseenter", function(){ btn.style.background = "#bb0000"; });
+        btn.addEventListener("mouseleave", function(){ btn.style.background = "#1a1a2e"; });
+
+        btn.addEventListener("click", function(e) {
+          e.stopPropagation();
+          closeRing();
+          item.action();
+        });
+
+        document.body.appendChild(btn);
+        ringEls.push(btn);
       });
 
-      document.body.appendChild(fab);
+      fab.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (ringOpen) {
+          closeRing();
+        } else {
+          openRing();
+        }
+      });
+
+      // Close ring on outside click
+      document.addEventListener("click", function() {
+        if (ringOpen) closeRing();
+      });
+    }
+
+    function openRing() {
+      ringOpen = true;
+      ringEls.forEach(function(btn, i) {
+        btn.style.display = "flex";
+        btn.style.animation = "__fab_ring_in 0.2s ease forwards";
+        btn.style.animationDelay = (i * 0.05) + "s";
+        btn.style.opacity = "0";
+        setTimeout(function(){ btn.style.opacity = "1"; }, 20 + i * 50);
+      });
+    }
+
+    function closeRing() {
+      ringOpen = false;
+      ringEls.forEach(function(btn) {
+        btn.style.display = "none";
+        btn.style.opacity = "0";
+      });
+    }
+
+    function openDebug() {
+      panelOpen = true;
+      if (!panelEl) buildPanel();
+      panelEl.style.display = "flex";
+      renderLogs();
+      setTimeout(function () { if (listEl) listEl.scrollTop = 0; }, 50);
     }
 
     // Wait for DOM then build the FAB
@@ -197,7 +494,7 @@
     window.__debugLogs = __logs;
   })();
   // =========================================================
-  // END DEBUG CONSOLE
+  // END DEBUG CONSOLE + FAB
   // =========================================================
 
   // Firebase config (used by chat + picks)
