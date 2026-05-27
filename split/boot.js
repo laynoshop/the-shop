@@ -276,106 +276,97 @@
     var coinFlipOverlayEl = null;
     var coinFlipHistory   = [];   // session history, max 5
     var coinFlipping      = false;
-    var cfRetryTimer      = null; // retry timer handle
 
-    // --- Firebase helpers (lazy — waits for window.db set by app.js) ---
-    function getCFRef() {
+    // ---- Firebase helpers — use firebase.firestore() directly (compat SDK) ----
+    // The app never sets window.db; it always calls firebase.firestore() inline.
+    // We follow the same pattern used by gp-data.js and all other modules.
+
+    function cfGetDB() {
       try {
-        var db = window.db;
-        if (!db) return null;
-        // Support both modular (doc) and compat (.collection) Firestore SDKs
-        if (typeof window.doc === "function" && typeof window.collection === "function") {
-          return window.doc(db, "coinFlip", "record");
-        }
-        if (db.collection) {
-          return db.collection("coinFlip").doc("record");
+        if (window.firebase && firebase.apps && firebase.apps.length) {
+          return firebase.firestore();
         }
       } catch(e) {}
       return null;
     }
 
-    function cfIncrement(field) {
-      // Atomically increment heads or tails counter in Firestore
-      try {
-        var ref = getCFRef();
-        if (!ref) return;
-        // Modular SDK (v9+)
-        if (typeof window.runTransaction === "function" && typeof window.getDoc === "function") {
-          window.runTransaction(window.db, function(tx) {
-            return window.getDoc(ref).then(function(snap) {
-              var data = snap.exists() ? snap.data() : { heads: 0, tails: 0 };
-              var update = { heads: data.heads || 0, tails: data.tails || 0 };
-              update[field] = (update[field] || 0) + 1;
-              tx.set(ref, update);
+    function cfEnsureFirebase() {
+      // If ensureFirebaseChatReady is available (set by gp-data.js), use it.
+      // Otherwise fall back to a simple anonymous-auth bootstrap identical to
+      // the one in gp-data.js ensureFirebaseReadySafe().
+      if (typeof window.ensureFirebaseChatReady === "function") {
+        return window.ensureFirebaseChatReady();
+      }
+      if (typeof window.ensureFirebaseReadySafe === "function") {
+        return window.ensureFirebaseReadySafe();
+      }
+      // Minimal bootstrap: init + anonymous sign-in
+      return new Promise(function(resolve) {
+        try {
+          if (window.firebase && window.FIREBASE_CONFIG) {
+            if (!firebase.apps || !firebase.apps.length) {
+              firebase.initializeApp(window.FIREBASE_CONFIG);
+            }
+            var auth = firebase.auth();
+            var done = false;
+            var finish = function() { if (!done) { done = true; resolve(); } };
+            var t = setTimeout(finish, 3000);
+            auth.onAuthStateChanged(function(user) {
+              if (done) return;
+              if (user) { clearTimeout(t); finish(); }
+              else {
+                auth.signInAnonymously().then(finish).catch(finish);
+              }
             });
-          }).then(function() {
-            cfFetchRecord(false);
-          }).catch(function(e) { console.warn("CF increment err:", e); });
-        }
-        // Compat SDK (v8)
-        else if (ref.firestore && typeof ref.firestore.runTransaction === "function") {
-          ref.firestore.runTransaction(function(tx) {
-            return tx.get(ref).then(function(snap) {
-              var data = snap.exists ? snap.data() : { heads: 0, tails: 0 };
-              var update = { heads: data.heads || 0, tails: data.tails || 0 };
-              update[field] = (update[field] || 0) + 1;
-              tx.set(ref, update);
-            });
-          }).then(function() {
-            cfFetchRecord(false);
-          }).catch(function(e) { console.warn("CF increment err:", e); });
-        }
-      } catch(e) { console.warn("CF Firebase err:", e); }
+          } else {
+            resolve();
+          }
+        } catch(e) { resolve(); }
+      });
     }
 
-    // withRetry: if window.db not ready yet, show a "Loading…" placeholder
-    // and retry up to ~10 times with 400ms gaps before giving up silently.
-    function cfFetchRecord(withRetry) {
-      if (withRetry === undefined) withRetry = true;
+    function cfIncrement(field) {
+      cfEnsureFirebase().then(function() {
+        try {
+          var db = cfGetDB();
+          if (!db) return;
+          var ref = db.collection("coinFlip").doc("record");
+          db.runTransaction(function(tx) {
+            return tx.get(ref).then(function(snap) {
+              var data = snap.exists ? (snap.data() || {}) : { heads: 0, tails: 0 };
+              var update = { heads: data.heads || 0, tails: data.tails || 0 };
+              update[field] = (update[field] || 0) + 1;
+              tx.set(ref, update);
+            });
+          }).then(function() {
+            cfFetchRecord();
+          }).catch(function(e) { console.warn("CF increment err:", e); });
+        } catch(e) { console.warn("CF Firebase err:", e); }
+      }).catch(function(e) { console.warn("CF ensureFirebase err:", e); });
+    }
 
-      // Clear any pending retry
-      if (cfRetryTimer) { clearTimeout(cfRetryTimer); cfRetryTimer = null; }
+    function cfFetchRecord() {
+      var el = document.getElementById("__cf_record");
+      if (el) el.innerHTML = "<span style='color:#555;font-size:13px;'>Loading record\u2026</span>";
 
-      var ref = getCFRef();
-
-      if (!ref) {
-        // Show placeholder so the user sees something while Firebase wakes up
-        var el = document.getElementById("__cf_record");
-        if (el && withRetry) {
-          el.innerHTML = "<span style='color:#555;font-size:13px;'>Loading record\u2026</span>";
-        }
-        if (withRetry) {
-          // Retry up to 10 times (every 400 ms = 4 seconds total)
-          var attempts = (cfFetchRecord._attempts || 0) + 1;
-          cfFetchRecord._attempts = attempts;
-          if (attempts <= 10) {
-            cfRetryTimer = setTimeout(function() { cfFetchRecord(true); }, 400);
-          } else {
-            cfFetchRecord._attempts = 0; // reset for next open
+      cfEnsureFirebase().then(function() {
+        try {
+          var db = cfGetDB();
+          if (!db) { renderCFRecord(null); return; }
+          db.collection("coinFlip").doc("record").get().then(function(snap) {
+            renderCFRecord(snap.exists ? snap.data() : { heads: 0, tails: 0 });
+          }).catch(function(e) {
+            console.warn("CF fetch err:", e);
             renderCFRecord(null);
-          }
-        } else {
+          });
+        } catch(e) {
+          console.warn("CF Firebase err:", e);
           renderCFRecord(null);
         }
-        return;
-      }
-
-      // db is ready — reset attempt counter and fetch
-      cfFetchRecord._attempts = 0;
-
-      // Modular SDK
-      if (typeof window.getDoc === "function") {
-        window.getDoc(ref).then(function(snap) {
-          renderCFRecord(snap.exists() ? snap.data() : { heads: 0, tails: 0 });
-        }).catch(function() { renderCFRecord(null); });
-      }
-      // Compat SDK
-      else if (typeof ref.get === "function") {
-        ref.get().then(function(snap) {
-          renderCFRecord(snap.exists ? snap.data() : { heads: 0, tails: 0 });
-        }).catch(function() { renderCFRecord(null); });
-      }
-      else { renderCFRecord(null); }
+      }).catch(function(e) {
+        console.warn("CF ensureFirebase err:", e);
+        renderCFRecord(null);
+      });
     }
 
     function renderCFRecord(data) {
@@ -541,8 +532,6 @@
     }
 
     function closeCoinFlip() {
-      if (cfRetryTimer) { clearTimeout(cfRetryTimer); cfRetryTimer = null; }
-      cfFetchRecord._attempts = 0;
       if (coinFlipOverlayEl) coinFlipOverlayEl.style.display = "none";
     }
     function openCoinFlip() {
@@ -565,9 +554,7 @@
         coinEl.style.boxShadow    = "0 4px 20px rgba(187,0,0,0.5)";
       }
       renderCoinHistory();
-      // Reset attempt counter and kick off fetch with retry enabled
-      cfFetchRecord._attempts = 0;
-      cfFetchRecord(true);
+      cfFetchRecord();
     }
 
     // =========================================================
