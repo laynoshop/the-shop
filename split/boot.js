@@ -62,7 +62,7 @@
     var badgeEl   = null;
     var ringOpen  = false;
     var ringEls   = [];
-    var fabWrap   = null;  // the container that slides
+    var fabWrap   = null;
     var fabMain   = null;
 
     function refreshPanel() {
@@ -271,29 +271,170 @@
     }
 
     // =========================================================
+    // COIN FLIP OVERLAY
+    // =========================================================
+    var coinFlipOverlayEl = null;
+    var coinFlipHistory   = [];   // session history, max 5
+    var coinFlipping      = false;
+
+    function buildCoinFlipOverlay() {
+      // Inject coin flip keyframe styles once
+      var cfStyle = document.createElement("style");
+      cfStyle.textContent = [
+        "@keyframes __cf_flip {",
+          "0%   { transform: rotateY(0deg)   translateY(0px);   }",
+          "30%  { transform: rotateY(360deg) translateY(-60px); }",
+          "60%  { transform: rotateY(720deg) translateY(-20px); }",
+          "80%  { transform: rotateY(900deg) translateY(-5px);  }",
+          "100% { transform: rotateY(1080deg) translateY(0px);  }",
+        "}",
+        "#__cf_coin { transition: none; }",
+        "#__cf_coin.flipping { animation: __cf_flip 1.1s cubic-bezier(0.33,1,0.68,1) forwards; }",
+        "#__cf_flip_btn:active { transform:scale(0.95); }",
+        "#__cf_flip_btn { transition:transform 0.12s ease, background 0.15s ease; }"
+      ].join("\n");
+      document.head.appendChild(cfStyle);
+
+      coinFlipOverlayEl = document.createElement("div");
+      coinFlipOverlayEl.id = "__coinflip_overlay";
+      coinFlipOverlayEl.style.cssText = "position:fixed;inset:0;z-index:99997;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.60);backdrop-filter:blur(4px);";
+      coinFlipOverlayEl.innerHTML =
+        "<div id='__cf_card' style='background:#1a1a2e;border:1px solid #333;border-radius:16px;width:min(92vw,340px);padding:28px 24px 24px;position:relative;box-shadow:0 8px 32px rgba(0,0,0,0.75);font-family:-apple-system,system-ui,sans-serif;color:#e0e0e0;text-align:center;'>" +
+          "<button id='__cf_close' style='position:absolute;top:12px;right:14px;background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;'>\u2715</button>" +
+          "<div style='font-size:13px;color:#bb0000;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:18px;'>\uD83E\uDE99 Coin Flip</div>" +
+
+          // Coin
+          "<div style='perspective:600px;margin-bottom:20px;'>" +
+            "<div id='__cf_coin' style='width:110px;height:110px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48px;background:linear-gradient(135deg,#bb0000,#8a0000);border:3px solid #ff4444;box-shadow:0 4px 20px rgba(187,0,0,0.5);'>" +
+              "<span id='__cf_coin_face'>\uD83C\uDF42</span>" +
+            "</div>" +
+          "</div>" +
+
+          // Result label
+          "<div id='__cf_result' style='font-size:28px;font-weight:900;color:#fff;min-height:36px;margin-bottom:6px;letter-spacing:1px;'>&nbsp;</div>" +
+          "<div id='__cf_sub' style='font-size:13px;color:#666;margin-bottom:22px;min-height:18px;'>&nbsp;</div>" +
+
+          // Flip button
+          "<button id='__cf_flip_btn' style='width:100%;padding:14px 0;border-radius:12px;background:#bb0000;color:#fff;border:none;font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.5px;'>FLIP</button>" +
+
+          // History
+          "<div id='__cf_history' style='margin-top:18px;min-height:24px;'></div>" +
+        "</div>";
+
+      document.body.appendChild(coinFlipOverlayEl);
+      document.getElementById("__cf_close").addEventListener("click", closeCoinFlip);
+      coinFlipOverlayEl.addEventListener("click", function(e){ if (e.target === coinFlipOverlayEl) closeCoinFlip(); });
+      document.getElementById("__cf_flip_btn").addEventListener("click", doFlip);
+    }
+
+    function doFlip() {
+      if (coinFlipping) return;
+      coinFlipping = true;
+
+      var btn      = document.getElementById("__cf_flip_btn");
+      var coinEl   = document.getElementById("__cf_coin");
+      var resultEl = document.getElementById("__cf_result");
+      var subEl    = document.getElementById("__cf_sub");
+      var faceEl   = document.getElementById("__cf_coin_face");
+
+      if (btn)      { btn.disabled = true; btn.style.opacity = "0.5"; }
+      if (resultEl) resultEl.innerHTML = "&nbsp;";
+      if (subEl)    subEl.innerHTML    = "&nbsp;";
+
+      // Randomise while spinning — face shows ? during flight
+      if (faceEl) faceEl.textContent = "?";
+      if (coinEl) {
+        coinEl.style.background = "linear-gradient(135deg,#333,#111)";
+        coinEl.style.borderColor = "#555";
+        coinEl.classList.remove("flipping");
+        void coinEl.offsetWidth; // reflow to restart animation
+        coinEl.classList.add("flipping");
+      }
+
+      // Haptic nudge on devices that support it
+      try { if (navigator.vibrate) navigator.vibrate([30, 40, 30]); } catch(e) {}
+
+      setTimeout(function() {
+        var isHeads = Math.random() < 0.5;
+        var label   = isHeads ? "HEADS" : "TAILS";
+
+        // Themed faces: Heads = Buckeye leaf, Tails = Block O
+        var face    = isHeads ? "\uD83C\uDF42" : "\uD83C\uDD7E\uFE0F";
+        var bgColor = isHeads
+          ? "linear-gradient(135deg,#bb0000,#8a0000)"
+          : "linear-gradient(135deg,#555,#2a2a2a)";
+        var borderColor = isHeads ? "#ff4444" : "#888";
+
+        if (faceEl) faceEl.textContent = face;
+        if (coinEl) {
+          coinEl.style.background    = bgColor;
+          coinEl.style.borderColor   = borderColor;
+          coinEl.style.boxShadow     = isHeads
+            ? "0 4px 20px rgba(187,0,0,0.5)"
+            : "0 4px 20px rgba(100,100,100,0.4)";
+        }
+        if (resultEl) resultEl.textContent = label;
+
+        // Add to session history (max 5)
+        coinFlipHistory.unshift(label);
+        if (coinFlipHistory.length > 5) coinFlipHistory.pop();
+        renderCoinHistory();
+
+        // Fun sub-label
+        var quips = isHeads
+          ? ["Buckeyes win the flip! \uD83C\uDFC6", "Scarlet side up!", "O-H!", "That's a Buckeye!", "Easy money \uD83D\uDCB0"]
+          : ["Gray side up.", "Tails never fails?", "I-O!", "Flip again?", "Oof. Try again."];
+        if (subEl) subEl.textContent = quips[Math.floor(Math.random() * quips.length)];
+
+        if (btn) { btn.disabled = false; btn.style.opacity = "1"; btn.textContent = "FLIP AGAIN"; }
+        coinFlipping = false;
+
+        try { if (navigator.vibrate) navigator.vibrate(50); } catch(e) {}
+      }, 1150);
+    }
+
+    function renderCoinHistory() {
+      var el = document.getElementById("__cf_history");
+      if (!el || coinFlipHistory.length === 0) return;
+      var dots = coinFlipHistory.map(function(r) {
+        var color = r === "HEADS" ? "#bb0000" : "#666";
+        var label = r === "HEADS" ? "\uD83C\uDF42" : "\uD83C\uDD7E\uFE0F";
+        return "<span title='" + r + "' style='display:inline-block;width:28px;height:28px;border-radius:50%;background:" + color + ";line-height:28px;font-size:14px;margin:0 3px;'>" + label + "</span>";
+      }).join("");
+      el.innerHTML = "<div style='font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>Last " + coinFlipHistory.length + " flips</div>" + dots;
+    }
+
+    function closeCoinFlip() { if (coinFlipOverlayEl) coinFlipOverlayEl.style.display = "none"; }
+    function openCoinFlip() {
+      if (!coinFlipOverlayEl) buildCoinFlipOverlay();
+      else coinFlipOverlayEl.style.display = "flex";
+      // Reset to ready state each open
+      var resultEl = document.getElementById("__cf_result");
+      var subEl    = document.getElementById("__cf_sub");
+      var btn      = document.getElementById("__cf_flip_btn");
+      var faceEl   = document.getElementById("__cf_coin_face");
+      var coinEl   = document.getElementById("__cf_coin");
+      if (resultEl) resultEl.innerHTML = "&nbsp;";
+      if (subEl)    subEl.innerHTML    = "&nbsp;";
+      if (btn)      { btn.disabled = false; btn.style.opacity = "1"; btn.textContent = "FLIP"; }
+      if (faceEl)   faceEl.textContent = "\uD83C\uDF42";
+      if (coinEl) {
+        coinEl.classList.remove("flipping");
+        coinEl.style.background   = "linear-gradient(135deg,#bb0000,#8a0000)";
+        coinEl.style.borderColor  = "#ff4444";
+        coinEl.style.boxShadow    = "0 4px 20px rgba(187,0,0,0.5)";
+      }
+      renderCoinHistory();
+    }
+
+    // =========================================================
     // RADIAL FAB  — container-based so it never clips edges
     //
-    // Layout strategy:
-    //  • fabWrap sits at bottom-right as a zero-size anchor.
-    //    The main FAB is centered on that anchor point.
-    //  • Ring buttons are absolute children offset by RADIUS
-    //    in polar coords relative to the FAB center.
-    //  • Resting bottom is high enough that the FAB fully
-    //    clears the bottom tab bar + browser chrome.
-    //  • On open, fabWrap translates only a small nudge —
-    //    the buttons fan out purely via their polar offsets,
-    //    so no overlap regardless of count.
-    //
-    // Arc design (angles from positive-X axis, CCW):
-    //   100° = mostly up, slight left   (Weather)
-    //   158° = upper-left diagonal      (Log Out)
-    //   216° = lower-left diagonal      (Debug)
-    //
-    //  RADIUS = 90px gives plenty of breathing room between
-    //  the 44px buttons (centres are 90px apart, edges ~46px).
-    //
-    //  right:30px on the wrapper keeps the FAB fully inset
-    //  from the screen edge on all iPhone sizes.
+    // Arc angles now spread across 4 buttons (80°–230°):
+    //   80°  = upper-right area  (Coin Flip)
+    //   130° = upper-left        (Weather)
+    //   180° = straight left     (Log Out)
+    //   230° = lower-left        (Debug)
     // =========================================================
     function buildFAB() {
       // --- Styles ---
@@ -316,16 +457,12 @@
       ].join("\n");
       document.head.appendChild(style);
 
-      // --- Wrapper (fixed anchor, zero visual size) ---
-      // bottom:110px clears the ~80px tab bar + browser URL bar.
-      // right:30px keeps the 44px FAB fully visible on all iPhones
-      // (22px half-button + 8px inset from edge = comfortable clearance).
       fabWrap = document.createElement("div");
       fabWrap.id = "__fab_wrap";
       fabWrap.style.cssText = [
         "position:fixed",
         "bottom:110px",
-        "right:30px",   // 30px anchor → FAB edge sits ~8px from screen edge
+        "right:30px",
         "width:0","height:0",
         "z-index:99998",
         "pointer-events:none"
@@ -338,7 +475,7 @@
       fabMain.setAttribute("aria-label", "Open shop menu");
       fabMain.style.cssText = [
         "position:absolute",
-        "bottom:-22px","right:-22px",   // center 44px button on wrap origin
+        "bottom:-22px","right:-22px",
         "width:44px","height:44px",
         "background:#bb0000","color:#fff",
         "border:2px solid rgba(255,255,255,0.18)","border-radius:50%",
@@ -374,16 +511,15 @@
       fabWrap.appendChild(fabMain);
 
       // --- Ring button definitions ---
-      // Angles from positive-X axis, counter-clockwise.
-      // Arc spans 100°–216° so all buttons stay above and to the
-      // left of the FAB — away from the right edge and nav bar.
+      // 4 buttons spread across 80°–230° arc
       var ringItems = [
-        { id: "__fab_weather", icon: "\u26C5",       label: "Weather", angle: 100, action: openWeather },
-        { id: "__fab_logout",  icon: "\uD83D\uDD13", label: "Log Out", angle: 158, action: openLogoutDialog },
-        { id: "__fab_debug",   icon: "\uD83D\uDC1E", label: "Debug",   angle: 216, action: openDebug }
+        { id: "__fab_coinflip", icon: "\uD83E\uDE99", label: "Coin Flip", angle: 80,  action: openCoinFlip },
+        { id: "__fab_weather",  icon: "\u26C5",       label: "Weather",   angle: 130, action: openWeather },
+        { id: "__fab_logout",   icon: "\uD83D\uDD13", label: "Log Out",   angle: 180, action: openLogoutDialog },
+        { id: "__fab_debug",    icon: "\uD83D\uDC1E", label: "Debug",     angle: 230, action: openDebug }
       ];
 
-      var RADIUS = 90; // px — enough spacing between 44px buttons
+      var RADIUS = 90;
 
       ringItems.forEach(function(item, i) {
         var btn = document.createElement("button");
@@ -392,8 +528,8 @@
         btn.setAttribute("aria-label", item.label);
 
         var rad = item.angle * Math.PI / 180;
-        var dx = Math.round(Math.cos(rad) * RADIUS); // +right / -left
-        var dy = Math.round(Math.sin(rad) * RADIUS); // +up   / -down
+        var dx = Math.round(Math.cos(rad) * RADIUS);
+        var dy = Math.round(Math.sin(rad) * RADIUS);
 
         var rightPx  = -22 - dx;
         var bottomPx = -22 + dy;
@@ -437,7 +573,6 @@
 
     function openRing() {
       ringOpen = true;
-      // Tiny nudge — the arc geometry does the real work
       fabWrap.style.transform = "translate(-10px, -10px)";
 
       ringEls.forEach(function(btn, i) {
