@@ -64,12 +64,21 @@
     var ringEls   = [];
     var fabWrap   = null;
     var fabMain   = null;
+    var preLoginDebugBtn = null;  // standalone debug btn shown before login
 
     function refreshPanel() {
       var newErrors = __logs.filter(function(l){ return l.level === "error" || l.level === "warn"; }).length;
       if (badgeEl) {
         badgeEl.textContent = newErrors > 0 ? newErrors : "";
         badgeEl.style.display = newErrors > 0 ? "flex" : "none";
+      }
+      // Also badge the pre-login debug button
+      if (preLoginDebugBtn) {
+        var preB = document.getElementById("__pre_debug_badge");
+        if (preB) {
+          preB.textContent = newErrors > 0 ? newErrors : "";
+          preB.style.display = newErrors > 0 ? "flex" : "none";
+        }
       }
       if (panelOpen && listEl) renderLogs();
     }
@@ -262,6 +271,8 @@
             if (code) code.value = "";
           } catch(e) { window.location.reload(); }
         }
+        // Hide full FAB, show pre-login debug button again
+        lockFAB();
       });
       logoutDialogEl.addEventListener("click", function(e){ if (e.target === logoutDialogEl) closeLogoutDialog(); });
     }
@@ -577,14 +588,67 @@
     }
 
     // =========================================================
-    // RADIAL FAB  — container-based so it never clips edges
+    // RADIAL FAB
     //
-    // Arc angles spread across 4 buttons (80°–230°):
-    //   80°  = upper-right area  (Coin Flip)
-    //   130° = upper-left        (Weather)
-    //   180° = straight left     (Log Out)
-    //   230° = lower-left        (Debug)
+    // PRE-LOGIN:  Only a small standalone 🐛 debug button is
+    //             shown (bottom-right corner). The full Buckeye
+    //             FAB stays hidden so the login screen is clean.
+    //
+    // POST-LOGIN: Call window.__fabUnlock() (triggered from
+    //             shared.js checkCode success path) to hide the
+    //             pre-login debug button and reveal the full
+    //             Buckeye radial FAB with all ring buttons.
+    //
+    // LOGOUT:     Call window.__fabLock() to revert to the
+    //             pre-login state.
+    //
+    // Arc angles (80°–230°):
+    //   80°  = upper-right (Coin Flip)
+    //   130° = upper-left  (Weather)
+    //   180° = straight left (Log Out)
+    //   230° = lower-left  (Debug)
     // =========================================================
+
+    // ---- Pre-login standalone debug button ----
+    function buildPreLoginDebugBtn() {
+      preLoginDebugBtn = document.createElement("button");
+      preLoginDebugBtn.id = "__pre_debug_btn";
+      preLoginDebugBtn.setAttribute("aria-label", "Open debug console");
+      preLoginDebugBtn.style.cssText = [
+        "position:fixed",
+        "bottom:30px","right:30px",
+        "width:44px","height:44px",
+        "background:#1a1a2e","color:#fff",
+        "border:2px solid #555","border-radius:50%",
+        "font-size:20px","cursor:pointer",
+        "display:flex","align-items:center","justify-content:center",
+        "box-shadow:0 2px 14px rgba(0,0,0,0.65)",
+        "z-index:99998",
+        "padding:0"
+      ].join(";");
+      preLoginDebugBtn.textContent = "\uD83D\uDC1E";
+
+      // Error badge
+      var preBadge = document.createElement("span");
+      preBadge.id = "__pre_debug_badge";
+      preBadge.style.cssText = [
+        "position:absolute","top:-5px","right:-5px",
+        "background:#ef4444","color:#fff",
+        "border-radius:50%","width:18px","height:18px",
+        "font-size:10px","font-family:sans-serif",
+        "display:none","align-items:center","justify-content:center",
+        "font-weight:bold","pointer-events:none"
+      ].join(";");
+      preLoginDebugBtn.appendChild(preBadge);
+
+      preLoginDebugBtn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        openDebug();
+      });
+
+      document.body.appendChild(preLoginDebugBtn);
+    }
+
     function buildFAB() {
       var style = document.createElement("style");
       style.textContent = [
@@ -613,7 +677,8 @@
         "right:30px",
         "width:0","height:0",
         "z-index:99998",
-        "pointer-events:none"
+        "pointer-events:none",
+        "display:none"   // hidden until login
       ].join(";");
       document.body.appendChild(fabWrap);
 
@@ -713,7 +778,30 @@
       document.addEventListener("click", function() {
         if (ringOpen) closeRing();
       });
+
+      // Build the pre-login debug button (shown immediately)
+      buildPreLoginDebugBtn();
     }
+
+    // ---- Called after Scarlet Key is accepted ----
+    function unlockFAB() {
+      // Hide the pre-login debug button
+      if (preLoginDebugBtn) preLoginDebugBtn.style.display = "none";
+      // Show the full Buckeye FAB
+      if (fabWrap) fabWrap.style.display = "block";
+    }
+    window.__fabUnlock = unlockFAB;
+
+    // ---- Called after logout — revert to pre-login state ----
+    function lockFAB() {
+      // Close ring if open
+      if (ringOpen) closeRing();
+      // Hide the full FAB
+      if (fabWrap) fabWrap.style.display = "none";
+      // Show the pre-login debug button again
+      if (preLoginDebugBtn) preLoginDebugBtn.style.display = "flex";
+    }
+    window.__fabLock = lockFAB;
 
     function openRing() {
       ringOpen = true;
