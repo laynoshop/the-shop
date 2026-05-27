@@ -277,6 +277,93 @@
     var coinFlipHistory   = [];   // session history, max 5
     var coinFlipping      = false;
 
+    // --- Firebase helpers (lazy — waits for window.db set by app.js) ---
+    function getCFRef() {
+      try {
+        var db = window.db;
+        if (!db) return null;
+        // Support both modular (doc) and compat (.collection) Firestore SDKs
+        if (typeof window.doc === "function" && typeof window.collection === "function") {
+          return window.doc(db, "coinFlip", "record");
+        }
+        if (db.collection) {
+          return db.collection("coinFlip").doc("record");
+        }
+      } catch(e) {}
+      return null;
+    }
+
+    function cfIncrement(field) {
+      // Atomically increment heads or tails counter in Firestore
+      try {
+        var ref = getCFRef();
+        if (!ref) return;
+        // Modular SDK (v9+)
+        if (typeof window.runTransaction === "function" && typeof window.getDoc === "function") {
+          window.runTransaction(window.db, function(tx) {
+            return window.getDoc(ref).then(function(snap) {
+              var data = snap.exists() ? snap.data() : { heads: 0, tails: 0 };
+              var update = { heads: data.heads || 0, tails: data.tails || 0 };
+              update[field] = (update[field] || 0) + 1;
+              tx.set(ref, update);
+            });
+          }).then(function() {
+            cfFetchRecord();
+          }).catch(function(e) { console.warn("CF increment err:", e); });
+        }
+        // Compat SDK (v8)
+        else if (ref.firestore && typeof ref.firestore.runTransaction === "function") {
+          ref.firestore.runTransaction(function(tx) {
+            return tx.get(ref).then(function(snap) {
+              var data = snap.exists ? snap.data() : { heads: 0, tails: 0 };
+              var update = { heads: data.heads || 0, tails: data.tails || 0 };
+              update[field] = (update[field] || 0) + 1;
+              tx.set(ref, update);
+            });
+          }).then(function() {
+            cfFetchRecord();
+          }).catch(function(e) { console.warn("CF increment err:", e); });
+        }
+      } catch(e) { console.warn("CF Firebase err:", e); }
+    }
+
+    function cfFetchRecord() {
+      try {
+        var ref = getCFRef();
+        if (!ref) { renderCFRecord(null); return; }
+        // Modular SDK
+        if (typeof window.getDoc === "function") {
+          window.getDoc(ref).then(function(snap) {
+            renderCFRecord(snap.exists() ? snap.data() : null);
+          }).catch(function() { renderCFRecord(null); });
+        }
+        // Compat SDK
+        else if (typeof ref.get === "function") {
+          ref.get().then(function(snap) {
+            renderCFRecord(snap.exists ? snap.data() : null);
+          }).catch(function() { renderCFRecord(null); });
+        }
+        else { renderCFRecord(null); }
+      } catch(e) { renderCFRecord(null); }
+    }
+
+    function renderCFRecord(data) {
+      var el = document.getElementById("__cf_record");
+      if (!el) return;
+      if (!data) { el.innerHTML = ""; return; }
+      var h = data.heads || 0;
+      var t = data.tails || 0;
+      var hLeading = h > t;
+      var tLeading = t > h;
+      var hStyle = hLeading ? "color:#ff4444;font-weight:900;font-size:16px;" : "color:#aaa;font-weight:700;font-size:15px;";
+      var tStyle = tLeading ? "color:#aaa;font-weight:900;font-size:16px;" : "color:#555;font-weight:700;font-size:15px;";
+      var dashStyle = "color:#444;font-size:13px;margin:0 6px;";
+      el.innerHTML =
+        "<span style='" + hStyle + "'>Heads " + h + "</span>" +
+        "<span style='" + dashStyle + "'>\u2013</span>" +
+        "<span style='" + tStyle + "'>" + t + " Tails</span>";
+    }
+
     function buildCoinFlipOverlay() {
       // Inject coin flip keyframe styles once
       var cfStyle = document.createElement("style");
@@ -303,12 +390,15 @@
           "<button id='__cf_close' style='position:absolute;top:12px;right:14px;background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;'>\u2715</button>" +
           "<div style='font-size:13px;color:#bb0000;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:18px;'>\uD83E\uDE99 Coin Flip</div>" +
 
-          // Coin
-          "<div style='perspective:600px;margin-bottom:20px;'>" +
-            "<div id='__cf_coin' style='width:110px;height:110px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:48px;background:linear-gradient(135deg,#bb0000,#8a0000);border:3px solid #ff4444;box-shadow:0 4px 20px rgba(187,0,0,0.5);'>" +
-              "<span id='__cf_coin_face'>\uD83C\uDF42</span>" +
+          // Coin — shows real images, falls back gracefully
+          "<div style='perspective:600px;margin-bottom:16px;'>" +
+            "<div id='__cf_coin' style='width:110px;height:110px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#bb0000,#8a0000);border:3px solid #ff4444;box-shadow:0 4px 20px rgba(187,0,0,0.5);overflow:hidden;'>" +
+              "<img id='__cf_coin_img' src='buckeye-O.png' alt='Heads' style='width:80px;height:80px;object-fit:contain;pointer-events:none;' />" +
             "</div>" +
           "</div>" +
+
+          // All-time record scoreboard
+          "<div id='__cf_record' style='font-size:14px;letter-spacing:0.3px;margin-bottom:14px;min-height:20px;'></div>" +
 
           // Result label
           "<div id='__cf_result' style='font-size:28px;font-weight:900;color:#fff;min-height:36px;margin-bottom:6px;letter-spacing:1px;'>&nbsp;</div>" +
@@ -317,7 +407,7 @@
           // Flip button
           "<button id='__cf_flip_btn' style='width:100%;padding:14px 0;border-radius:12px;background:#bb0000;color:#fff;border:none;font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.5px;'>FLIP</button>" +
 
-          // History
+          // Session history
           "<div id='__cf_history' style='margin-top:18px;min-height:24px;'></div>" +
         "</div>";
 
@@ -333,57 +423,64 @@
 
       var btn      = document.getElementById("__cf_flip_btn");
       var coinEl   = document.getElementById("__cf_coin");
+      var coinImg  = document.getElementById("__cf_coin_img");
       var resultEl = document.getElementById("__cf_result");
       var subEl    = document.getElementById("__cf_sub");
-      var faceEl   = document.getElementById("__cf_coin_face");
 
       if (btn)      { btn.disabled = true; btn.style.opacity = "0.5"; }
       if (resultEl) resultEl.innerHTML = "&nbsp;";
       if (subEl)    subEl.innerHTML    = "&nbsp;";
 
-      // Randomise while spinning — face shows ? during flight
-      if (faceEl) faceEl.textContent = "?";
+      // Spinning state — hide image, show neutral spinner look
+      if (coinImg)  coinImg.style.opacity = "0";
       if (coinEl) {
         coinEl.style.background = "linear-gradient(135deg,#333,#111)";
         coinEl.style.borderColor = "#555";
+        coinEl.style.boxShadow = "0 4px 20px rgba(80,80,80,0.4)";
         coinEl.classList.remove("flipping");
-        void coinEl.offsetWidth; // reflow to restart animation
+        void coinEl.offsetWidth;
         coinEl.classList.add("flipping");
       }
 
-      // Haptic nudge on devices that support it
+      // Haptic nudge
       try { if (navigator.vibrate) navigator.vibrate([30, 40, 30]); } catch(e) {}
 
       setTimeout(function() {
         var isHeads = Math.random() < 0.5;
         var label   = isHeads ? "HEADS" : "TAILS";
-
-        // Themed faces: Heads = Buckeye leaf, Tails = Block O
-        var face    = isHeads ? "\uD83C\uDF42" : "\uD83C\uDD7E\uFE0F";
+        var imgSrc  = isHeads ? "buckeye-O.png" : "buckeye-leaf.png";
         var bgColor = isHeads
           ? "linear-gradient(135deg,#bb0000,#8a0000)"
-          : "linear-gradient(135deg,#555,#2a2a2a)";
-        var borderColor = isHeads ? "#ff4444" : "#888";
+          : "linear-gradient(135deg,#3a3a2a,#222210)";
+        var borderColor = isHeads ? "#ff4444" : "#a8a060";
+        var shadowColor = isHeads
+          ? "0 4px 20px rgba(187,0,0,0.5)"
+          : "0 4px 20px rgba(140,130,60,0.4)";
 
-        if (faceEl) faceEl.textContent = face;
+        if (coinImg) {
+          coinImg.src = imgSrc;
+          coinImg.alt = label;
+          coinImg.style.opacity = "1";
+        }
         if (coinEl) {
-          coinEl.style.background    = bgColor;
-          coinEl.style.borderColor   = borderColor;
-          coinEl.style.boxShadow     = isHeads
-            ? "0 4px 20px rgba(187,0,0,0.5)"
-            : "0 4px 20px rgba(100,100,100,0.4)";
+          coinEl.style.background   = bgColor;
+          coinEl.style.borderColor  = borderColor;
+          coinEl.style.boxShadow    = shadowColor;
         }
         if (resultEl) resultEl.textContent = label;
 
-        // Add to session history (max 5)
+        // Increment Firebase record
+        cfIncrement(isHeads ? "heads" : "tails");
+
+        // Session history (max 5)
         coinFlipHistory.unshift(label);
         if (coinFlipHistory.length > 5) coinFlipHistory.pop();
         renderCoinHistory();
 
-        // Fun sub-label
+        // Fun quip
         var quips = isHeads
           ? ["Buckeyes win the flip! \uD83C\uDFC6", "Scarlet side up!", "O-H!", "That's a Buckeye!", "Easy money \uD83D\uDCB0"]
-          : ["Gray side up.", "Tails never fails?", "I-O!", "Flip again?", "Oof. Try again."];
+          : ["Leaf side up.", "Tails never fails?", "I-O!", "Flip again?", "Oof. Try again."];
         if (subEl) subEl.textContent = quips[Math.floor(Math.random() * quips.length)];
 
         if (btn) { btn.disabled = false; btn.style.opacity = "1"; btn.textContent = "FLIP AGAIN"; }
@@ -397,9 +494,15 @@
       var el = document.getElementById("__cf_history");
       if (!el || coinFlipHistory.length === 0) return;
       var dots = coinFlipHistory.map(function(r) {
-        var color = r === "HEADS" ? "#bb0000" : "#666";
-        var label = r === "HEADS" ? "\uD83C\uDF42" : "\uD83C\uDD7E\uFE0F";
-        return "<span title='" + r + "' style='display:inline-block;width:28px;height:28px;border-radius:50%;background:" + color + ";line-height:28px;font-size:14px;margin:0 3px;'>" + label + "</span>";
+        var isH = r === "HEADS";
+        return "<span title='" + r + "' style='display:inline-flex;align-items:center;justify-content:center;" +
+          "width:30px;height:30px;border-radius:50%;overflow:hidden;" +
+          "background:" + (isH ? "#8a0000" : "#2a2a18") + ";" +
+          "border:2px solid " + (isH ? "#ff4444" : "#a8a060") + ";" +
+          "margin:0 3px;'>" +
+          "<img src='" + (isH ? "buckeye-O.png" : "buckeye-leaf.png") + "' " +
+          "style='width:20px;height:20px;object-fit:contain;' alt='" + r + "' />" +
+          "</span>";
       }).join("");
       el.innerHTML = "<div style='font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>Last " + coinFlipHistory.length + " flips</div>" + dots;
     }
@@ -412,12 +515,12 @@
       var resultEl = document.getElementById("__cf_result");
       var subEl    = document.getElementById("__cf_sub");
       var btn      = document.getElementById("__cf_flip_btn");
-      var faceEl   = document.getElementById("__cf_coin_face");
+      var coinImg  = document.getElementById("__cf_coin_img");
       var coinEl   = document.getElementById("__cf_coin");
       if (resultEl) resultEl.innerHTML = "&nbsp;";
       if (subEl)    subEl.innerHTML    = "&nbsp;";
       if (btn)      { btn.disabled = false; btn.style.opacity = "1"; btn.textContent = "FLIP"; }
-      if (faceEl)   faceEl.textContent = "\uD83C\uDF42";
+      if (coinImg)  { coinImg.src = "buckeye-O.png"; coinImg.alt = "Heads"; coinImg.style.opacity = "1"; }
       if (coinEl) {
         coinEl.classList.remove("flipping");
         coinEl.style.background   = "linear-gradient(135deg,#bb0000,#8a0000)";
@@ -425,19 +528,20 @@
         coinEl.style.boxShadow    = "0 4px 20px rgba(187,0,0,0.5)";
       }
       renderCoinHistory();
+      // Fetch live record from Firebase
+      cfFetchRecord();
     }
 
     // =========================================================
     // RADIAL FAB  — container-based so it never clips edges
     //
-    // Arc angles now spread across 4 buttons (80°–230°):
+    // Arc angles spread across 4 buttons (80°–230°):
     //   80°  = upper-right area  (Coin Flip)
     //   130° = upper-left        (Weather)
     //   180° = straight left     (Log Out)
     //   230° = lower-left        (Debug)
     // =========================================================
     function buildFAB() {
-      // --- Styles ---
       var style = document.createElement("style");
       style.textContent = [
         "@keyframes __fab_pop_in {",
@@ -469,7 +573,6 @@
       ].join(";");
       document.body.appendChild(fabWrap);
 
-      // --- Main FAB button ---
       fabMain = document.createElement("button");
       fabMain.id = "__fab_main";
       fabMain.setAttribute("aria-label", "Open shop menu");
@@ -510,8 +613,6 @@
       fabMain.appendChild(badgeEl);
       fabWrap.appendChild(fabMain);
 
-      // --- Ring button definitions ---
-      // 4 buttons spread across 80°–230° arc
       var ringItems = [
         { id: "__fab_coinflip", icon: "\uD83E\uDE99", label: "Coin Flip", angle: 80,  action: openCoinFlip },
         { id: "__fab_weather",  icon: "\u26C5",       label: "Weather",   angle: 130, action: openWeather },
@@ -521,7 +622,7 @@
 
       var RADIUS = 90;
 
-      ringItems.forEach(function(item, i) {
+      ringItems.forEach(function(item) {
         var btn = document.createElement("button");
         btn.id = item.id;
         btn.className = "__fab_ring_btn";
@@ -560,7 +661,6 @@
         ringEls.push(btn);
       });
 
-      // --- Toggle logic ---
       fabMain.addEventListener("click", function(e) {
         e.stopPropagation();
         if (ringOpen) closeRing(); else openRing();
@@ -574,7 +674,6 @@
     function openRing() {
       ringOpen = true;
       fabWrap.style.transform = "translate(-10px, -10px)";
-
       ringEls.forEach(function(btn, i) {
         btn.style.display = "flex";
         btn.style.opacity = "0";
@@ -588,7 +687,6 @@
     function closeRing() {
       ringOpen = false;
       fabWrap.style.transform = "translate(0, 0)";
-
       ringEls.forEach(function(btn) {
         btn.style.display = "none";
         btn.style.opacity = "0";
