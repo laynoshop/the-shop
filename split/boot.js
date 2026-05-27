@@ -276,6 +276,7 @@
     var coinFlipOverlayEl = null;
     var coinFlipHistory   = [];   // session history, max 5
     var coinFlipping      = false;
+    var cfRetryTimer      = null; // retry timer handle
 
     // --- Firebase helpers (lazy — waits for window.db set by app.js) ---
     function getCFRef() {
@@ -308,7 +309,7 @@
               tx.set(ref, update);
             });
           }).then(function() {
-            cfFetchRecord();
+            cfFetchRecord(false);
           }).catch(function(e) { console.warn("CF increment err:", e); });
         }
         // Compat SDK (v8)
@@ -321,30 +322,60 @@
               tx.set(ref, update);
             });
           }).then(function() {
-            cfFetchRecord();
+            cfFetchRecord(false);
           }).catch(function(e) { console.warn("CF increment err:", e); });
         }
       } catch(e) { console.warn("CF Firebase err:", e); }
     }
 
-    function cfFetchRecord() {
-      try {
-        var ref = getCFRef();
-        if (!ref) { renderCFRecord(null); return; }
-        // Modular SDK
-        if (typeof window.getDoc === "function") {
-          window.getDoc(ref).then(function(snap) {
-            renderCFRecord(snap.exists() ? snap.data() : null);
-          }).catch(function() { renderCFRecord(null); });
+    // withRetry: if window.db not ready yet, show a "Loading…" placeholder
+    // and retry up to ~10 times with 400ms gaps before giving up silently.
+    function cfFetchRecord(withRetry) {
+      if (withRetry === undefined) withRetry = true;
+
+      // Clear any pending retry
+      if (cfRetryTimer) { clearTimeout(cfRetryTimer); cfRetryTimer = null; }
+
+      var ref = getCFRef();
+
+      if (!ref) {
+        // Show placeholder so the user sees something while Firebase wakes up
+        var el = document.getElementById("__cf_record");
+        if (el && withRetry) {
+          el.innerHTML = "<span style='color:#555;font-size:13px;'>Loading record\u2026</span>";
         }
-        // Compat SDK
-        else if (typeof ref.get === "function") {
-          ref.get().then(function(snap) {
-            renderCFRecord(snap.exists ? snap.data() : null);
-          }).catch(function() { renderCFRecord(null); });
+        if (withRetry) {
+          // Retry up to 10 times (every 400 ms = 4 seconds total)
+          var attempts = (cfFetchRecord._attempts || 0) + 1;
+          cfFetchRecord._attempts = attempts;
+          if (attempts <= 10) {
+            cfRetryTimer = setTimeout(function() { cfFetchRecord(true); }, 400);
+          } else {
+            cfFetchRecord._attempts = 0; // reset for next open
+            renderCFRecord(null);
+          }
+        } else {
+          renderCFRecord(null);
         }
-        else { renderCFRecord(null); }
-      } catch(e) { renderCFRecord(null); }
+        return;
+      }
+
+      // db is ready — reset attempt counter and fetch
+      cfFetchRecord._attempts = 0;
+
+      // Modular SDK
+      if (typeof window.getDoc === "function") {
+        window.getDoc(ref).then(function(snap) {
+          renderCFRecord(snap.exists() ? snap.data() : { heads: 0, tails: 0 });
+        }).catch(function() { renderCFRecord(null); });
+      }
+      // Compat SDK
+      else if (typeof ref.get === "function") {
+        ref.get().then(function(snap) {
+          renderCFRecord(snap.exists ? snap.data() : { heads: 0, tails: 0 });
+        }).catch(function() { renderCFRecord(null); });
+      }
+      else { renderCFRecord(null); }
     }
 
     function renderCFRecord(data) {
@@ -398,7 +429,9 @@
           "</div>" +
 
           // All-time record scoreboard
-          "<div id='__cf_record' style='font-size:14px;letter-spacing:0.3px;margin-bottom:14px;min-height:20px;'></div>" +
+          "<div id='__cf_record' style='font-size:14px;letter-spacing:0.3px;margin-bottom:14px;min-height:20px;'>" +
+            "<span style='color:#555;font-size:13px;'>Loading record\u2026</span>" +
+          "</div>" +
 
           // Result label
           "<div id='__cf_result' style='font-size:28px;font-weight:900;color:#fff;min-height:36px;margin-bottom:6px;letter-spacing:1px;'>&nbsp;</div>" +
@@ -507,7 +540,11 @@
       el.innerHTML = "<div style='font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>Last " + coinFlipHistory.length + " flips</div>" + dots;
     }
 
-    function closeCoinFlip() { if (coinFlipOverlayEl) coinFlipOverlayEl.style.display = "none"; }
+    function closeCoinFlip() {
+      if (cfRetryTimer) { clearTimeout(cfRetryTimer); cfRetryTimer = null; }
+      cfFetchRecord._attempts = 0;
+      if (coinFlipOverlayEl) coinFlipOverlayEl.style.display = "none";
+    }
     function openCoinFlip() {
       if (!coinFlipOverlayEl) buildCoinFlipOverlay();
       else coinFlipOverlayEl.style.display = "flex";
@@ -528,8 +565,9 @@
         coinEl.style.boxShadow    = "0 4px 20px rgba(187,0,0,0.5)";
       }
       renderCoinHistory();
-      // Fetch live record from Firebase
-      cfFetchRecord();
+      // Reset attempt counter and kick off fetch with retry enabled
+      cfFetchRecord._attempts = 0;
+      cfFetchRecord(true);
     }
 
     // =========================================================
