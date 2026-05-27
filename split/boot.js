@@ -588,6 +588,34 @@
     }
 
     // =========================================================
+    // DOMINOS PIZZA SHORTCUT
+    // =========================================================
+    function openDominos() {
+      // Try the Domino's app deep link first; fall back to the website
+      var appLink  = "dominos://";
+      var webLink  = "https://www.dominos.com";
+      var start    = Date.now();
+      var fallback = setTimeout(function() {
+        if (Date.now() - start < 2000) {
+          window.open(webLink, "_blank");
+        }
+      }, 1200);
+      // Attempt to launch the app via an invisible iframe
+      var iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden;";
+      iframe.src = appLink;
+      document.body.appendChild(iframe);
+      setTimeout(function() {
+        try { document.body.removeChild(iframe); } catch(e) {}
+      }, 2000);
+      // If the page loses focus the app opened — cancel the web fallback
+      window.addEventListener("blur", function onBlur() {
+        clearTimeout(fallback);
+        window.removeEventListener("blur", onBlur);
+      }, { once: true });
+    }
+
+    // =========================================================
     // RADIAL FAB
     //
     // PRE-LOGIN:  Only a small standalone 🐛 debug button is
@@ -605,6 +633,7 @@
     // Arc angles (80°–230°):
     //   80°  = upper-right (Coin Flip)
     //   130° = upper-left  (Weather)
+    //   155° = left        (Domino's 🍕)
     //   180° = straight left (Log Out)
     //   230° = lower-left  (Debug)
     // =========================================================
@@ -723,10 +752,11 @@
       fabWrap.appendChild(fabMain);
 
       var ringItems = [
-        { id: "__fab_coinflip", icon: "\uD83E\uDE99", label: "Coin Flip", angle: 80,  action: openCoinFlip },
-        { id: "__fab_weather",  icon: "\u26C5",       label: "Weather",   angle: 130, action: openWeather },
-        { id: "__fab_logout",   icon: "\uD83D\uDD13", label: "Log Out",   angle: 180, action: openLogoutDialog },
-        { id: "__fab_debug",    icon: "\uD83D\uDC1E", label: "Debug",     angle: 230, action: openDebug }
+        { id: "__fab_coinflip", icon: "\uD83E\uDE99", label: "Coin Flip",   angle: 80,  action: openCoinFlip },
+        { id: "__fab_weather",  icon: "\u26C5",       label: "Weather",     angle: 130, action: openWeather },
+        { id: "__fab_dominos",  icon: "\uD83C\uDF55", label: "Domino's",    angle: 155, action: openDominos },
+        { id: "__fab_logout",   icon: "\uD83D\uDD13", label: "Log Out",     angle: 180, action: openLogoutDialog },
+        { id: "__fab_debug",    icon: "\uD83D\uDC1E", label: "Debug",       angle: 230, action: openDebug }
       ];
 
       var RADIUS = 90;
