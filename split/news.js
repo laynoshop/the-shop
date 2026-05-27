@@ -20,7 +20,7 @@
 (function () {
   "use strict";
 
-  const NEWS_CACHE_KEY   = "theShopTopNewsCache_v3"; // v3: bust base64-broken cache
+  const NEWS_CACHE_KEY   = "theShopTopNewsCache_v4"; // v4: bust stale sort-order cache
   const NEWS_FILTER_KEY  = "theShopTopNewsFilter_v1";
   const NEWS_CACHE_TTL_MS = 7 * 60 * 1000;
 
@@ -275,12 +275,11 @@
   function decodeAllOriginsResponse(json) {
     const raw = json?.contents || "";
     if (!raw) return "";
-    // base64 data URI: "data:...;base64,<payload>"
     const b64match = raw.match(/^data:[^;]+;base64,(.+)$/s);
     if (b64match) {
       try { return atob(b64match[1]); } catch { return ""; }
     }
-    return raw; // plain text — return as-is
+    return raw;
   }
 
   // -----------------------------
@@ -365,22 +364,16 @@
 
   // -----------------------------
   // Fetch: Eleven Warriors RSS
-  // Strategy:
-  //  1. Direct fetch (works if no CORS block)
-  //  2. AllOrigins /get endpoint → decode base64 → parse XML
-  //  3. rss2json.com → returns JSON (no XML parsing needed, no CORS)
   // -----------------------------
   async function fetchElevenWarriors() {
     const EW_RSS = "https://www.elevenwarriors.com/rss.xml";
 
-    // Attempt 1: direct
     try {
       const xml = await fetchTextWithTimeout(EW_RSS, 7000);
       const items = parseRssItems(xml, {source:"Eleven Warriors",_osuFeed:true});
       if (items.length) return items;
     } catch {}
 
-    // Attempt 2: AllOrigins /get (JSON wrapper, may base64-encode the body)
     try {
       const json = await fetchJsonWithTimeout(
         `https://api.allorigins.win/get?url=${encodeURIComponent(EW_RSS)}`, 9000
@@ -392,7 +385,6 @@
       }
     } catch {}
 
-    // Attempt 3: rss2json.com — returns clean JSON, bypasses CORS entirely
     try {
       const data = await fetchJsonWithTimeout(
         `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(EW_RSS)}&count=20`, 9000
@@ -483,7 +475,7 @@
     const deduped = dedupeNewsItems(tagged);
     // Sort purely newest → oldest (no sport score boosts)
     const sorted  = sortByNewest(deduped);
-    return sorted.slice(0, 15);
+    return sorted.slice(0, 30); // 30 articles so filters always have enough
   }
 
   // -----------------------------
