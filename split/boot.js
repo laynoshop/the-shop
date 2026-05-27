@@ -763,20 +763,19 @@
       ];
 
       var RADIUS = 115;
-var EDGE_SAFE = 14; // keeps buttons from bleeding off-screen
 
-ringItems.forEach(function(item) {
-  ...
-  var rad = item.angle * Math.PI / 180;
-  var dx = Math.round(Math.cos(rad) * RADIUS);
-  var dy = Math.round(Math.sin(rad) * RADIUS);
+      ringItems.forEach(function(item) {
+        var btn = document.createElement("button");
+        btn.id = item.id;
+        btn.className = "__fab_ring_btn";
+        btn.setAttribute("aria-label", item.label);
 
-  var rightPx  = -22 - dx;
-  var bottomPx = -22 + dy;
+        var rad = item.angle * Math.PI / 180;
+        var dx = Math.round(Math.cos(rad) * RADIUS);
+        var dy = Math.round(Math.sin(rad) * RADIUS);
 
-  // Clamp so no button ever goes past the right edge
-  rightPx = Math.max(rightPx, -44 + EDGE_SAFE);
-
+        var rightPx  = -22 - dx;
+        var bottomPx = -22 + dy;
 
         btn.style.cssText = [
           "position:absolute",
