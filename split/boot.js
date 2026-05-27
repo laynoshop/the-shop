@@ -704,7 +704,7 @@
       fabWrap.style.cssText = [
         "position:fixed",
         "bottom:110px",
-        "right:30px",
+        "right:24px",
         "width:0","height:0",
         "z-index:99998",
         "pointer-events:none",
