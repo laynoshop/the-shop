@@ -72,7 +72,6 @@
         badgeEl.textContent = newErrors > 0 ? newErrors : "";
         badgeEl.style.display = newErrors > 0 ? "flex" : "none";
       }
-      // Also badge the pre-login debug button
       if (preLoginDebugBtn) {
         var preB = document.getElementById("__pre_debug_badge");
         if (preB) {
@@ -143,6 +142,13 @@
     // WEATHER OVERLAY
     // =========================================================
     var weatherOverlayEl = null;
+    var radarMap         = null;   // Leaflet map instance
+    var radarLayer       = null;   // current RainViewer tile layer
+    var radarFrames      = [];     // array of {time, path} from RainViewer API
+    var radarFrameIdx    = 0;
+    var radarPlaying     = false;
+    var radarTimer       = null;
+
     var WMO_CODES = {
       0:{label:"Clear Sky",icon:"\u2600\uFE0F"},1:{label:"Mainly Clear",icon:"\uD83C\uDF24\uFE0F"},
       2:{label:"Partly Cloudy",icon:"\u26C5"},3:{label:"Overcast",icon:"\u2601\uFE0F"},
@@ -163,6 +169,138 @@
       if (i === 1) return "Tomorrow";
       return new Date(dateStr + "T12:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
     }
+
+    // ---- Radar helpers ----
+    function loadLeaflet(cb) {
+      if (window.L) { cb(); return; }
+      // Leaflet CSS
+      var lCss = document.createElement("link");
+      lCss.rel = "stylesheet";
+      lCss.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(lCss);
+      // Leaflet JS
+      var lJs = document.createElement("script");
+      lJs.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      lJs.onload = cb;
+      lJs.onerror = function() {
+        var el = document.getElementById("__radar_map_wrap");
+        if (el) el.innerHTML = "<div style='text-align:center;padding:20px;color:#f59e0b;font-size:13px;'>\u26a0\ufe0f Radar unavailable (could not load map library)</div>";
+      };
+      document.head.appendChild(lJs);
+    }
+
+    function initRadarMap() {
+      var wrap = document.getElementById("__radar_map_wrap");
+      if (!wrap || !window.L) return;
+
+      // Marysville, OH
+      var LAT = 40.2365, LNG = -83.3677;
+
+      if (radarMap) {
+        radarMap.invalidateSize();
+        return;
+      }
+
+      radarMap = L.map("__radar_map_wrap", {
+        center: [LAT, LNG],
+        zoom: 7,
+        zoomControl: true,
+        attributionControl: false
+      });
+
+      // Dark base map (CartoDB dark matter — looks great with radar)
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19
+      }).addTo(radarMap);
+
+      // Marysville marker
+      L.circleMarker([LAT, LNG], {
+        radius: 7,
+        fillColor: "#bb0000",
+        color: "#ff6666",
+        weight: 2,
+        fillOpacity: 0.95
+      }).bindTooltip("Marysville", { permanent: false, direction: "top" }).addTo(radarMap);
+
+      // Fetch RainViewer frames
+      fetchRadarFrames();
+    }
+
+    function fetchRadarFrames() {
+      fetch("https://api.rainviewer.com/public/weather-maps.json")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var past = (data.radar && data.radar.past) ? data.radar.past : [];
+          // Keep last 10 frames
+          radarFrames = past.slice(-10);
+          radarFrameIdx = radarFrames.length - 1; // start on most recent
+          if (radarFrames.length > 0) {
+            showRadarFrame(radarFrameIdx);
+            updateRadarControls();
+            // Auto-play the animation once on open
+            startRadarPlay();
+          } else {
+            showRadarError("No radar frames available");
+          }
+        })
+        .catch(function(e) {
+          showRadarError("Radar data unavailable");
+        });
+    }
+
+    function showRadarFrame(idx) {
+      if (!radarMap || !radarFrames[idx]) return;
+      var frame = radarFrames[idx];
+      // Remove old layer
+      if (radarLayer) { radarMap.removeLayer(radarLayer); radarLayer = null; }
+      radarLayer = L.tileLayer(
+        "https://tilecache.rainviewer.com" + frame.path + "/256/{z}/{x}/{y}/2/1_1.png",
+        { opacity: 0.7, maxZoom: 19, tileSize: 256 }
+      );
+      radarLayer.addTo(radarMap);
+      updateRadarControls();
+    }
+
+    function updateRadarControls() {
+      var frameLabel = document.getElementById("__radar_frame_label");
+      var playBtn    = document.getElementById("__radar_play_btn");
+      if (frameLabel && radarFrames.length > 0) {
+        var frame = radarFrames[radarFrameIdx];
+        var t = new Date(frame.time * 1000);
+        var timeStr = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        frameLabel.textContent = timeStr + "  (" + (radarFrameIdx + 1) + "/" + radarFrames.length + ")";
+      }
+      if (playBtn) {
+        playBtn.textContent = radarPlaying ? "\u23F8" : "\u25B6";
+        playBtn.title = radarPlaying ? "Pause" : "Play animation";
+      }
+    }
+
+    function startRadarPlay() {
+      if (radarPlaying) return;
+      radarPlaying = true;
+      updateRadarControls();
+      radarTimer = setInterval(function() {
+        radarFrameIdx = (radarFrameIdx + 1) % radarFrames.length;
+        showRadarFrame(radarFrameIdx);
+      }, 600);
+    }
+
+    function stopRadarPlay() {
+      radarPlaying = false;
+      if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
+      updateRadarControls();
+    }
+
+    function toggleRadarPlay() {
+      if (radarPlaying) stopRadarPlay(); else startRadarPlay();
+    }
+
+    function showRadarError(msg) {
+      var wrap = document.getElementById("__radar_map_wrap");
+      if (wrap) wrap.innerHTML = "<div style='text-align:center;padding:20px;color:#f59e0b;font-size:13px;'>\u26a0\ufe0f " + msg + "</div>";
+    }
+
     function buildWeatherOverlay() {
       weatherOverlayEl = document.createElement("div");
       weatherOverlayEl.id = "__weather_overlay";
@@ -176,30 +314,43 @@
       weatherOverlayEl.addEventListener("click", function(e){ if (e.target === weatherOverlayEl) closeWeather(); });
       fetchWeather();
     }
-    function closeWeather() { if (weatherOverlayEl) weatherOverlayEl.style.display = "none"; }
+
+    function closeWeather() {
+      stopRadarPlay();
+      if (weatherOverlayEl) weatherOverlayEl.style.display = "none";
+    }
+
     function openWeather() {
       if (!weatherOverlayEl) { buildWeatherOverlay(); }
       else { weatherOverlayEl.style.display = "flex"; fetchWeather(); }
     }
+
     function fetchWeather() {
       var body = document.getElementById("__weather_body");
       if (body) body.innerHTML = "<div style='text-align:center;padding:30px;color:#666;'>Loading weather\u2026</div>";
+      // Reset radar state when refreshing
+      stopRadarPlay();
+      radarMap = null; radarLayer = null; radarFrames = []; radarFrameIdx = 0;
       var url = "https://api.open-meteo.com/v1/forecast?latitude=40.2365&longitude=-83.3677" +
         "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m" +
         "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max" +
         "&temperature_unit=fahrenheit&wind_speed_unit=mph&forecast_days=6&timezone=America%2FNew_York";
       fetch(url).then(function(r){ return r.json(); }).then(renderWeather).catch(renderWeatherError);
     }
+
     function metaTile(label, value) {
       return "<div style='background:#111;border-radius:10px;padding:10px 12px;text-align:center;'>" +
         "<div style='font-size:11px;color:#666;margin-bottom:2px;'>" + label + "</div>" +
         "<div style='font-size:16px;font-weight:700;color:#fff;'>" + value + "</div></div>";
     }
+
     function renderWeather(data) {
       var body = document.getElementById("__weather_body"); if (!body) return;
       var cur = data.current || {}, daily = data.daily || {};
       var curWmo = wmo(cur.weather_code);
+
       var html = [
+        // ── Current conditions ──
         "<div style='text-align:center;margin-bottom:16px;'>",
         "<div style='font-size:13px;color:#bb0000;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;'>Marysville, OH</div>",
         "<div style='font-size:64px;line-height:1;margin-bottom:4px;'>" + curWmo.icon + "</div>",
@@ -211,9 +362,33 @@
         metaTile("\uD83D\uDCC9 Low",  Math.round((daily.temperature_2m_min||[])[0]||0) + "\u00b0F"),
         metaTile("\uD83D\uDCA7 Humidity", Math.round(cur.relative_humidity_2m||0) + "%"),
         metaTile("\uD83D\uDCA8 Wind", Math.round(cur.wind_speed_10m||0) + " mph"),
-        "</div><div style='border-top:1px solid #333;padding-top:14px;'>",
+        "</div>",
+
+        // ── Radar section ──
+        "<div style='border-top:1px solid #333;padding-top:14px;margin-bottom:4px;'>",
+        "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;'>",
+        "<div style='font-size:11px;color:#666;letter-spacing:1px;text-transform:uppercase;'>\uD83D\uDDFA\uFE0F Radar</div>",
+        "<div style='display:flex;align-items:center;gap:8px;'>",
+        "<span id='__radar_frame_label' style='font-size:11px;color:#555;'></span>",
+        "<button id='__radar_play_btn' onclick='(function(){var f=document.getElementById(\"__radar_play_btn\");if(f)f.blur();if(window.__radarToggle)window.__radarToggle();})()' style='background:#111;border:1px solid #444;border-radius:6px;color:#ccc;font-size:14px;padding:3px 10px;cursor:pointer;line-height:1;'>\u25B6</button>",
+        "</div></div>",
+        // Map container — Leaflet will fill this
+        "<div id='__radar_map_wrap' style='width:100%;height:220px;border-radius:10px;overflow:hidden;background:#0a0a14;border:1px solid #2a2a3a;'>",
+        "<div style='display:flex;align-items:center;justify-content:center;height:100%;color:#444;font-size:13px;'>Loading radar\u2026</div>",
+        "</div>",
+        // Precip legend
+        "<div style='display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding:0 2px;'>",
+        "<div style='font-size:10px;color:#555;'>Light</div>",
+        "<div style='flex:1;height:6px;margin:0 8px;border-radius:3px;background:linear-gradient(to right,#00d4ff,#00ff88,#ffff00,#ff8800,#ff0000,#cc00ff);'></div>",
+        "<div style='font-size:10px;color:#555;'>Heavy</div>",
+        "</div>",
+        "</div>",
+
+        // ── 5-Day Forecast ──
+        "<div style='border-top:1px solid #333;padding-top:14px;'>",
         "<div style='font-size:11px;color:#666;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;'>5-Day Forecast</div>"
       ].join("");
+
       var dates = daily.time || [];
       for (var i = 1; i <= 5; i++) {
         if (!dates[i]) continue;
@@ -230,7 +405,17 @@
           "<span style='font-size:13px;color:#666;margin-left:4px;'>" + lo + "\u00b0</span></div></div>";
       }
       body.innerHTML = html + "</div>";
+
+      // Expose radar toggle globally for the inline onclick
+      window.__radarToggle = toggleRadarPlay;
+
+      // Initialize the Leaflet radar map after DOM is updated
+      loadLeaflet(function() {
+        // Small delay to ensure the map container is in the DOM and sized
+        setTimeout(function() { initRadarMap(); }, 80);
+      });
     }
+
     function renderWeatherError(err) {
       var body = document.getElementById("__weather_body");
       if (body) body.innerHTML = "<div style='text-align:center;padding:30px;color:#f59e0b;'>\u26a0\ufe0f Could not load weather.<br><small style='color:#666;'>" + (err&&err.message?err.message:"Network error") + "</small></div>";
@@ -271,7 +456,6 @@
             if (code) code.value = "";
           } catch(e) { window.location.reload(); }
         }
-        // Hide full FAB, show pre-login debug button again
         lockFAB();
       });
       logoutDialogEl.addEventListener("click", function(e){ if (e.target === logoutDialogEl) closeLogoutDialog(); });
@@ -285,12 +469,8 @@
     // COIN FLIP OVERLAY
     // =========================================================
     var coinFlipOverlayEl = null;
-    var coinFlipHistory   = [];   // session history, max 5
+    var coinFlipHistory   = [];
     var coinFlipping      = false;
-
-    // ---- Firebase helpers ----
-    // Use the existing signed-in user from the Scarlet Key login.
-    // Never attempt anonymous sign-in — Firestore rules block anonymous users.
 
     function cfGetDB() {
       try {
@@ -301,14 +481,10 @@
       return null;
     }
 
-    // Wait up to 3s for an already-authenticated user.
-    // If no user is signed in after the wait, bail out gracefully — never sign in anonymously.
     function cfEnsureFirebase() {
       return new Promise(function(resolve, reject) {
         try {
           if (!window.firebase) { reject(new Error("Firebase not loaded")); return; }
-
-          // If Firebase isn't initialized yet, wait for it
           if (!firebase.apps || !firebase.apps.length) {
             if (window.FIREBASE_CONFIG) {
               firebase.initializeApp(window.FIREBASE_CONFIG);
@@ -316,13 +492,8 @@
               reject(new Error("No Firebase config")); return;
             }
           }
-
           var auth = firebase.auth();
-
-          // If there's already a signed-in user, we're done immediately
           if (auth.currentUser) { resolve(); return; }
-
-          // Otherwise wait for auth state to settle (user is logging in)
           var done = false;
           var timer = setTimeout(function() {
             if (done) return;
@@ -330,9 +501,8 @@
             try { unsub(); } catch(e) {}
             var u = auth.currentUser;
             if (u) { resolve(); }
-            else { reject(new Error("No authenticated user — coin flip requires Scarlet Key login")); }
+            else { reject(new Error("No authenticated user \u2014 coin flip requires Scarlet Key login")); }
           }, 3000);
-
           var unsub = auth.onAuthStateChanged(function(user) {
             if (done) return;
             if (user) {
@@ -341,7 +511,6 @@
               try { unsub(); } catch(e) {}
               resolve();
             }
-            // If user is null, keep waiting for the timer — don't sign in anonymously
           });
         } catch(e) {
           reject(e);
@@ -372,7 +541,6 @@
     function cfFetchRecord() {
       var el = document.getElementById("__cf_record");
       if (el) el.innerHTML = "<span style='color:#555;font-size:13px;'>Loading record\u2026</span>";
-
       cfEnsureFirebase().then(function() {
         try {
           var db = cfGetDB();
@@ -401,7 +569,6 @@
       var t = data.tails || 0;
       var hLeading = h > t;
       var tLeading = t > h;
-      // Heads always scarlet, tails always gray — bold the leader
       var hStyle = "color:#bb0000;font-weight:" + (hLeading ? "900" : "700") + ";font-size:" + (hLeading ? "16" : "15") + "px;";
       var tStyle = "color:#aaaaaa;font-weight:" + (tLeading ? "900" : "700") + ";font-size:" + (tLeading ? "16" : "15") + "px;";
       var dashStyle = "color:#444;font-size:13px;margin:0 6px;";
@@ -412,7 +579,6 @@
     }
 
     function buildCoinFlipOverlay() {
-      // Inject coin flip keyframe styles once
       var cfStyle = document.createElement("style");
       cfStyle.textContent = [
         "@keyframes __cf_flip {",
@@ -436,27 +602,17 @@
         "<div id='__cf_card' style='background:#1a1a2e;border:1px solid #333;border-radius:16px;width:min(92vw,340px);padding:28px 24px 24px;position:relative;box-shadow:0 8px 32px rgba(0,0,0,0.75);font-family:-apple-system,system-ui,sans-serif;color:#e0e0e0;text-align:center;'>" +
           "<button id='__cf_close' style='position:absolute;top:12px;right:14px;background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;'>\u2715</button>" +
           "<div style='font-size:13px;color:#bb0000;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:18px;'>\uD83E\uDE99 Coin Flip</div>" +
-
-          // Coin — shows real images, falls back gracefully
           "<div style='perspective:600px;margin-bottom:16px;'>" +
             "<div id='__cf_coin' style='width:110px;height:110px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#bb0000,#8a0000);border:3px solid #ff4444;box-shadow:0 4px 20px rgba(187,0,0,0.5);overflow:hidden;'>" +
               "<img id='__cf_coin_img' src='buckeye-O.png' alt='Heads' style='width:80px;height:80px;object-fit:contain;pointer-events:none;' />" +
             "</div>" +
           "</div>" +
-
-          // All-time record scoreboard
           "<div id='__cf_record' style='font-size:14px;letter-spacing:0.3px;margin-bottom:14px;min-height:20px;'>" +
             "<span style='color:#555;font-size:13px;'>Loading record\u2026</span>" +
           "</div>" +
-
-          // Result label
           "<div id='__cf_result' style='font-size:28px;font-weight:900;min-height:36px;margin-bottom:6px;letter-spacing:1px;'>&nbsp;</div>" +
           "<div id='__cf_sub' style='font-size:13px;color:#666;margin-bottom:22px;min-height:18px;'>&nbsp;</div>" +
-
-          // Flip button
           "<button id='__cf_flip_btn' style='width:100%;padding:14px 0;border-radius:12px;background:#bb0000;color:#fff;border:none;font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.5px;'>FLIP</button>" +
-
-          // Session history
           "<div id='__cf_history' style='margin-top:18px;min-height:24px;'></div>" +
         "</div>";
 
@@ -469,18 +625,14 @@
     function doFlip() {
       if (coinFlipping) return;
       coinFlipping = true;
-
       var btn      = document.getElementById("__cf_flip_btn");
       var coinEl   = document.getElementById("__cf_coin");
       var coinImg  = document.getElementById("__cf_coin_img");
       var resultEl = document.getElementById("__cf_result");
       var subEl    = document.getElementById("__cf_sub");
-
       if (btn)      { btn.disabled = true; btn.style.opacity = "0.5"; }
       if (resultEl) resultEl.innerHTML = "&nbsp;";
       if (subEl)    subEl.innerHTML    = "&nbsp;";
-
-      // Spinning state — hide image, show neutral spinner look
       if (coinImg)  coinImg.style.opacity = "0";
       if (coinEl) {
         coinEl.style.background = "linear-gradient(135deg,#333,#111)";
@@ -490,56 +642,27 @@
         void coinEl.offsetWidth;
         coinEl.classList.add("flipping");
       }
-
-      // Haptic nudge
       try { if (navigator.vibrate) navigator.vibrate([30, 40, 30]); } catch(e) {}
-
       setTimeout(function() {
         var isHeads = Math.random() < 0.5;
         var label   = isHeads ? "HEADS" : "TAILS";
         var imgSrc  = isHeads ? "buckeye-O.png" : "buckeye-leaf.png";
-        var bgColor = isHeads
-          ? "linear-gradient(135deg,#bb0000,#8a0000)"
-          : "linear-gradient(135deg,#3a3a2a,#222210)";
+        var bgColor = isHeads ? "linear-gradient(135deg,#bb0000,#8a0000)" : "linear-gradient(135deg,#3a3a2a,#222210)";
         var borderColor = isHeads ? "#ff4444" : "#a8a060";
-        var shadowColor = isHeads
-          ? "0 4px 20px rgba(187,0,0,0.5)"
-          : "0 4px 20px rgba(140,130,60,0.4)";
-
-        if (coinImg) {
-          coinImg.src = imgSrc;
-          coinImg.alt = label;
-          coinImg.style.opacity = "1";
-        }
-        if (coinEl) {
-          coinEl.style.background   = bgColor;
-          coinEl.style.borderColor  = borderColor;
-          coinEl.style.boxShadow    = shadowColor;
-        }
-
-        // HEADS = scarlet, TAILS = gray
-        if (resultEl) {
-          resultEl.style.color = isHeads ? "#bb0000" : "#aaaaaa";
-          resultEl.textContent = label;
-        }
-
-        // Increment Firebase record
+        var shadowColor = isHeads ? "0 4px 20px rgba(187,0,0,0.5)" : "0 4px 20px rgba(140,130,60,0.4)";
+        if (coinImg) { coinImg.src = imgSrc; coinImg.alt = label; coinImg.style.opacity = "1"; }
+        if (coinEl) { coinEl.style.background = bgColor; coinEl.style.borderColor = borderColor; coinEl.style.boxShadow = shadowColor; }
+        if (resultEl) { resultEl.style.color = isHeads ? "#bb0000" : "#aaaaaa"; resultEl.textContent = label; }
         cfIncrement(isHeads ? "heads" : "tails");
-
-        // Session history (max 5)
         coinFlipHistory.unshift(label);
         if (coinFlipHistory.length > 5) coinFlipHistory.pop();
         renderCoinHistory();
-
-        // Fun quip
         var quips = isHeads
           ? ["Buckeyes win the flip! \uD83C\uDFC6", "Scarlet side up!", "O-H!", "That's a Buckeye!", "Easy money \uD83D\uDCB0"]
           : ["Leaf side up.", "Tails never fails?", "I-O!", "Flip again?", "Oof. Try again."];
         if (subEl) subEl.textContent = quips[Math.floor(Math.random() * quips.length)];
-
         if (btn) { btn.disabled = false; btn.style.opacity = "1"; btn.textContent = "FLIP AGAIN"; }
         coinFlipping = false;
-
         try { if (navigator.vibrate) navigator.vibrate(50); } catch(e) {}
       }, 1150);
     }
@@ -561,13 +684,10 @@
       el.innerHTML = "<div style='font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>Last " + coinFlipHistory.length + " flips</div>" + dots;
     }
 
-    function closeCoinFlip() {
-      if (coinFlipOverlayEl) coinFlipOverlayEl.style.display = "none";
-    }
+    function closeCoinFlip() { if (coinFlipOverlayEl) coinFlipOverlayEl.style.display = "none"; }
     function openCoinFlip() {
       if (!coinFlipOverlayEl) buildCoinFlipOverlay();
       else coinFlipOverlayEl.style.display = "flex";
-      // Reset to ready state each open
       var resultEl = document.getElementById("__cf_result");
       var subEl    = document.getElementById("__cf_sub");
       var btn      = document.getElementById("__cf_flip_btn");
@@ -591,22 +711,8 @@
     // DOMINOS PIZZA SHORTCUT
     // =========================================================
     function openDominos() {
-      // Strategy:
-      // 1. Attempt the deep link via window.location.href (preserves user-gesture
-      //    chain so the browser allows it without treating it as a popup).
-      // 2. After 1.5s, if the page is still visible (app not installed / not iOS),
-      //    open the Domino's website as a fallback.
-      // 3. A visibilitychange listener cancels the fallback if the app launched
-      //    and the browser backgrounded the page.
-      //
-      // This replaces the old iframe approach which modern iOS/Android silently
-      // block, causing the fallback window.open (inside a setTimeout) to be
-      // treated as a popup and also blocked.
-
       var webLink = "https://www.dominos.com";
       var cancelled = false;
-
-      // Cancel web fallback if the app launched and took over (page hidden)
       function onVisibilityChange() {
         if (document.hidden) {
           cancelled = true;
@@ -614,44 +720,16 @@
         }
       }
       document.addEventListener("visibilitychange", onVisibilityChange);
-
-      // Attempt deep link — stays in the user-gesture call stack
       window.location.href = "dominos://";
-
-      // Fallback: open website if app didn’t launch within 1.5s
       setTimeout(function() {
         document.removeEventListener("visibilitychange", onVisibilityChange);
-        if (!cancelled) {
-          window.location.href = webLink;
-        }
+        if (!cancelled) { window.location.href = webLink; }
       }, 1500);
     }
 
     // =========================================================
     // RADIAL FAB
-    //
-    // PRE-LOGIN:  Only a small standalone \uD83D\uDC1E debug button is
-    //             shown (bottom-right corner). The full Buckeye
-    //             FAB stays hidden so the login screen is clean.
-    //
-    // POST-LOGIN: Call window.__fabUnlock() (triggered from
-    //             shared.js checkCode success path) to hide the
-    //             pre-login debug button and reveal the full
-    //             Buckeye radial FAB with all ring buttons.
-    //
-    // LOGOUT:     Call window.__fabLock() to revert to the
-    //             pre-login state.
-    //
-    // Arc angles (70°–240°) — evenly spaced at ~42.5° apart,
-    // RADIUS bumped to 115px so 44px buttons never overlap:
-    //   70°  = upper-right  (Coin Flip)
-    //   112° = upper        (Weather)
-    //   155° = left         (Domino's \uD83C\uDF55)
-    //   197° = lower-left   (Log Out)
-    //   240° = lower        (Debug)
     // =========================================================
-
-    // ---- Pre-login standalone debug button ----
     function buildPreLoginDebugBtn() {
       preLoginDebugBtn = document.createElement("button");
       preLoginDebugBtn.id = "__pre_debug_btn";
@@ -669,8 +747,6 @@
         "padding:0"
       ].join(";");
       preLoginDebugBtn.textContent = "\uD83D\uDC1E";
-
-      // Error badge
       var preBadge = document.createElement("span");
       preBadge.id = "__pre_debug_badge";
       preBadge.style.cssText = [
@@ -682,12 +758,7 @@
         "font-weight:bold","pointer-events:none"
       ].join(";");
       preLoginDebugBtn.appendChild(preBadge);
-
-      preLoginDebugBtn.addEventListener("click", function(e) {
-        e.stopPropagation();
-        openDebug();
-      });
-
+      preLoginDebugBtn.addEventListener("click", function(e) { e.stopPropagation(); openDebug(); });
       document.body.appendChild(preLoginDebugBtn);
     }
 
@@ -720,7 +791,7 @@
         "width:0","height:0",
         "z-index:99998",
         "pointer-events:none",
-        "display:none"   // hidden until login
+        "display:none"
       ].join(";");
       document.body.appendChild(fabWrap);
 
@@ -764,8 +835,6 @@
       fabMain.appendChild(badgeEl);
       fabWrap.appendChild(fabMain);
 
-      // Arc angles evenly distributed 70°–240° (42.5° apart), RADIUS=115px
-      // ensures no two 44px buttons overlap (min arc gap ~85px at r=115).
       var ringItems = [
         { id: "__fab_coinflip", icon: "\uD83E\uDE99", label: "Coin Flip",  angle: 70,  action: openCoinFlip },
         { id: "__fab_weather",  icon: "\u26C5",       label: "Weather",    angle: 112, action: openWeather },
@@ -775,24 +844,19 @@
       ];
 
       var RADIUS = 115;
-      var EDGE_SAFE = 14; // keeps buttons from bleeding off-screen
+      var EDGE_SAFE = 14;
 
       ringItems.forEach(function(item) {
         var btn = document.createElement("button");
         btn.id = item.id;
         btn.className = "__fab_ring_btn";
         btn.setAttribute("aria-label", item.label);
-
         var rad = item.angle * Math.PI / 180;
         var dx = Math.round(Math.cos(rad) * RADIUS);
         var dy = Math.round(Math.sin(rad) * RADIUS);
-
         var rightPx  = -22 - dx;
         var bottomPx = -22 + dy;
-
-        // Clamp so no button ever goes past the right edge
         rightPx = Math.max(rightPx, -44 + EDGE_SAFE);
-
         btn.style.cssText = [
           "position:absolute",
           "right:"  + rightPx  + "px",
@@ -808,13 +872,11 @@
           "pointer-events:auto"
         ].join(";");
         btn.textContent = item.icon;
-
         btn.addEventListener("click", function(e) {
           e.stopPropagation();
           closeRing();
           item.action();
         });
-
         fabWrap.appendChild(btn);
         ringEls.push(btn);
       });
@@ -828,26 +890,18 @@
         if (ringOpen) closeRing();
       });
 
-      // Build the pre-login debug button (shown immediately)
       buildPreLoginDebugBtn();
     }
 
-    // ---- Called after Scarlet Key is accepted ----
     function unlockFAB() {
-      // Hide the pre-login debug button
       if (preLoginDebugBtn) preLoginDebugBtn.style.display = "none";
-      // Show the full Buckeye FAB
       if (fabWrap) fabWrap.style.display = "block";
     }
     window.__fabUnlock = unlockFAB;
 
-    // ---- Called after logout — revert to pre-login state ----
     function lockFAB() {
-      // Close ring if open
       if (ringOpen) closeRing();
-      // Hide the full FAB
       if (fabWrap) fabWrap.style.display = "none";
-      // Show the pre-login debug button again
       if (preLoginDebugBtn) preLoginDebugBtn.style.display = "flex";
     }
     window.__fabLock = lockFAB;
