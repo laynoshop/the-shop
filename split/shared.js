@@ -297,6 +297,35 @@ window.replaceMichiganText = replaceMichiganText;
   window.showTab = showTab;
 
   // ------------------------------------------------------------
+  // Logout helper (centralised so FAB + any other caller can use it)
+  // ------------------------------------------------------------
+  function doLogout() {
+    try { window.hardResetAppInitState(); } catch {}
+    try { if (window.safeRoleSet) safeRoleSet(""); } catch {}
+    window.__serverRoleCache = "";
+    showEntryScreen._bound = false;
+
+    // Revert FAB to pre-login state (pre-login debug btn only)
+    try { if (typeof window.__fabLock === "function") window.__fabLock(); } catch(e) {}
+
+    try {
+      const login = document.getElementById("login");
+      const entry = document.getElementById("entry");
+      const app   = document.getElementById("app");
+      if (app)   app.style.display   = "none";
+      if (entry) entry.style.display = "none";
+      if (login) {
+        login.style.display = "block";
+        const code = document.getElementById("code");
+        if (code) { code.value = ""; setTimeout(() => { try { code.focus(); } catch {} }, 100); }
+      }
+      document.body.classList.remove("entryMode");
+    } catch(e) { window.location.reload(); }
+  }
+  window.doLogout = doLogout;
+  window.logout   = doLogout; // alias for any legacy callers
+
+  // ------------------------------------------------------------
   // Login (invite code -> role)
   // ------------------------------------------------------------
   async function checkCode() {
@@ -381,6 +410,10 @@ window.replaceMichiganText = replaceMichiganText;
 
     buildTabsForRole(role);
     showEntryScreen();
+
+    // ---- Unlock the full Buckeye FAB now that the user is in ----
+    try { if (typeof window.__fabUnlock === "function") window.__fabUnlock(); } catch(e) {}
+
   } catch (e) {
     console.error("checkCode failed:", e);
     if (btn) btn.textContent = "Load error";
