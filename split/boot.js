@@ -291,6 +291,9 @@
     //
     //  RADIUS = 90px gives plenty of breathing room between
     //  the 44px buttons (centres are 90px apart, edges ~46px).
+    //
+    //  right:30px on the wrapper keeps the FAB fully inset
+    //  from the screen edge on all iPhone sizes.
     // =========================================================
     function buildFAB() {
       // --- Styles ---
@@ -314,14 +317,15 @@
       document.head.appendChild(style);
 
       // --- Wrapper (fixed anchor, zero visual size) ---
-      // bottom:110px keeps the FAB fully above the ~80px bottom nav
-      // plus the browser URL bar on mobile Safari/Chrome.
+      // bottom:110px clears the ~80px tab bar + browser URL bar.
+      // right:30px keeps the 44px FAB fully visible on all iPhones
+      // (22px half-button + 8px inset from edge = comfortable clearance).
       fabWrap = document.createElement("div");
       fabWrap.id = "__fab_wrap";
       fabWrap.style.cssText = [
         "position:fixed",
-        "bottom:110px",   // clear tab bar (80px) + browser chrome + 10px buffer
-        "right:18px",
+        "bottom:110px",
+        "right:30px",   // 30px anchor → FAB edge sits ~8px from screen edge
         "width:0","height:0",
         "z-index:99998",
         "pointer-events:none"
@@ -373,16 +377,13 @@
       // Angles from positive-X axis, counter-clockwise.
       // Arc spans 100°–216° so all buttons stay above and to the
       // left of the FAB — away from the right edge and nav bar.
-      // 58° of arc spread across 3 buttons = ~58px centre-to-centre
-      // at RADIUS 90, giving clear visual separation.
       var ringItems = [
         { id: "__fab_weather", icon: "\u26C5",       label: "Weather", angle: 100, action: openWeather },
         { id: "__fab_logout",  icon: "\uD83D\uDD13", label: "Log Out", angle: 158, action: openLogoutDialog },
         { id: "__fab_debug",   icon: "\uD83D\uDC1E", label: "Debug",   angle: 216, action: openDebug }
       ];
 
-      // Radius of the ring — enough that 44px buttons don't visually touch
-      var RADIUS = 90; // px
+      var RADIUS = 90; // px — enough spacing between 44px buttons
 
       ringItems.forEach(function(item, i) {
         var btn = document.createElement("button");
@@ -394,7 +395,6 @@
         var dx = Math.round(Math.cos(rad) * RADIUS); // +right / -left
         var dy = Math.round(Math.sin(rad) * RADIUS); // +up   / -down
 
-        // Position relative to wrap origin (= FAB centre at bottom:-22, right:-22)
         var rightPx  = -22 - dx;
         var bottomPx = -22 + dy;
 
@@ -437,8 +437,7 @@
 
     function openRing() {
       ringOpen = true;
-      // Small nudge so the 216° (lower-left) button doesn't dip
-      // too close to the nav bar. The main arc spread does the work.
+      // Tiny nudge — the arc geometry does the real work
       fabWrap.style.transform = "translate(-10px, -10px)";
 
       ringEls.forEach(function(btn, i) {
