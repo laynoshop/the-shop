@@ -59,6 +59,13 @@
   border-color: var(--scores-header-accent, rgba(187,0,0,0.6));
   color: #fff; box-shadow: 0 0 12px var(--scores-header-accent, rgba(187,0,0,0.4));
 }
+/* Shop pill — always gold when active */
+.scoresLeaguePill[data-league="shop"].active {
+  background: rgba(200,154,0,0.75);
+  border-color: rgba(200,154,0,0.6);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(200,154,0,0.45);
+}
 
 /* ── Date navigator ── */
 .scoresDateNav { display: flex; align-items: center; justify-content: center; gap: 0; padding: 10px 16px 6px; }
@@ -172,7 +179,7 @@
   box-shadow: 0 6px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(200,160,0,0.18),
     0 0 22px rgba(200,155,0,0.13), inset 0 1px 0 rgba(255,220,100,0.09);
 }
-/* ── Fav ribbon — full-width strip between header and matchup ── */
+/* ── Fav ribbon ── */
 .favRibbon {
   display: flex;
   align-items: center;
@@ -193,6 +200,64 @@
   100% { }
 }
 .score.flashed { animation: scoreFlash 600ms ease-out forwards; }
+
+/* ── Shop league badge on card ── */
+.shopLeagueBadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 5px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.13);
+  color: rgba(255,255,255,0.5); flex-shrink: 0; white-space: nowrap;
+}
+
+/* ── Shop next-game card ── */
+.shopNextCard {
+  background: rgba(200,154,0,0.07);
+  border: 1.5px solid rgba(200,154,0,0.25);
+  border-left: 4px solid #c89a00;
+  border-radius: 14px;
+  padding: 18px 16px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 18px rgba(200,154,0,0.1);
+}
+.shopNextLabel {
+  font-size: 10px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+  color: #c89a00; margin-bottom: 2px;
+}
+.shopNextTeams {
+  font-size: 17px; font-weight: 900; color: #fff; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.shopNextMeta {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.shopNextMetaPill {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.55); white-space: nowrap;
+}
+.shopNextCountdown {
+  font-size: 13px; font-weight: 800; letter-spacing: 0.03em;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(200,154,0,0.18); border: 1px solid rgba(200,154,0,0.35);
+  color: #f0c040; white-space: nowrap;
+}
+
+/* ── Shop empty state ── */
+.shopEmptyState {
+  padding: 36px 24px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  text-align: center;
+}
+.shopEmptyIcon { font-size: 32px; line-height: 1; margin-bottom: 4px; }
+.shopEmptyTitle {
+  font-size: 16px; font-weight: 800; color: rgba(255,255,255,0.7); letter-spacing: 0.01em;
+}
+.shopEmptySubtitle {
+  font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.35); letter-spacing: 0.01em;
+  margin-bottom: 12px;
+}
 
 /* ════════════════════════════════
    PGA LEADERBOARD
@@ -391,6 +456,7 @@
 
   // ─── League pill labels ──────────────────────────────────────
   const LEAGUE_LABELS = {
+    shop:  "🏪 Shop",
     ncaam: "🏀 NCAAB",
     cfb:   "🏈 CFB",
     nba:   "🏀 NBA",
@@ -400,6 +466,12 @@
     mlb:   "⚾ MLB",
     pga:   "⛳ PGA",
     ufc:   "🥊 UFC",
+  };
+
+  // Short labels shown on Shop tab score cards
+  const SHOP_LEAGUE_LABELS = {
+    ncaam: "NCAAB", cfb: "CFB", nba: "NBA",
+    nhl: "NHL",   mls: "MLS", nfl: "NFL", mlb: "MLB",
   };
 
   // ─── League pill row scroll memory ────────────────────────────
@@ -443,11 +515,20 @@
     const n = new Date();
     return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,"0")}${String(n.getDate()).padStart(2,"0")}`;
   }
+  // Returns number of calendar days between two YYYYMMDD strings (b - a)
+  function daysBetween(aStr, bStr) {
+    try {
+      function toMs(s) { return new Date(parseInt(s.slice(0,4)),parseInt(s.slice(4,6))-1,parseInt(s.slice(6,8))).getTime(); }
+      return Math.round((toMs(bStr) - toMs(aStr)) / 86400000);
+    } catch { return 0; }
+  }
 
   // ─── Build header HTML ───────────────────────────────────────────
   function buildHeaderHTML(leagueKey, color) {
     const leagueLabel = LEAGUE_LABELS[leagueKey] || leagueKey.toUpperCase();
-    const pillsHTML = (SD.LEAGUES || []).map(l => {
+    // Shop pill is always first, then all other leagues
+    const shopPill = `<button class="scoresLeaguePill${leagueKey === "shop" ? " active" : ""}" data-league="shop" type="button">${LEAGUE_LABELS["shop"]}</button>`;
+    const leaguePills = (SD.LEAGUES || []).map(l => {
       const isActive = l.key === leagueKey;
       return `<button class="scoresLeaguePill${isActive ? " active" : ""}" data-league="${SD.escapeHtml(l.key)}" type="button">${SD.escapeHtml(LEAGUE_LABELS[l.key] || l.key.toUpperCase())}</button>`;
     }).join("");
@@ -457,7 +538,7 @@
     <div class="scoresHeaderTitle">${SD.escapeHtml(leagueLabel)}<span>Scores</span></div>
     <button class="scoresRefreshBtn" id="scoresRefreshBtn" type="button" aria-label="Refresh scores">Refresh</button>
   </div>
-  <div class="scoresLeagueRow" id="scoresLeagueRow">${pillsHTML}</div>
+  <div class="scoresLeagueRow" id="scoresLeagueRow">${shopPill}${leaguePills}</div>
 </div>`;
   }
 
@@ -480,7 +561,6 @@
     const row = document.getElementById("scoresLeagueRow");
     if (!row) return;
 
-    // Track scroll position passively as the user scrolls
     row.addEventListener("scroll", () => {
       leagueRowScrollLeft = row.scrollLeft || 0;
     }, { passive: true });
@@ -490,7 +570,6 @@
       if (!pill) return;
       const key = pill.dataset.league;
       if (!key) return;
-      // Save current scroll position before the header is rebuilt
       saveLeagueRowScroll();
       SD.setSavedLeagueKey(key);
       window.loadScores(true);
@@ -573,7 +652,8 @@
     });
   }
 
-  function buildScoreCardHTML(ev, leagueKey) {
+  // Build a score card. shopLeagueKey is set when rendering from Shop tab so a league badge appears.
+  function buildScoreCardHTML(ev, leagueKey, shopLeagueKey) {
     const comp         = ev?.competitions?.[0];
     const competitors  = comp?.competitors || [];
     const status       = comp?.status;
@@ -605,6 +685,8 @@
     const awayLogoUrl = SD.getTeamLogoUrl(awayTeam);
     const isFavHome = SD.isFavoriteTeam(homeTeam);
     const isFavAway = SD.isFavoriteTeam(awayTeam);
+    const isShopHome = SD.isShopTeam ? SD.isShopTeam(homeTeam) : isFavHome;
+    const isShopAway = SD.isShopTeam ? SD.isShopTeam(awayTeam) : isFavAway;
     const eventId  = String(ev?.id || "");
 
     // ── Broadcast network ──
@@ -672,12 +754,15 @@
       return `<span class="score ${isWinner ? "winner" : "loser"}">${SD.escapeHtml(sc)}</span>`;
     }
 
-    const isFavSpotlight = isFavHome || isFavAway;
+    // On the Shop tab, highlight any Shop team (not just favorites)
+    const highlightHome = shopLeagueKey ? isShopHome : isFavHome;
+    const highlightAway = shopLeagueKey ? isShopAway : isFavAway;
+    const isFavSpotlight = highlightHome || highlightAway;
     let cardClasses = "scoreCard";
     if (isFavSpotlight) cardClasses += " favCard favSpotlight";
     if (isLive) cardClasses += " cardLive";
 
-    // Win prob bar HTML — only on live games where data is available
+    // Win prob bar HTML
     const winProbBarHTML = (() => {
       if (!winProb || !isLive) return "";
       const awayColor = awayTeam.color ? "#" + awayTeam.color.replace(/^#/,"") : "rgba(120,120,255,0.7)";
@@ -688,9 +773,13 @@
       </div>`;
     })();
 
-    // Fav ribbon — full-width strip, rendered between cardHeader and matchup
-    const favRibbonHTML = isFavSpotlight
-      ? `<div class="favRibbon">⭐ Shop Team</div>`
+    // Fav / Shop ribbon
+    const ribbonLabel = shopLeagueKey ? "🏪 Shop Team" : "⭐ Shop Team";
+    const favRibbonHTML = isFavSpotlight ? `<div class="favRibbon">${ribbonLabel}</div>` : "";
+
+    // League badge shown on Shop tab cards
+    const leagueBadgeHTML = shopLeagueKey
+      ? `<div class="shopLeagueBadge">${SD.escapeHtml(SHOP_LEAGUE_LABELS[shopLeagueKey] || shopLeagueKey.toUpperCase())}</div>`
       : "";
 
     return `
@@ -699,13 +788,14 @@
   <div class="cardHeader">
     ${statusLine}
     <div class="cardHeaderRight">
+      ${leagueBadgeHTML}
       ${broadcastName ? `<div class="broadcastChip">${SD.escapeHtml(broadcastName)}</div>` : ""}
       <div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>
     </div>
   </div>
   ${favRibbonHTML}
   <div class="matchup">
-    <div class="teamRow away${isFavAway ? " favTeam" : ""}">
+    <div class="teamRow away${highlightAway ? " favTeam" : ""}">
       ${logoImg(awayLogoUrl, awayAbbr)}
       <div class="teamInfo">
         <div class="teamName">${SD.escapeHtml(awayRankPrefix + awayName)}</div>
@@ -713,7 +803,7 @@
       </div>
       ${scoreSpan(awayScore, awayWinner, isPost)}
     </div>
-    <div class="teamRow home${isFavHome ? " favTeam" : ""}">
+    <div class="teamRow home${highlightHome ? " favTeam" : ""}">
       ${logoImg(homeLogoUrl, homeAbbr)}
       <div class="teamInfo">
         <div class="teamName">${SD.escapeHtml(homeRankPrefix + homeName)}</div>
@@ -752,7 +842,6 @@
         const away = competitors.find(c => String(c?.homeAway || "") === "away") || competitors[0] || {};
         card.classList.toggle("cardLive", isLive);
         const scoreEls = card.querySelectorAll(".score");
-        // Flash score if it changed during live update
         function setScoreWithFlash(el, newVal) {
           if (!el) return;
           if (el.textContent !== newVal && newVal !== "") {
@@ -769,7 +858,6 @@
           if (scoreEls[0]) { scoreEls[0].classList.toggle("winner", aw); scoreEls[0].classList.toggle("loser", !aw); }
           if (scoreEls[1]) { scoreEls[1].classList.toggle("winner", hw); scoreEls[1].classList.toggle("loser", !hw); }
         }
-        // Update status line
         const statusEl = card.querySelector(".statusLive, .statusFinal, .statusPre");
         if (statusEl) {
           const displayClock = String(status?.displayClock || "").trim();
@@ -791,7 +879,6 @@
             statusEl.textContent = `Final${fd ? " · "+fd : ""}`;
           }
         }
-        // Update win prob bar
         const winProb = (() => {
           const preds = comp?.predictor || comp?.winProbability || null;
           const hc = Number(preds?.homeTeam?.teamChancePct ?? preds?.homeWinPercentage ?? -1);
@@ -855,6 +942,116 @@
     });
   }
 
+  // ─── Shop tab: fetch all leagues in parallel, filter to Shop teams ────────
+  async function loadShopScores(dateStr) {
+    const container = document.getElementById("scoresContainer");
+    if (!container) return;
+
+    container.innerHTML = `<div class="emptyState">Loading Shop teams...</div>`;
+
+    const scanKeys = SD.SHOP_SCAN_LEAGUES || ["ncaam","cfb","nba","nhl","mls","nfl","mlb"];
+
+    // Fetch all leagues simultaneously
+    const results = await Promise.allSettled(
+      scanKeys.map(async key => {
+        const league = SD.getLeagueByKey(key);
+        if (!league) return { key, events: [] };
+        const url  = SD.withLangRegion(league.endpoint(dateStr));
+        const data = await SD.fetchJsonNoStore(url);
+        return { key, events: data?.events || [] };
+      })
+    );
+
+    // Collect all Shop-team events, tagging each with its source league key
+    const shopEvents = [];
+    for (const r of results) {
+      if (r.status !== "fulfilled") continue;
+      const { key, events } = r.value;
+      for (const ev of events) {
+        if (SD.isShopEvent(ev)) shopEvents.push({ ev, leagueKey: key });
+      }
+    }
+
+    if (shopEvents.length > 0) {
+      // Sort: live first, then pre, then post; within same state by start time
+      shopEvents.sort((a, b) => {
+        const stA = SD.stateRank(a.ev?.competitions?.[0]?.status);
+        const stB = SD.stateRank(b.ev?.competitions?.[0]?.status);
+        if (stA !== stB) return stA - stB;
+        return SD.getStartTimeMs(a.ev) - SD.getStartTimeMs(b.ev);
+      });
+      container.innerHTML = shopEvents
+        .map(({ ev, leagueKey }) => buildScoreCardHTML(ev, leagueKey, leagueKey))
+        .join("");
+      return;
+    }
+
+    // ── No games today: find the next upcoming Shop team game (up to 14 days ahead) ──
+    container.innerHTML = `<div class="shopEmptyState"><div class="shopEmptyIcon">🏪</div><div class="shopEmptyTitle">No Shop teams in action today.</div><div class="shopEmptySubtitle">Searching for the next upcoming game…</div></div>`;
+
+    let nextFound = null;
+    for (let delta = 1; delta <= 14 && !nextFound; delta++) {
+      const searchDate = SD.yyyymmddOffset ? SD.yyyymmddOffset(dateStr, delta) : shiftDate(dateStr, delta);
+      const nextResults = await Promise.allSettled(
+        scanKeys.map(async key => {
+          const league = SD.getLeagueByKey(key);
+          if (!league) return { key, events: [] };
+          const url  = SD.withLangRegion(league.endpoint(searchDate));
+          const data = await SD.fetchJsonNoStore(url);
+          return { key, events: data?.events || [], date: searchDate };
+        })
+      );
+      for (const r of nextResults) {
+        if (r.status !== "fulfilled") continue;
+        const { key, events, date } = r.value;
+        for (const ev of events) {
+          if (SD.isShopEvent(ev)) {
+            nextFound = { ev, leagueKey: key, date, delta };
+            break;
+          }
+        }
+        if (nextFound) break;
+      }
+    }
+
+    if (!nextFound) {
+      container.innerHTML = `<div class="shopEmptyState"><div class="shopEmptyIcon">🏪</div><div class="shopEmptyTitle">No Shop teams in action today.</div><div class="shopEmptySubtitle">No upcoming Shop team games found in the next 14 days.</div></div>`;
+      return;
+    }
+
+    // Build a "next game" preview card
+    const { ev, leagueKey, date, delta } = nextFound;
+    const comp = ev?.competitions?.[0];
+    const competitors = comp?.competitors || [];
+    const home = competitors.find(c => String(c?.homeAway||"") === "home") || competitors[1] || {};
+    const away = competitors.find(c => String(c?.homeAway||"") === "away") || competitors[0] || {};
+    const homeName = SD.getTeamDisplayNameUI(home?.team || {});
+    const awayName = SD.getTeamDisplayNameUI(away?.team || {});
+    const gameDate = comp?.date || ev?.date || "";
+    let timeStr = "";
+    if (gameDate) { try { timeStr = new Date(gameDate).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch {} }
+    const prettyDate = SD.yyyymmddToPretty ? SD.yyyymmddToPretty(date) : date;
+    const countdownLabel = delta === 1 ? "Tomorrow" : `Game in ${delta} days`;
+    const leagueBadge = SHOP_LEAGUE_LABELS[leagueKey] || leagueKey.toUpperCase();
+
+    container.innerHTML = `
+<div class="shopEmptyState">
+  <div class="shopEmptyIcon">🏪</div>
+  <div class="shopEmptyTitle">No Shop teams in action today.</div>
+  <div class="shopEmptySubtitle">Next upcoming Shop team game:</div>
+</div>
+<div class="shopNextCard">
+  <div class="shopNextLabel">⏭ Next Shop Game</div>
+  <div class="shopNextTeams">${SD.escapeHtml(awayName)} vs. ${SD.escapeHtml(homeName)}</div>
+  <div class="shopNextMeta">
+    <span class="shopNextMetaPill">📅 ${SD.escapeHtml(prettyDate)}</span>
+    ${timeStr ? `<span class="shopNextMetaPill">🕐 ${SD.escapeHtml(timeStr)} ET</span>` : ""}
+    <span class="shopNextMetaPill">${SD.escapeHtml(leagueBadge)}</span>
+    <span class="shopNextCountdown">${SD.escapeHtml(countdownLabel)}</span>
+  </div>
+</div>`;
+  }
+
   // ─── PGA Leaderboard ──────────────────────────────────────────────────────
   function renderPGALeaderboard(data, leagueKey, dateYYYYMMDD) {
     const container = document.getElementById("scoresContainer");
@@ -866,7 +1063,6 @@
       return;
     }
 
-    // Pick the most relevant event (prefer in-progress, then upcoming, then completed)
     const stateOrder = { "in": 0, "pre": 1, "post": 2 };
     const sorted = [...events].sort((a, b) => {
       const sa = stateOrder[String(a?.competitions?.[0]?.status?.type?.state || "post").toLowerCase()] ?? 2;
@@ -880,20 +1076,17 @@
     const isLive = stateStr === "in";
     const isPost = stateStr === "post";
 
-    // Tournament info
     const tournamentName = ev?.name || ev?.shortName || "PGA Tournament";
     const venue = comp?.venue?.fullName || "";
     const city  = comp?.venue?.address?.city || "";
     const state = comp?.venue?.address?.state || "";
     const venueStr = [venue, city && state ? `${city}, ${state}` : (city || state)].filter(Boolean).join(" · ");
 
-    // Round info
     const currentRound = Number(comp?.status?.period || 1);
     const totalRounds  = 4;
     const roundLabel   = `Round ${currentRound}`;
     const statusLabel  = isLive ? "In Progress" : isPost ? "Final" : (String(status?.type?.shortDetail || "Upcoming"));
 
-    // Weather
     const weather = comp?.weather || null;
     const weatherHTML = (() => {
       if (!weather) return "";
@@ -913,7 +1106,6 @@
       </div>`;
     })();
 
-    // Hero
     const statusPillClass = isLive ? "live" : isPost ? "final" : "pre";
     const heroHTML = `
 <div class="pgaHero">
@@ -926,7 +1118,6 @@
   ${weatherHTML}
 </div>`;
 
-    // Round pills
     const roundPillsHTML = `<div class="pgaRoundPills">
       ${Array.from({length: totalRounds}, (_, i) => {
         const r = i + 1;
@@ -935,10 +1126,7 @@
       }).join("")}
     </div>`;
 
-    // Competitors / leaderboard
     const competitors = comp?.competitors || [];
-
-    // Sort by position (numeric sort on position string)
     const sorted2 = [...competitors].sort((a, b) => {
       const pa = parseInt(a?.status?.position?.id || a?.status?.displayOrder || "9999", 10);
       const pb = parseInt(b?.status?.position?.id || b?.status?.displayOrder || "9999", 10);
@@ -950,7 +1138,6 @@
       if (scoreStr.startsWith("-")) return "under";
       return "over";
     }
-
     function pgaScoreDisplay(scoreStr) {
       if (!scoreStr) return "-";
       const n = parseInt(scoreStr, 10);
@@ -980,7 +1167,6 @@
       }
 
       const rankClass = posNum === 1 ? "gold" : posNum === 2 ? "silver" : posNum === 3 ? "bronze" : "";
-
       return `${cutDiv}<div class="pgaLeaderRow${isTop3 ? " top3" : ""}${isCut || isWD ? " cut" : ""}">
         <div class="pgaRank${rankClass ? " "+rankClass : ""}">${SD.escapeHtml(String(pos))}</div>
         <div class="pgaPlayerInfo">
@@ -1005,12 +1191,10 @@
 
     container.innerHTML = heroHTML + roundPillsHTML + leaderboardHTML;
 
-    // Bind round pill clicks
     container.querySelectorAll(".pgaRoundPill").forEach(btn => {
       btn.addEventListener("click", () => {
         container.querySelectorAll(".pgaRoundPill").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
-        // TODO: re-fetch round-specific data if API supports it
       });
     });
   }
@@ -1023,7 +1207,6 @@
       container.innerHTML = `<div class="emptyState">No UFC events found for this date.</div>`;
       return;
     }
-    // UFC events are fight cards — render each event as a card with bouts
     container.innerHTML = events.map(ev => buildScoreCardHTML(ev, leagueKey)).join("");
   }
 
@@ -1036,16 +1219,11 @@
     const renderKey    = leagueKey + "_" + dateStr;
     lastRenderedKey    = renderKey;
 
-    const league = SD.getLeagueByKey(leagueKey);
-    if (!league) return;
     const color = SD.LEAGUE_COLORS[leagueKey] || "#444";
 
     // Build shell — header + date nav + container
     const content = document.getElementById("content");
     if (!content) return;
-
-    const isPGA = leagueKey === "pga";
-    const isCollege = SD.isCollegeLeagueKey(leagueKey);
 
     content.innerHTML =
       buildHeaderHTML(leagueKey, color) +
@@ -1057,6 +1235,17 @@
     bindDateNav();
     bindRefreshBtn();
     bindCardTaps(leagueKey);
+
+    // ── Shop tab: special cross-league path ──
+    if (leagueKey === "shop") {
+      await loadShopScores(dateStr);
+      return;
+    }
+
+    const league = SD.getLeagueByKey(leagueKey);
+    if (!league) return;
+    const isPGA     = leagueKey === "pga";
+    const isCollege = SD.isCollegeLeagueKey(leagueKey);
 
     // Fetch
     let events = [];
