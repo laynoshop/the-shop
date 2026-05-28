@@ -20,6 +20,21 @@
     "Cleveland Guardians",
   ];
 
+  // ─── Shop Teams — curated list for the Shop tab (cross-league) ────────────
+  // Independent from FAVORITES so each list can be managed separately.
+  const SHOP_TEAMS = [
+    "Ohio State Buckeyes",
+    "Duke Blue Devils",
+    "West Virginia Mountaineers",
+    "Columbus Blue Jackets",
+    "Columbus Crew",
+    "Carolina Hurricanes",
+    "Carolina Panthers",
+    "Dallas Cowboys",
+    "Boston Red Sox",
+    "Cleveland Guardians",
+  ];
+
   const LEAGUE_COLORS = {
     cfb:   "#bb0000",
     nfl:   "#013369",
@@ -30,6 +45,7 @@
     mls:   "#009a44",
     pga:   "#3d7a40",
     ufc:   "#c8102e",
+    shop:  "#c89a00",
   };
 
   const LEAGUES = [
@@ -62,6 +78,9 @@
       summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/summary?event=${eventId}` },
   ];
 
+  // Leagues to scan when Shop tab is active (all team-sport leagues)
+  const SHOP_SCAN_LEAGUES = ["ncaam", "cfb", "nba", "nhl", "mls", "nfl", "mlb"];
+
   const PLAYOFF_LEAGUES = new Set(["nhl", "nba", "nfl", "mlb"]);
 
   // ---------- iOS/PWA safety ----------
@@ -78,7 +97,8 @@
   })();
 
   function norm(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
-  const FAVORITES_NORM = FAVORITES.map(norm);
+  const FAVORITES_NORM  = FAVORITES.map(norm);
+  const SHOP_TEAMS_NORM = SHOP_TEAMS.map(norm);
 
   // ─── Storage keys ─────────────────────────────────────────────────────────
   const LEAGUE_KEY = "scoresLeague";
@@ -208,6 +228,20 @@
     const identities = getTeamIdentityStrings(team);
     return identities.some(id => FAVORITES_NORM.some(f => id === f));
   }
+
+  // ─── Shop team matching — EXACT match only ────────────────────────────────
+  function isShopTeam(team) {
+    if (!team) return false;
+    const identities = getTeamIdentityStrings(team);
+    return identities.some(id => SHOP_TEAMS_NORM.some(f => id === f));
+  }
+
+  // Returns true if either competitor in an event is a Shop team
+  function isShopEvent(event) {
+    const competitors = event?.competitions?.[0]?.competitors || [];
+    return competitors.some(c => isShopTeam(c?.team));
+  }
+
   function favoriteRankForEvent(event) {
     const comp = event?.competitions?.[0];
     const competitors = comp?.competitors || [];
@@ -437,7 +471,9 @@
 
   // ─── Expose public API ─────────────────────────────────────────────────────
   window.__SD = {
-    LEAGUE_COLORS, LEAGUES, FAVORITES, FAVORITES_NORM, LEAGUE_KEY, DATE_KEY,
+    LEAGUE_COLORS, LEAGUES, FAVORITES, FAVORITES_NORM,
+    SHOP_TEAMS, SHOP_TEAMS_NORM, SHOP_SCAN_LEAGUES,
+    LEAGUE_KEY, DATE_KEY,
     PLAYOFF_LEAGUES,
     getSavedLeagueKey, setSavedLeagueKey,
     getSavedDateYYYYMMDD, setSavedDateYYYYMMDD,
@@ -447,6 +483,7 @@
     fetchJsonNoStore, getLeagueByKey,
     getTeamDisplayNameUI, getTeamAbbrevUI, getTeamLogoUrl,
     teamDisplayNameWithRank, getTeamIdentityStrings, isFavoriteTeam,
+    isShopTeam, isShopEvent,
     favoriteRankForEvent, stateRank, getStartTimeMs,
     getOverallRecordFromCompetitor, getConferenceNameFromCompetitor,
     metaLineWithConference, isCollegeLeagueKey,
