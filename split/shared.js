@@ -195,7 +195,7 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "beat",   label: "Beat<br/>TTUN" },
       { key: "news",   label: "Top<br/>News" },
       { key: "golf",   label: "&#x26F3;<br/>Putt" },
-      { key: "fun",    label: "&#x1F389;<br/>Fun" },
+      { key: "fun",    label: "🤪<br/>Family" },
     ];
 
     // =========================
