@@ -147,6 +147,12 @@ window.replaceMichiganText = replaceMichiganText;
     const stocksDoor = document.querySelector('.doorBtn[data-go="stocks"]');
     if (stocksDoor) stocksDoor.style.display = isAdmin ? "" : "none";
 
+    // =========================
+    // DASHBOARD: admin only
+    // =========================
+    const dashDoor = document.querySelector('.doorBtn[data-go="dashboard"]');
+    if (dashDoor) dashDoor.style.display = isAdmin ? "" : "none";
+
     updateRivalryBanner();
 
     if (!showEntryScreen._bound) {
@@ -199,11 +205,12 @@ window.replaceMichiganText = replaceMichiganText;
     ];
 
     // =========================
-    // STOCKS + SHOP: admin only
+    // STOCKS + SHOP + DASHBOARD: admin only
     // =========================
     if (role === "admin") {
-      baseTabs.push({ key: "stocks", label: "&#x1F4C8;<br/>Stocks" });
-      baseTabs.push({ key: "shop",   label: "Shop" });
+      baseTabs.push({ key: "stocks",    label: "&#x1F4C8;<br/>Stocks" });
+      baseTabs.push({ key: "shop",      label: "Shop" });
+      baseTabs.push({ key: "dashboard", label: "🏠<br/>Home" });
     }
 
     tabs.innerHTML = baseTabs
@@ -257,7 +264,7 @@ window.replaceMichiganText = replaceMichiganText;
     const role = getRole();
 
     // Block admin-only tabs for guests
-    if ((tab === "shop" || tab === "stocks") && role !== "admin") tab = "scores";
+    if ((tab === "shop" || tab === "stocks" || tab === "dashboard") && role !== "admin") tab = "scores";
 
     currentTab = tab;
     window.__activeTab = tab;
@@ -278,17 +285,21 @@ window.replaceMichiganText = replaceMichiganText;
       }
     };
 
-    if (tab === "scores")      safe("loadScores", true);
-    else if (tab === "picks")  safe("renderPicks", true);
-    else if (tab === "beat")   safe("renderBeatTTUN");
-    else if (tab === "news")   safe("renderTopNews", true);
-    else if (tab === "shop")   safe("renderShop");
-    else if (tab === "golf")   safe("renderGolf");
-    else if (tab === "fun")    safe("renderFun");
+    if (tab === "scores")          safe("loadScores", true);
+    else if (tab === "picks")      safe("renderPicks", true);
+    else if (tab === "beat")       safe("renderBeatTTUN");
+    else if (tab === "news")       safe("renderTopNews", true);
+    else if (tab === "shop")       safe("renderShop");
+    else if (tab === "golf")       safe("renderGolf");
+    else if (tab === "fun")        safe("renderFun");
     // =========================
     // STOCKS TAB ROUTE
     // =========================
-    else if (tab === "stocks") safe("renderStocks");
+    else if (tab === "stocks")     safe("renderStocks");
+    // =========================
+    // DASHBOARD TAB ROUTE
+    // =========================
+    else if (tab === "dashboard")  safe("renderDashboard");
     else safe("loadScores", true);
 
     updateRivalryBanner();
