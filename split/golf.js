@@ -33,7 +33,7 @@
   function esc(s) {
     return String(s || "")
       .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+      .replace(/>/g,"&gt;").replace(/\"/g,"&quot;");
   }
 
   function vsParLabel(strokes, par) {
@@ -74,12 +74,10 @@
   }
 
   // Convert a YYYY-MM-DD date string to a local-time timestamp (not UTC).
-  // new Date("2026-05-07") parses as UTC midnight, which is the previous day
-  // in any negative-offset timezone (e.g. US Eastern). This fixes that.
   function localDateStringToTimestamp(dateStr) {
     if (!dateStr) return Date.now();
     const [year, month, day] = dateStr.split("-").map(Number);
-    return new Date(year, month - 1, day, 12, 0, 0).getTime(); // noon local time
+    return new Date(year, month - 1, day, 12, 0, 0).getTime();
   }
 
   // ─── State ───────────────────────────────────────────────────────────────
@@ -185,19 +183,15 @@
     });
   }
 
-  // ─── Firebase helper: Save a manually-entered completed round ────────────────────────
+  // ─── Firebase helper: Save a manually-entered completed round ─────────────
   async function saveManualRound(courseId, courseName, holePars, playerNames, scoresMap, roundDate) {
     const db = COL();
     if (!db) return null;
     const roundId = generateRoundId();
-    // Build scores in the same shape as a live round
     const scores = {};
     playerNames.forEach(p => {
       scores[p] = { holes: scoresMap[p] || new Array(holePars.length).fill(null) };
     });
-    // Use localDateStringToTimestamp so "2026-05-07" stays May 7 in any timezone,
-    // instead of new Date("2026-05-07") which parses as UTC midnight and shifts
-    // the date back one day for US timezones.
     const ts = localDateStringToTimestamp(roundDate);
     await db.collection(ROUNDS_PATH).doc(roundId).set({
       courseId,
@@ -215,9 +209,21 @@
     return roundId;
   }
 
-  // ─── Render: Main Shell ─────────────────────────────────────────────────────
+  // ─── Render: Main Shell ──────────────────────────────────────────────────
   function getContent() { return document.getElementById("content"); }
   function setContent(html) { const c = getContent(); if (c) c.innerHTML = html; }
+
+  // ─── Live hole map helper ─────────────────────────────────────────────────
+  // Calls golf-map.js's renderMiniGolfHoleMap if available; returns "" if not.
+  function buildLiveHoleMapHTML(roundData, currentHole) {
+    if (!roundData || typeof window.renderMiniGolfHoleMap !== "function") return "";
+    return window.renderMiniGolfHoleMap(
+      roundData.courseId,
+      roundData.courseName,
+      currentHole + 1,
+      Array.isArray(roundData.holePars) ? roundData.holePars.length : 0
+    ) || "";
+  }
 
   // ─── View: Golf Home ──────────────────────────────────────────────────────
   async function renderGolfHome() {
@@ -276,7 +282,7 @@
           <h2>THE Putt Shop</h2>
         </div>
         <div class="golf-home-btns">
-          <button class="golf-btn golf-btn-primary" id="golfStartBtn">🏴‍☠️ Start a Round</button>
+          <button class="golf-btn golf-btn-primary" id="golfStartBtn">🏴\u200d☠️ Start a Round</button>
           <button class="golf-btn golf-btn-secondary" id="golfMapBtn">🗺️ Course Map</button>
           <button class="golf-btn golf-btn-secondary" id="golfHistoryBtn">📋 Prior Rounds</button>
           <button class="golf-btn golf-btn-secondary" id="golfStatsBtn">📊 Putt Putt Stats</button>
@@ -449,6 +455,9 @@
     const totalHoles = pars.length;
     const isLast     = currentHole === totalHoles - 1;
 
+    // Build live hole map card (renders nothing if course has no map)
+    const liveHoleMapHTML = buildLiveHoleMapHTML(roundData, currentHole);
+
     _state.draftScores = {};
     players.forEach(p => {
       const saved = normalizeHoles(roundData.scores[p]?.holes, totalHoles)[currentHole];
@@ -485,6 +494,7 @@
         </div>
 
         <div class="golf-par-line">Par ${par}</div>
+        ${liveHoleMapHTML}
 
         <div class="golf-score-list" id="golfScoreList">
           ${playerRows()}
@@ -537,7 +547,6 @@
     const { roundId, currentHole, draftScores, roundData } = _state;
     const totalHoles = roundData.holePars.length;
 
-    // Save current hole scores to Firebase, keep status active
     roundData.players.forEach(p => {
       if (!roundData.scores[p]) roundData.scores[p] = { holes: [] };
       if (!Array.isArray(roundData.scores[p].holes)) {
@@ -859,7 +868,7 @@
           </div>
         ` : ""}
 
-        <h3 class="golf-section-title">🏴‍☠️ Player Leaderboard</h3>
+        <h3 class="golf-section-title">🏴\u200d☠️ Player Leaderboard</h3>
         <div class="golf-table-wrap">
           <table class="golf-table">
             <thead><tr><th>Player</th><th>Rounds</th><th>Avg</th><th>Wins</th><th>HIOs</th></tr></thead>
@@ -982,7 +991,6 @@
 
     // Render the score-entry grid
     const pars = course.par;
-    const totalPar = pars.reduce((a, b) => a + b, 0);
 
     const headerCells = pars.map((_, i) => `<th style="min-width:36px;">H${i+1}</th>`).join("");
     const parCells    = pars.map(p => `<td class="golf-sc-par">${p}</td>`).join("");
@@ -1068,7 +1076,7 @@
     });
   }
 
-  // ─── Shared: Scorecard HTML ─────────────────────────────────────────────────────
+  // ─── Shared: Scorecard HTML ───────────────────────────────────────────────
   function buildScorecardHTML(round) {
     const pars    = round.holePars || [];
     const players = round.players  || [];
@@ -1107,12 +1115,12 @@
     `;
   }
 
-  // ─── Admin: Course Manager (legacy entry point from shop tab) ─────────────────
+  // ─── Admin: Course Manager (legacy entry point from shop tab) ────────────
   async function renderAdminGolf() {
     renderGolfHome();
   }
 
-  // ─── Pi Scoreboard: Firebase Listener + TV Overlay ───────────────────────────
+  // ─── Pi Scoreboard: Firebase Listener + TV Overlay ───────────────────────
   let _piUnsubscribe = null;
 
   function initPiGolfListener() {
@@ -1262,7 +1270,7 @@
     `;
   }
 
-  // ─── Entry Points ────────────────────────────────────────────────────────────
+  // ─── Expose ───────────────────────────────────────────────────────────────
   window.renderGolf         = renderGolfHome;
   window.renderAdminGolf    = renderAdminGolf;
   window.initPiGolfListener = initPiGolfListener;

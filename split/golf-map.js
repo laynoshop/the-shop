@@ -1,5 +1,5 @@
 /* =========================
-   THE PUTT SHOP — Course Map v5
+   THE PUTT SHOP — Course Map v6
 
    GREEN SHAPE (SVG viewBox 0 0 220 460):
      - RIGHT SIDE: straight wall top to bottom
@@ -105,10 +105,6 @@
         },
         {
           id: 6,
-          // Pulled ~4ft back from the top fringe so there's room above the cup
-          // for the ball to overshoot, stop, and roll back down into the face.
-          // Right edge of the neck, ~4ft down from the top wall.
-          // 4ft = 4/SY = ~83 SVG units below y=10, so hole y = 93.
           tee:       [10,  445],
           hole:      [210, 93],
           facingDeg: 0,
@@ -147,6 +143,12 @@
     }
   ];
 
+  // Link Firebase course doc IDs to static map definitions.
+  // Key = static course id, value = array of known Firebase doc IDs for that course.
+  const COURSE_LINKS = {
+    "front-edge-nine": ["front-edge-nine", "course_1783266419297"]
+  };
+
   // Auto-compute totalPar and dist labels from actual coordinates
   COURSES.forEach(c => {
     c.totalPar = 0;
@@ -169,10 +171,39 @@
     lineActive: "#f59e0b",
   };
 
-  // ─── Facing label ─────────────────────────────────────────────────────────
+  // ─── Helpers ──────────────────────────────────────────────────────────────
   function facingLabel(deg) {
     const m = { 0: "↑ UP", 90: "→ RIGHT", 180: "↓ DOWN", 270: "← LEFT" };
     return m[deg] || deg + "°";
+  }
+
+  function normKey(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  // Find a static map course by Firebase doc ID, COURSE_LINKS, or normalized name.
+  function findLinkedCourse(courseId, courseName, totalHoles) {
+    if (courseId) {
+      // Direct static ID match
+      const exact = COURSES.find(c => c.id === courseId);
+      if (exact) return exact;
+      // Firebase doc ID → static course via COURSE_LINKS
+      const linked = COURSES.find(c => (COURSE_LINKS[c.id] || []).includes(courseId));
+      if (linked) return linked;
+    }
+    // Fallback: normalized name match
+    const nameKey = normKey(courseName);
+    if (nameKey) {
+      const byName = COURSES.find(c => {
+        const holesMatch = !totalHoles || (c.holes && c.holes.length === totalHoles);
+        return normKey(c.name) === nameKey && holesMatch;
+      });
+      if (byName) return byName;
+    }
+    return null;
   }
 
   // ─── Arrow builder ────────────────────────────────────────────────────────
@@ -270,7 +301,31 @@
     `;
   }
 
-  // ─── Render main view ─────────────────────────────────────────────────────
+  // ─── Mini hole map for live scoring ──────────────────────────────────────
+  // Returns an HTML string showing the isolated hole map card for use
+  // inside the scoring screen. Returns "" if no map is available.
+  function renderMiniGolfHoleMap(courseId, courseName, holeNumber, totalHoles) {
+    const course = findLinkedCourse(courseId, courseName, totalHoles);
+    if (!course) return "";
+    const hole = (course.holes || []).find(h => h.id === holeNumber);
+    if (!hole) return "";
+    return `
+      <div class="gmap-live-card"
+        style="margin:12px 0 14px;padding:12px 12px 10px;border-radius:18px;
+               background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+          <div style="font-size:14px;font-weight:900;color:#fff;">🗺️ Hole ${hole.id} Map</div>
+          <div style="font-size:12px;font-weight:800;color:#f59e0b;">${hole.dist} · Par ${hole.par}</div>
+        </div>
+        ${buildSVG(course.holes, hole.id)}
+        <div style="margin-top:10px;font-size:12px;line-height:1.45;color:rgba(255,255,255,0.86);">
+          ${hole.tip}
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── Render main map view ─────────────────────────────────────────────────
   function renderGolfMap(initialCourseId) {
     let activeCourseId = initialCourseId || COURSES[0].id;
     let activeHole     = null;
@@ -387,7 +442,9 @@
   }
 
   // ─── Expose ───────────────────────────────────────────────────────────────
-  window.renderGolfMap    = renderGolfMap;
-  window.GOLF_MAP_COURSES = COURSES;
+  window.renderGolfMap             = renderGolfMap;
+  window.GOLF_MAP_COURSES          = COURSES;
+  window.findLinkedGolfMapCourse   = findLinkedCourse;
+  window.renderMiniGolfHoleMap     = renderMiniGolfHoleMap;
 
 })();
