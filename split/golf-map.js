@@ -70,11 +70,11 @@
         {
           id: 2,
           tee:       [210, 20],
-          hole:      [10,  445],
-          facingDeg: 270,
+          hole:      [20,  435],
+          facingDeg: 45,
           par:       3,
           desc:      "Cross-Diagonal Full",
-          tip:       "Top-right neck to bottom-left corner. Cup opens LEFT — approach from the right. Use the left wall as a backstop and let the ball kick back right into the face."
+          tip:       "Top-right neck to bottom-left corner. Cup opens NORTHEAST — approach from the bottom-right. Send the ball toward the bottom-left, let it slow near the corner, and roll back northeast into the face."
         },
         {
           id: 3,
@@ -173,7 +173,7 @@
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   function facingLabel(deg) {
-    const m = { 0: "↑ UP", 90: "→ RIGHT", 180: "↓ DOWN", 270: "← LEFT" };
+    const m = { 0: "↑ UP", 90: "→ RIGHT", 180: "↓ DOWN", 270: "← LEFT", 45: "↗ NE", 135: "↘ SE", 225: "↙ SW", 315: "↖ NW" };
     return m[deg] || deg + "°";
   }
 
