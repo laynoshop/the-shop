@@ -1,5 +1,5 @@
 /* =========================
-   THE PUTT SHOP — Course Map v7
+   THE PUTT SHOP — Course Map v8
 
    GREEN SHAPE (SVG viewBox 0 0 220 460) — EXACT MEASURED DIMENSIONS:
      Top neck width:       2'4"  (2.333 ft)
@@ -22,26 +22,18 @@
      SVG height 460 units = 23.417 ft  →  SY = 23.417 / 460
      True distance = sqrt((dx*SX)² + (dy*SY)²)
 
-   KEY BEHAVIOR:
-     - activeHole set → ONLY that hole's T, H, line, arrow rendered.
-       All others hidden completely (isolate mode).
-     - activeHole null → all holes shown at reduced opacity (overview).
-
    facingDeg = direction the cup OPENING faces:
      0=UP, 90=RIGHT, 180=DOWN, 270=LEFT, 45=NE, 135=SE, 225=SW, 315=NW
-   Arrow points FROM hole center TOWARD the opening.
    ========================= */
 
 (function GolfMapModule() {
   "use strict";
 
-  // ─── Green polygon ────────────────────────────────────────────────────────
   const GREEN_POLY  = "146,5 215,5 215,455 5,455 5,287 146,146";
   const FRINGE_POLY = "148,8 212,8 212,452 8,452 8,289 148,149";
 
-  // ─── Scale factors (exact measurements) ─────────────────────────────────────
-  const SX = 7.4167 / 220;   // ft per SVG unit (horizontal) — 7'5" across
-  const SY = 23.417 / 460;   // ft per SVG unit (vertical)   — 23'5" tall
+  const SX = 7.4167 / 220;
+  const SY = 23.417 / 460;
 
   function realFt(tee, hole) {
     const dx = (hole[0] - tee[0]) * SX;
@@ -53,7 +45,6 @@
     return "~" + Math.round(realFt(tee, hole)) + "ft";
   }
 
-  // ─── Course Library ───────────────────────────────────────────────────────
   const COURSES = [
     {
       id: "front-edge-nine",
@@ -72,7 +63,7 @@
         {
           id: 2,
           tee:       [210, 15],
-          hole:      [20,  443],
+          hole:      [20,  435],
           facingDeg: 45,
           par:       3,
           desc:      "Cross-Diagonal Full",
@@ -117,7 +108,7 @@
         {
           id: 7,
           tee:       [10,  443],
-          hole:      [210, 95],
+          hole:      [210, 100],
           facingDeg: 270,
           par:       3,
           desc:      "Bottom-Left to Right Rail",
@@ -125,7 +116,7 @@
         },
         {
           id: 8,
-          tee:       [210, 75],
+          tee:       [210, 80],
           hole:      [10,  443],
           facingDeg: 90,
           par:       3,
@@ -142,15 +133,102 @@
           tip:       "From the base of the diagonal wall, shoot diagonally to the bottom-right corner. Cup opens UP — controlled speed wins the hole. The finisher."
         }
       ]
+    },
+    {
+      id: "back-edge-nine",
+      name: "Back-Edge Nine",
+      designer: "The Putt Shop",
+      holes: [
+        {
+          id: 1,
+          tee:       [210, 420],
+          hole:      [210, 50],
+          facingDeg: 180,
+          par:       2,
+          desc:      "Right Rail Rocket",
+          tip:       "Straight up the right wall — pure speed control. Cup opens DOWN, give it just enough to reach the top and trickle back in. Prime hole-in-one candidate."
+        },
+        {
+          id: 2,
+          tee:       [210, 448],
+          hole:      [155, 15],
+          facingDeg: 90,
+          par:       3,
+          desc:      "Corner to Neck",
+          tip:       "Bottom-right corner all the way to the neck top-left. Cup opens RIGHT — overshoot the top-left wall and let it feed back right into the face."
+        },
+        {
+          id: 3,
+          tee:       [10,  350],
+          hole:      [210, 25],
+          facingDeg: 270,
+          par:       3,
+          desc:      "Left Wall to Neck",
+          tip:       "From the left wall mid-section, diagonal up to the top-right corner of the neck. Cup opens LEFT — hit the right wall and let it kick back left into the cup."
+        },
+        {
+          id: 4,
+          tee:       [155, 20],
+          hole:      [15,  280],
+          facingDeg: 90,
+          par:       2,
+          desc:      "Diagonal Wall Dash",
+          tip:       "Straight down the diagonal wall — the most unique line on the course. Cup opens RIGHT at the base. Pure feel shot: too hard and you bounce off the left wall, too soft and you stall. Hole-in-one is very much on."
+        },
+        {
+          id: 5,
+          tee:       [10,  287],
+          hole:      [210, 80],
+          facingDeg: 0,
+          par:       3,
+          desc:      "Diagonal Base Up",
+          tip:       "From the base of the diagonal wall, fire up to the upper right. Cup opens UP — send it past the cup to the top fringe and let gravity return it into the face."
+        },
+        {
+          id: 6,
+          tee:       [155, 15],
+          hole:      [15,  448],
+          facingDeg: 0,
+          par:       3,
+          desc:      "Neck to Bottom-Left",
+          tip:       "From the top-left of the neck, full diagonal down to the bottom-left corner. Cup opens UP — overshoot the bottom-left corner and let it roll back up into the face."
+        },
+        {
+          id: 7,
+          tee:       [210, 200],
+          hole:      [15,  440],
+          facingDeg: 45,
+          par:       3,
+          desc:      "Mid-Right to Bottom-Left",
+          tip:       "From mid right wall down to the bottom-left corner. Cup opens NE — approach from the southwest, let the ball run into the corner and feed back northeast into the face."
+        },
+        {
+          id: 8,
+          tee:       [15,  445],
+          hole:      [210, 250],
+          facingDeg: 270,
+          par:       3,
+          desc:      "Bottom-Left to Mid-Right",
+          tip:       "From bottom-left corner, long diagonal up to the mid-right wall. Cup opens LEFT — use the right wall as a backstop and let it kick back left into the face."
+        },
+        {
+          id: 9,
+          tee:       [15,  448],
+          hole:      [210, 35],
+          facingDeg: 180,
+          par:       4,
+          desc:      "The Gauntlet",
+          tip:       "Bottom-left all the way to the top-right neck. The longest hole on the course — nearly the full green diagonal. Cup opens DOWN. Par 4: shot 1 gets you to mid-green, shot 2 into the neck zone, shot 3 sets up, shot 4 sinks it. Birdie (3) is elite. Eagle (2) is legend."
+        }
+      ]
     }
   ];
 
-  // Link Firebase course doc IDs to static map definitions.
   const COURSE_LINKS = {
-    "front-edge-nine": ["front-edge-nine", "course_1783266419297"]
+    "front-edge-nine": ["front-edge-nine", "course_1783266419297"],
+    "back-edge-nine":  ["back-edge-nine"]
   };
 
-  // Auto-compute totalPar and dist labels from actual coordinates
   COURSES.forEach(c => {
     c.totalPar = 0;
     c.holes.forEach(h => {
@@ -159,7 +237,6 @@
     });
   });
 
-  // ─── Colors ──────────────────────────────────────────────────────────────
   const C = {
     green:      "#2d6a2d",
     stroke:     "rgba(255,255,255,0.22)",
@@ -172,17 +249,13 @@
     lineActive: "#f59e0b",
   };
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
   function facingLabel(deg) {
     const m = { 0: "↑ UP", 90: "→ RIGHT", 180: "↓ DOWN", 270: "← LEFT", 45: "↗ NE", 135: "↘ SE", 225: "↙ SW", 315: "↖ NW" };
     return m[deg] || deg + "°";
   }
 
   function normKey(s) {
-    return String(s || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   }
 
   function findLinkedCourse(courseId, courseName, totalHoles) {
@@ -203,7 +276,6 @@
     return null;
   }
 
-  // ─── Arrow builder ────────────────────────────────────────────────────────
   function buildArrow(cx, cy, deg, active) {
     const r   = 20;
     const rad = (deg - 90) * Math.PI / 180;
@@ -224,7 +296,6 @@
     `;
   }
 
-  // ─── SVG builder ──────────────────────────────────────────────────────────
   function buildSVG(holes, activeHole) {
     const MR = 11, FS = 8;
     const isolate = activeHole !== null;
@@ -298,7 +369,6 @@
     `;
   }
 
-  // ─── Mini hole map for live scoring ──────────────────────────────────────
   function renderMiniGolfHoleMap(courseId, courseName, holeNumber, totalHoles) {
     const course = findLinkedCourse(courseId, courseName, totalHoles);
     if (!course) return "";
@@ -320,7 +390,6 @@
     `;
   }
 
-  // ─── Render main map view ─────────────────────────────────────────────────
   function renderGolfMap(initialCourseId) {
     let activeCourseId = initialCourseId || COURSES[0].id;
     let activeHole     = null;
@@ -358,7 +427,8 @@
 
       const holeButtons = holes.map(h => {
         const active = activeHole === h.id;
-        return `<button class="gmap-hole-btn ${active ? "gmap-hole-btn-active" : ""}" data-hole="${h.id}">${h.id}</button>`;
+        const parBadge = h.par === 4 ? ' 🔥' : h.par === 2 ? ' ⭐' : '';
+        return `<button class="gmap-hole-btn ${active ? "gmap-hole-btn-active" : ""}" data-hole="${h.id}">${h.id}${parBadge}</button>`;
       }).join("");
 
       const holeList = holes.map(h => `
@@ -393,6 +463,7 @@
             <span class="gmap-legend-tee">● T = Tee</span>
             <span class="gmap-legend-hole">● H = Hole</span>
             <span class="gmap-legend-arrow">→ = Cup opens</span>
+            <span style="color:rgba(255,255,255,0.5);font-size:11px;">⭐=Par 2 🔥=Par 4</span>
           </div>
           <div class="gmap-svg-wrap">${buildSVG(holes, activeHole)}</div>
           ${holeDetailHTML}
@@ -436,7 +507,6 @@
     draw();
   }
 
-  // ─── Expose ──────────────────────────────────────────────────────────────
   window.renderGolfMap             = renderGolfMap;
   window.GOLF_MAP_COURSES          = COURSES;
   window.findLinkedGolfMapCourse   = findLinkedCourse;
