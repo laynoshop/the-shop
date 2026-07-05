@@ -1,34 +1,33 @@
 /* =========================
-   THE PUTT SHOP — Course Map v3
+   THE PUTT SHOP — Course Map v4
 
    GREEN SHAPE (SVG viewBox 0 0 220 460):
      - RIGHT SIDE: straight wall top to bottom
      - TOP NECK: narrow section on the RIGHT (~3ft wide), runs ~8ft down
-     - DIAGONAL: cuts from bottom-left of neck diagonally down to lower-left,
-       widening into the full bottom section
+     - DIAGONAL: cuts from bottom-left of neck diagonally to lower-left
      - BOTTOM SECTION: full width (~8ft), runs ~14ft
 
    Polygon (clockwise):
      Top-left of neck:     (155, 10)
      Top-right of neck:    (215, 10)
      Bottom-right corner:  (215, 450)
-     Bottom-left corner:   (5,  450)
-     Base of diagonal:     (5,  210)
+     Bottom-left corner:   (5,   450)
+     Base of diagonal:     (5,   210)
      Top of diagonal:      (155, 150)
 
-   KEY RULES:
-     - When a hole is selected (activeHole !== null), ONLY that hole's
-       T marker, H marker, dashed line, and cup arrow are shown.
-       All other holes are completely hidden.
-     - All holes are >= 12ft (represented in SVG units where the full
-       22ft green = ~440 SVG units, so 12ft ≈ 240 SVG units of diagonal)
-     - facingDeg: direction the cup OPENING faces
-         0   = opens UP    (approach from below)
-         90  = opens RIGHT  (approach from the left)
-         180 = opens DOWN   (approach from above)
-         270 = opens LEFT   (approach from the right)
-     - Arrow points FROM the hole center TOWARD the cup opening,
-       showing the player which direction to approach from.
+   DISTANCE MATH (verified):
+     SVG height 460 units = 22ft  →  1 SVG unit = 0.04783 ft (vertical)
+     SVG width  220 units = 8ft   →  1 SVG unit = 0.03636 ft (horizontal)
+     True distance = sqrt((dx*0.03636)² + (dy*0.04783)²)
+
+   KEY BEHAVIOR:
+     - activeHole set → ONLY that hole's T, H, line, arrow rendered.
+       All others hidden completely (isolate mode).
+     - activeHole null → all holes shown at reduced opacity (overview).
+
+   facingDeg = direction the cup OPENING faces:
+     0=UP, 90=RIGHT, 180=DOWN, 270=LEFT
+   Arrow points FROM hole center TOWARD the opening.
    ========================= */
 
 (function GolfMapModule() {
@@ -38,17 +37,26 @@
   const GREEN_POLY  = "155,10 215,10 215,450 5,450 5,210 155,150";
   const FRINGE_POLY = "157,13 212,13 212,447 8,447 8,212 157,153";
 
-  // ─── Distance helper ──────────────────────────────────────────────────────
-  // Straight-line SVG distance between tee and hole.
-  // Full green is ~440 SVG units tall = ~22ft, so 1 SVG unit ≈ 0.05ft.
-  // 12ft minimum = 240 SVG units minimum.
-  function svgDist(tee, hole) {
-    const dx = hole[0] - tee[0];
-    const dy = hole[1] - tee[1];
+  // ─── Scale factors ────────────────────────────────────────────────────────
+  // These are the ONLY values used to compute dist labels.
+  // SVG 460 units tall = 22ft, SVG 220 units wide = 8ft
+  const SX = 8  / 220;   // ft per SVG unit (horizontal)
+  const SY = 22 / 460;   // ft per SVG unit (vertical)
+
+  function realFt(tee, hole) {
+    const dx = (hole[0] - tee[0]) * SX;
+    const dy = (hole[1] - tee[1]) * SY;
     return Math.sqrt(dx * dx + dy * dy);
   }
 
+  function distLabel(tee, hole) {
+    const d = realFt(tee, hole);
+    return "~" + Math.round(d) + "ft";
+  }
+
   // ─── Course Library ───────────────────────────────────────────────────────
+  // All tee/hole coordinates verified >= 12ft real distance.
+  // dist field is AUTO-COMPUTED below so it always matches the coordinates.
   const COURSES = [
     {
       id: "front-edge-nine",
@@ -57,144 +65,97 @@
       holes: [
         {
           id: 1,
-          // Tee: top-left corner of the narrow neck
-          // Hole: bottom-right corner of the wide section, facing UP
-          // Full-length diagonal (~22ft). Cup opens UP — ball must approach
-          // from below. If you blast past the bottom-right corner you
-          // must reposition below the cup and putt back up into the face.
-          // Par 3: the natural overshoot on a long diagonal + directional cup
-          tee:       [160, 25],
-          hole:      [205, 435],
+          tee:       [160, 20],
+          hole:      [210, 445],
           facingDeg: 0,
           par:       3,
-          dist:      "~22ft",
           desc:      "Full-Length Diagonal",
-          tip:       "Tee at the top-left of the neck. Roll the full length of the green to the bottom-right corner. Cup opens UP — if you blow past it you must come back and approach from below. Par 3."
+          tip:       "Tee at the top-left of the neck. Full diagonal to the bottom-right corner. Cup opens UP — if you blast past the corner you must reposition below the cup and putt back up into the face."
         },
         {
           id: 2,
-          // Tee: top-right of neck
-          // Hole: far-left of wide section (mid-height), facing RIGHT
-          // Long diagonal from neck to left wall. Cup opens RIGHT so
-          // ball must approach from the LEFT — use the left wall as a
-          // backstop and approach the cup face from that side. Par 3.
-          tee:       [210, 25],
-          hole:      [18, 310],
-          facingDeg: 90,
+          tee:       [210, 20],
+          hole:      [10,  445],
+          facingDeg: 270,
           par:       3,
-          dist:      "~20ft",
-          desc:      "Neck to Left Wall",
-          tip:       "Long cross-green shot from top-right neck to far-left of the wide section. Cup opens RIGHT — use the left wall as a backstop and let the ball feed back right into the cup face."
+          desc:      "Cross-Diagonal Full",
+          tip:       "Top-right neck to bottom-left corner. Cup opens LEFT — approach from the right. Use the left wall as a backstop and let the ball kick back right into the face."
         },
         {
           id: 3,
-          // Tee: bottom-left of neck (top of diagonal area)
-          // Hole: bottom-right corner, facing LEFT
-          // Long run from the diagonal area diagonally to the right bottom.
-          // Cup opens LEFT — approach from the right wall. Par 2 (natural
-          // path hugs the right wall and feeds into the face cleanly).
-          tee:       [160, 148],
-          hole:      [205, 438],
-          facingDeg: 270,
-          par:       2,
-          dist:      "~15ft",
-          desc:      "Diagonal to Right Corner",
-          tip:       "From the top of the diagonal, send it down and right to the bottom-right corner. Cup opens LEFT — the right wall naturally feeds the ball into the cup face. Clean par 2 if you control speed."
+          tee:       [160, 20],
+          hole:      [10,  310],
+          facingDeg: 90,
+          par:       3,
+          desc:      "Down the Diagonal Wall",
+          tip:       "Top-left neck to mid-left wall. The ball travels down and left along the diagonal. Cup opens RIGHT — run it past the left wall then approach from the left side."
         },
         {
           id: 4,
-          // Tee: left edge of wide section (just below diagonal)
-          // Hole: right wall mid-section, facing UP
-          // Cross-green shot. Cup faces UP — straight approach if you
-          // land it right, but easy to overshoot and need to come back. Par 2.
-          tee:       [18, 240],
-          hole:      [205, 360],
-          facingDeg: 0,
+          tee:       [210, 20],
+          hole:      [10,  310],
+          facingDeg: 90,
           par:       2,
-          dist:      "~16ft",
-          desc:      "Wide Section Cross",
-          tip:       "Left-side tee to right wall mid-section. Cup opens UP — don't overshoot past the right wall or you'll be repositioning below the cup."
+          desc:      "Neck to Left Wall",
+          tip:       "Top-right neck, long shot to the left wall mid-section. Cup opens RIGHT — the left wall is your backstop. Clean approach back into the face from the left."
         },
         {
           id: 5,
-          // Tee: right wall mid-section
-          // Hole: bottom-left corner, facing RIGHT
-          // Ball travels from mid-right to bottom-left. Cup opens RIGHT
-          // so approach from the left wall — let it hit the corner and
-          // feed back right into the face. Par 3.
-          tee:       [205, 240],
-          hole:      [18, 438],
-          facingDeg: 90,
+          tee:       [210, 445],
+          hole:      [160, 20],
+          facingDeg: 180,
           par:       3,
-          dist:      "~22ft",
-          desc:      "Right Wall to Bottom-Left",
-          tip:       "Mid-right tee, long diagonal to the bottom-left corner. Cup opens RIGHT — run it into the left corner wall and let the ball kick back right into the cup face."
+          desc:      "Uphill Full Diagonal",
+          tip:       "Bottom-right corner to top-left neck. Cup opens DOWN — you MUST send it past the cup toward the top wall, let it return, and roll back down into the face from above."
         },
         {
           id: 6,
-          // Tee: bottom-right corner
-          // Hole: center of the wide section (mid-height), facing DOWN
-          // Shooting UP the green. Cup faces DOWN — ball must overshoot
-          // past the cup toward the top, then roll back down into the face
-          // from above. Par 3.
-          tee:       [205, 445],
-          hole:      [110, 290],
-          facingDeg: 180,
+          tee:       [10,  445],
+          hole:      [210, 20],
+          facingDeg: 0,
           par:       3,
-          dist:      "~17ft",
-          desc:      "Bottom-Up Comeback",
-          tip:       "Tee at bottom-right, shoot up to center-wide. Cup opens DOWN — you MUST send it past the cup toward the top of the green, then let it roll back down into the face from above."
+          desc:      "Uphill Cross-Diagonal",
+          tip:       "Bottom-left corner all the way up to the top-right neck. Cup opens UP — approach from below. Don't overshoot past the top wall or you'll need to come back down."
         },
         {
           id: 7,
-          // Tee: center-wide section
-          // Hole: bottom-left corner, facing UP
-          // Medium diagonal. Cup opens UP — clean approach if you don't
-          // overshoot the corner. Par 2.
-          tee:       [110, 240],
-          hole:      [18, 440],
-          facingDeg: 0,
-          par:       2,
-          dist:      "~14ft",
-          desc:      "Center to Bottom-Left",
-          tip:       "Center tee to bottom-left corner. Cup opens UP — control your speed. Don't blast past the corner or you'll need to reposition below the cup."
+          tee:       [10,  440],
+          hole:      [210, 100],
+          facingDeg: 270,
+          par:       3,
+          desc:      "Bottom-Left to Right Rail",
+          tip:       "Long upward diagonal from bottom-left to right wall upper section. Cup opens LEFT — let the ball hit the right wall and feed back left into the cup face."
         },
         {
           id: 8,
-          // Tee: bottom-left corner
-          // Hole: right wall upper-wide section, facing LEFT
-          // Long upward diagonal. Cup opens LEFT — approach from the
-          // right wall, let it bounce and feed left into the face. Par 3.
-          tee:       [18, 440],
-          hole:      [205, 250],
-          facingDeg: 270,
+          tee:       [210, 80],
+          hole:      [10,  440],
+          facingDeg: 90,
           par:       3,
-          dist:      "~22ft",
-          desc:      "Bottom-Left Up to Right Wall",
-          tip:       "Long uphill diagonal from bottom-left to the right wall upper-wide. Cup opens LEFT — let the ball hit the right wall and feed back left into the cup face."
+          desc:      "Right Rail to Bottom-Left",
+          tip:       "From high on the right rail, long diagonal down to the bottom-left corner. Cup opens RIGHT — run it into the left wall and let it kick back right into the face."
         },
         {
           id: 9,
-          // Tee: left wall mid-wide section
-          // Hole: right wall bottom-wide section, facing UP
-          // Cross-bottom shot. Cup opens UP — long straight run with a
-          // slight downward angle. Pressure finisher. Par 2.
-          tee:       [18, 345],
-          hole:      [205, 430],
+          tee:       [10,  210],
+          hole:      [210, 445],
           facingDeg: 0,
           par:       2,
-          dist:      "~20ft",
           desc:      "Victory Lap",
-          tip:       "Left-side tee, cross the bottom of the wide section to the right wall. Cup opens UP near the bottom-right — controlled speed wins the hole and the round."
+          tip:       "From the base of the diagonal wall, shoot diagonally to the bottom-right corner. Cup opens UP — controlled speed wins the hole. The finisher."
         }
       ]
     }
-    // Additional courses can be added here
+    // Additional courses can be appended here
   ];
 
-  // Auto-compute totalPar
+  // Auto-compute totalPar and dist labels from actual coordinates
   COURSES.forEach(c => {
-    c.totalPar = c.holes.reduce((s, h) => s + h.par, 0);
+    c.totalPar = 0;
+    c.holes.forEach(h => {
+      h.dist = distLabel(h.tee, h.hole);
+      c.totalPar += h.par;
+    });
   });
 
   // ─── Colors ───────────────────────────────────────────────────────────────
@@ -217,25 +178,17 @@
   }
 
   // ─── Arrow builder ────────────────────────────────────────────────────────
-  // Arrow points FROM hole center TOWARD the cup opening direction.
-  // deg: 0=up, 90=right, 180=down, 270=left
   function buildArrow(cx, cy, deg, active) {
     const r   = 20;
     const rad = (deg - 90) * Math.PI / 180;
     const ax  = cx + r * Math.cos(rad);
     const ay  = cy + r * Math.sin(rad);
-    const headLen = 7;
-    const headW   = 4.5;
-    const dx  = Math.cos(rad);
-    const dy  = Math.sin(rad);
-    const px  = -dy;
-    const py  =  dx;
-    const tx  = ax - dx * headLen;
-    const ty  = ay - dy * headLen;
-    const lx1 = tx + px * headW;
-    const ly1 = ty + py * headW;
-    const lx2 = tx - px * headW;
-    const ly2 = ty - py * headW;
+    const headLen = 7, headW = 4.5;
+    const dx  = Math.cos(rad), dy = Math.sin(rad);
+    const px  = -dy,           py =  dx;
+    const tx  = ax - dx * headLen, ty = ay - dy * headLen;
+    const lx1 = tx + px * headW,   ly1 = ty + py * headW;
+    const lx2 = tx - px * headW,   ly2 = ty - py * headW;
     const col = active ? "#f59e0b" : "rgba(255,255,255,0.80)";
     return `
       <line x1="${cx}" y1="${cy}" x2="${ax.toFixed(1)}" y2="${ay.toFixed(1)}"
@@ -246,32 +199,22 @@
   }
 
   // ─── SVG builder ──────────────────────────────────────────────────────────
-  // KEY BEHAVIOR:
-  //   - If activeHole is set: ONLY render that hole's line, T marker, H marker, arrow.
-  //     All other holes are completely invisible.
-  //   - If activeHole is null: render ALL holes at reduced opacity (overview mode).
   function buildSVG(holes, activeHole) {
-    const MR = 11;
-    const FS = 8;
+    const MR = 11, FS = 8;
     const isolate = activeHole !== null;
-
     let lines = "", lineNums = "", arrows = "", tees = "", holeMarkers = "";
 
     holes.forEach(h => {
       const isActive = activeHole === h.id;
-
-      // In isolate mode, skip all holes except the active one
       if (isolate && !isActive) return;
 
-      const opacity = isolate ? 1 : 0.30;
       const lineCol = isolate ? C.lineActive : C.line;
       const lineW   = isolate ? 2 : 1.2;
+      const opacity = isolate ? 1 : 0.30;
 
-      // Dashed path line
       lines += `<line x1="${h.tee[0]}" y1="${h.tee[1]}" x2="${h.hole[0]}" y2="${h.hole[1]}"
         stroke="${lineCol}" stroke-width="${lineW}" stroke-dasharray="5 3" opacity="${opacity}" />`;
 
-      // Mid-line number label (only in overview mode — in isolate mode it's redundant)
       if (!isolate) {
         const mx = (h.tee[0] + h.hole[0]) / 2;
         const my = (h.tee[1] + h.hole[1]) / 2;
@@ -280,10 +223,8 @@
           font-family="-apple-system,system-ui">${h.id}</text>`;
       }
 
-      // Cup-facing arrow
       arrows += buildArrow(h.hole[0], h.hole[1], h.facingDeg, true);
 
-      // Tee marker
       const r = MR + (isActive ? 2 : 0);
       tees += `
         <circle cx="${h.tee[0]}" cy="${h.tee[1]}" r="${r}"
@@ -293,7 +234,6 @@
           font-family="-apple-system,system-ui">T${h.id}</text>
       `;
 
-      // Hole marker
       holeMarkers += `
         <circle cx="${h.hole[0]}" cy="${h.hole[1]}" r="${r}"
           fill="${C.hole}" stroke="rgba(0,0,0,0.5)" stroke-width="1.5" />
@@ -303,17 +243,14 @@
       `;
     });
 
-    // In isolate mode, add a large "cup face" label showing approach direction
     let approachLabel = "";
     if (isolate) {
       const h = holes.find(x => x.id === activeHole);
       if (h) {
         approachLabel = `
-          <text x="110" y="460" text-anchor="middle" dominant-baseline="auto"
+          <text x="110" y="462" text-anchor="middle" dominant-baseline="auto"
             font-size="9" font-weight="900" fill="#f59e0b"
-            font-family="-apple-system,system-ui">
-            Cup opens ${facingLabel(h.facingDeg)} — approach from that direction
-          </text>
+            font-family="-apple-system,system-ui">Cup opens ${facingLabel(h.facingDeg)} — approach from that direction</text>
         `;
       }
     }
@@ -322,32 +259,11 @@
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 470"
         style="width:100%;max-width:270px;display:block;margin:0 auto;border-radius:16px;
                background:#121212;box-shadow:0 12px 32px rgba(0,0,0,0.55);overflow:visible;">
-
-        <!-- Green surface -->
         <polygon points="${GREEN_POLY}"
           fill="${C.green}" stroke="${C.stroke}" stroke-width="2.5" />
-
-        <!-- Fringe inner line -->
         <polygon points="${FRINGE_POLY}"
           fill="none" stroke="${C.fringe}" stroke-width="1.5" />
-
-        <!-- Putt path lines -->
-        ${lines}
-        ${lineNums}
-
-        <!-- Cup arrows (under hole circles) -->
-        ${arrows}
-
-        <!-- Tee markers -->
-        ${tees}
-
-        <!-- Hole markers -->
-        ${holeMarkers}
-
-        <!-- Approach label (isolate mode only) -->
-        ${approachLabel}
-
-        <!-- Dimension hints -->
+        ${lines}${lineNums}${arrows}${tees}${holeMarkers}${approachLabel}
         <text x="185" y="6" text-anchor="middle" font-size="6"
           fill="rgba(255,255,255,0.25)" font-family="-apple-system,system-ui">~3ft</text>
         <text x="110" y="6" text-anchor="middle" font-size="6"
@@ -369,12 +285,10 @@
       const holes      = course.holes;
       const activeData = activeHole ? holes.find(h => h.id === activeHole) : null;
 
-      // Course dropdown
       const courseOpts = COURSES.map(c =>
         `<option value="${c.id}" ${c.id === activeCourseId ? "selected" : ""}>${c.name}</option>`
       ).join("");
 
-      // Hole detail card
       const holeDetailHTML = activeData ? `
         <div class="gmap-detail">
           <div class="gmap-detail-top">
@@ -392,17 +306,13 @@
             <span class="gmap-dist-chip">📍 ${activeData.dist}</span>
           </div>
         </div>
-      ` : `
-        <div class="gmap-hint">Tap a hole number to isolate it and see the approach direction</div>
-      `;
+      ` : `<div class="gmap-hint">Tap a hole number to isolate it and see the approach direction</div>`;
 
-      // Hole selector buttons
       const holeButtons = holes.map(h => {
         const active = activeHole === h.id;
         return `<button class="gmap-hole-btn ${active ? "gmap-hole-btn-active" : ""}" data-hole="${h.id}">${h.id}</button>`;
       }).join("");
 
-      // Reference list
       const holeList = holes.map(h => `
         <div class="gmap-hole-row ${activeHole === h.id ? "gmap-hole-row-active" : ""}" data-hole="${h.id}">
           <span class="gmap-hole-num">H${h.id}</span>
@@ -423,7 +333,6 @@
             <button class="golf-back" id="gmapBack">← Back</button>
             <h2>🗺️ Course Map</h2>
           </div>
-
           <div class="gmap-course-select-wrap">
             <label class="golf-label">Course</label>
             <select class="golf-select gmap-course-select" id="gmapCourseSelect">${courseOpts}</select>
@@ -432,24 +341,17 @@
               <span class="gmap-course-designer">by ${course.designer}</span>
             </div>
           </div>
-
           <div class="gmap-legend">
             <span class="gmap-legend-tee">● T = Tee</span>
             <span class="gmap-legend-hole">● H = Hole</span>
             <span class="gmap-legend-arrow">→ = Cup opens</span>
           </div>
-
-          <div class="gmap-svg-wrap">
-            ${buildSVG(holes, activeHole)}
-          </div>
-
+          <div class="gmap-svg-wrap">${buildSVG(holes, activeHole)}</div>
           ${holeDetailHTML}
-
           <div class="gmap-hole-selector">
             <div class="golf-label" style="margin-bottom:8px;">Select Hole</div>
             <div class="gmap-hole-grid">${holeButtons}</div>
           </div>
-
           <div class="gmap-all-holes">${holeList}</div>
         </div>
       `;
@@ -469,7 +371,6 @@
           const id = parseInt(btn.dataset.hole, 10);
           activeHole = activeHole === id ? null : id;
           draw();
-          // Scroll map into view
           document.querySelector(".gmap-svg-wrap")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         });
       });
