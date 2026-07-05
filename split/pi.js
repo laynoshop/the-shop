@@ -149,7 +149,12 @@
   function _syncPuttPageMode() {
     const wrap = document.getElementById("piWrap");
     if (!wrap) return;
-    wrap.classList.toggle("piPuttPageMode", _activeLeague === "puttputt");
+    const isPutt = _activeLeague === "puttputt";
+    wrap.classList.toggle("piPuttPageMode", isPutt);
+
+    // Show/hide the right panel toggle bar based on mode
+    const toggleBar = document.getElementById("piRightToggleBar");
+    if (toggleBar) toggleBar.style.display = isPutt ? "none" : "";
   }
 
   // ----------------------------------------------------------------
@@ -276,7 +281,7 @@
     margin-top: 2px;
   }
 
-  /* ---- Countdown — sexied up ---- */
+  /* ---- Countdown ---- */
   #piCountdown {
     display: flex;
     align-items: center;
@@ -456,7 +461,7 @@
   .piRightToggleBtn:hover { color: #fff; background: rgba(180,0,0,0.25); }
   .piRightToggleBtn.active { color: #ff4444; border-bottom-color: #cc0000; background: rgba(180,0,0,0.15); }
 
-  /* Right panel content area — YouTube only in top portion */
+  /* Right panel content area */
   #piRightContent {
     display: flex;
     flex-direction: column;
@@ -467,10 +472,15 @@
   #piYoutubeSlot {
     flex-shrink: 0;
     width: 100%;
-    /* ~45% of right panel height = top portion only */
     height: 42%;
     position: relative;
     background: #000;
+  }
+  /* In Clubhouse mode, hole map fills the entire right panel */
+  #piWrap.piPuttPageMode #piYoutubeSlot {
+    height: 100%;
+    flex: 1;
+    background: transparent;
   }
   #piYoutubeSlot iframe {
     width: 100%;
@@ -611,16 +621,48 @@
   .piPuttPuttBtn:hover { background: rgba(0,160,80,0.45); color: #fff; border-color: rgba(0,220,120,0.7); }
   .piPuttPuttBtn.active { background: linear-gradient(135deg, #007a3a, #005528); color: #fff; border-color: #00cc66; box-shadow: 0 0 12px rgba(0,200,80,0.55); }
 
-  /* ---- Clubhouse full-width mode ---- */
-  #piWrap.piPuttPageMode {
-    grid-template-columns: 1fr;
-  }
+  /* ---- Clubhouse mode: right panel becomes the hole map column ---- */
   #piWrap.piPuttPageMode #piRightPanel {
+    display: flex;
+  }
+  #piWrap.piPuttPageMode #piRightToggleBar {
+    display: none;
+  }
+  #piWrap.piPuttPageMode #piRightBottom {
     display: none;
   }
   #piWrap.piPuttPageMode #piScoresPanel {
-    border-right: none;
-    padding-right: 18px;
+    border-right: 1px solid rgba(0,180,70,0.2);
+  }
+
+  /* ---- Hole map container in right panel ---- */
+  #piHoleMapSlot {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+  #piHoleMapSlot .piPuttHoleHead {
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(0,220,100,0.6);
+    margin-bottom: 10px;
+    flex-shrink: 0;
+  }
+  #piHoleMapSlot .piPuttHoleCard {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
   }
 
   /* ================================================================
@@ -819,7 +861,7 @@
     padding-right: 10px;
   }
 
-  /* Score chips — the core upgrade */
+  /* Score chips */
   .piPuttScorecard .pi-sc-under {
     color: #1aff88;
     font-weight: 900;
@@ -994,6 +1036,9 @@
     const bottomSlot  = document.getElementById("piRightBottom");
     if (!youtubeSlot || !bottomSlot) return;
 
+    // In Clubhouse mode, hole map is injected separately — don't clobber it
+    if (_activeLeague === "puttputt") return;
+
     if (_rightPanel === "youtube") {
       youtubeSlot.style.display = "block";
       if (!youtubeSlot.querySelector("iframe")) {
@@ -1006,6 +1051,40 @@
       youtubeSlot.style.display = "none";
       bottomSlot.innerHTML = "";
       _renderTop25(bottomSlot);
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Inject hole map into the right panel (Clubhouse mode only)
+  // ----------------------------------------------------------------
+  function _injectHoleMapIntoRightPanel(round) {
+    const youtubeSlot = document.getElementById("piYoutubeSlot");
+    if (!youtubeSlot) return;
+
+    const isLive = round.status !== "complete";
+    const currentHole = typeof round.currentHole === "number" ? round.currentHole : 0;
+    const pars = round.holePars || [];
+
+    let holeMapHTML = "";
+    if (isLive && typeof window.renderMiniGolfHoleMap === "function") {
+      try {
+        holeMapHTML = window.renderMiniGolfHoleMap(round.courseId, round.courseName, currentHole + 1, pars.length) || "";
+      } catch(e) {}
+    }
+
+    if (holeMapHTML) {
+      youtubeSlot.innerHTML = `
+        <div id="piHoleMapSlot">
+          <div class="piPuttHoleHead">⛳ Hole ${currentHole + 1} Map</div>
+          <div class="piPuttHoleCard">${holeMapHTML}</div>
+        </div>`;
+    } else {
+      // No hole map available — show a placeholder
+      youtubeSlot.innerHTML = `
+        <div id="piHoleMapSlot" style="opacity:0.35;">
+          <div class="piPuttHoleHead">⛳ Hole ${currentHole + 1} of ${pars.length}</div>
+          <div style="font-size:5rem;line-height:1;">⛳</div>
+        </div>`;
     }
   }
 
@@ -1091,6 +1170,8 @@
         if (snap.empty) { el.innerHTML = `<div class="piPuttNoRound">No rounds found. Start one in the Shop App!</div>`; return; }
         const round = { id: snap.docs[0].id, ...snap.docs[0].data() };
         el.innerHTML = `<div class="piPuttWrap">${_buildPiPuttScorecardHTML(round)}</div>`;
+        // Inject hole map into the right panel column
+        _injectHoleMapIntoRightPanel(round);
       }, err => {
         el.innerHTML = `<div class="piPuttNoRound">Could not load round data.</div>`;
       });
@@ -1141,22 +1222,14 @@
     let leaderText = "";
     if (leader && leader.played > 0) {
       const vp = vpLabel(leader.diff);
+      const currentHole = typeof round.currentHole === "number" ? round.currentHole : 0;
       leaderText = isLive
-        ? `🏌️ Leading: ${_esc(leader.p)} &nbsp;·&nbsp; <span style="color:#1aff88;text-shadow:0 0 10px rgba(0,255,140,0.5);">${vp.text}</span> &nbsp;·&nbsp; Hole ${round.currentHole + 1} of ${pars.length}`
+        ? `🏌️ Leading: ${_esc(leader.p)} &nbsp;·&nbsp; <span style="color:#1aff88;text-shadow:0 0 10px rgba(0,255,140,0.5);">${vp.text}</span> &nbsp;·&nbsp; Hole ${currentHole + 1} of ${pars.length}`
         : `🏆 Winner: ${_esc(leader.p)} &nbsp;·&nbsp; <span style="color:#1aff88;text-shadow:0 0 10px rgba(0,255,140,0.5);">${vp.text}</span>`;
     }
 
     const holeCount = pars.length;
     const subline = `${holeCount}-Hole Round · Par ${totalPar}`;
-
-    // Live hole map
-    const currentHole = typeof round.currentHole === "number" ? round.currentHole : 0;
-    let liveHoleMapHTML = "";
-    if (isLive && typeof window.renderMiniGolfHoleMap === "function") {
-      try {
-        liveHoleMapHTML = window.renderMiniGolfHoleMap(round.courseId, round.courseName, currentHole + 1, pars.length) || "";
-      } catch(e) {}
-    }
 
     // ----------------------------------------------------------------
     // Squeeze styles for 8+ players
@@ -1216,12 +1289,6 @@
         </table>
       </div>
       ${leaderText ? `<div class="piPuttLeader">${leaderText}</div>` : ""}
-      ${liveHoleMapHTML ? `
-        <div class="piPuttHoleWrap">
-          <div class="piPuttHoleHead">Current Hole</div>
-          <div class="piPuttHoleCard">${liveHoleMapHTML}</div>
-        </div>
-      ` : ""}
     `;
   }
 
