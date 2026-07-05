@@ -259,3 +259,102 @@
 
 /* Hole selector section */
 .gmap-hole-selector { padding: 2px 0; }
+
+
+/* =========================
+   Pi TV — Two-Column Scorecard Layout
+   Left:  live scorecard
+   Right: YouTube player + live hole map
+   ========================= */
+
+/* Outer wrapper — fills the overlay and splits into two columns */
+.pi-tv-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* LEFT column — scorecard takes ~42% of the TV width */
+.pi-left-col {
+  flex: 0 0 42%;
+  max-width: 42%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 28px 20px 28px 28px;
+  box-sizing: border-box;
+}
+
+/* RIGHT column — YouTube + hole map take the remaining 58% */
+.pi-right-col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 28px 28px 28px 20px;
+  box-sizing: border-box;
+}
+
+/* YouTube iframe wrapper — 16:9 aspect ratio */
+.pi-yt-wrap {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 */
+  height: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  flex-shrink: 0;
+}
+
+.pi-yt-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 18px;
+}
+
+/* Hole map wrapper — sits below the YouTube player */
+.pi-hole-map-wrap {
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.09);
+  padding: 16px;
+  flex-shrink: 0;
+}
+
+/* Scale up hole map content for TV readability */
+.pi-hole-map-wrap .gmap-detail {
+  font-size: 16px;
+}
+
+.pi-hole-map-wrap .gmap-detail-num {
+  font-size: 20px;
+}
+
+.pi-hole-map-wrap .gmap-detail-par {
+  font-size: 16px;
+  padding: 6px 14px;
+}
+
+.pi-hole-map-wrap .gmap-detail-desc {
+  font-size: 15px;
+}
+
+.pi-hole-map-wrap .gmap-svg-wrap svg {
+  max-width: 100%;
+  height: auto;
+}
