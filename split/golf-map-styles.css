@@ -1,5 +1,5 @@
 /* =========================
-   THE PUTT SHOP — Course Map Styles
+   THE PUTT SHOP — Course Map Styles v2
    ========================= */
 
 /* SVG container */
@@ -9,22 +9,55 @@
   padding: 4px 0 8px;
 }
 
+/* Course selector row */
+.gmap-course-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.gmap-course-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.gmap-course-par {
+  font-size: 13px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.75);
+}
+
+.gmap-course-designer {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.35);
+  font-style: italic;
+}
+
 /* Legend row */
 .gmap-legend {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  flex-wrap: wrap;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.3px;
   padding: 4px 0 2px;
 }
 
-.gmap-legend-tee  { color: #f59e0b; }
-.gmap-legend-hole { color: #ff4444; }
+.gmap-legend-tee   { color: #f59e0b; }
+.gmap-legend-hole  { color: #ff4444; }
+.gmap-legend-arrow { color: rgba(255,255,255,0.75); }
 
-/* Hole selector grid (1-9 buttons) */
+/* Hole selector grid */
 .gmap-hole-grid {
   display: grid;
   grid-template-columns: repeat(9, 1fr);
@@ -36,27 +69,24 @@
   border-radius: 12px;
   font-size: 14px;
   font-weight: 1000;
-  letter-spacing: 0.2px;
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.85);
   text-align: center;
-  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+  transition: background .12s, border-color .12s, transform .1s;
   width: 100%;
 }
 
-.gmap-hole-btn:active {
-  transform: scale(0.96);
-}
+.gmap-hole-btn:active { transform: scale(0.95); }
 
 .gmap-hole-btn-active {
   background: rgba(187,0,0,0.28);
   border-color: rgba(187,0,0,0.60);
   color: #fff;
-  box-shadow: 0 0 12px rgba(187,0,0,0.20);
+  box-shadow: 0 0 12px rgba(187,0,0,0.22);
 }
 
-/* Active hole detail card */
+/* Hole detail card */
 .gmap-detail {
   padding: 14px 16px;
   border-radius: 18px;
@@ -67,38 +97,64 @@
   box-shadow: 0 10px 24px rgba(0,0,0,0.30);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .gmap-detail-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .gmap-detail-num {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 1000;
-  letter-spacing: 0.3px;
+  line-height: 1.3;
+  flex: 1;
 }
 
 .gmap-detail-par {
   font-size: 13px;
   font-weight: 900;
-  letter-spacing: 1px;
-  text-transform: uppercase;
   padding: 5px 10px;
   border-radius: 999px;
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.14);
   color: rgba(255,255,255,0.75);
+  white-space: nowrap;
+}
+
+/* Cup facing row */
+.gmap-facing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gmap-facing-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(255,255,255,0.45);
+}
+
+.gmap-facing-val {
+  font-size: 14px;
+  font-weight: 1000;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.18);
 }
 
 .gmap-detail-desc {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  color: rgba(255,255,255,0.80);
-  line-height: 1.4;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.5;
 }
 
 .gmap-detail-markers {
@@ -126,21 +182,20 @@
   color: #ffd9d9;
 }
 
-/* Hint (when no hole selected) */
+/* Hint */
 .gmap-hint {
   text-align: center;
   font-size: 13px;
   font-weight: 700;
-  color: rgba(255,255,255,0.40);
+  color: rgba(255,255,255,0.38);
   padding: 6px 0;
   font-style: italic;
 }
 
-/* All-holes reference list */
+/* Hole reference list */
 .gmap-all-holes {
   display: flex;
   flex-direction: column;
-  gap: 0;
   border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.08);
   overflow: hidden;
@@ -150,20 +205,25 @@
 .gmap-hole-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 11px 14px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer;
+  transition: background .12s;
 }
 
-.gmap-hole-row:last-child {
-  border-bottom: none;
+.gmap-hole-row:last-child { border-bottom: none; }
+.gmap-hole-row:active     { background: rgba(255,255,255,0.04); }
+
+.gmap-hole-row-active {
+  background: rgba(187,0,0,0.12);
+  border-left: 3px solid rgba(187,0,0,0.60);
 }
 
 .gmap-hole-num {
   font-size: 13px;
   font-weight: 1000;
-  letter-spacing: 0.2px;
-  min-width: 52px;
+  min-width: 28px;
   color: rgba(255,255,255,0.90);
 }
 
@@ -178,15 +238,24 @@
   white-space: nowrap;
 }
 
-.gmap-hole-desc {
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(255,255,255,0.50);
-  line-height: 1.3;
+.gmap-hole-row-right {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 1;
 }
 
-/* Hole selector section wrapper */
-.gmap-hole-selector {
-  padding: 2px 0;
+.gmap-hole-desc {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.70);
 }
+
+.gmap-hole-facing {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.38);
+}
+
+/* Hole selector section */
+.gmap-hole-selector { padding: 2px 0; }
