@@ -213,8 +213,7 @@
   function getContent() { return document.getElementById("content"); }
   function setContent(html) { const c = getContent(); if (c) c.innerHTML = html; }
 
-  // ─── Live hole map helper ─────────────────────────────────────────────────
-  // Calls golf-map.js's renderMiniGolfHoleMap if available; returns "" if not.
+  // ─── Live hole map helper (phone scoring) ────────────────────────────────
   function buildLiveHoleMapHTML(roundData, currentHole) {
     if (!roundData || typeof window.renderMiniGolfHoleMap !== "function") return "";
     return window.renderMiniGolfHoleMap(
@@ -225,11 +224,45 @@
     ) || "";
   }
 
+  // ─── Pi hole map helper (TV scoreboard right column) ─────────────────────
+  // Returns HTML for the right-column panel: YouTube iframe on top,
+  // live hole map card underneath. Returns "" if no map is available.
+  function buildPiRightColumnHTML(round) {
+    const currentHole = typeof round.currentHole === "number" ? round.currentHole : 0;
+    const holeNum     = currentHole + 1;
+    const totalHoles  = (round.holePars || []).length;
+
+    let holeMapHTML = "";
+    if (typeof window.renderMiniGolfHoleMap === "function") {
+      holeMapHTML = window.renderMiniGolfHoleMap(
+        round.courseId,
+        round.courseName,
+        holeNum,
+        totalHoles
+      ) || "";
+    }
+
+    return `
+      <div class="pi-right-col">
+        <div class="pi-yt-wrap">
+          <iframe
+            id="piYouTubeFrame"
+            class="pi-yt-frame"
+            src="https://www.youtube.com/embed?listType=search&list=lofi+chill&autoplay=1&mute=0&loop=1&controls=1&rel=0"
+            allow="autoplay; encrypted-media"
+            allowfullscreen
+            frameborder="0"
+          ></iframe>
+        </div>
+        ${holeMapHTML ? `<div class="pi-hole-map-wrap">${holeMapHTML}</div>` : ""}
+      </div>
+    `;
+  }
+
   // ─── View: Golf Home ──────────────────────────────────────────────────────
   async function renderGolfHome() {
     _state.view = "home";
 
-    // If admin, also load courses + regulars to show the admin panel
     let adminHTML = "";
     if (isAdmin()) {
       const [courses, regulars] = await Promise.all([loadCourses(), loadRegulars()]);
@@ -300,7 +333,6 @@
     document.getElementById("golfStatsBtn")?.addEventListener("click", () => renderStats());
     document.getElementById("golfManualEntryBtn")?.addEventListener("click", () => renderManualEntry());
 
-    // Admin bindings
     if (isAdmin()) {
       document.getElementById("adminSaveCourse")?.addEventListener("click", async () => {
         const name = document.getElementById("adminCourseName")?.value.trim();
@@ -371,7 +403,6 @@
     `);
 
     document.getElementById("golfBackHome")?.addEventListener("click", renderGolfHome);
-    // FIX: wrap in arrow function so the click event is never passed as prefill
     document.getElementById("golfAddPlayer")?.addEventListener("click", () => addPlayerRow());
     document.getElementById("golfConfirmStart")?.addEventListener("click", confirmStartRound);
     document.querySelectorAll(".golf-chip").forEach(btn => {
@@ -455,7 +486,6 @@
     const totalHoles = pars.length;
     const isLast     = currentHole === totalHoles - 1;
 
-    // Build live hole map card (renders nothing if course has no map)
     const liveHoleMapHTML = buildLiveHoleMapHTML(roundData, currentHole);
 
     _state.draftScores = {};
@@ -720,7 +750,6 @@
         const holePars = round.holePars || [];
         const totalHoles = holePars.length;
         const rawScores = round.scores || {};
-        // Normalize all player hole arrays before handing to scoring view
         const scores = {};
         (round.players || []).forEach(p => {
           scores[p] = { holes: normalizeHoles(rawScores[p]?.holes, totalHoles) };
@@ -788,7 +817,6 @@
       let roundBest = Infinity;
 
       for (const p of (r.players || [])) {
-        // normalize before forEach so Firebase objects don't crash
         const holes = normalizeHoles(r.scores?.[p]?.holes, pars.length);
         if (!playerStats[p]) playerStats[p] = { rounds: 0, totalDiff: 0, wins: 0, holeInOnes: 0 };
         playerStats[p].rounds++;
@@ -810,7 +838,6 @@
       }
 
       for (const p of (r.players || [])) {
-        // normalize here too for the wins/bestRound pass
         const holes = normalizeHoles(r.scores?.[p]?.holes, pars.length);
         const { diff } = totalVsPar(holes, pars);
         if (diff === roundBest) {
@@ -900,7 +927,7 @@
     }
 
     const courseOpts = courses.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
-    const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
+    const todayStr = new Date().toLocaleDateString("en-CA");
 
     const regularsChips = regulars.length
       ? `<div class="golf-field">
@@ -989,9 +1016,7 @@
     const unique = [...new Set(names)];
     if (unique.length !== names.length) { alert("Player names must be unique."); return; }
 
-    // Render the score-entry grid
     const pars = course.par;
-
     const headerCells = pars.map((_, i) => `<th style="min-width:36px;">H${i+1}</th>`).join("");
     const parCells    = pars.map(p => `<td class="golf-sc-par">${p}</td>`).join("");
 
@@ -1035,7 +1060,6 @@
     document.getElementById("golfBackMEScores")?.addEventListener("click", () => renderManualEntry());
 
     document.getElementById("meSaveRound")?.addEventListener("click", async () => {
-      // Collect scores
       const scoresMap = {};
       unique.forEach(p => { scoresMap[p] = new Array(pars.length).fill(null); });
 
@@ -1049,7 +1073,6 @@
         }
       });
 
-      // Validate — every hole must have a score
       for (const p of unique) {
         for (let i = 0; i < pars.length; i++) {
           if (!scoresMap[p][i]) {
@@ -1062,7 +1085,6 @@
       const btn = document.getElementById("meSaveRound");
       if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
 
-      // Auto-add new names to regulars
       const known = new Set(_state.regulars);
       for (const n of unique) {
         if (!known.has(n)) await saveRegular(n);
@@ -1189,11 +1211,50 @@
     `;
   }
 
+  // showPiScorecard: two-column TV layout.
+  // LEFT  — live scorecard (unchanged behaviour).
+  // RIGHT — YouTube player on top, live hole map card underneath.
+  // The YouTube iframe is preserved across hole updates by checking whether
+  // it already exists before replacing innerHTML — we only refresh the
+  // right column's hole-map portion so the video keeps playing.
   function showPiScorecard(round) {
     const el = document.getElementById("piGolfOverlay");
     if (!el) return;
     el.style.display = "flex";
-    el.innerHTML = buildPiScorecardHTML(round);
+
+    const scorecardHTML  = buildPiScorecardHTML(round);
+    const rightColHTML   = buildPiRightColumnHTML(round);
+
+    // If the scorecard is already showing (not the alert), only update the
+    // hole map inside the right column so the YouTube iframe keeps playing.
+    const existingLeft = el.querySelector(".pi-golf-scorecard-wrap");
+    if (existingLeft) {
+      // Refresh scorecard scores
+      const leftWrap = el.querySelector(".pi-left-col");
+      if (leftWrap) leftWrap.innerHTML = scorecardHTML;
+      // Refresh hole map only (keep iframe alive)
+      const holeMapWrap = el.querySelector(".pi-hole-map-wrap");
+      const newMapHTML = (() => {
+        if (typeof window.renderMiniGolfHoleMap !== "function") return "";
+        const h = typeof round.currentHole === "number" ? round.currentHole : 0;
+        return window.renderMiniGolfHoleMap(
+          round.courseId, round.courseName,
+          h + 1, (round.holePars || []).length
+        ) || "";
+      })();
+      if (holeMapWrap) {
+        holeMapWrap.innerHTML = newMapHTML;
+      }
+      return;
+    }
+
+    // First render: build the full two-column layout
+    el.innerHTML = `
+      <div class="pi-tv-layout">
+        <div class="pi-left-col">${scorecardHTML}</div>
+        ${rightColHTML}
+      </div>
+    `;
     document.getElementById("piGolfClose")?.addEventListener("click", hidePiGolfOverlay);
   }
 
