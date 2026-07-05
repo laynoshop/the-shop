@@ -1,24 +1,26 @@
 /* =========================
-   THE PUTT SHOP — Course Map v6
+   THE PUTT SHOP — Course Map v7
 
-   GREEN SHAPE (SVG viewBox 0 0 220 460):
-     - RIGHT SIDE: straight wall top to bottom
-     - TOP NECK: narrow section on the RIGHT (~3ft wide), runs ~8ft down
-     - DIAGONAL: cuts from bottom-left of neck diagonally to lower-left
-     - BOTTOM SECTION: full width (~8ft), runs ~14ft
+   GREEN SHAPE (SVG viewBox 0 0 220 460) — EXACT MEASURED DIMENSIONS:
+     Top neck width:       2'4"  (2.333 ft)
+     Right total height:  23'5"  (23.417 ft)
+     Neck height:          7'2"  (7.167 ft)
+     Diagonal wall:        8'9"  (8.75 ft)
+     Bottom width:         7'5"  (7.417 ft)
+     Bottom section ht:    9'1"  (9.083 ft)
 
    Polygon (clockwise):
-     Top-left of neck:     (155, 10)
-     Top-right of neck:    (215, 10)
-     Bottom-right corner:  (215, 450)
-     Bottom-left corner:   (5,   450)
-     Base of diagonal:     (5,   210)
-     Top of diagonal:      (155, 150)
+     Top-left of neck:     (146,   5)
+     Top-right of neck:    (215,   5)
+     Bottom-right corner:  (215, 455)
+     Bottom-left corner:   (  5, 455)
+     Base of diagonal:     (  5, 287)
+     Top of diagonal:      (146, 146)
 
-   DISTANCE MATH (verified):
-     SVG height 460 units = 22ft  →  1 SVG unit = 0.04783 ft (vertical)
-     SVG width  220 units = 8ft   →  1 SVG unit = 0.03636 ft (horizontal)
-     True distance = sqrt((dx*0.03636)² + (dy*0.04783)²)
+   SCALE FACTORS:
+     SVG width  220 units = 7.4167 ft  →  SX = 7.4167 / 220
+     SVG height 460 units = 23.417 ft  →  SY = 23.417 / 460
+     True distance = sqrt((dx*SX)² + (dy*SY)²)
 
    KEY BEHAVIOR:
      - activeHole set → ONLY that hole's T, H, line, arrow rendered.
@@ -26,7 +28,7 @@
      - activeHole null → all holes shown at reduced opacity (overview).
 
    facingDeg = direction the cup OPENING faces:
-     0=UP, 90=RIGHT, 180=DOWN, 270=LEFT
+     0=UP, 90=RIGHT, 180=DOWN, 270=LEFT, 45=NE, 135=SE, 225=SW, 315=NW
    Arrow points FROM hole center TOWARD the opening.
    ========================= */
 
@@ -34,12 +36,12 @@
   "use strict";
 
   // ─── Green polygon ────────────────────────────────────────────────────────
-  const GREEN_POLY  = "155,10 215,10 215,450 5,450 5,210 155,150";
-  const FRINGE_POLY = "157,13 212,13 212,447 8,447 8,212 157,153";
+  const GREEN_POLY  = "146,5 215,5 215,455 5,455 5,287 146,146";
+  const FRINGE_POLY = "148,8 212,8 212,452 8,452 8,289 148,149";
 
-  // ─── Scale factors ────────────────────────────────────────────────────────
-  const SX = 8  / 220;   // ft per SVG unit (horizontal)
-  const SY = 22 / 460;   // ft per SVG unit (vertical)
+  // ─── Scale factors (exact measurements) ─────────────────────────────────────
+  const SX = 7.4167 / 220;   // ft per SVG unit (horizontal) — 7'5" across
+  const SY = 23.417 / 460;   // ft per SVG unit (vertical)   — 23'5" tall
 
   function realFt(tee, hole) {
     const dx = (hole[0] - tee[0]) * SX;
@@ -60,8 +62,8 @@
       holes: [
         {
           id: 1,
-          tee:       [160, 20],
-          hole:      [210, 445],
+          tee:       [150, 15],
+          hole:      [210, 448],
           facingDeg: 0,
           par:       3,
           desc:      "Full-Length Diagonal",
@@ -69,8 +71,8 @@
         },
         {
           id: 2,
-          tee:       [210, 20],
-          hole:      [20,  435],
+          tee:       [210, 15],
+          hole:      [20,  443],
           facingDeg: 45,
           par:       3,
           desc:      "Cross-Diagonal Full",
@@ -78,7 +80,7 @@
         },
         {
           id: 3,
-          tee:       [160, 20],
+          tee:       [150, 15],
           hole:      [10,  310],
           facingDeg: 90,
           par:       3,
@@ -87,7 +89,7 @@
         },
         {
           id: 4,
-          tee:       [210, 20],
+          tee:       [210, 15],
           hole:      [10,  310],
           facingDeg: 90,
           par:       2,
@@ -96,8 +98,8 @@
         },
         {
           id: 5,
-          tee:       [210, 445],
-          hole:      [160, 20],
+          tee:       [210, 448],
+          hole:      [150, 15],
           facingDeg: 180,
           par:       3,
           desc:      "Uphill Full Diagonal",
@@ -105,17 +107,17 @@
         },
         {
           id: 6,
-          tee:       [10,  445],
-          hole:      [210, 93],
+          tee:       [10,  448],
+          hole:      [210, 88],
           facingDeg: 0,
           par:       3,
           desc:      "Bottom-Left Comeback",
-          tip:       "Bottom-left corner up to the right edge of the neck, ~4ft from the top wall. Cup opens UP — you must hit it PAST the hole toward the top fringe, let it roll back, and drop in from below. Classic par 3 comeback."
+          tip:       "Bottom-left corner up to the right edge of the neck. Cup opens UP — you must hit it PAST the hole toward the top fringe, let it roll back, and drop in from below. Classic par 3 comeback."
         },
         {
           id: 7,
-          tee:       [10,  440],
-          hole:      [210, 100],
+          tee:       [10,  443],
+          hole:      [210, 95],
           facingDeg: 270,
           par:       3,
           desc:      "Bottom-Left to Right Rail",
@@ -123,8 +125,8 @@
         },
         {
           id: 8,
-          tee:       [210, 80],
-          hole:      [10,  440],
+          tee:       [210, 75],
+          hole:      [10,  443],
           facingDeg: 90,
           par:       3,
           desc:      "Right Rail to Bottom-Left",
@@ -133,7 +135,7 @@
         {
           id: 9,
           tee:       [10,  210],
-          hole:      [210, 445],
+          hole:      [210, 448],
           facingDeg: 0,
           par:       2,
           desc:      "Victory Lap",
@@ -144,7 +146,6 @@
   ];
 
   // Link Firebase course doc IDs to static map definitions.
-  // Key = static course id, value = array of known Firebase doc IDs for that course.
   const COURSE_LINKS = {
     "front-edge-nine": ["front-edge-nine", "course_1783266419297"]
   };
@@ -158,7 +159,7 @@
     });
   });
 
-  // ─── Colors ───────────────────────────────────────────────────────────────
+  // ─── Colors ──────────────────────────────────────────────────────────────
   const C = {
     green:      "#2d6a2d",
     stroke:     "rgba(255,255,255,0.22)",
@@ -184,17 +185,13 @@
       .trim();
   }
 
-  // Find a static map course by Firebase doc ID, COURSE_LINKS, or normalized name.
   function findLinkedCourse(courseId, courseName, totalHoles) {
     if (courseId) {
-      // Direct static ID match
       const exact = COURSES.find(c => c.id === courseId);
       if (exact) return exact;
-      // Firebase doc ID → static course via COURSE_LINKS
       const linked = COURSES.find(c => (COURSE_LINKS[c.id] || []).includes(courseId));
       if (linked) return linked;
     }
-    // Fallback: normalized name match
     const nameKey = normKey(courseName);
     if (nameKey) {
       const byName = COURSES.find(c => {
@@ -277,7 +274,7 @@
       const h = holes.find(x => x.id === activeHole);
       if (h) {
         approachLabel = `
-          <text x="110" y="462" text-anchor="middle" dominant-baseline="auto"
+          <text x="110" y="466" text-anchor="middle" dominant-baseline="auto"
             font-size="9" font-weight="900" fill="#f59e0b"
             font-family="-apple-system,system-ui">Cup opens ${facingLabel(h.facingDeg)} — approach from that direction</text>
         `;
@@ -285,7 +282,7 @@
     }
 
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 470"
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 475"
         style="width:100%;max-width:270px;display:block;margin:0 auto;border-radius:16px;
                background:#121212;box-shadow:0 12px 32px rgba(0,0,0,0.55);overflow:visible;">
         <polygon points="${GREEN_POLY}"
@@ -293,17 +290,15 @@
         <polygon points="${FRINGE_POLY}"
           fill="none" stroke="${C.fringe}" stroke-width="1.5" />
         ${lines}${lineNums}${arrows}${tees}${holeMarkers}${approachLabel}
-        <text x="185" y="6" text-anchor="middle" font-size="6"
-          fill="rgba(255,255,255,0.25)" font-family="-apple-system,system-ui">~3ft</text>
-        <text x="110" y="6" text-anchor="middle" font-size="6"
-          fill="rgba(255,255,255,0.16)" font-family="-apple-system,system-ui">~8ft →</text>
+        <text x="180" y="3" text-anchor="middle" font-size="6"
+          fill="rgba(255,255,255,0.25)" font-family="-apple-system,system-ui">2'4"</text>
+        <text x="110" y="3" text-anchor="middle" font-size="6"
+          fill="rgba(255,255,255,0.16)" font-family="-apple-system,system-ui">7'5" wide</text>
       </svg>
     `;
   }
 
   // ─── Mini hole map for live scoring ──────────────────────────────────────
-  // Returns an HTML string showing the isolated hole map card for use
-  // inside the scoring screen. Returns "" if no map is available.
   function renderMiniGolfHoleMap(courseId, courseName, holeNumber, totalHoles) {
     const course = findLinkedCourse(courseId, courseName, totalHoles);
     if (!course) return "";
@@ -441,7 +436,7 @@
     draw();
   }
 
-  // ─── Expose ───────────────────────────────────────────────────────────────
+  // ─── Expose ──────────────────────────────────────────────────────────────
   window.renderGolfMap             = renderGolfMap;
   window.GOLF_MAP_COURSES          = COURSES;
   window.findLinkedGolfMapCourse   = findLinkedCourse;
