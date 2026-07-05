@@ -8,7 +8,7 @@
 (function GolfModule() {
   "use strict";
 
-  // ─── Constants ───────────────────────────────────────────────────────────
+  // ─── Constants ─────────────────────────────────────────────────────
   const COL   = () => (window.firebase && firebase.apps && firebase.apps.length ? firebase.firestore() : null);
   const COURSES_PATH  = "putt_courses";
   const REGULARS_PATH = "putt_regulars";
@@ -29,7 +29,7 @@
     "Shane Lowry",
   ];
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
+  // ─── Helpers ────────────────────────────────────────────────────────────
   function esc(s) {
     return String(s || "")
       .replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -185,7 +185,7 @@
     });
   }
 
-  // ─── Firebase helper: Save a manually-entered completed round ────────────
+  // ─── Firebase helper: Save a manually-entered completed round ────────────────────────
   async function saveManualRound(courseId, courseName, holePars, playerNames, scoresMap, roundDate) {
     const db = COL();
     if (!db) return null;
@@ -215,7 +215,7 @@
     return roundId;
   }
 
-  // ─── Render: Main Shell ───────────────────────────────────────────────────
+  // ─── Render: Main Shell ─────────────────────────────────────────────────────
   function getContent() { return document.getElementById("content"); }
   function setContent(html) { const c = getContent(); if (c) c.innerHTML = html; }
 
@@ -276,7 +276,8 @@
           <h2>THE Putt Shop</h2>
         </div>
         <div class="golf-home-btns">
-          <button class="golf-btn golf-btn-primary" id="golfStartBtn">🏌️ Start a Round</button>
+          <button class="golf-btn golf-btn-primary" id="golfStartBtn">🏴‍☠️ Start a Round</button>
+          <button class="golf-btn golf-btn-secondary" id="golfMapBtn">🗺️ Course Map</button>
           <button class="golf-btn golf-btn-secondary" id="golfHistoryBtn">📋 Prior Rounds</button>
           <button class="golf-btn golf-btn-secondary" id="golfStatsBtn">📊 Putt Putt Stats</button>
           ${isAdmin() ? `<button class="golf-btn golf-btn-secondary" id="golfManualEntryBtn">📝 Manually Add Round</button>` : ""}
@@ -286,6 +287,9 @@
     `);
 
     document.getElementById("golfStartBtn")?.addEventListener("click", () => renderSetup());
+    document.getElementById("golfMapBtn")?.addEventListener("click", () => {
+      if (typeof window.renderGolfMap === "function") window.renderGolfMap();
+    });
     document.getElementById("golfHistoryBtn")?.addEventListener("click", () => renderHistory());
     document.getElementById("golfStatsBtn")?.addEventListener("click", () => renderStats());
     document.getElementById("golfManualEntryBtn")?.addEventListener("click", () => renderManualEntry());
@@ -463,9 +467,9 @@
           <div class="golf-score-row">
             <div class="golf-score-name">${esc(p)}</div>
             <div class="golf-stepper">
-              <button class="golf-step-btn" data-player="${esc(p)}" data-dir="-1">◀</button>
+              <button class="golf-step-btn" data-player="${esc(p)}" data-dir="-1">◄</button>
               <span class="golf-step-val" id="stepVal_${esc(p)}">${score}</span>
-              <button class="golf-step-btn" data-player="${esc(p)}" data-dir="1">▶</button>
+              <button class="golf-step-btn" data-player="${esc(p)}" data-dir="1">►</button>
             </div>
             <div class="golf-score-total ${vpCls}" id="total_${esc(p)}">${vpRun}</div>
           </div>
@@ -855,7 +859,7 @@
           </div>
         ` : ""}
 
-        <h3 class="golf-section-title">🏌️ Player Leaderboard</h3>
+        <h3 class="golf-section-title">🏴‍☠️ Player Leaderboard</h3>
         <div class="golf-table-wrap">
           <table class="golf-table">
             <thead><tr><th>Player</th><th>Rounds</th><th>Avg</th><th>Wins</th><th>HIOs</th></tr></thead>
@@ -1064,7 +1068,7 @@
     });
   }
 
-  // ─── Shared: Scorecard HTML ───────────────────────────────────────────────
+  // ─── Shared: Scorecard HTML ─────────────────────────────────────────────────────
   function buildScorecardHTML(round) {
     const pars    = round.holePars || [];
     const players = round.players  || [];
@@ -1103,12 +1107,12 @@
     `;
   }
 
-  // ─── Admin: Course Manager (legacy entry point from shop tab) ─────────────
+  // ─── Admin: Course Manager (legacy entry point from shop tab) ─────────────────
   async function renderAdminGolf() {
     renderGolfHome();
   }
 
-  // ─── Pi Scoreboard: Firebase Listener + TV Overlay ───────────────────────
+  // ─── Pi Scoreboard: Firebase Listener + TV Overlay ───────────────────────────
   let _piUnsubscribe = null;
 
   function initPiGolfListener() {
@@ -1258,7 +1262,7 @@
     `;
   }
 
-  // ─── Entry Points ─────────────────────────────────────────────────────────
+  // ─── Entry Points ────────────────────────────────────────────────────────────
   window.renderGolf         = renderGolfHome;
   window.renderAdminGolf    = renderAdminGolf;
   window.initPiGolfListener = initPiGolfListener;
