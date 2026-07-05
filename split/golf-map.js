@@ -215,10 +215,10 @@
           id: 9,
           tee:       [15,  448],
           hole:      [210, 35],
-          facingDeg: 180,
+          facingDeg: 0,
           par:       4,
           desc:      "The Gauntlet",
-          tip:       "Bottom-left all the way to the top-right neck. The longest hole on the course — nearly the full green diagonal. Cup opens DOWN. Par 4: shot 1 gets you to mid-green, shot 2 into the neck zone, shot 3 sets up, shot 4 sinks it. Birdie (3) is elite. Eagle (2) is legend."
+          tip:       "Bottom-left all the way to the top-right neck. The longest hole on the course — nearly the full green diagonal. Cup opens UP — the open side faces the top fringe, so you must approach from below and roll it in from the south. Place the cup 2ft from the back (top) fringe along the right side of the neck. Par 4: shot 1 gets you to mid-green, shot 2 into the neck zone, shot 3 sets up below the cup, shot 4 sinks it. Birdie (3) is elite. Eagle (2) is legend."
         }
       ]
     }
