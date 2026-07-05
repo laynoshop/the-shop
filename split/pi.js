@@ -1,4 +1,4 @@
- // split/pi.js
+// split/pi.js
 // Pi Scoreboard — full-screen TV dashboard for the Raspberry Pi.
 // Admin only. Launched from the entry screen via window.launchPiScoreboard()
 
@@ -112,6 +112,7 @@
     overlay.innerHTML = "";
     overlay.style.cssText = "display:block;position:fixed;inset:0;z-index:9999;overflow:hidden;";
     overlay.innerHTML = buildShell();
+    _syncPuttPageMode();
     overlay.querySelector("#piCloseBtn").addEventListener("click", exitPiScoreboard);
     document.addEventListener("keydown", _handleEsc);
     _bindLeagueButtons();
@@ -141,6 +142,15 @@
   window.exitPiScoreboard = exitPiScoreboard;
 
   function _handleEsc(e) { if (e.key === "Escape") exitPiScoreboard(); }
+
+  // ----------------------------------------------------------------
+  // Sync Clubhouse full-width mode
+  // ----------------------------------------------------------------
+  function _syncPuttPageMode() {
+    const wrap = document.getElementById("piWrap");
+    if (!wrap) return;
+    wrap.classList.toggle("piPuttPageMode", _activeLeague === "puttputt");
+  }
 
   // ----------------------------------------------------------------
   // Weather
@@ -176,7 +186,6 @@
 
   function _weatherInfo(code, hour) {
     const isNight = hour < 6 || hour >= 20;
-    // WMO weather codes → emoji + label + subtle bg tint
     if (code === 0)                      return { emoji: isNight ? "🌙" : "☀️",  label: isNight ? "Clear Night"    : "Sunny",           bg: isNight ? "rgba(20,10,50,0.45)" : "rgba(255,180,0,0.12)" };
     if (code === 1)                      return { emoji: isNight ? "🌙" : "🌤️",  label: "Mainly Clear",                                  bg: "rgba(255,180,0,0.09)" };
     if (code === 2)                      return { emoji: "⛅",                    label: "Partly Cloudy",                                 bg: "rgba(180,180,180,0.1)" };
@@ -602,6 +611,18 @@
   .piPuttPuttBtn:hover { background: rgba(0,160,80,0.45); color: #fff; border-color: rgba(0,220,120,0.7); }
   .piPuttPuttBtn.active { background: linear-gradient(135deg, #007a3a, #005528); color: #fff; border-color: #00cc66; box-shadow: 0 0 12px rgba(0,200,80,0.55); }
 
+  /* ---- Clubhouse full-width mode ---- */
+  #piWrap.piPuttPageMode {
+    grid-template-columns: 1fr;
+  }
+  #piWrap.piPuttPageMode #piRightPanel {
+    display: none;
+  }
+  #piWrap.piPuttPageMode #piScoresPanel {
+    border-right: none;
+    padding-right: 18px;
+  }
+
   /* ================================================================
      Pi Putt Putt Scorecard — BROADCAST REDESIGN
      ================================================================ */
@@ -948,6 +969,7 @@
             head.classList.remove("gold");
           }
         }
+        _syncPuttPageMode();
         _renderScores();
       });
     });
@@ -973,17 +995,14 @@
     if (!youtubeSlot || !bottomSlot) return;
 
     if (_rightPanel === "youtube") {
-      // YouTube in top slot only — only inject if iframe isn't already there
-      // (prevents the 5-min news refresh timer from restarting the video)
       youtubeSlot.style.display = "block";
       if (!youtubeSlot.querySelector("iframe")) {
         youtubeSlot.innerHTML = `<iframe
           src="https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&modestbranding=1&rel=0"
           allow="autoplay; encrypted-media" allowfullscreen title="OSU Natty Replay"></iframe>`;
       }
-      bottomSlot.innerHTML = ""; // empty space — will circle back
+      bottomSlot.innerHTML = "";
     } else {
-      // Top 25 fills the whole right content area
       youtubeSlot.style.display = "none";
       bottomSlot.innerHTML = "";
       _renderTop25(bottomSlot);
@@ -1052,21 +1071,18 @@
     if (!el) return;
     el.innerHTML = `<div class="piNoGames">Loading Putt Putt round…</div>`;
 
-    // Update panel head
     const head = document.getElementById("piPanelHeadLabel");
     if (head) { head.textContent = "⛳ Putt Putt Scorecard"; head.classList.remove("gold"); head.style.color = "#00cc66"; head.style.borderBottomColor = "rgba(0,180,80,0.4)"; head.style.textShadow = "0 0 6px rgba(0,200,80,0.4)"; }
 
     const db = window.firebase && firebase.apps && firebase.apps.length ? firebase.firestore() : null;
     if (!db) { el.innerHTML = `<div class="piPuttNoRound">Firebase not available — open the Shop App to start a round.</div>`; return; }
 
-    // Wait up to 6s for Firebase auth to be ready before attaching listener
     await new Promise((resolve) => {
       if (!window.firebase || !firebase.auth) { resolve(); return; }
       const unsub = firebase.auth().onAuthStateChanged(user => { unsub(); resolve(user); });
       setTimeout(resolve, 6000);
     });
 
-    // Real-time listener — updates scorecard automatically as holes are scored on the phone
     if (window._puttPuttUnsub) { window._puttPuttUnsub(); window._puttPuttUnsub = null; }
     window._puttPuttUnsub = db.collection("putt_rounds")
       .orderBy("startedAt", "desc")
@@ -1098,7 +1114,6 @@
       return { text: "+" + diff, cls: "pi-sc-over" };
     }
 
-    // Sort players by current score (leader first)
     const ranked = players.map(p => {
       const holes = Array.isArray(round.scores?.[p]?.holes)
   ? round.scores[p].holes
@@ -1122,7 +1137,6 @@
       return `<tr><td class="piPuttNameCol">${_esc(p)}</td>${cells}<td class="piPuttTotalCol ${vp.cls}">${vp.text}</td></tr>`;
     }).join("");
 
-    // Leader line
     const leader = ranked[0];
     let leaderText = "";
     if (leader && leader.played > 0) {
@@ -1135,27 +1149,22 @@
     const holeCount = pars.length;
     const subline = `${holeCount}-Hole Round · Par ${totalPar}`;
 
+    // Live hole map
+    const currentHole = typeof round.currentHole === "number" ? round.currentHole : 0;
+    let liveHoleMapHTML = "";
+    if (isLive && typeof window.renderMiniGolfHoleMap === "function") {
+      try {
+        liveHoleMapHTML = window.renderMiniGolfHoleMap(round.courseId, round.courseName, currentHole + 1, pars.length) || "";
+      } catch(e) {}
+    }
+
     // ----------------------------------------------------------------
     // Squeeze styles for 8+ players
-    // When >7 players, scale down fonts and row padding proportionally
-    // so the full table + leader bar fit within the same pixel budget
-    // as a 7-player round. Scale factor: 7 / playerCount, floored at 0.55.
     // ----------------------------------------------------------------
     const playerCount = ranked.length;
     let squeezeStyle = "";
     if (playerCount > 7) {
       const scale = Math.max(0.55, 7 / playerCount);
-      // Base sizes (px) for 7-player layout:
-      //   thead hole numbers : 2.2rem  → use scale * 2.2
-      //   thead name col     : 1.6rem  → use scale * 1.6
-      //   par row cells      : 2.0rem  → use scale * 2.0
-      //   par row name       : 1.7rem  → use scale * 1.7
-      //   tbody td           : 2.8rem  → use scale * 2.8
-      //   tbody name col     : 3.0rem  → use scale * 3.0
-      //   tbody total col    : 2.8rem  → use scale * 2.8
-      //   tbody td padding   : 9px     → use scale * 9
-      //   thead th padding   : 10px/8px→ use scale * 10 / scale * 8
-      //   par row padding    : 6px     → use scale * 6
       const r = (base, unit = "rem") => `${(scale * base).toFixed(3)}${unit}`;
       const px = base => `${Math.round(scale * base)}px`;
       squeezeStyle = `
@@ -1207,6 +1216,12 @@
         </table>
       </div>
       ${leaderText ? `<div class="piPuttLeader">${leaderText}</div>` : ""}
+      ${liveHoleMapHTML ? `
+        <div class="piPuttHoleWrap">
+          <div class="piPuttHoleHead">Current Hole</div>
+          <div class="piPuttHoleCard">${liveHoleMapHTML}</div>
+        </div>
+      ` : ""}
     `;
   }
 
@@ -1686,12 +1701,10 @@
         </div>`;
     }).join("");
 
-    // Series
     const seriesFromComp = _parseSeriesFromComp(comp, leagueKey);
     const series = seriesOverride || seriesFromComp;
     const seriesHTML = series ? `<div class="piSeriesLine">${_buildSeriesHTML(series)}</div>` : `<div class="piSeriesLine"></div>`;
 
-    // Odds / venue meta
     const venue    = String(comp?.venue?.fullName || comp?.venue?.shortName || "");
     const oddsLine = oddsOverride ? _buildOddsLine(oddsOverride.favored, oddsOverride.ou) : "";
     const metaHTML = (venue || oddsLine) ? `
