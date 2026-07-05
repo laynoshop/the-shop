@@ -1,5 +1,5 @@
 /* =========================
-   THE PUTT SHOP — Course Map v4
+   THE PUTT SHOP — Course Map v5
 
    GREEN SHAPE (SVG viewBox 0 0 220 460):
      - RIGHT SIDE: straight wall top to bottom
@@ -38,8 +38,6 @@
   const FRINGE_POLY = "157,13 212,13 212,447 8,447 8,212 157,153";
 
   // ─── Scale factors ────────────────────────────────────────────────────────
-  // These are the ONLY values used to compute dist labels.
-  // SVG 460 units tall = 22ft, SVG 220 units wide = 8ft
   const SX = 8  / 220;   // ft per SVG unit (horizontal)
   const SY = 22 / 460;   // ft per SVG unit (vertical)
 
@@ -50,13 +48,10 @@
   }
 
   function distLabel(tee, hole) {
-    const d = realFt(tee, hole);
-    return "~" + Math.round(d) + "ft";
+    return "~" + Math.round(realFt(tee, hole)) + "ft";
   }
 
   // ─── Course Library ───────────────────────────────────────────────────────
-  // All tee/hole coordinates verified >= 12ft real distance.
-  // dist field is AUTO-COMPUTED below so it always matches the coordinates.
   const COURSES = [
     {
       id: "front-edge-nine",
@@ -70,7 +65,7 @@
           facingDeg: 0,
           par:       3,
           desc:      "Full-Length Diagonal",
-          tip:       "Tee at the top-left of the neck. Full diagonal to the bottom-right corner. Cup opens UP — if you blast past the corner you must reposition below the cup and putt back up into the face."
+          tip:       "Tee at the top-left of the neck. Full diagonal to the bottom-right corner. Cup opens UP — if you blast past the corner you must reposition below and putt back up into the face."
         },
         {
           id: 2,
@@ -88,7 +83,7 @@
           facingDeg: 90,
           par:       3,
           desc:      "Down the Diagonal Wall",
-          tip:       "Top-left neck to mid-left wall. The ball travels down and left along the diagonal. Cup opens RIGHT — run it past the left wall then approach from the left side."
+          tip:       "Top-left neck to mid-left wall. Cup opens RIGHT — run it past the left wall then let it feed back right into the face."
         },
         {
           id: 4,
@@ -106,16 +101,20 @@
           facingDeg: 180,
           par:       3,
           desc:      "Uphill Full Diagonal",
-          tip:       "Bottom-right corner to top-left neck. Cup opens DOWN — you MUST send it past the cup toward the top wall, let it return, and roll back down into the face from above."
+          tip:       "Bottom-right corner to top-left neck. Cup opens DOWN — send it past the cup toward the top wall, let it return, and roll back down into the face from above."
         },
         {
           id: 6,
+          // Pulled ~4ft back from the top fringe so there's room above the cup
+          // for the ball to overshoot, stop, and roll back down into the face.
+          // Right edge of the neck, ~4ft down from the top wall.
+          // 4ft = 4/SY = ~83 SVG units below y=10, so hole y = 93.
           tee:       [10,  445],
-          hole:      [210, 20],
+          hole:      [210, 93],
           facingDeg: 0,
           par:       3,
-          desc:      "Uphill Cross-Diagonal",
-          tip:       "Bottom-left corner all the way up to the top-right neck. Cup opens UP — approach from below. Don't overshoot past the top wall or you'll need to come back down."
+          desc:      "Bottom-Left Comeback",
+          tip:       "Bottom-left corner up to the right edge of the neck, ~4ft from the top wall. Cup opens UP — you must hit it PAST the hole toward the top fringe, let it roll back, and drop in from below. Classic par 3 comeback."
         },
         {
           id: 7,
@@ -146,7 +145,6 @@
         }
       ]
     }
-    // Additional courses can be appended here
   ];
 
   // Auto-compute totalPar and dist labels from actual coordinates
