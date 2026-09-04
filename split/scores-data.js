@@ -420,8 +420,13 @@
 
   async function hydrateAllOdds(league, leagueKey, dateYYYYMMDD, events) {
     if (!events || !events.length) return;
-    const limit = Math.min(events.length, 12);
-    const batch = events.slice(0, limit);
+    // Shop teams always get their odds hydrated, even on a big slate where
+    // their game would otherwise fall outside the general cap below.
+    const priority = events.filter(ev => isShopEvent(ev));
+    const priorityIds = new Set(priority.map(ev => String(ev?.id || "")));
+    const rest = events.filter(ev => !priorityIds.has(String(ev?.id || "")));
+    const remainingSlots = Math.max(0, 12 - priority.length);
+    const batch = priority.concat(rest.slice(0, remainingSlots));
     await Promise.all(batch.map(async (ev) => {
       const id = String(ev?.id || "");
       if (!id) return;
