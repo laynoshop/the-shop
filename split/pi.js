@@ -58,7 +58,8 @@
   // an empty `d` omits the dates param entirely (ESPN then defaults to the
   // current week for these two sports — used as a fallback, see _weekRangeParam).
   const LEAGUES = [
-    { key: "cfb",   label: "🏈 CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?${d ? `dates=${d}&` : ""}limit=200` },
+    // groups=80 restricts to FBS only — no FCS/D2/D3 games mixed in.
+    { key: "cfb",   label: "🏈 CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?${d ? `dates=${d}&` : ""}groups=80&limit=200` },
     { key: "nfl",   label: "🏈 NFL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?${d ? `dates=${d}&` : ""}limit=100` },
     { key: "nba",   label: "🏀 NBA",    url: d => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=50` },
     { key: "mlb",   label: "⚾ MLB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${d}&limit=50` },
@@ -105,6 +106,17 @@
   let _pageRotateInterval = null;
   let _oddsCache   = new Map(); // eventId -> { favored, ou }
   let _seriesCache = new Map(); // eventId -> series object
+  // Persists across the 60s data refresh so rotation keeps advancing instead
+  // of restarting at page 1 every time — only a real league switch resets it.
+  let _pageIndex = 0;
+  let _pageRotateLeague = null;
+
+  const TOP25_PAGE_SIZE = 15;
+  const TOP25_ROTATE_MS = 15 * 1000;
+  let _top25RotateInterval = null;
+  function _clearTop25Rotate() {
+    if (_top25RotateInterval) { clearInterval(_top25RotateInterval); _top25RotateInterval = null; }
+  }
 
   // ----------------------------------------------------------------
   // Guard
@@ -147,6 +159,9 @@
     _intervals.forEach(id => clearInterval(id));
     _intervals = [];
     _clearPageRotate();
+    _pageIndex = 0;
+    _pageRotateLeague = null;
+    _clearTop25Rotate();
     document.removeEventListener("keydown", _handleEsc);
     if (window._puttPuttUnsub) { window._puttPuttUnsub(); window._puttPuttUnsub = null; }
     const overlay = document.getElementById("piScoreboard");
@@ -512,14 +527,45 @@
   #piRightBottom::-webkit-scrollbar-track { background: #0d0000; }
   #piRightBottom::-webkit-scrollbar-thumb { background: #440000; border-radius: 2px; }
 
-  /* Top 25 list */
-  #piTop25List { padding: 10px 12px; }
-  .piRankHead { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #bb0000; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid rgba(180,0,0,0.3); }
-  .piRankRow { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 5px; margin-bottom: 3px; background: rgba(255,255,255,0.03); }
-  .piRankRow:nth-child(odd) { background: rgba(255,255,255,0.05); }
-  .piRankNum  { min-width: 22px; font-size: 1rem; font-weight: 900; color: #cc0000; text-align: right; }
-  .piRankTeam { flex: 1; font-size: 0.95rem; font-weight: 600; color: #e8e8e8; }
-  .piRankRecord { font-size: 0.82rem; color: #777; }
+  /* Top 25 list — big, logo'd rows for TV; rotates 1-15 / 16-25 when needed */
+  #piTop25List { padding: 14px 16px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+  .piRankHead {
+    display: flex; align-items: baseline; gap: 10px;
+    font-size: 1.15rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #ff3333; margin-bottom: 12px; padding-bottom: 8px;
+    border-bottom: 2px solid rgba(200,0,0,0.35);
+    text-shadow: 0 0 10px rgba(220,0,0,0.45);
+    flex-shrink: 0;
+  }
+  .piRankHeadRange { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; color: #888; text-transform: none; }
+  .piRankLoading, .piRankEmpty { color: #666; font-size: 1rem; padding: 20px 0; }
+  .piRankList { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+  .piRankRow {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.035);
+    border-left: 3px solid rgba(200,0,0,0.35);
+  }
+  .piRankRow:nth-child(odd) { background: rgba(255,255,255,0.06); }
+  .piRankRow:nth-child(-n+4) { border-left-color: #ffcc44; background: rgba(200,160,0,0.08); }
+  .piRankNum {
+    flex-shrink: 0;
+    min-width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem; font-weight: 900; color: #fff;
+    background: linear-gradient(135deg, #cc0000, #7a0000);
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .piRankLogo { width: 34px; height: 34px; object-fit: contain; flex-shrink: 0; border-radius: 4px; }
+  .piRankLogoPlaceholder { background: rgba(255,255,255,0.08); }
+  .piRankTeam { flex: 1; min-width: 0; font-size: 1.2rem; font-weight: 700; color: #f0f0f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .piRankTrend { flex-shrink: 0; font-size: 0.85rem; font-weight: 800; }
+  .piRankTrend.up   { color: #3dd68c; }
+  .piRankTrend.down { color: #ff5f5f; }
+  .piRankTrend.flat { color: #666; }
+  .piRankRecord { flex-shrink: 0; min-width: 46px; text-align: right; font-size: 0.95rem; font-weight: 700; color: #999; font-variant-numeric: tabular-nums; }
 
   .piPanelHead {
     font-size: 0.85rem;
@@ -552,6 +598,7 @@
   .piShopCard.upcoming { border-left-color: rgba(0,100,200,0.7); background: rgba(0,60,120,0.07); }
 
   .piShopCardTop { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .piShopCardTopLeft { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .piShopLeagueBadge {
     font-size: 0.9rem;
     font-weight: 800;
@@ -562,7 +609,7 @@
     color: #fff;
     flex-shrink: 0;
   }
-  .piShopStatusLabel { font-size: 1rem; font-weight: 700; color: #999; text-align: right; white-space: nowrap; }
+  .piShopStatusLabel { font-size: 1rem; font-weight: 700; color: #999; text-align: right; white-space: nowrap; flex-shrink: 0; }
   .piShopStatusLabel.live     { color: #ff4444; }
   .piShopStatusLabel.upcoming { color: #4499ff; }
 
@@ -608,8 +655,13 @@
 
   .piShopMeta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
   .piShopMetaItem { font-size: 0.8rem; color: #666; white-space: nowrap; }
-  .piShopMetaItem.odds  { color: #aaa; font-weight: 600; }
-  .piShopMetaItem.venue { color: #666; }
+  /* Odds now lives in the top row next to the league pill — doubled from the
+     0.8rem every other meta item uses, per request. */
+  .piShopMetaItem.odds  { font-size: 1.6rem; color: #ccc; font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .piShopMetaItem.odds:empty { display: none; }
+  /* Venue is now the only thing left in the bottom row, so it gets to be
+     bigger than before — bigger than the old 0.8rem, still under team names. */
+  .piShopMetaItem.venue { font-size: 1.1rem; color: #888; }
 
   /* ---- Bottom banner ---- */
   #piBanner {
@@ -1054,6 +1106,7 @@
     if (_activeLeague === "puttputt") return;
 
     if (_rightPanel === "youtube") {
+      _clearTop25Rotate();
       youtubeSlot.style.display = "block";
       if (!youtubeSlot.querySelector("iframe")) {
         youtubeSlot.innerHTML = `<iframe
@@ -1105,22 +1158,63 @@
   // ----------------------------------------------------------------
   // Top 25
   // ----------------------------------------------------------------
+  function _buildTop25Row(r) {
+    const team    = r?.team || {};
+    const name    = _applyTTUN(String(team?.displayName || team?.shortDisplayName || team?.name || "Unknown"));
+    const logoUrl = team?.logos?.[0]?.href || team?.logo || "";
+    const logoHTML = logoUrl
+      ? `<img class="piRankLogo" src="${_esc(logoUrl)}" alt="" loading="lazy" />`
+      : `<div class="piRankLogo piRankLogoPlaceholder"></div>`;
+    const record = String(r?.recordSummary || "");
+    const trendRaw = String(r?.trend || "").trim();
+    const trendHTML = (trendRaw && trendRaw !== "-")
+      ? (trendRaw.startsWith("-")
+          ? `<span class="piRankTrend down">&#x25BC;${_esc(trendRaw.slice(1))}</span>`
+          : `<span class="piRankTrend up">&#x25B2;${_esc(trendRaw.replace(/^\+/, ""))}</span>`)
+      : `<span class="piRankTrend flat">&#x2013;</span>`;
+    return `
+      <div class="piRankRow">
+        <span class="piRankNum">${_esc(String(r?.current ?? ""))}</span>
+        ${logoHTML}
+        <span class="piRankTeam">${_esc(name)}</span>
+        ${trendHTML}
+        <span class="piRankRecord">${_esc(record)}</span>
+      </div>`;
+  }
+
   function _renderTop25(el) {
-    el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;padding:16px 0;">Loading rankings&hellip;</div></div>`;
+    _clearTop25Rotate();
+    el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div class="piRankLoading">Loading rankings&hellip;</div></div>`;
     fetch("https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings")
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(data => {
         const ap    = (data?.rankings || []).find(p => String(p?.name || "").toLowerCase().includes("ap")) || (data?.rankings || [])[0];
         const ranks = ap?.ranks || [];
         const list  = el.querySelector("#piTop25List") || el;
-        if (!ranks.length) { list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;">Rankings not available.</div>`; return; }
-        list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div>` +
-          ranks.map(r => {
-            const name = _applyTTUN(String(r?.team?.name || r?.team?.displayName || "Unknown"));
-            return `<div class="piRankRow"><span class="piRankNum">${r.current}</span><span class="piRankTeam">${_esc(name)}</span><span class="piRankRecord">${_esc(String(r?.recordSummary || ""))}</span></div>`;
-          }).join("");
+        if (!ranks.length) { list.innerHTML = `<div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div class="piRankEmpty">Rankings not available.</div>`; return; }
+
+        const pages = [];
+        for (let i = 0; i < ranks.length; i += TOP25_PAGE_SIZE) pages.push(ranks.slice(i, i + TOP25_PAGE_SIZE));
+
+        let idx = 0;
+        const renderTop25Page = () => {
+          const page = pages[idx] || [];
+          const rangeLabel = pages.length > 1
+            ? `<span class="piRankHeadRange">${idx * TOP25_PAGE_SIZE + 1}&ndash;${idx * TOP25_PAGE_SIZE + page.length}</span>`
+            : "";
+          list.innerHTML =
+            `<div class="piRankHead">&#x1F3C6; CFB AP Top 25 ${rangeLabel}</div>` +
+            `<div class="piRankList">${page.map(_buildTop25Row).join("")}</div>`;
+        };
+        renderTop25Page();
+        if (pages.length > 1) {
+          _top25RotateInterval = setInterval(() => {
+            idx = (idx + 1) % pages.length;
+            renderTop25Page();
+          }, TOP25_ROTATE_MS);
+        }
       })
-      .catch(() => { el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div style="color:#555;font-size:0.95rem;">Rankings unavailable.</div></div>`; });
+      .catch(() => { el.innerHTML = `<div id="piTop25List"><div class="piRankHead">&#x1F3C6; CFB AP Top 25</div><div class="piRankEmpty">Rankings unavailable.</div></div>`; });
   }
 
   // ----------------------------------------------------------------
@@ -1383,6 +1477,10 @@
   async function _renderLeagueScores() {
     const el = document.getElementById("piScoresContent");
     if (!el) return;
+    if (_activeLeague !== _pageRotateLeague) {
+      _pageIndex = 0;
+      _pageRotateLeague = _activeLeague;
+    }
     _clearPageRotate();
 
     const league      = LEAGUES.find(l => l.key === _activeLeague) || LEAGUES[0];
@@ -1476,9 +1574,11 @@
         )
       : [others];
 
-    let pageIndex = 0;
+    // Carry over rotation progress from before this refresh (see _pageIndex
+    // declaration) instead of restarting at page 1 every 60 seconds.
+    if (_pageIndex >= pages.length) _pageIndex = 0;
     const renderPage = () => {
-      const shown = pinned.concat(pages[pageIndex] || []).slice(0, CARDS_PER_PAGE);
+      const shown = pinned.concat(pages[_pageIndex] || []).slice(0, CARDS_PER_PAGE);
       el.innerHTML = shown.map(ev => {
         const eventId = String(ev?.id || "");
         return _buildShopCard(_activeLeague, leagueLabel, ev, _seriesCache.get(eventId), _oddsCache.get(eventId));
@@ -1490,7 +1590,7 @@
     renderPage();
     if (pages.length > 1) {
       _pageRotateInterval = setInterval(() => {
-        pageIndex = (pageIndex + 1) % pages.length;
+        _pageIndex = (_pageIndex + 1) % pages.length;
         renderPage();
       }, PAGE_ROTATE_MS);
     }
@@ -1905,16 +2005,19 @@
     const oddsLine = oddsOverride ? _buildOddsLine(oddsOverride.favored, oddsOverride.ou) : "";
     // Odds span always renders (even empty) so the async odds fetch below has
     // an element to fill in later — it isn't known yet at initial render time.
-    const metaHTML = `
+    // It lives in the top row now; the bottom meta row is venue-only.
+    const metaHTML = venue ? `
       <div class="piShopMeta">
-        <span class="piShopMetaItem odds">${_esc(oddsLine)}</span>
-        ${venue ? `<span class="piShopMetaItem venue">📍 ${_esc(venue)}</span>` : ""}
-      </div>`;
+        <span class="piShopMetaItem venue">📍 ${_esc(venue)}</span>
+      </div>` : "";
 
     return `
       <div class="${cardClass}" data-eventid="${_esc(String(ev?.id || ""))}">
         <div class="piShopCardTop">
-          <span class="piShopLeagueBadge" style="background:${color};">${_esc(leagueLabel)}</span>
+          <div class="piShopCardTopLeft">
+            <span class="piShopLeagueBadge" style="background:${color};">${_esc(leagueLabel)}</span>
+            <span class="piShopMetaItem odds">${_esc(oddsLine)}</span>
+          </div>
           <span class="piShopStatusLabel ${statusClass}">${_esc(statusText)}</span>
         </div>
         <div class="piShopTeamsRow">${teamsHTML}</div>
