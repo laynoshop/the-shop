@@ -290,12 +290,11 @@
     gap: 16px;
   }
   #piHeaderLeft { display: flex; align-items: center; gap: 12px; }
-  #piHeaderLeft img { height: 44px; width: 44px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(255,200,0,0.6)); }
+  #piHeaderLeft img { height: 55px; width: 55px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(255,200,0,0.6)); }
   #piHeaderTitle {
     font-size: clamp(2rem, 5vw, 3.4rem);
     font-weight: 900;
     letter-spacing: 0.06em;
-    text-transform: uppercase;
     color: #fff;
     text-shadow: 0 0 12px rgba(255,180,0,0.5), 2px 2px 4px rgba(0,0,0,0.8);
     line-height: 1;
@@ -539,7 +538,6 @@
     border-left: 3px solid rgba(200,0,0,0.35);
   }
   .piRankRow:nth-child(odd) { background: rgba(255,255,255,0.06); }
-  .piRankRow:nth-child(-n+4) { border-left-color: #ffcc44; background: rgba(200,160,0,0.08); }
   .piRankNum {
     flex-shrink: 0;
     min-width: 30px; height: 30px;
@@ -988,7 +986,7 @@
     <div id="piHeaderLeft">
       <img src="${BLOCK_O}" alt="Block O" />
       <div id="piHeaderTitle">
-        The Shop Scoreboard
+        THE Shop Scoreboard
       </div>
     </div>
     <div id="piCountdown">
