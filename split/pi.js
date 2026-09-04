@@ -102,7 +102,7 @@
   // page (golf and UFC are excluded — those pages need separate work).
   const PAGINATED_LEAGUES = new Set(["cfb", "nfl", "nba", "mlb", "nhl", "ncaam", "mls"]);
   const CARDS_PER_PAGE = 8;
-  const PAGE_ROTATE_MS = 12 * 1000;
+  const PAGE_ROTATE_MS = 10 * 1000;
   let _pageRotateInterval = null;
   let _oddsCache   = new Map(); // eventId -> { favored, ou }
   let _seriesCache = new Map(); // eventId -> series object
@@ -111,7 +111,7 @@
   let _pageIndex = 0;
   let _pageRotateLeague = null;
 
-  const TOP25_PAGE_SIZE = 15;
+  const TOP25_PAGE_SIZE = 14;
   const TOP25_ROTATE_MS = 15 * 1000;
   let _top25RotateInterval = null;
   function _clearTop25Rotate() {
@@ -292,22 +292,13 @@
   #piHeaderLeft { display: flex; align-items: center; gap: 12px; }
   #piHeaderLeft img { height: 44px; width: 44px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(255,200,0,0.6)); }
   #piHeaderTitle {
-    font-size: clamp(1rem, 2.5vw, 1.7rem);
+    font-size: clamp(2rem, 5vw, 3.4rem);
     font-weight: 900;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #fff;
     text-shadow: 0 0 12px rgba(255,180,0,0.5), 2px 2px 4px rgba(0,0,0,0.8);
     line-height: 1;
-  }
-  #piHeaderTitle span {
-    display: block;
-    font-size: 0.45em;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    color: #ffddaa;
-    text-shadow: none;
-    margin-top: 2px;
   }
 
   /* ---- Countdown ---- */
@@ -655,9 +646,9 @@
 
   .piShopMeta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
   .piShopMetaItem { font-size: 0.8rem; color: #666; white-space: nowrap; }
-  /* Odds now lives in the top row next to the league pill — doubled from the
-     0.8rem every other meta item uses, per request. */
-  .piShopMetaItem.odds  { font-size: 1.6rem; color: #ccc; font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* Odds now lives in the top row next to the league pill, matching the
+     venue row's font size below. */
+  .piShopMetaItem.odds  { font-size: 1.1rem; color: #ccc; font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .piShopMetaItem.odds:empty { display: none; }
   /* Venue is now the only thing left in the bottom row, so it gets to be
      bigger than before — bigger than the old 0.8rem, still under team names. */
@@ -998,7 +989,6 @@
       <img src="${BLOCK_O}" alt="Block O" />
       <div id="piHeaderTitle">
         The Shop Scoreboard
-        <span>Scarlet &amp; Gray &bull; Game Day HQ</span>
       </div>
     </div>
     <div id="piCountdown">
