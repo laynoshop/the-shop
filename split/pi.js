@@ -1165,8 +1165,13 @@
       ? `<img class="piRankLogo" src="${_esc(logoUrl)}" alt="" loading="lazy" />`
       : `<div class="piRankLogo piRankLogoPlaceholder"></div>`;
     const record = String(r?.recordSummary || "");
+    // ESPN sends "-" for no previous ranking, but some responses instead send
+    // a literal "0"/"+0"/"-0" for an unchanged rank — treat all of those (and
+    // anything else that isn't a genuine non-zero move) as the flat dash too.
     const trendRaw = String(r?.trend || "").trim();
-    const trendHTML = (trendRaw && trendRaw !== "-")
+    const trendNum = Number(trendRaw.replace(/^\+/, ""));
+    const isFlat   = !trendRaw || trendRaw === "-" || (!Number.isNaN(trendNum) && trendNum === 0);
+    const trendHTML = !isFlat
       ? (trendRaw.startsWith("-")
           ? `<span class="piRankTrend down">&#x25BC;${_esc(trendRaw.slice(1))}</span>`
           : `<span class="piRankTrend up">&#x25B2;${_esc(trendRaw.replace(/^\+/, ""))}</span>`)
