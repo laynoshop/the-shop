@@ -147,12 +147,6 @@ window.replaceMichiganText = replaceMichiganText;
     const stocksDoor = document.querySelector('.doorBtn[data-go="stocks"]');
     if (stocksDoor) stocksDoor.style.display = isAdmin ? "" : "none";
 
-    // =========================
-    // DISNEY: visible to everyone
-    // =========================
-    const disneyDoor = document.querySelector('.doorBtn[data-go="disney"]');
-    if (disneyDoor) disneyDoor.style.display = "";
-
     updateRivalryBanner();
 
     if (!showEntryScreen._bound) {
@@ -202,7 +196,6 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "news",   label: "Top<br/>News" },
       { key: "golf",   label: "&#x26F3;<br/>Putt" },
       { key: "fun",    label: "\uD83E\uDD2A<br/>Family" },
-      { key: "disney", label: "\uD83C\uDFF0<br/>Disney" },
     ];
 
     // =========================
@@ -296,10 +289,6 @@ window.replaceMichiganText = replaceMichiganText;
     // STOCKS TAB ROUTE
     // =========================
     else if (tab === "stocks")     safe("renderStocks");
-    // =========================
-    // DISNEY TAB ROUTE
-    // =========================
-    else if (tab === "disney")     safe("renderDisney");
     else safe("loadScores", true);
 
     updateRivalryBanner();
