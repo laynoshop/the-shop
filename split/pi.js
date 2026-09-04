@@ -53,9 +53,13 @@
     ufc:   3,
   };
 
+  // CFB/NFL scoreboard "week" pages show the whole Tue–Mon window, so these
+  // accept either a single YYYYMMDD or a YYYYMMDD-YYYYMMDD range in `d`, and
+  // an empty `d` omits the dates param entirely (ESPN then defaults to the
+  // current week for these two sports — used as a fallback, see _weekRangeParam).
   const LEAGUES = [
-    { key: "cfb",   label: "🏈 CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${d}&limit=50` },
-    { key: "nfl",   label: "🏈 NFL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${d}&limit=50` },
+    { key: "cfb",   label: "🏈 CFB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?${d ? `dates=${d}&` : ""}limit=200` },
+    { key: "nfl",   label: "🏈 NFL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?${d ? `dates=${d}&` : ""}limit=100` },
     { key: "nba",   label: "🏀 NBA",    url: d => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=50` },
     { key: "mlb",   label: "⚾ MLB",    url: d => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${d}&limit=50` },
     { key: "nhl",   label: "🏒 NHL",    url: d => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${d}&limit=50` },
@@ -92,6 +96,15 @@
   let _intervals    = [];
   let _activeLeague = "shop";
   let _rightPanel   = "youtube";
+
+  // Leagues that paginate to 8 cards/page with Shop teams pinned on every
+  // page (golf and UFC are excluded — those pages need separate work).
+  const PAGINATED_LEAGUES = new Set(["cfb", "nfl", "nba", "mlb", "nhl", "ncaam", "mls"]);
+  const CARDS_PER_PAGE = 8;
+  const PAGE_ROTATE_MS = 12 * 1000;
+  let _pageRotateInterval = null;
+  let _oddsCache   = new Map(); // eventId -> { favored, ou }
+  let _seriesCache = new Map(); // eventId -> series object
 
   // ----------------------------------------------------------------
   // Guard
@@ -133,6 +146,7 @@
   function exitPiScoreboard() {
     _intervals.forEach(id => clearInterval(id));
     _intervals = [];
+    _clearPageRotate();
     document.removeEventListener("keydown", _handleEsc);
     if (window._puttPuttUnsub) { window._puttPuttUnsub(); window._puttPuttUnsub = null; }
     const overlay = document.getElementById("piScoreboard");
@@ -1369,51 +1383,150 @@
   async function _renderLeagueScores() {
     const el = document.getElementById("piScoresContent");
     if (!el) return;
-    const league = LEAGUES.find(l => l.key === _activeLeague) || LEAGUES[0];
-    const date   = _todayStr();
+    _clearPageRotate();
+
+    const league      = LEAGUES.find(l => l.key === _activeLeague) || LEAGUES[0];
+    const leagueLabel = league.label.replace(/^\S+\s/, "");
+    const isWeekly    = _showsWeekView(_activeLeague);
     el.innerHTML = `<div class="piNoGames">Loading&hellip;</div>`;
 
     let events = [];
     try {
-      const data = await fetch(league.url(date)).then(r => r.ok ? r.json() : Promise.reject(r.status));
+      const dateParam = isWeekly ? _weekRangeParam() : _todayStr();
+      const data = await fetch(league.url(dateParam)).then(r => r.ok ? r.json() : Promise.reject(r.status));
       events = data?.events || [];
+      // Fallback: if the week-range query somehow comes back empty, ESPN
+      // defaults to the current week for these two sports when dates is omitted.
+      if (isWeekly && !events.length) {
+        const fallbackData = await fetch(league.url("")).then(r => r.ok ? r.json() : Promise.reject(r.status));
+        events = fallbackData?.events || [];
+      }
     } catch {
       el.innerHTML = `<div class="piNoGames">Scores unavailable.</div>`;
       return;
     }
 
-    if (!events.length) { el.innerHTML = `<div class="piNoGames">No games today.</div>`; return; }
+    if (!events.length) { el.innerHTML = `<div class="piNoGames">No games ${isWeekly ? "this week" : "today"}.</div>`; return; }
 
-    el.innerHTML = events.map(ev =>
-      _buildShopCard(_activeLeague, league.label.replace(/^\S+\s/, ""), ev, null, null)
-    ).join("");
+    // UFC (and anything else outside PAGINATED_LEAGUES) keeps the original
+    // simple, unpaginated full-list view — those pages need separate work.
+    if (!PAGINATED_LEAGUES.has(_activeLeague)) {
+      el.innerHTML = events.map(ev => _buildShopCard(_activeLeague, leagueLabel, ev, null, null)).join("");
+      try { if (typeof window.replaceMichiganText === "function") window.replaceMichiganText(el); } catch {}
 
-    try { if (typeof window.replaceMichiganText === "function") window.replaceMichiganText(el); } catch {}
+      if (!SUMMARY_URLS[_activeLeague]) return;
+      const CONCURRENCY = 4;
+      let idx = 0;
+      async function worker() {
+        while (idx < events.length) {
+          const i = idx++;
+          const ev = events[i];
+          const eventId = String(ev?.id || "");
+          if (!eventId) continue;
+          try {
+            const data = await fetch(SUMMARY_URLS[_activeLeague](eventId)).then(r => r.ok ? r.json() : null);
+            if (!data) continue;
+            const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
+            if (odds.favored || odds.ou) {
+              const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+              if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
+            }
+            if (PLAYOFF_LEAGUES.has(_activeLeague)) {
+              const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+              if (card) {
+                const s = card.querySelector(".piSeriesLine");
+                if (s && !s.innerHTML.trim()) {
+                  const series = _parseSeriesFromSummary(data, ev?.competitions?.[0]);
+                  if (series) s.innerHTML = _buildSeriesHTML(series);
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+      await Promise.allSettled(Array.from({ length: CONCURRENCY }, worker));
+      return;
+    }
 
+    // ── Paginated leagues: Shop teams pinned on every page, everything ──
+    // ── else rotates through in batches of up to 8 total per page.     ──
+    _oddsCache   = new Map();
+    _seriesCache = new Map();
+
+    const pinned = [];
+    const others = [];
+    for (const ev of events) {
+      const comp = (ev?.competitions || [])[0] || {};
+      const hasShop = (comp?.competitors || []).some(c => _isShopTeam(c?.team));
+      (hasShop ? pinned : others).push(ev);
+    }
+    pinned.sort((a, b) => _shopTeamRank(a) - _shopTeamRank(b));
+    const rank = ev => { const s = _getState(ev); return s === "in" ? 0 : s === "pre" ? 1 : 2; };
+    others.sort((a, b) => {
+      const rA = rank(a), rB = rank(b);
+      if (rA !== rB) return rA - rB;
+      return new Date(a.date || 0) - new Date(b.date || 0);
+    });
+
+    const otherPerPage = Math.max(1, CARDS_PER_PAGE - Math.min(pinned.length, CARDS_PER_PAGE));
+    const pages = (pinned.length + others.length) > CARDS_PER_PAGE
+      ? Array.from(
+          { length: Math.max(1, Math.ceil(others.length / otherPerPage)) },
+          (_, i) => others.slice(i * otherPerPage, (i + 1) * otherPerPage)
+        )
+      : [others];
+
+    let pageIndex = 0;
+    const renderPage = () => {
+      const shown = pinned.concat(pages[pageIndex] || []).slice(0, CARDS_PER_PAGE);
+      el.innerHTML = shown.map(ev => {
+        const eventId = String(ev?.id || "");
+        return _buildShopCard(_activeLeague, leagueLabel, ev, _seriesCache.get(eventId), _oddsCache.get(eventId));
+      }).join("");
+      try { if (typeof window.replaceMichiganText === "function") window.replaceMichiganText(el); } catch {}
+      _hydrateEventOdds(shown, el);
+    };
+
+    renderPage();
+    if (pages.length > 1) {
+      _pageRotateInterval = setInterval(() => {
+        pageIndex = (pageIndex + 1) % pages.length;
+        renderPage();
+      }, PAGE_ROTATE_MS);
+    }
+  }
+
+  // Fetches odds (+ series, for playoff leagues) for the given events and
+  // patches them into the DOM once they resolve. Skips anything already
+  // cached this render cycle (reset every time _renderLeagueScores re-fetches).
+  async function _hydrateEventOdds(events, el) {
     if (!SUMMARY_URLS[_activeLeague]) return;
+    const toFetch = events.filter(ev => ev?.id && !_oddsCache.has(String(ev.id)));
+    if (!toFetch.length) return;
     const CONCURRENCY = 4;
     let idx = 0;
     async function worker() {
-      while (idx < events.length) {
+      while (idx < toFetch.length) {
         const i = idx++;
-        const ev = events[i];
+        const ev = toFetch[i];
         const eventId = String(ev?.id || "");
-        if (!eventId) continue;
         try {
           const data = await fetch(SUMMARY_URLS[_activeLeague](eventId)).then(r => r.ok ? r.json() : null);
           if (!data) continue;
           const odds = _parseOddsFromSummary(data, ev?.competitions?.[0]);
+          _oddsCache.set(eventId, odds);
           if (odds.favored || odds.ou) {
             const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
             if (card) { const o = card.querySelector(".piShopMetaItem.odds"); if (o) o.textContent = _buildOddsLine(odds.favored, odds.ou); }
           }
           if (PLAYOFF_LEAGUES.has(_activeLeague)) {
-            const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
-            if (card) {
-              const s = card.querySelector(".piSeriesLine");
-              if (s && !s.innerHTML.trim()) {
-                const series = _parseSeriesFromSummary(data, ev?.competitions?.[0]);
-                if (series) s.innerHTML = _buildSeriesHTML(series);
+            const series = _parseSeriesFromSummary(data, ev?.competitions?.[0]);
+            if (series) {
+              _seriesCache.set(eventId, series);
+              const card = el.querySelector(`.piShopCard[data-eventid="${eventId}"]`);
+              if (card) {
+                const s = card.querySelector(".piSeriesLine");
+                if (s && !s.innerHTML.trim()) s.innerHTML = _buildSeriesHTML(series);
               }
             }
           }
@@ -1748,11 +1861,16 @@
       statusText = statusDetail || "LIVE";
     } else if (state === "post" || statusName.includes("final") || statusName === "post") {
       cardClass += " final";
-      statusText = statusDetail || "Final";
+      const base = (statusDetail && statusDetail.toLowerCase() !== "final") ? statusDetail : "Final";
+      statusText = base + _dayContextSuffix(leagueKey, ev);
     } else {
       cardClass += " sched";
       const evDate = new Date(ev?.date || "");
-      statusText = evDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const timeStr = evDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      // Week view (CFB/NFL) spans multiple days, so show which day it's on.
+      statusText = _showsWeekView(leagueKey) && !isNaN(evDate)
+        ? `${evDate.toLocaleDateString([], { weekday: "short" })} ${timeStr}`
+        : timeStr;
     }
 
     const color = LEAGUE_COLORS[leagueKey] || "#555";
@@ -1810,6 +1928,40 @@
   // ----------------------------------------------------------------
   function _todayStr() {
     return _dateStr(new Date());
+  }
+
+  // CFB/NFL "week" = Tuesday through the following Monday, rolling over
+  // exactly at Tuesday (so a Monday night game still belongs to that week).
+  function _currentWeekRange() {
+    const now = new Date();
+    const sinceTue = (now.getDay() - 2 + 7) % 7; // Tue=0 ... Mon=6
+    const start = new Date(now);
+    start.setDate(now.getDate() - sinceTue);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return { start: _dateStr(start), end: _dateStr(end) };
+  }
+  function _weekRangeParam() {
+    const { start, end } = _currentWeekRange();
+    return `${start}-${end}`;
+  }
+
+  function _clearPageRotate() {
+    if (_pageRotateInterval) { clearInterval(_pageRotateInterval); _pageRotateInterval = null; }
+  }
+
+  function _showsWeekView(leagueKey) {
+    return leagueKey === "cfb" || leagueKey === "nfl";
+  }
+
+  // For a Final on a week-view league, appends " · Thu" when the game wasn't
+  // played today, so a full week's worth of finals stay distinguishable.
+  function _dayContextSuffix(leagueKey, ev) {
+    if (!_showsWeekView(leagueKey)) return "";
+    const evDate = new Date(ev?.date || "");
+    if (isNaN(evDate)) return "";
+    if (evDate.toDateString() === new Date().toDateString()) return "";
+    return ` · ${evDate.toLocaleDateString([], { weekday: "short" })}`;
   }
 
   function _dateStr(d) {
