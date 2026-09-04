@@ -609,7 +609,7 @@
   .piShopTeamLogo { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; border-radius: 3px; }
   .piShopTeamRank {
     flex-shrink: 0;
-    font-size: 0.85rem;
+    font-size: clamp(1.25rem, 2.2vw, 1.65rem);
     font-weight: 900;
     color: #ffcc44;
     background: rgba(200,160,0,0.15);
