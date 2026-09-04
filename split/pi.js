@@ -1694,11 +1694,22 @@
   // ----------------------------------------------------------------
   function _parseOddsFromSummary(data, fallbackComp) {
     try {
-      const comp = data?.header?.competitions?.[0] || data?.competitions?.[0] || fallbackComp || {};
-      const odds = comp?.odds?.[0] || comp?.situation?.lastPlay?.probability || null;
+      // Primary source: top-level pickcenter/odds array (what ESPN's summary
+      // endpoint actually populates for nearly every event).
+      const pickcenter = data?.pickcenter || data?.odds || [];
+      const oddsArr = Array.isArray(pickcenter) ? pickcenter : [pickcenter];
+      let odds = oddsArr.find(o => o?.provider?.name || o?.spread !== undefined) || oddsArr[0] || null;
+
+      // Fallback: some sports only carry odds under header.competitions[0].odds
+      if (!odds) {
+        const comp = data?.header?.competitions?.[0] || data?.competitions?.[0] || fallbackComp || {};
+        const fallbackOdds = comp?.odds;
+        odds = Array.isArray(fallbackOdds) ? fallbackOdds[0] : (fallbackOdds || null);
+      }
       if (!odds) return {};
+
       const favored = String(odds?.details || odds?.spread || "").trim();
-      const ou      = odds?.overUnder != null ? String(odds.overUnder) : "";
+      const ou      = odds?.overUnder != null ? String(odds.overUnder) : (odds?.total != null ? String(odds.total) : "");
       return { favored: favored || null, ou: ou || null };
     } catch { return {}; }
   }
@@ -1774,11 +1785,13 @@
 
     const venue    = String(comp?.venue?.fullName || comp?.venue?.shortName || "");
     const oddsLine = oddsOverride ? _buildOddsLine(oddsOverride.favored, oddsOverride.ou) : "";
-    const metaHTML = (venue || oddsLine) ? `
+    // Odds span always renders (even empty) so the async odds fetch below has
+    // an element to fill in later — it isn't known yet at initial render time.
+    const metaHTML = `
       <div class="piShopMeta">
-        ${oddsLine ? `<span class="piShopMetaItem odds">${_esc(oddsLine)}</span>` : ""}
-        ${venue    ? `<span class="piShopMetaItem venue">📍 ${_esc(venue)}</span>` : ""}
-      </div>` : "";
+        <span class="piShopMetaItem odds">${_esc(oddsLine)}</span>
+        ${venue ? `<span class="piShopMetaItem venue">📍 ${_esc(venue)}</span>` : ""}
+      </div>`;
 
     return `
       <div class="${cardClass}" data-eventid="${_esc(String(ev?.id || ""))}">
