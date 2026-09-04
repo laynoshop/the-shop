@@ -1938,7 +1938,12 @@
   // ----------------------------------------------------------------
   function _buildShopCard(leagueKey, leagueLabel, ev, seriesOverride, oddsOverride, upcoming = false) {
     const comp       = (ev?.competitions || [])[0] || {};
-    const competitors = comp?.competitors || [];
+    // Away on top, home on bottom — ESPN's own competitors order doesn't
+    // reliably put them in that order, so sort by homeAway explicitly.
+    const competitors = [...(comp?.competitors || [])].sort((a, b) => {
+      const rank = c => String(c?.homeAway || "") === "home" ? 1 : 0;
+      return rank(a) - rank(b);
+    });
     const state      = _getState(ev);
     const statusDetail = String(ev?.status?.type?.detail || ev?.status?.type?.shortDetail || "");
     const statusName   = String(ev?.status?.type?.name || "").toLowerCase();
