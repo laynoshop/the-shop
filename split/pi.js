@@ -111,7 +111,7 @@
   let _pageIndex = 0;
   let _pageRotateLeague = null;
 
-  const TOP25_PAGE_SIZE = 14;
+  const TOP25_PAGE_SIZE = 10;
   const TOP25_ROTATE_MS = 15 * 1000;
   let _top25RotateInterval = null;
   function _clearTop25Rotate() {
@@ -529,10 +529,10 @@
   }
   .piRankHeadRange { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; color: #888; text-transform: none; }
   .piRankLoading, .piRankEmpty { color: #666; font-size: 1rem; padding: 20px 0; }
-  .piRankList { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+  .piRankList { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
   .piRankRow {
-    display: flex; align-items: center; gap: 12px;
-    padding: 8px 10px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 12px;
     border-radius: 8px;
     background: rgba(255,255,255,0.035);
     border-left: 3px solid rgba(200,0,0,0.35);
@@ -540,21 +540,22 @@
   .piRankRow:nth-child(odd) { background: rgba(255,255,255,0.06); }
   .piRankNum {
     flex-shrink: 0;
-    min-width: 30px; height: 30px;
+    min-width: 38px; height: 38px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.05rem; font-weight: 900; color: #fff;
+    font-size: 1.2rem; font-weight: 900; color: #fff;
     background: linear-gradient(135deg, #cc0000, #7a0000);
     border-radius: 50%;
     box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   }
-  .piRankLogo { width: 34px; height: 34px; object-fit: contain; flex-shrink: 0; border-radius: 4px; }
+  .piRankLogo { width: 44px; height: 44px; object-fit: contain; flex-shrink: 0; border-radius: 5px; }
   .piRankLogoPlaceholder { background: rgba(255,255,255,0.08); }
-  .piRankTeam { flex: 1; min-width: 0; font-size: 1.2rem; font-weight: 700; color: #f0f0f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Matches .piShopTeamNameFull on the scorecards */
+  .piRankTeam { flex: 1; min-width: 0; font-size: clamp(1.25rem, 2.2vw, 1.65rem); font-weight: 700; color: #f0f0f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .piRankTrend { flex-shrink: 0; font-size: 0.85rem; font-weight: 800; }
   .piRankTrend.up   { color: #3dd68c; }
   .piRankTrend.down { color: #ff5f5f; }
   .piRankTrend.flat { color: #666; }
-  .piRankRecord { flex-shrink: 0; min-width: 46px; text-align: right; font-size: 0.95rem; font-weight: 700; color: #999; font-variant-numeric: tabular-nums; }
+  .piRankRecord { flex-shrink: 0; min-width: 46px; text-align: right; font-size: 1rem; font-weight: 800; color: #bbb; font-variant-numeric: tabular-nums; }
 
   .piPanelHead {
     font-size: 0.85rem;
@@ -615,7 +616,7 @@
     text-overflow: ellipsis;
   }
   .piShopTeamNameFull.fav { color: #ffcc66; }
-  .piShopTeamRecord { font-size: 0.85rem; color: #666; white-space: nowrap; flex-shrink: 0; }
+  .piShopTeamRecord { font-size: 0.85rem; font-weight: 700; color: #999; white-space: nowrap; flex-shrink: 0; }
   .piShopTeamScore {
     font-size: clamp(1.6rem, 3vw, 2.4rem);
     font-weight: 900;
