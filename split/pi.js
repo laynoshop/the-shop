@@ -607,6 +607,16 @@
   .piShopTeamLine { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .piShopTeamLineLeft { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .piShopTeamLogo { width: 30px; height: 30px; object-fit: contain; flex-shrink: 0; border-radius: 3px; }
+  .piShopTeamRank {
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    font-weight: 900;
+    color: #ffcc44;
+    background: rgba(200,160,0,0.15);
+    border: 1px solid rgba(200,160,0,0.35);
+    border-radius: 5px;
+    padding: 1px 6px;
+  }
   .piShopTeamNameFull {
     font-size: clamp(1.25rem, 2.2vw, 1.65rem);
     font-weight: 800;
@@ -1970,6 +1980,8 @@
       const logoUrl  = team?.logo || "";
       const nameRaw  = String(team?.displayName || team?.shortDisplayName || team?.name || "TBD");
       const name     = _applyTTUN(nameRaw);
+      const rank     = Number(c?.curatedRank?.current || c?.rank || 0);
+      const rankHTML = (rank > 0 && rank <= 25) ? `<span class="piShopTeamRank">#${rank}</span>` : "";
       const score    = c?.score != null ? String(c.score) : (upcoming ? "" : "--");
       const record   = String(c?.records?.[0]?.summary || "");
       const logoHTML = logoUrl ? `<img class="piShopTeamLogo" src="${_esc(logoUrl)}" alt="${_esc(name)}" loading="lazy" />` : "";
@@ -1977,6 +1989,7 @@
         <div class="piShopTeamLine">
           <div class="piShopTeamLineLeft">
             ${logoHTML}
+            ${rankHTML}
             <span class="piShopTeamNameFull${isFav ? " fav" : ""}">${_esc(name)}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
