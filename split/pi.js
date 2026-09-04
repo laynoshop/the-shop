@@ -551,11 +551,11 @@
   .piRankLogoPlaceholder { background: rgba(255,255,255,0.08); }
   /* Matches .piShopTeamNameFull on the scorecards */
   .piRankTeam { flex: 1; min-width: 0; font-size: clamp(1.25rem, 2.2vw, 1.65rem); font-weight: 700; color: #f0f0f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .piRankTrend { flex-shrink: 0; font-size: 0.85rem; font-weight: 800; }
+  .piRankTrend { flex-shrink: 0; font-size: clamp(1.25rem, 2.2vw, 1.65rem); font-weight: 800; }
   .piRankTrend.up   { color: #3dd68c; }
   .piRankTrend.down { color: #ff5f5f; }
   .piRankTrend.flat { color: #666; }
-  .piRankRecord { flex-shrink: 0; min-width: 46px; text-align: right; font-size: 1rem; font-weight: 800; color: #bbb; font-variant-numeric: tabular-nums; }
+  .piRankRecord { flex-shrink: 0; min-width: 46px; text-align: right; font-size: clamp(1.25rem, 2.2vw, 1.65rem); font-weight: 800; color: #bbb; font-variant-numeric: tabular-nums; }
 
   .piPanelHead {
     font-size: 0.85rem;
@@ -616,7 +616,7 @@
     text-overflow: ellipsis;
   }
   .piShopTeamNameFull.fav { color: #ffcc66; }
-  .piShopTeamRecord { font-size: 0.85rem; font-weight: 700; color: #999; white-space: nowrap; flex-shrink: 0; }
+  .piShopTeamRecord { font-size: 1.1rem; font-weight: 700; color: #999; white-space: nowrap; flex-shrink: 0; }
   .piShopTeamScore {
     font-size: clamp(1.6rem, 3vw, 2.4rem);
     font-weight: 900;
