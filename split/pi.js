@@ -1438,7 +1438,7 @@
 
     if (!events.length) { el.innerHTML = `<div class="piNoGames">No PGA Tour events found.</div>`; return; }
 
-    el.innerHTML = events.map(ev => _buildShopCard("pga", "PGA", ev, null, null)).join("");
+    el.innerHTML = events.map(ev => _buildShopCard("pga", "PGA", ev, null, null, false, false)).join("");
 
     const CONCURRENCY = 4;
     let idx = 0;
@@ -1508,7 +1508,7 @@
     // UFC (and anything else outside PAGINATED_LEAGUES) keeps the original
     // simple, unpaginated full-list view — those pages need separate work.
     if (!PAGINATED_LEAGUES.has(_activeLeague)) {
-      el.innerHTML = events.map(ev => _buildShopCard(_activeLeague, leagueLabel, ev, null, null)).join("");
+      el.innerHTML = events.map(ev => _buildShopCard(_activeLeague, leagueLabel, ev, null, null, false, false)).join("");
       try { if (typeof window.replaceMichiganText === "function") window.replaceMichiganText(el); } catch {}
 
       if (!SUMMARY_URLS[_activeLeague]) return;
@@ -1580,7 +1580,7 @@
       const shown = pinned.concat(pages[_pageIndex] || []).slice(0, CARDS_PER_PAGE);
       el.innerHTML = shown.map(ev => {
         const eventId = String(ev?.id || "");
-        return _buildShopCard(_activeLeague, leagueLabel, ev, _seriesCache.get(eventId), _oddsCache.get(eventId));
+        return _buildShopCard(_activeLeague, leagueLabel, ev, _seriesCache.get(eventId), _oddsCache.get(eventId), false, false);
       }).join("");
       try { if (typeof window.replaceMichiganText === "function") window.replaceMichiganText(el); } catch {}
       _hydrateEventOdds(shown, el);
@@ -1936,7 +1936,7 @@
   // ----------------------------------------------------------------
   // Score card builder
   // ----------------------------------------------------------------
-  function _buildShopCard(leagueKey, leagueLabel, ev, seriesOverride, oddsOverride, upcoming = false) {
+  function _buildShopCard(leagueKey, leagueLabel, ev, seriesOverride, oddsOverride, upcoming = false, showLeagueBadge = true) {
     const comp       = (ev?.competitions || [])[0] || {};
     // Away on top, home on bottom — ESPN's own competitors order doesn't
     // reliably put them in that order, so sort by homeAway explicitly.
@@ -2022,7 +2022,7 @@
       <div class="${cardClass}" data-eventid="${_esc(String(ev?.id || ""))}">
         <div class="piShopCardTop">
           <div class="piShopCardTopLeft">
-            <span class="piShopLeagueBadge" style="background:${color};">${_esc(leagueLabel)}</span>
+            ${showLeagueBadge ? `<span class="piShopLeagueBadge" style="background:${color};">${_esc(leagueLabel)}</span>` : ""}
             <span class="piShopMetaItem odds">${_esc(oddsLine)}</span>
           </div>
           <span class="piShopStatusLabel ${statusClass}">${_esc(statusText)}</span>
