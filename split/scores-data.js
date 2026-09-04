@@ -81,6 +81,11 @@
   // Leagues to scan when Shop tab is active (all team-sport leagues)
   const SHOP_SCAN_LEAGUES = ["ncaam", "cfb", "nba", "nhl", "mls", "nfl", "mlb"];
 
+  // Per-league lookahead windows (days ahead to search) for a Shop team with no game today
+  const SHOP_LOOKAHEAD_DAYS = {
+    cfb: 6, nfl: 6, nhl: 3, nba: 3, mlb: 3, ncaam: 3, mls: 3,
+  };
+
   const PLAYOFF_LEAGUES = new Set(["nhl", "nba", "nfl", "mlb"]);
 
   // ---------- iOS/PWA safety ----------
@@ -240,6 +245,14 @@
   function isShopEvent(event) {
     const competitors = event?.competitions?.[0]?.competitors || [];
     return competitors.some(c => isShopTeam(c?.team));
+  }
+
+  // Returns the exact SHOP_TEAMS_NORM entry a team matches, or null.
+  // Used to track which Shop teams already have a game today vs. need a lookahead search.
+  function shopTeamNormKey(team) {
+    if (!team) return null;
+    const identities = getTeamIdentityStrings(team);
+    return SHOP_TEAMS_NORM.find(f => identities.includes(f)) || null;
   }
 
   function favoriteRankForEvent(event) {
@@ -477,7 +490,8 @@
   // ─── Expose public API ─────────────────────────────────────────────────────
   window.__SD = {
     LEAGUE_COLORS, LEAGUES, FAVORITES, FAVORITES_NORM,
-    SHOP_TEAMS, SHOP_TEAMS_NORM, SHOP_SCAN_LEAGUES,
+    SHOP_TEAMS, SHOP_TEAMS_NORM, SHOP_SCAN_LEAGUES, SHOP_LOOKAHEAD_DAYS,
+    shopTeamNormKey,
     LEAGUE_KEY, DATE_KEY,
     PLAYOFF_LEAGUES,
     getSavedLeagueKey, setSavedLeagueKey,
