@@ -115,7 +115,9 @@
 @keyframes scLivePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } }
 .statusFinal { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
 .statusPre { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.65); }
-.oddsLine { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.statusUpcoming { font-size: 12px; font-weight: 800; color: #4499ff; }
+.oddsLineRow { padding: 0 12px 6px; text-align: right; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45); }
+.oddsLineRow:empty { display: none; }
 .seriesBadge { margin: 6px 12px 0; display: inline-flex; align-items: center; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: #ffcc44; background: rgba(200,160,0,0.14); border: 1px solid rgba(200,160,0,0.28); border-radius: 6px; padding: 2px 8px; align-self: flex-start; }
 .matchup { display: flex; flex-direction: column; padding: 6px 12px 10px; gap: 2px; }
 .teamRow { display: flex; align-items: center; gap: 10px; padding: 6px 0; min-height: 44px; border-radius: 8px; transition: background 150ms ease; }
@@ -161,8 +163,8 @@
   color: rgba(255,255,255,0.55); flex-shrink: 0; white-space: nowrap;
 }
 .cardHeaderRight {
-  display: flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 60%;
-  overflow: hidden;
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 70%;
+  flex-wrap: wrap; justify-content: flex-end;
 }
 /* ── Win probability bar ── */
 .winProbBar {
@@ -208,40 +210,6 @@
   padding: 2px 8px; border-radius: 5px;
   background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.13);
   color: rgba(255,255,255,0.5); flex-shrink: 0; white-space: nowrap;
-}
-
-/* ── Shop next-game card ── */
-.shopNextCard {
-  background: rgba(200,154,0,0.07);
-  border: 1.5px solid rgba(200,154,0,0.25);
-  border-left: 4px solid #c89a00;
-  border-radius: 14px;
-  padding: 18px 16px 16px;
-  display: flex; flex-direction: column; gap: 10px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 18px rgba(200,154,0,0.1);
-}
-.shopNextLabel {
-  font-size: 10px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
-  color: #c89a00; margin-bottom: 2px;
-}
-.shopNextTeams {
-  font-size: 17px; font-weight: 900; color: #fff; line-height: 1.25;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.shopNextMeta {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-}
-.shopNextMetaPill {
-  font-size: 11px; font-weight: 700;
-  padding: 3px 9px; border-radius: 999px;
-  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.55); white-space: nowrap;
-}
-.shopNextCountdown {
-  font-size: 13px; font-weight: 800; letter-spacing: 0.03em;
-  padding: 3px 10px; border-radius: 999px;
-  background: rgba(200,154,0,0.18); border: 1px solid rgba(200,154,0,0.35);
-  color: #f0c040; white-space: nowrap;
 }
 
 /* ── Shop empty state ── */
@@ -653,7 +621,9 @@
   }
 
   // Build a score card. shopLeagueKey is set when rendering from Shop tab so a league badge appears.
-  function buildScoreCardHTML(ev, leagueKey, shopLeagueKey) {
+  // opts.upcoming marks a Shop team's next scheduled game found via lookahead (no game today).
+  function buildScoreCardHTML(ev, leagueKey, shopLeagueKey, opts) {
+    const upcoming     = !!opts?.upcoming;
     const comp         = ev?.competitions?.[0];
     const competitors  = comp?.competitors || [];
     const status       = comp?.status;
@@ -722,7 +692,18 @@
     const seriesBadge  = seriesStatus ? `<div class="seriesBadge">${SD.escapeHtml(seriesStatus)}</div>` : "";
 
     let statusLine = "";
-    if (isLive) {
+    if (upcoming) {
+      const gameDate = comp?.date || ev?.date || "";
+      const evDate = gameDate ? new Date(gameDate) : null;
+      let dayLabel = "";
+      let timeStr = "";
+      if (evDate && !isNaN(evDate)) {
+        const diffDays = Math.round((evDate - new Date()) / 86400000);
+        dayLabel = diffDays <= 0 ? "Today" : diffDays === 1 ? "Tomorrow" : `In ${diffDays} days`;
+        try { timeStr = evDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch {}
+      }
+      statusLine = `<div class="statusUpcoming">${SD.escapeHtml(dayLabel || "Upcoming")}${timeStr ? " · " + SD.escapeHtml(timeStr) : ""}</div>`;
+    } else if (isLive) {
       let periodLabel = "";
       if      (isMLB)                                            periodLabel = mlbInningLabel(period, situation);
       else if (leagueKey === "nba"  || leagueKey === "ncaam")   periodLabel = period <= 2 ? `${period}H` : (period === 3 ? "OT" : `${period-2}OT`);
@@ -761,6 +742,7 @@
     let cardClasses = "scoreCard";
     if (isFavSpotlight) cardClasses += " favCard favSpotlight";
     if (isLive) cardClasses += " cardLive";
+    if (upcoming) cardClasses += " cardUpcoming";
 
     // Win prob bar HTML
     const winProbBarHTML = (() => {
@@ -790,9 +772,9 @@
     <div class="cardHeaderRight">
       ${leagueBadgeHTML}
       ${broadcastName ? `<div class="broadcastChip">${SD.escapeHtml(broadcastName)}</div>` : ""}
-      <div class="oddsLine" data-oddsline="${SD.escapeHtml(eventId)}"></div>
     </div>
   </div>
+  <div class="oddsLineRow" data-oddsline="${SD.escapeHtml(eventId)}"></div>
   ${favRibbonHTML}
   <div class="matchup">
     <div class="teamRow away${highlightAway ? " favTeam" : ""}">
@@ -943,125 +925,122 @@
   }
 
   // ─── Shop tab: fetch all leagues in parallel, filter to Shop teams ────────
-  async function loadShopScores(dateStr) {
+  // Mirrors the Pi-Scoreboard's Shop Teams behavior: show every Shop team
+  // playing today, and for any Shop team with no game today, look ahead
+  // (per-league window) and show their next scheduled game in the same list.
+  // No date picker here — this is always "today" (+ lookahead), unlike the
+  // per-league pages which stay date-navigable.
+  async function loadShopScores() {
     const container = document.getElementById("scoresContainer");
     if (!container) return;
 
     container.innerHTML = `<div class="emptyState">Loading Shop teams...</div>`;
 
-    const scanKeys = SD.SHOP_SCAN_LEAGUES || ["ncaam","cfb","nba","nhl","mls","nfl","mlb"];
+    const scanKeys      = SD.SHOP_SCAN_LEAGUES || ["ncaam","cfb","nba","nhl","mls","nfl","mlb"];
+    const lookaheadDays = SD.SHOP_LOOKAHEAD_DAYS || {};
+    const todayStr      = SD.todayYYYYMMDD();
 
-    // Fetch all leagues simultaneously
+    // Fetch all leagues simultaneously for today
     const results = await Promise.allSettled(
       scanKeys.map(async key => {
         const league = SD.getLeagueByKey(key);
         if (!league) return { key, events: [] };
-        const url  = SD.withLangRegion(league.endpoint(dateStr));
+        const url  = SD.withLangRegion(league.endpoint(todayStr));
         const data = await SD.fetchJsonNoStore(url);
         return { key, events: data?.events || [] };
       })
     );
 
-    // Collect all Shop-team events, tagging each with its source league key
-    const shopEvents = [];
+    // Collect all Shop-team events playing today, tagging each with its source league key
+    const matched = [];
+    const teamsFound = new Set();
     for (const r of results) {
       if (r.status !== "fulfilled") continue;
       const { key, events } = r.value;
       for (const ev of events) {
-        if (SD.isShopEvent(ev)) shopEvents.push({ ev, leagueKey: key });
-      }
-    }
-
-    if (shopEvents.length > 0) {
-      // Sort: live first, then pre, then post; within same state by start time
-      shopEvents.sort((a, b) => {
-        const stA = SD.stateRank(a.ev?.competitions?.[0]?.status);
-        const stB = SD.stateRank(b.ev?.competitions?.[0]?.status);
-        if (stA !== stB) return stA - stB;
-        return SD.getStartTimeMs(a.ev) - SD.getStartTimeMs(b.ev);
-      });
-      container.innerHTML = shopEvents
-        .map(({ ev, leagueKey }) => buildScoreCardHTML(ev, leagueKey, leagueKey))
-        .join("");
-
-      // Hydrate betting info (favored + O/U) for every Shop team event,
-      // grouped back out by league since odds are fetched per-league.
-      const byLeague = {};
-      for (const { ev, leagueKey } of shopEvents) {
-        (byLeague[leagueKey] || (byLeague[leagueKey] = [])).push(ev);
-      }
-      for (const key of Object.keys(byLeague)) {
-        const league = SD.getLeagueByKey(key);
-        if (!league) continue;
-        SD.hydrateAllOdds(league, key, dateStr, byLeague[key]).catch(() => {});
-      }
-      return;
-    }
-
-    // ── No games today: find the next upcoming Shop team game (up to 14 days ahead) ──
-    container.innerHTML = `<div class="shopEmptyState"><div class="shopEmptyIcon">🏪</div><div class="shopEmptyTitle">No Shop teams in action today.</div><div class="shopEmptySubtitle">Searching for the next upcoming game…</div></div>`;
-
-    let nextFound = null;
-    for (let delta = 1; delta <= 14 && !nextFound; delta++) {
-      const searchDate = SD.yyyymmddOffset ? SD.yyyymmddOffset(dateStr, delta) : shiftDate(dateStr, delta);
-      const nextResults = await Promise.allSettled(
-        scanKeys.map(async key => {
-          const league = SD.getLeagueByKey(key);
-          if (!league) return { key, events: [] };
-          const url  = SD.withLangRegion(league.endpoint(searchDate));
-          const data = await SD.fetchJsonNoStore(url);
-          return { key, events: data?.events || [], date: searchDate };
-        })
-      );
-      for (const r of nextResults) {
-        if (r.status !== "fulfilled") continue;
-        const { key, events, date } = r.value;
-        for (const ev of events) {
-          if (SD.isShopEvent(ev)) {
-            nextFound = { ev, leagueKey: key, date, delta };
-            break;
+        if (SD.isShopEvent(ev)) {
+          matched.push({ ev, leagueKey: key, upcoming: false });
+          for (const c of (ev?.competitions?.[0]?.competitors || [])) {
+            const teamKey = SD.shopTeamNormKey(c?.team);
+            if (teamKey) teamsFound.add(teamKey);
           }
         }
-        if (nextFound) break;
       }
     }
 
-    if (!nextFound) {
-      container.innerHTML = `<div class="shopEmptyState"><div class="shopEmptyIcon">🏪</div><div class="shopEmptyTitle">No Shop teams in action today.</div><div class="shopEmptySubtitle">No upcoming Shop team games found in the next 14 days.</div></div>`;
+    // Any Shop team with no game today: look ahead (per-league window) for its next game
+    const missingTeams = (SD.SHOP_TEAMS_NORM || []).filter(t => !teamsFound.has(t));
+    if (missingTeams.length) {
+      const lookaheadFetches = [];
+      for (const key of scanKeys) {
+        const days   = lookaheadDays[key] || 0;
+        const league = SD.getLeagueByKey(key);
+        if (!days || !league) continue;
+        for (let d = 1; d <= days; d++) {
+          const searchDate = SD.yyyymmddOffset(todayStr, d);
+          lookaheadFetches.push(
+            SD.fetchJsonNoStore(SD.withLangRegion(league.endpoint(searchDate)))
+              .then(data => ({ key, events: data?.events || [], daysAhead: d }))
+              .catch(() => ({ key, events: [], daysAhead: d }))
+          );
+        }
+      }
+
+      const lookaheadResults = await Promise.allSettled(lookaheadFetches);
+      const upcomingByTeam = new Map();
+      for (const r of lookaheadResults) {
+        if (r.status !== "fulfilled") continue;
+        const { key, events, daysAhead } = r.value;
+        for (const ev of events) {
+          for (const c of (ev?.competitions?.[0]?.competitors || [])) {
+            const teamKey = SD.shopTeamNormKey(c?.team);
+            if (!teamKey || teamsFound.has(teamKey)) continue;
+            const existing = upcomingByTeam.get(teamKey);
+            if (!existing || daysAhead < existing.daysAhead) {
+              upcomingByTeam.set(teamKey, { ev, leagueKey: key, daysAhead });
+            }
+          }
+        }
+      }
+
+      const addedIds = new Set(matched.map(m => String(m.ev?.id || "")));
+      for (const { ev, leagueKey } of upcomingByTeam.values()) {
+        const id = String(ev?.id || "");
+        if (id && !addedIds.has(id)) {
+          matched.push({ ev, leagueKey, upcoming: true });
+          addedIds.add(id);
+        }
+      }
+    }
+
+    if (!matched.length) {
+      container.innerHTML = `<div class="shopEmptyState"><div class="shopEmptyIcon">🏪</div><div class="shopEmptyTitle">No Shop teams in action today.</div><div class="shopEmptySubtitle">No upcoming Shop team games found.</div></div>`;
       return;
     }
 
-    // Build a "next game" preview card
-    const { ev, leagueKey, date, delta } = nextFound;
-    const comp = ev?.competitions?.[0];
-    const competitors = comp?.competitors || [];
-    const home = competitors.find(c => String(c?.homeAway||"") === "home") || competitors[1] || {};
-    const away = competitors.find(c => String(c?.homeAway||"") === "away") || competitors[0] || {};
-    const homeName = SD.getTeamDisplayNameUI(home?.team || {});
-    const awayName = SD.getTeamDisplayNameUI(away?.team || {});
-    const gameDate = comp?.date || ev?.date || "";
-    let timeStr = "";
-    if (gameDate) { try { timeStr = new Date(gameDate).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); } catch {} }
-    const prettyDate = SD.yyyymmddToPretty ? SD.yyyymmddToPretty(date) : date;
-    const countdownLabel = delta === 1 ? "Tomorrow" : `Game in ${delta} days`;
-    const leagueBadge = SHOP_LEAGUE_LABELS[leagueKey] || leagueKey.toUpperCase();
+    // Sort: live, then final, then scheduled today, then upcoming (by soonest)
+    matched.sort((a, b) => {
+      const rank = m => m.upcoming ? 3 : SD.stateRank(m.ev?.competitions?.[0]?.status);
+      const rA = rank(a), rB = rank(b);
+      if (rA !== rB) return rA - rB;
+      return SD.getStartTimeMs(a.ev) - SD.getStartTimeMs(b.ev);
+    });
 
-    container.innerHTML = `
-<div class="shopEmptyState">
-  <div class="shopEmptyIcon">🏪</div>
-  <div class="shopEmptyTitle">No Shop teams in action today.</div>
-  <div class="shopEmptySubtitle">Next upcoming Shop team game:</div>
-</div>
-<div class="shopNextCard">
-  <div class="shopNextLabel">⏭ Next Shop Game</div>
-  <div class="shopNextTeams">${SD.escapeHtml(awayName)} vs. ${SD.escapeHtml(homeName)}</div>
-  <div class="shopNextMeta">
-    <span class="shopNextMetaPill">📅 ${SD.escapeHtml(prettyDate)}</span>
-    ${timeStr ? `<span class="shopNextMetaPill">🕐 ${SD.escapeHtml(timeStr)} ET</span>` : ""}
-    <span class="shopNextMetaPill">${SD.escapeHtml(leagueBadge)}</span>
-    <span class="shopNextCountdown">${SD.escapeHtml(countdownLabel)}</span>
-  </div>
-</div>`;
+    container.innerHTML = matched
+      .map(({ ev, leagueKey, upcoming }) => buildScoreCardHTML(ev, leagueKey, leagueKey, { upcoming }))
+      .join("");
+
+    // Hydrate betting info (favored + O/U) for every Shop team event,
+    // grouped back out by league since odds are fetched per-league.
+    const byLeague = {};
+    for (const { ev, leagueKey } of matched) {
+      (byLeague[leagueKey] || (byLeague[leagueKey] = [])).push(ev);
+    }
+    for (const key of Object.keys(byLeague)) {
+      const league = SD.getLeagueByKey(key);
+      if (!league) continue;
+      SD.hydrateAllOdds(league, key, todayStr, byLeague[key]).catch(() => {});
+    }
   }
 
   // ─── PGA Leaderboard ──────────────────────────────────────────────────────
@@ -1237,20 +1216,22 @@
     const content = document.getElementById("content");
     if (!content) return;
 
+    const isShop = leagueKey === "shop";
+
     content.innerHTML =
       buildHeaderHTML(leagueKey, color) +
-      buildDateNavHTML(dateStr) +
+      (isShop ? "" : buildDateNavHTML(dateStr)) +
       `<div id="scoresContainer" class="scoresContainer"></div>`;
 
     restoreLeagueRowScroll();
     bindLeaguePills();
-    bindDateNav();
+    if (!isShop) bindDateNav();
     bindRefreshBtn();
     bindCardTaps(leagueKey);
 
-    // ── Shop tab: special cross-league path ──
-    if (leagueKey === "shop") {
-      await loadShopScores(dateStr);
+    // ── Shop tab: special cross-league path (always "today" — no date nav) ──
+    if (isShop) {
+      await loadShopScores();
       return;
     }
 
