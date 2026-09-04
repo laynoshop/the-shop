@@ -983,6 +983,18 @@
       container.innerHTML = shopEvents
         .map(({ ev, leagueKey }) => buildScoreCardHTML(ev, leagueKey, leagueKey))
         .join("");
+
+      // Hydrate betting info (favored + O/U) for every Shop team event,
+      // grouped back out by league since odds are fetched per-league.
+      const byLeague = {};
+      for (const { ev, leagueKey } of shopEvents) {
+        (byLeague[leagueKey] || (byLeague[leagueKey] = [])).push(ev);
+      }
+      for (const key of Object.keys(byLeague)) {
+        const league = SD.getLeagueByKey(key);
+        if (!league) continue;
+        SD.hydrateAllOdds(league, key, dateStr, byLeague[key]).catch(() => {});
+      }
       return;
     }
 
