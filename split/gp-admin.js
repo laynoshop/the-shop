@@ -34,7 +34,9 @@
   function pickRank(competitor, teamObj) {
     const r = competitor?.curatedRank?.current ?? competitor?.rank ?? teamObj?.rank ?? "";
     const n = Number(r);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    // ESPN uses 99 (and sometimes 0) as an "unranked" sentinel rather than
+    // omitting the field, so only 1-25 (the actual AP/Coaches Top 25) counts.
+    return Number.isFinite(n) && n >= 1 && n <= 25 ? n : null;
   }
   function buildTeam(competitor) {
     const team = competitor?.team || {};
