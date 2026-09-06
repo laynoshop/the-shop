@@ -30,7 +30,6 @@
   }
 
   const PICKS_NAME_KEY   = "theShopPicksName_v1";
-  const META_PUBLIC_DOC  = "public";
 
   // ─── Firebase ready ───────────────────────────────────────────────
   async function ensureFirebaseReadySafe() {
@@ -88,13 +87,20 @@
     return String(name).trim().slice(0, 20);
   }
 
-  // ─── Firestore refs ────────────────────────────────────────────────
-  function metaRef(db, docId) {
-    return db.collection("pickSlatesMeta").doc(String(docId));
+  // ─── leagues (pick'em groups) ────────────────────────────────────────
+  // Unrelated to the *sport* leagueKey (nfl/cfb/nba) used elsewhere for the
+  // ESPN scoreboard fetch — this is the "Work League" / "Family League" kind.
+  async function gpGetLeague(db, leagueId) {
+    if (!leagueId) return null;
+    const snap = await db.collection("leagues").doc(String(leagueId)).get();
+    return snap.exists ? { id: snap.id, ...(snap.data() || {}) } : null;
   }
-  async function gpGetMetaPublic(db) {
-    const snap = await metaRef(db, META_PUBLIC_DOC).get();
-    return snap.exists ? (snap.data() || {}) : {};
+  async function gpListLeagues(db) {
+    const snap = await db.collection("leagues").get();
+    const list = [];
+    snap.forEach(d => list.push({ id: d.id, ...(d.data() || {}) }));
+    list.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+    return list;
   }
 
   // ─── slate games ─────────────────────────────────────────────────────
@@ -587,8 +593,8 @@
   window.GP_Data = {
     ensureFirebaseReadySafe,
     getPicksDisplayName,
-    metaRef,
-    gpGetMetaPublic,
+    gpGetLeague,
+    gpListLeagues,
     gpGetSlateDoc,
     gpGetSlateGames,
     gpGetMyPicksMap,
