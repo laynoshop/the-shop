@@ -568,7 +568,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 .gpTiebreakerInput {
   width: 110px; padding: 9px 12px; border-radius: 10px;
   background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.14);
-  color: inherit; font-weight: 800; font-size: 15px; outline: none;
+  color: inherit; font-weight: 800; font-size: 16px; outline: none;
 }
 .gpTiebreakerInput:disabled { opacity: 0.5; }
 .gpTiebreakerActual { font-size: 12px; font-weight: 800; color: rgba(120,220,160,0.85); }
@@ -683,7 +683,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 .gpLeagueSettingsInput {
   width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px;
   background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.12);
-  color: inherit; font-weight: 700; font-size: 15px; outline: none;
+  color: inherit; font-weight: 700; font-size: 16px; outline: none;
 }
 .gpLeagueSettingsCheckRow { display: flex; align-items: center; gap: 10px; }
 .gpLeagueSettingsActions { display: flex; gap: 10px; margin-top: 4px; }
@@ -1633,7 +1633,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 <div class="gpAdminDateRange">
   <span class="gpAdminInlineLabel">Scoring:</span>
   <select data-gpscoringmode="1"
-    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:13px">
+    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px">
     <option value="straight"${mode === "straight" ? " selected" : ""}>Straight-up (dog=2, fav=1)</option>
     <option value="ats"${mode === "ats" ? " selected" : ""}>Against the Spread (1 per cover)</option>
   </select>
@@ -1655,7 +1655,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 <div class="gpAdminDateRange">
   <span class="gpAdminInlineLabel">Tiebreaker game:</span>
   <select data-gptiebreakerselect="1"
-    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:13px;max-width:100%">
+    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px;max-width:100%">
     ${options}
   </select>
   <button class="smallBtn" type="button" data-gpaction="adminSetTiebreaker" data-weekid="${esc(weekId)}">Set</button>
@@ -1698,7 +1698,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     </div>
   </div>
   <div class="gpAdminControls">
-    <select data-league-select style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:13px">
+    <select data-league-select style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px">
       ${leagueOptions}
     </select>
     <button class="smallBtn" type="button" data-gpaction="adminQuickWeekRange">This Week (Thu–Mon)</button>
@@ -1706,10 +1706,10 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   <div class="gpAdminDateRange">
     <span class="gpAdminInlineLabel">From</span>
     <input type="date" data-date-start-input value="${esc(startInputVal)}"
-      style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:13px"/>
+      style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px"/>
     <span class="gpAdminInlineLabel">to</span>
     <input type="date" data-date-end-input value="${esc(endInputVal)}"
-      style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:13px"/>
+      style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px"/>
     <button class="smallBtn" type="button" data-gpaction="adminLoadGames">Load</button>
   </div>
   <div id="gpAdminGameList" class="gpAdminGameList">
