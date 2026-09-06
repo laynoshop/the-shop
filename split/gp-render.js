@@ -273,6 +273,11 @@
 .gpEveryoneSummary::before { content: "▸ "; font-size: 10px; }
 details[open] .gpEveryoneSummary::before { content: "▾ "; }
 .gpEveryoneBody { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.gpEveryoneLocked {
+  padding: 0 12px 8px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em;
+  color: rgba(255,255,255,0.28);
+}
 .gpPickLine {
   font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.7);
   padding: 4px 0;
@@ -1187,6 +1192,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
           }${esc(my === "away" ? safeTeam(away) : safeTeam(home))}</div>`
         : locked ? `<div class="gpLocked">🔒 Locked</div>` : `<div class="gpNoPick">No pick yet</div>`}
     </div>
+    ${locked ? `
     <details class="gpEveryoneDetails" data-gpeveryone="1"
       data-weekid="${esc(weekId)}" data-eid="${esc(eventId)}"
       data-away="${esc(safeTeam(away))}" data-home="${esc(safeTeam(home))}">
@@ -1194,7 +1200,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       <div class="gpEveryoneBody" id="gpEv_${esc(weekId)}_${esc(eventId)}">
         <div class="muted" style="font-size:12px">Loading picks…</div>
       </div>
-    </details>
+    </details>` : `
+    <div class="gpEveryoneLocked">🔒 Picks reveal when the game locks in</div>`}
   </div>
 </div>`;
   }
@@ -1246,6 +1253,21 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
       const awayLogo = String(g?.awayLogo || away?.logo || "").trim();
       const homeLogo = String(g?.homeLogo || home?.logo || "").trim();
+
+      // Not locked yet — never reveal whether/what this player picked,
+      // regardless of what picksMap has for it.
+      const gameLocked = startMs(g) > 0 && Date.now() >= startMs(g);
+      if (!gameLocked) {
+        return `
+<div class="gpOverlayPickRow" style="opacity:0.5">
+  <div class="gpOverlayPickTeamLogoPlaceholder">🔒</div>
+  <div style="flex:1;min-width:0">
+    <div class="gpOverlayPickTeamName" style="color:rgba(255,255,255,0.35)">Locked</div>
+    <div class="gpOverlayPickGameLabel">${esc(safeTeam(away))} @ ${esc(safeTeam(home))}</div>
+  </div>
+  <div class="gpOverlayPickResult gpResultPending">🔒</div>
+</div>`;
+      }
 
       const pick = picksMap?.[eventId];
       if (!pick?.side) {
