@@ -1508,21 +1508,40 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         kickoffMs: kickoffMs(ev), spreadValue: null, spreadFavoredSide: "", oddsDetails: ""
       };
     }
+    // Rank and spread are independent facts about a game, so a game can
+    // earn both badges at once (e.g. a ranked matchup that's also a
+    // toss-up). "Ranked team" only applies when exactly one side is
+    // ranked — a ranked-vs-ranked game shows just "Ranked matchup".
     function priorityFor(summary) {
       const awayRank = Number(summary?.awayTeam?.rank);
       const homeRank = Number(summary?.homeTeam?.rank);
       const awayRanked = Number.isFinite(awayRank) && awayRank > 0;
       const homeRanked = Number.isFinite(homeRank) && homeRank > 0;
+      const bothRanked = awayRanked && homeRanked;
+      const oneRanked  = (awayRanked || homeRanked) && !bothRanked;
+
       // summary.spreadValue is null when there's no odds at all — Number(null)
       // is 0, which would otherwise look like a real (tight) spread, so require
       // an actual value before treating this as having odds.
-      const spreadVal  = Number(summary?.spreadValue);
-      const hasSpread  = summary?.spreadValue != null && Number.isFinite(spreadVal);
-      if (awayRanked && homeRanked)         return { tier: 0, badge: "🏆 Ranked matchup", sortKey: awayRank + homeRank };
-      if (awayRanked || homeRanked)         return { tier: 1, badge: "🏅 Ranked team", sortKey: awayRanked ? awayRank : homeRank };
-      if (hasSpread && spreadVal <= 3)      return { tier: 2, badge: "🎯 Toss-up", sortKey: spreadVal };
-      if (hasSpread && spreadVal <= 5)      return { tier: 3, badge: "🔥 Close matchup", sortKey: spreadVal };
-      return { tier: 4, badge: "", sortKey: 0 };
+      const spreadVal = Number(summary?.spreadValue);
+      const hasSpread = summary?.spreadValue != null && Number.isFinite(spreadVal);
+      const isTossup  = hasSpread && spreadVal <= 3;
+      const isClose   = hasSpread && !isTossup && spreadVal <= 5;
+
+      const badges = [];
+      if (bothRanked) badges.push("🏆 Ranked matchup");
+      else if (oneRanked) badges.push("🏅 Ranked team");
+      if (isTossup) badges.push("🎯 Toss-up");
+      else if (isClose) badges.push("🔥 Close matchup");
+
+      let tier, sortKey;
+      if (bothRanked)      { tier = 0; sortKey = awayRank + homeRank; }
+      else if (oneRanked)  { tier = 1; sortKey = awayRanked ? awayRank : homeRank; }
+      else if (isTossup)   { tier = 2; sortKey = spreadVal; }
+      else if (isClose)    { tier = 3; sortKey = spreadVal; }
+      else                 { tier = 4; sortKey = 0; }
+
+      return { tier, badges, sortKey };
     }
 
     const summarized = [...(Array.isArray(availableEvents) ? availableEvents : [])]
@@ -1578,15 +1597,17 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const hn = safeTeam(summary.homeTeam);
       const ms = summary.kickoffMs;
       const started  = ms > 0 && ms < Date.now();
-      const oddsLine = summary.oddsDetails ? `Fav: ${summary.oddsDetails}` : "";
+      const oddsLine   = summary.oddsDetails ? `Fav: ${summary.oddsDetails}` : "";
+      const badgesHTML = (priority.badges || [])
+        .map(b => `<span class="gpAdminPriorityBadge">${esc(b)}</span>`).join("");
       return `
 <div class="gpAdminRow">
   <label>
     <input type="checkbox" data-gpgamesel value="${esc(id)}" />
     <span style="flex:1;min-width:0">
       <span style="display:block">${esc(an)} <span style="color:rgba(255,255,255,0.38)">@</span> ${esc(hn)}</span>
-      ${(priority.badge || oddsLine) ? `<span style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
-        ${priority.badge ? `<span class="gpAdminPriorityBadge">${esc(priority.badge)}</span>` : ""}
+      ${(badgesHTML || oddsLine) ? `<span style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+        ${badgesHTML}
         ${oddsLine ? `<span class="gpAdminOddsHint">${esc(oddsLine)}</span>` : ""}
       </span>` : ""}
     </span>
