@@ -1514,11 +1514,12 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const awayRanked = Number.isFinite(awayRank) && awayRank > 0;
       const homeRanked = Number.isFinite(homeRank) && homeRank > 0;
       const spreadVal  = Number(summary?.spreadValue);
-      const isTight    = Number.isFinite(spreadVal) && spreadVal <= 3;
-      if (awayRanked && homeRanked) return { tier: 0, badge: "🏆 Ranked matchup", sortKey: awayRank + homeRank };
-      if (awayRanked || homeRanked) return { tier: 1, badge: "🏅 Ranked team", sortKey: awayRanked ? awayRank : homeRank };
-      if (isTight)                  return { tier: 2, badge: "🎯 Toss-up", sortKey: spreadVal };
-      return { tier: 3, badge: "", sortKey: 0 };
+      const hasSpread  = Number.isFinite(spreadVal);
+      if (awayRanked && homeRanked)         return { tier: 0, badge: "🏆 Ranked matchup", sortKey: awayRank + homeRank };
+      if (awayRanked || homeRanked)         return { tier: 1, badge: "🏅 Ranked team", sortKey: awayRanked ? awayRank : homeRank };
+      if (hasSpread && spreadVal <= 3)      return { tier: 2, badge: "🎯 Toss-up", sortKey: spreadVal };
+      if (hasSpread && spreadVal <= 5)      return { tier: 3, badge: "🔥 Close matchup", sortKey: spreadVal };
+      return { tier: 4, badge: "", sortKey: 0 };
     }
 
     const summarized = [...(Array.isArray(availableEvents) ? availableEvents : [])]
@@ -1526,7 +1527,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       .map(x => ({ ...x, priority: priorityFor(x.summary) }))
       .sort((a, b) => {
         if (a.priority.tier !== b.priority.tier) return a.priority.tier - b.priority.tier;
-        if (a.priority.tier === 3) return a.summary.kickoffMs - b.summary.kickoffMs;
+        if (a.priority.tier === 4) return a.summary.kickoffMs - b.summary.kickoffMs;
         return a.priority.sortKey - b.priority.sortKey;
       });
 
