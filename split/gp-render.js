@@ -120,10 +120,6 @@
   box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .gpScoreCard.gpCardLive { background: rgba(200,0,0,0.07); }
-.gpScoreCard.gpPickedCard {
-  border-left-color: rgba(80,200,120,0.8) !important;
-  background: rgba(0,200,100,0.05);
-}
 .gpCardHeader {
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 8px 12px 6px;
@@ -164,8 +160,10 @@
 }
 
 /* Team pick buttons — the subtle border on every option is a "tap to
-   pick" affordance; it turns green once chosen, then red if the game
-   goes final and the pick was wrong. */
+   pick" affordance. Once chosen it goes a neutral bold gray (no verdict
+   yet — win/loss isn't decided), then green once the game is final and
+   the pick was right, or red if it was wrong. A push (ATS) or tie
+   (straight) is neither, so it stays neutral gray permanently. */
 .gpTeamPickBtn {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 10px; min-height: 44px; border-radius: 10px;
@@ -177,12 +175,18 @@
   -webkit-tap-highlight-color: transparent;
 }
 .gpTeamPickBtn:active { background: rgba(255,255,255,0.06); }
-.gpTeamPickBtn.gpPickRowActive {
+.gpTeamPickBtn.gpPickNeutral {
+  background: rgba(255,255,255,0.11);
+  border-color: rgba(255,255,255,0.4);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.14) inset;
+}
+.gpTeamPickBtn.gpPickNeutral .gpTeamName { color: #fff; font-weight: 900; }
+.gpTeamPickBtn.gpPickResultWin {
   background: rgba(80,200,120,0.14);
   border-color: rgba(90,220,140,0.6);
   box-shadow: 0 0 0 1px rgba(90,220,140,0.2) inset;
 }
-.gpTeamPickBtn.gpPickRowActive .gpTeamName { color: #6dff9a; font-weight: 900; }
+.gpTeamPickBtn.gpPickResultWin .gpTeamName { color: #6dff9a; font-weight: 900; }
 .gpTeamPickBtn.gpPickResultLoss {
   background: rgba(220,60,60,0.14);
   border-color: rgba(230,90,90,0.6);
@@ -240,9 +244,10 @@
 }
 .gpYouPicked {
   font-size: 12px; font-weight: 900;
-  color: rgba(100,255,160,0.9); letter-spacing: 0.03em;
+  color: rgba(255,255,255,0.85); letter-spacing: 0.03em;
 }
 .gpYouPicked.gpPending { color: rgba(255,210,60,0.9); }
+.gpYouPicked.gpResultWin { color: rgba(100,255,160,0.9); }
 .gpYouPicked.gpResultLoss { color: rgba(255,110,110,0.95); }
 .gpNoPick  { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.3); }
 .gpLocked  { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.3); }
@@ -1083,10 +1088,12 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const homeFade   = hasPick && !homeActive;
 
     // — did my pick win, lose, or push, once the game is final? —
-    // "win" grades the same way the leaderboard does: straight games by
-    // final score, the ATS game by its stored spread (a push counts as
-    // neither a win nor a loss, so it keeps the normal picked styling).
-    let myPickResult = "pending";
+    // Grades the same way the leaderboard does: straight games by final
+    // score, the ATS game by its stored spread — so a team can lose the
+    // game outright but still be a correct (green) ATS cover. Until the
+    // game is final, or if it's a push/tie, there's no verdict yet, so
+    // the pick just shows as picked (neutral gray) rather than green.
+    let myPickResult = "unresolved";
     if (hasPick && isFinal) {
       const GP_Data = window.GP_Data || {};
       if (isAts) {
@@ -1098,12 +1105,15 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         else if (showScores) myPickResult = "push"; // tie
       }
     }
-    const awayIsLoss = awayActive && myPickResult === "loss";
-    const homeIsLoss = homeActive && myPickResult === "loss";
+    function pickResultCls(isActive) {
+      if (!isActive) return "";
+      if (myPickResult === "win")  return " gpPickResultWin";
+      if (myPickResult === "loss") return " gpPickResultLoss";
+      return " gpPickNeutral"; // unresolved or push
+    }
 
     let cardCls = "gpScoreCard";
-    if (isLive)  cardCls += " gpCardLive";
-    if (hasPick) cardCls += " gpPickedCard";
+    if (isLive) cardCls += " gpCardLive";
 
     // Left border edge is a type indicator, not a sport color: red for
     // outright/straight-up games, green for the designated ATS game(s).
@@ -1131,7 +1141,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   </div>` : ""}
   ${venueLine ? `<div class="gpVenueLine">${esc(venueLine)}</div>` : ""}
   <div class="gpMatchup">
-    <button class="gpTeamPickBtn${awayIsLoss ? " gpPickResultLoss" : (awayActive ? " gpPickRowActive" : "")}${awayFade ? " gpFaded" : ""}"
+    <button class="gpTeamPickBtn${pickResultCls(awayActive)}${awayFade ? " gpFaded" : ""}"
       type="button"
       ${locked ? "disabled" : ""}
       data-gppick="away" data-eid="${esc(eventId)}" data-slate="${esc(weekId)}">
@@ -1142,7 +1152,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       </div>
       ${showScores ? scoreHTML(awayScore, awayWinner, isFinal && !awayWinner) : ""}
     </button>
-    <button class="gpTeamPickBtn${homeIsLoss ? " gpPickResultLoss" : (homeActive ? " gpPickRowActive" : "")}${homeFade ? " gpFaded" : ""}"
+    <button class="gpTeamPickBtn${pickResultCls(homeActive)}${homeFade ? " gpFaded" : ""}"
       type="button"
       ${locked ? "disabled" : ""}
       data-gppick="home" data-eid="${esc(eventId)}" data-slate="${esc(weekId)}">
@@ -1157,8 +1167,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   <div class="gpPickStrip">
     <div>
       ${hasPick
-        ? `<div class="gpYouPicked${isPending ? " gpPending" : ""}${myPickResult === "loss" ? " gpResultLoss" : ""}">${
-            isPending ? "⏳ Pending: " : myPickResult === "loss" ? "✕ Lost: " : (isAts ? "✓ Covering: " : "✓ Picked: ")
+        ? `<div class="gpYouPicked${isPending ? " gpPending" : ""}${myPickResult === "win" ? " gpResultWin" : ""}${myPickResult === "loss" ? " gpResultLoss" : ""}">${
+            isPending ? "⏳ Pending: " : myPickResult === "win" ? "✓ Won: " : myPickResult === "loss" ? "✕ Lost: " : (isAts ? "Covering: " : "Picked: ")
           }${esc(my === "away" ? safeTeam(away) : safeTeam(home))}</div>`
         : locked ? `<div class="gpLocked">🔒 Locked</div>` : `<div class="gpNoPick">No pick yet</div>`}
     </div>

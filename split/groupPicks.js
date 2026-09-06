@@ -507,9 +507,14 @@
         gpPendingSet(eventId, side);
         syncSaveBtnState();
         document.querySelectorAll(`[data-gppick][data-eid="${eventId}"]`).forEach(b => {
-          const bSide = b.getAttribute("data-gppick");
-          b.classList.toggle("gpPickRowActive", bSide === side);
-          b.classList.toggle("gpFaded",         bSide !== side);
+          const bSide  = b.getAttribute("data-gppick");
+          const active = bSide === side;
+          // A game whose pick buttons are still clickable hasn't started,
+          // so a freshly-tapped pick is always unresolved (neutral gray) —
+          // never green/red, those only apply once the game goes final.
+          b.classList.toggle("gpPickNeutral",    active);
+          b.classList.remove("gpPickResultWin", "gpPickResultLoss");
+          b.classList.toggle("gpFaded", !active);
         });
       }
       return;
