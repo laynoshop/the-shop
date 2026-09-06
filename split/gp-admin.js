@@ -8,17 +8,7 @@
 (function () {
   "use strict";
 
-  const META_PUBLIC_DOC = "public";
-  const META_ADMIN_DOC  = "admin";
-
   function currentYear() { return new Date().getFullYear(); }
-  function weekIdFor(year, weekNum) { return `${year}_W${weekNum}`; }
-
-  function metaRef(db, docId) {
-    // Prefer GP_Data version if available
-    if (window.GP_Data?.metaRef) return window.GP_Data.metaRef(db, docId);
-    return db.collection("pickSlatesMeta").doc(String(docId));
-  }
 
   // --------------- team / venue / odds builders (used when adding games) ---------------
   function pickLogo(teamObj) {
@@ -118,73 +108,75 @@
     };
   }
 
-  // --------------- create new week ---------------
-  async function gpAdminCreateNewWeek(db, uid) {
-    const y         = currentYear();
-    const adminRef  = metaRef(db, META_ADMIN_DOC);
-    const publicRef = metaRef(db, META_PUBLIC_DOC);
+  // --------------- leagues (pick'em groups: "Work League", "Family League", ...) ---------------
+  // Note: unrelated to `leagueKey` elsewhere in this codebase, which means the
+  // *sport* (nfl/cfb/nba/...) for the ESPN scoreboard fetch. These are two
+  // different concepts that happen to share the English word "league".
+  function leaguesRef(db, leagueId) {
+    return db.collection("leagues").doc(String(leagueId));
+  }
+
+  async function gpCreateLeague(db, uid, { name, seasonYear, scoringModeDefault }) {
+    const ref = db.collection("leagues").doc();
+    await ref.set({
+      name:               String(name || "New League").trim().slice(0, 40),
+      seasonYear:         Number(seasonYear) || currentYear(),
+      scoringModeDefault: scoringModeDefault === "ats" ? "ats" : "straight",
+      archived:           false,
+      currentWeek:        0,
+      activeWeekId:       "",
+      weeks:              [],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
+    });
+    return ref.id;
+  }
+
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, scoringModeDefault, archived }) {
+    const patch = {
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid
+    };
+    if (name !== undefined)               patch.name = String(name || "").trim().slice(0, 40);
+    if (seasonYear !== undefined)         patch.seasonYear = Number(seasonYear) || currentYear();
+    if (scoringModeDefault !== undefined) patch.scoringModeDefault = scoringModeDefault === "ats" ? "ats" : "straight";
+    if (archived !== undefined)           patch.archived = !!archived;
+    await leaguesRef(db, leagueId).set(patch, { merge: true });
+    return true;
+  }
+
+  // --------------- create a new week inside a league ---------------
+  async function gpAdminCreateNewWeekInLeague(db, uid, leagueId) {
+    const leagueRef = leaguesRef(db, leagueId);
+    let newId = "";
 
     await db.runTransaction(async (tx) => {
-      const aSnap = await tx.get(adminRef);
-      const pSnap = await tx.get(publicRef);
-      const a = aSnap.exists ? (aSnap.data() || {}) : {};
-      const p = pSnap.exists ? (pSnap.data() || {}) : {};
+      const lSnap = await tx.get(leagueRef);
+      const l = lSnap.exists ? (lSnap.data() || {}) : {};
+      const y = Number(l.seasonYear) || currentYear();
 
-      const nextWeek = Math.max(1, Number(a.currentWeek || 0) + 1);
-      const newId    = weekIdFor(y, nextWeek);
-      const label    = `Week ${nextWeek}`;
-      const weeks    = Array.isArray(p.weeks) ? [...p.weeks] : [];
+      const nextWeek = Math.max(1, Number(l.currentWeek || 0) + 1);
+      newId = `${leagueId}_${y}_W${nextWeek}`;
+      const label = `Week ${nextWeek}`;
+      const weeks = Array.isArray(l.weeks) ? [...l.weeks] : [];
       if (!weeks.some(w => String(w.id) === newId)) {
         weeks.push({ id: newId, label, published: false });
       }
 
-      tx.set(adminRef, {
-        year: y, currentWeek: nextWeek, activeWeekId: newId,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
-      }, { merge: true });
-
-      tx.set(publicRef, {
-        year: y, activeWeekId: newId, weeks,
+      tx.set(leagueRef, {
+        currentWeek: nextWeek, activeWeekId: newId, weeks,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
       }, { merge: true });
 
       tx.set(db.collection("pickSlates").doc(newId), {
-        type: "week", year: y, weekNum: nextWeek, label,
+        type: "week", leagueId: String(leagueId), year: y, weekNum: nextWeek, label,
+        scoringMode: l.scoringModeDefault === "ats" ? "ats" : "straight",
         active: true, published: false,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
       }, { merge: true });
     });
-    return true;
-  }
-
-  // --------------- set active week ---------------
-  async function gpAdminSetActiveWeek(db, uid, weekId) {
-    const publicRef = metaRef(db, META_PUBLIC_DOC);
-    const adminRef  = metaRef(db, META_ADMIN_DOC);
-    const y = currentYear();
-
-    await db.runTransaction(async (tx) => {
-      const pSnap = await tx.get(publicRef);
-      const p = pSnap.exists ? (pSnap.data() || {}) : {};
-      const weeks = Array.isArray(p.weeks) ? [...p.weeks] : [];
-      if (!weeks.some(w => String(w.id) === String(weekId))) {
-        weeks.push({ id: String(weekId), label: String(weekId), published: false });
-      }
-      tx.set(publicRef, {
-        year: y, activeWeekId: String(weekId), weeks,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
-      }, { merge: true });
-      tx.set(adminRef, {
-        year: y, activeWeekId: String(weekId),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
-      }, { merge: true });
-      tx.set(db.collection("pickSlates").doc(String(weekId)), {
-        active: true,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
-      }, { merge: true });
-    });
-    return true;
+    return newId;
   }
 
   // --------------- add selected games to week ---------------
@@ -304,7 +296,7 @@
   }
 
   // --------------- publish week ---------------
-  async function gpAdminPublishWeek(db, uid, weekId) {
+  async function gpAdminPublishWeek(db, uid, leagueId, weekId) {
     const slateRef  = db.collection("pickSlates").doc(String(weekId));
     await slateRef.set({
       published: true,
@@ -314,16 +306,16 @@
       updatedBy:   uid
     }, { merge: true });
 
-    const publicRef = metaRef(db, META_PUBLIC_DOC);
+    const leagueRef = leaguesRef(db, leagueId);
     await db.runTransaction(async (tx) => {
-      const pSnap = await tx.get(publicRef);
-      const p = pSnap.exists ? (pSnap.data() || {}) : {};
-      const weeks = Array.isArray(p.weeks) ? [...p.weeks] : [];
+      const lSnap = await tx.get(leagueRef);
+      const l = lSnap.exists ? (lSnap.data() || {}) : {};
+      const weeks = Array.isArray(l.weeks) ? [...l.weeks] : [];
       const next  = weeks.map(w => {
         if (String(w.id) === String(weekId)) return { ...w, published: true };
         return w;
       });
-      tx.set(publicRef, {
+      tx.set(leagueRef, {
         weeks: next,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: uid
@@ -333,8 +325,9 @@
 
   // --------------- expose on window ---------------
   window.GP_Admin = {
-    gpAdminCreateNewWeek,
-    gpAdminSetActiveWeek,
+    gpCreateLeague,
+    gpUpdateLeagueSettings,
+    gpAdminCreateNewWeekInLeague,
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,
     gpAdminPublishWeek,

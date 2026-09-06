@@ -59,12 +59,6 @@
   margin-left: auto;
   display: flex; align-items: center; gap: 6px; flex-shrink: 0;
 }
-.gpSubline {
-  display: flex; align-items: center; gap: 8px;
-  overflow-x: auto; -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; padding-bottom: 2px;
-}
-.gpSubline::-webkit-scrollbar { display: none; }
 
 /* ══════════════════════════════════════════════
    GP CONTAINER
@@ -615,6 +609,84 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .gpRemoveGameBtn:active { background: rgba(255,60,60,0.22); }
+
+/* ══════════════════════════════════════════════
+   WEEK PAGER (replaces the old week <select>)
+   ══════════════════════════════════════════════ */
+.gpWeekPager {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 2px;
+}
+.gpWeekPagerArrow {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.85); font-size: 18px; font-weight: 900;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpWeekPagerArrow:active { background: rgba(255,255,255,0.12); }
+.gpWeekPagerArrow:disabled { opacity: 0.25; cursor: default; pointer-events: none; }
+.gpWeekPagerLabel { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.gpWeekPagerTitle { font-size: 17px; font-weight: 900; color: #fff; letter-spacing: 0.01em; }
+.gpWeekPagerSub { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.38); text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ══════════════════════════════════════════════
+   LEAGUE PICKER
+   ══════════════════════════════════════════════ */
+.gpLeaguePickerGrid {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.gpLeagueCard {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.09);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpLeagueCard:active { background: rgba(255,255,255,0.08); }
+.gpLeagueCard.gpLeagueArchived { opacity: 0.5; }
+.gpLeagueCardIcon {
+  width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; background: rgba(187,0,0,0.12); border: 1px solid rgba(187,0,0,0.25);
+}
+.gpLeagueCardInfo { flex: 1; min-width: 0; }
+.gpLeagueCardName { font-size: 16px; font-weight: 900; color: #fff; }
+.gpLeagueCardMeta { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.4); margin-top: 2px; }
+.gpLeagueCardGear {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6); font-size: 15px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpLeagueCreateTile {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 16px; border-radius: 16px;
+  border: 1px dashed rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.6); font-weight: 800; font-size: 14px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpLeagueCreateTile:active { background: rgba(255,255,255,0.05); }
+
+/* ══════════════════════════════════════════════
+   LEAGUE SETTINGS FORM
+   ══════════════════════════════════════════════ */
+.gpLeagueSettingsForm {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; border-radius: 16px;
+  background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.09);
+}
+.gpLeagueSettingsRow { display: flex; flex-direction: column; gap: 6px; }
+.gpLeagueSettingsLabel { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.4); }
+.gpLeagueSettingsInput {
+  width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px;
+  background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.12);
+  color: inherit; font-weight: 700; font-size: 15px; outline: none;
+}
+.gpLeagueSettingsCheckRow { display: flex; align-items: center; gap: 10px; }
+.gpLeagueSettingsActions { display: flex; gap: 10px; margin-top: 4px; }
 
 /* ══════════════════════════════════════════════
    PLAYER PICKS OVERLAY
@@ -1459,7 +1531,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   // ─── Admin builder  (rendered at TOP of page) ────────────────────
   function gpBuildAdminBuilderHTML({
     weekId, weekLabel, availableEvents, leagueKey, dateStart, dateEnd,
-    games, scoringMode, tiebreakerEventId
+    games, scoringMode, tiebreakerEventId, pickLeagueId
   }) {
     function kickoffMs(ev) {
       const comp = ev?.competitions?.[0];
@@ -1621,7 +1693,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
     <div class="gpAdminPanelTitle">⚙ Admin · ${esc(weekLabel || weekId || "")}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="smallBtn" type="button" data-gpaction="adminCreateWeek">+ New Week</button>
+      <button class="smallBtn" type="button" data-gpaction="editLeague" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
+      <button class="smallBtn" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
     </div>
   </div>
   <div class="gpAdminControls">
@@ -1647,7 +1720,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     <button class="smallBtn" type="button" data-gpselect="all">All</button>
     <button class="smallBtn" type="button" data-gpselect="none">None</button>
     <button class="smallBtn" type="button" data-gpaction="adminAddGames" data-weekid="${esc(weekId)}">Add Selected</button>
-    <button class="smallBtn" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}">Publish Week</button>
+    <button class="smallBtn" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}" data-leagueid="${esc(pickLeagueId || "")}">Publish Week</button>
   </div>` : ""}
   ${scoringModeHTML}
   ${tiebreakerHTML}
@@ -1727,19 +1800,107 @@ ${saveRow}`;
   }
 
   // ─── Header ─────────────────────────────────────────────────────
-  function renderPicksHeaderHTML({ weekSelectHTML, weekId, weekLabel, isAdmin }) {
+  function renderPicksHeaderHTML({ leagueName, isAdmin, showLeaguesBtn }) {
     return `
 <div class="gpPageHeader">
   <div class="gpHeaderTop">
-    <div class="gpHeaderTitle">Picks<span>Group Picks${weekLabel ? " · " + weekLabel : ""}</span></div>
+    <div class="gpHeaderTitle">Picks<span>${esc(leagueName || "Group Picks")}</span></div>
     <div class="gpHeaderActions">
+      ${showLeaguesBtn ? `<button class="smallBtn" type="button" data-gpaction="showLeaguePicker">Leagues</button>` : ""}
       <button class="smallBtn" type="button" data-gpaction="name">Name</button>
       <button class="smallBtn" type="button" data-gpaction="savePicks" disabled>Save</button>
       <button class="smallBtn" type="button" data-gpaction="refresh">↺</button>
     </div>
   </div>
-  <div class="gpSubline">
-    ${weekSelectHTML || ""}
+</div>`;
+  }
+
+  // ─── Week pager (◀ Week N ▶ — replaces the old week dropdown) ─────
+  function gpBuildWeekPagerHTML({ weekLabel, isDraft, canPrev, canNext }) {
+    return `
+<div class="gpWeekPager">
+  <button type="button" class="gpWeekPagerArrow" data-gpaction="weekPrev" ${canPrev ? "" : "disabled"} aria-label="Previous week">‹</button>
+  <div class="gpWeekPagerLabel">
+    <div class="gpWeekPagerTitle">${esc(weekLabel || "")}</div>
+    ${isDraft ? `<div class="gpWeekPagerSub">Draft</div>` : ""}
+  </div>
+  <button type="button" class="gpWeekPagerArrow" data-gpaction="weekNext" ${canNext ? "" : "disabled"} aria-label="Next week">›</button>
+</div>`;
+  }
+
+  // ─── League picker (shown after identity, before entering a league) ──
+  function gpBuildLeaguePickerHTML({ leagues, isAdmin }) {
+    const list = Array.isArray(leagues) ? leagues : [];
+    const visible = list.filter(l => !l.archived || isAdmin);
+    const sorted  = [...visible].sort((a, b) => {
+      if (!!a.archived !== !!b.archived) return a.archived ? 1 : -1;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+
+    const cards = sorted.map(l => {
+      const weeksCount = Array.isArray(l.weeks) ? l.weeks.length : 0;
+      const meta = `${esc(String(l.seasonYear || ""))} · ${weeksCount} week${weeksCount !== 1 ? "s" : ""}${l.archived ? " · Archived" : ""}`;
+      return `
+<div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="selectLeague" data-leagueid="${esc(l.id)}">
+  <div class="gpLeagueCardIcon">🏈</div>
+  <div class="gpLeagueCardInfo">
+    <div class="gpLeagueCardName">${esc(l.name || "League")}</div>
+    <div class="gpLeagueCardMeta">${meta}</div>
+  </div>
+  ${isAdmin ? `<div class="gpLeagueCardGear" data-gpaction="editLeague" data-leagueid="${esc(l.id)}" title="League settings">⚙</div>` : ""}
+</div>`;
+    }).join("");
+
+    const createTile = isAdmin
+      ? `<div class="gpLeagueCreateTile" data-gpaction="createLeague">+ Create League</div>`
+      : "";
+
+    const empty = !sorted.length
+      ? `<div class="gpEmpty">${isAdmin ? "No leagues yet — create one to get started." : "No leagues yet. Check back soon."}</div>`
+      : "";
+
+    return `
+<div class="gpLeaguePickerGrid">
+  ${empty}
+  ${cards}
+  ${createTile}
+</div>`;
+  }
+
+  // ─── League settings form (create or edit) ────────────────────────
+  function gpBuildLeagueSettingsHTML({ mode, league }) {
+    const isEdit = mode === "edit" && league;
+    const name    = esc(String(league?.name ?? ""));
+    const year    = Number(league?.seasonYear) || new Date().getFullYear();
+    const mode2   = league?.scoringModeDefault === "ats" ? "ats" : "straight";
+    const archived = !!league?.archived;
+
+    return `
+<div class="gpLeagueSettingsForm" data-leagueid="${esc(league?.id || "")}">
+  <div class="gpAdminPanelTitle">${isEdit ? "⚙ League Settings" : "⚙ Create League"}</div>
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">League Name</div>
+    <input type="text" id="gpLeagueName" class="gpLeagueSettingsInput" value="${name}" placeholder="e.g. Work League" maxlength="40"/>
+  </div>
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">Season Year</div>
+    <input type="number" id="gpLeagueYear" class="gpLeagueSettingsInput" value="${esc(String(year))}"/>
+  </div>
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">Default Scoring</div>
+    <select id="gpLeagueScoringMode" class="gpLeagueSettingsInput">
+      <option value="straight"${mode2 === "straight" ? " selected" : ""}>Straight-up (dog=2, fav=1)</option>
+      <option value="ats"${mode2 === "ats" ? " selected" : ""}>Against the Spread (1 per cover)</option>
+    </select>
+  </div>
+  ${isEdit ? `
+  <label class="gpLeagueSettingsCheckRow">
+    <input type="checkbox" id="gpLeagueArchived" ${archived ? "checked" : ""}/>
+    <span class="muted" style="font-weight:800">Archived (hidden from players)</span>
+  </label>` : ""}
+  <div class="gpLeagueSettingsActions">
+    <button class="smallBtn" type="button" data-gpaction="submitLeagueSettings" data-leagueid="${esc(league?.id || "")}">${isEdit ? "Save Settings" : "Create League"}</button>
+    <button class="smallBtn" type="button" data-gpaction="cancelLeagueSettings">Cancel</button>
   </div>
 </div>`;
   }
@@ -1781,6 +1942,9 @@ ${saveRow}`;
   // ─── Expose public API ──────────────────────────────────────────
   window.GP_Render = {
     renderPicksHeaderHTML,
+    gpBuildWeekPagerHTML,
+    gpBuildLeaguePickerHTML,
+    gpBuildLeagueSettingsHTML,
     gpBuildGroupPicksCardHTML,
     gpBuildAdminBuilderHTML,
     buildLeaderboardHTML,

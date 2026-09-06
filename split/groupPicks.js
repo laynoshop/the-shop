@@ -8,13 +8,21 @@
      GP_Admin     (gp-admin.js)
      GP_Render    (gp-render.js)
 
-   Owns: constants, pending-picks state, week selector,
+   Owns: constants, pending-picks state, league + week selection,
          renderPicks(), click/change handlers, auto-refresh.
+
+   Flow: identity gate -> league picker -> week view (pager, not a
+   dropdown) -> leaderboard -> games. "League" here means a pick'em
+   group (Work League, Family League, ...) — unrelated to `leagueKey`
+   elsewhere in this file, which means the *sport* (nfl/cfb/nba/...)
+   for the ESPN scoreboard fetch. To keep the two straight, the pick'em
+   concept is always `pickLeague*` in code.
 
    Layout order for admin:
      1. Header (sticky)
-     2. Admin Builder Panel   ← TOP of page
-     3. Game cards + leaderboard
+     2. Week pager
+     3. Admin Builder Panel
+     4. Leaderboard + games
 */
 
 (function () {
@@ -23,7 +31,10 @@
   // ───────────────────────────────────────────
   // Constants
   // ───────────────────────────────────────────
-  const PICKS_WEEK_KEY = "theShopPicksWeek_v1";
+  const PICKS_LEAGUE_KEY = "theShopPickLeagueId_v1";
+  function weekKeyForLeague(pickLeagueId) {
+    return `theShopPicksWeek_v1_${pickLeagueId}`;
+  }
 
   // ───────────────────────────────────────────
   // Safe helpers (local copies for safety)
@@ -186,7 +197,7 @@
   }
 
   // ───────────────────────────────────────────
-  // Season standings — aggregate every published week
+  // Season standings — aggregate every published week in a league
   // Fully-final weeks are cached in localStorage forever (their result
   // can never change again); anything still live/upcoming is recomputed
   // fresh on every load.
@@ -232,25 +243,38 @@
   }
 
   // ───────────────────────────────────────────
-  // Week selector helpers
+  // League selection helpers (which pick'em group is active)
   // ───────────────────────────────────────────
-  function gpGetSelectedWeekId(metaPublic) {
-    const saved = safeGetLS(PICKS_WEEK_KEY).trim();
+  function gpGetSelectedLeagueId() {
+    return safeGetLS(PICKS_LEAGUE_KEY).trim();
+  }
+  function gpSetSelectedLeagueId(id) {
+    safeSetLS(PICKS_LEAGUE_KEY, String(id || ""));
+  }
+
+  // ───────────────────────────────────────────
+  // Week selection helpers (scoped per league — switching leagues
+  // remembers where you left off in each one independently)
+  // ───────────────────────────────────────────
+  function gpGetSelectedWeekId(pickLeagueId, league) {
+    const saved = safeGetLS(weekKeyForLeague(pickLeagueId)).trim();
     if (saved) return saved;
-    return String(metaPublic?.activeWeekId || "");
+    return String(league?.activeWeekId || "");
   }
-  function gpSetSelectedWeekId(id) {
-    safeSetLS(PICKS_WEEK_KEY, String(id));
+  function gpSetSelectedWeekId(pickLeagueId, id) {
+    safeSetLS(weekKeyForLeague(pickLeagueId), String(id || ""));
   }
-  function buildWeekSelectHTML(weeks, selectedId) {
+
+  // Finds the adjacent week's id for the pager arrows. Non-admins only
+  // ever step through published weeks; admins can page through drafts too.
+  function gpAdjacentWeekId(weeks, currentId, dir, isAdmin) {
     const list = Array.isArray(weeks) ? weeks : [];
-    if (list.length <= 1) return "";
-    const options = list.map(w => {
-      const id  = String(w?.id || "");
-      const lbl = String(w?.label || id);
-      return `<option value="${id}"${id === selectedId ? " selected" : ""}>${lbl}</option>`;
-    }).join("");
-    return `<select class="smallSelect" data-gpweeksel="1" style="font-weight:900;">${options}</select>`;
+    const visible = isAdmin ? list : list.filter(w => w?.published);
+    const idx = visible.findIndex(w => String(w?.id) === String(currentId));
+    if (idx === -1) return null;
+    const nextIdx = idx + dir;
+    if (nextIdx < 0 || nextIdx >= visible.length) return null;
+    return String(visible[nextIdx].id);
   }
 
   // ───────────────────────────────────────────
@@ -272,8 +296,7 @@
   // DOM order written:
   //   1. Header  (gpPageHeader — sticky)
   //   2. gpContainer
-  //        a. Admin builder panel  ← FIRST inside container (admin only)
-  //        b. Games + leaderboard
+  //        a. League picker OR league settings form OR week content
   // ───────────────────────────────────────────
   async function renderPicks() {
     const el = document.getElementById("content");
@@ -290,9 +313,7 @@
         prefillName:     idObj.name || "",
         rememberChecked: idObj.remember !== false
       });
-      const hdr = (Render().renderPicksHeaderHTML || (() => ""))({
-        weekSelectHTML: "", weekId: "", weekLabel: "", isAdmin
-      });
+      const hdr = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin });
       el.innerHTML = `${hdr}<div class="gpContainer">${gateHTML}</div>`;
       return;
     }
@@ -306,24 +327,69 @@
     mem.picksPlayerId = playerId;
     mem.picksName     = name;
 
-    // ── firebase + meta ──
-    let db, metaPublic;
+    // ── firebase ──
+    let db;
     try {
       await (Data().ensureFirebaseReadySafe || (async () => {}))();
       db = firebase.firestore();
-      metaPublic = await (Data().gpGetMetaPublic || (async () => ({})))(db);
     } catch (err) {
       el.innerHTML = `<div class="gpContainer"><div class="gpNotice">Failed to connect: ${String(err?.message || err)}</div></div>`;
       return;
     }
 
-    // ── week resolution ──
-    const weeks = Array.isArray(metaPublic?.weeks) ? metaPublic.weeks : [];
+    // ── league settings form (create or edit) — can be entered either
+    //    from the picker or from within an active league ──
+    if (mem.gpLeagueEditMode) {
+      const isEdit = mem.gpLeagueEditMode === "edit";
+      let league = null;
+      if (isEdit) {
+        try { league = await (Data().gpGetLeague || (async () => null))(db, mem.gpLeagueEditingId); } catch {}
+      }
+      const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
+        leagueName: league?.name || "", isAdmin, showLeaguesBtn: !!gpGetSelectedLeagueId()
+      });
+      const formHTML = (Render().gpBuildLeagueSettingsHTML || (() => ""))({
+        mode: isEdit ? "edit" : "create", league
+      });
+      el.innerHTML = `${headerHTML}<div class="gpContainer">${formHTML}</div>`;
+      postRender();
+      return;
+    }
+
+    // ── league resolution ──
+    const pickLeagueId = mem.pickLeagueId || gpGetSelectedLeagueId();
+    const showPicker = !pickLeagueId || mem.gpShowLeaguePicker;
+
+    if (showPicker) {
+      const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false });
+      let leagues = [];
+      try { leagues = await (Data().gpListLeagues || (async () => []))(db); } catch {}
+      const pickerHTML = (Render().gpBuildLeaguePickerHTML || (() => ""))({ leagues, isAdmin });
+      el.innerHTML = `${headerHTML}<div class="gpContainer">${pickerHTML}</div>`;
+      postRender();
+      return;
+    }
+
+    mem.pickLeagueId = pickLeagueId;
+
+    // ── league doc ──
+    let league = null;
+    try { league = await (Data().gpGetLeague || (async () => null))(db, pickLeagueId); } catch {}
+    if (!league) {
+      // League vanished (deleted, or a stale/bad id) — fall back to the picker.
+      mem.pickLeagueId = "";
+      gpSetSelectedLeagueId("");
+      await renderPicks();
+      return;
+    }
+
+    const weeks = Array.isArray(league.weeks) ? league.weeks : [];
+    mem.picksLeagueWeeksCache = weeks;
 
     // ── season view: cumulative standings across every published week ──
     if (mem.gpViewMode === "season") {
       const headerHTML  = (Render().renderPicksHeaderHTML || (() => ""))({
-        weekSelectHTML: "", weekId: "", weekLabel: "Season", isAdmin
+        leagueName: league.name, isAdmin, showLeaguesBtn: true
       });
       const toggleHTML  = (Render().gpBuildViewToggleHTML || (() => ""))("season");
       let seasonHTML = `<div class="gpNotice">Loading season standings…</div>`;
@@ -339,7 +405,7 @@
       return;
     }
 
-    let selectedId = gpGetSelectedWeekId(metaPublic);
+    let selectedId = gpGetSelectedWeekId(pickLeagueId, league);
     const weekMeta = weeks.find(w => String(w?.id) === selectedId) || weeks[weeks.length - 1] || null;
     if (!selectedId && weekMeta) selectedId = String(weekMeta.id || "");
     const weekLabel = String(weekMeta?.label || selectedId || "");
@@ -365,7 +431,7 @@
         myPicksUserDoc = await (Data().gpGetMyPicksUserDoc     || (async () => ({})))(db, selectedId, playerId);
       } catch {}
     }
-    const scoringMode      = String(slateDoc?.scoringMode || "straight");
+    const scoringMode      = String(slateDoc?.scoringMode || league.scoringModeDefault || "straight");
     const tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
     const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
       ? Number(myPicksUserDoc.tiebreakerGuess) : null;
@@ -385,11 +451,16 @@
     const lockReminderHTML = lockReminder ? (Render().gpBuildLockReminderHTML || (() => ""))(lockReminder) : "";
 
     // ── build HTML ──
-    const weekSelectHTML = buildWeekSelectHTML(weeks, selectedId);
-    const headerHTML     = (Render().renderPicksHeaderHTML || (() => ""))({
-      weekSelectHTML, weekId: selectedId, weekLabel, isAdmin
+    const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
+      leagueName: league.name, isAdmin, showLeaguesBtn: true
     });
     const toggleHTML = (Render().gpBuildViewToggleHTML || (() => ""))("week");
+    const pagerHTML  = weeks.length ? (Render().gpBuildWeekPagerHTML || (() => ""))({
+      weekLabel,
+      isDraft:  !published && isAdmin,
+      canPrev:  !!gpAdjacentWeekId(weeks, selectedId, -1, isAdmin),
+      canNext:  !!gpAdjacentWeekId(weeks, selectedId, +1, isAdmin)
+    }) : "";
     const cardsHTML = (Render().gpBuildGroupPicksCardHTML || (() => ""))({
       weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin,
       scoringMode, tiebreakerEventId, tiebreakers,
@@ -408,11 +479,11 @@
       adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
         weekId: selectedId, weekLabel, availableEvents: avail,
         leagueKey, dateStart, dateEnd, isAdmin,
-        games, scoringMode, tiebreakerEventId
+        games, scoringMode, tiebreakerEventId, pickLeagueId
       });
     }
 
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${toggleHTML}${adminBuilderHTML}${cardsHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${toggleHTML}${pagerHTML}${adminBuilderHTML}${cardsHTML}</div>`;
     postRender();
   }
 
@@ -491,6 +562,112 @@
       return;
     }
 
+    // ── week pager: previous / next ──
+    if (action === "weekPrev" || action === "weekNext") {
+      const mem2 = gpMem();
+      const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
+      const weeks = mem2.picksLeagueWeeksCache || [];
+      const isAdmin = getRole() === "admin";
+      const dir = action === "weekPrev" ? -1 : 1;
+      const adjacentId = gpAdjacentWeekId(weeks, mem2.picksSlateId, dir, isAdmin);
+      if (!pickLeagueId || !adjacentId) return;
+      gpSetSelectedWeekId(pickLeagueId, adjacentId);
+      gpPendingClear();
+      await renderPicks();
+      return;
+    }
+
+    // ── leagues: open the picker ──
+    if (action === "showLeaguePicker") {
+      gpMem().gpShowLeaguePicker = true;
+      await renderPicks();
+      return;
+    }
+
+    // ── leagues: select one ──
+    if (action === "selectLeague") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      const mem2 = gpMem();
+      mem2.pickLeagueId = leagueId;
+      mem2.gpShowLeaguePicker = false;
+      mem2.gpViewMode = "week";
+      gpSetSelectedLeagueId(leagueId);
+      gpPendingClear();
+      await renderPicks();
+      return;
+    }
+
+    // ── leagues: open create form ──
+    if (action === "createLeague") {
+      const mem2 = gpMem();
+      mem2.gpLeagueEditMode   = "create";
+      mem2.gpLeagueEditingId  = "";
+      await renderPicks();
+      return;
+    }
+
+    // ── leagues: open edit-settings form ──
+    if (action === "editLeague") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      const mem2 = gpMem();
+      mem2.gpLeagueEditMode  = "edit";
+      mem2.gpLeagueEditingId = leagueId;
+      await renderPicks();
+      return;
+    }
+
+    // ── leagues: cancel the create/edit form ──
+    if (action === "cancelLeagueSettings") {
+      const mem2 = gpMem();
+      mem2.gpLeagueEditMode  = null;
+      mem2.gpLeagueEditingId = "";
+      await renderPicks();
+      return;
+    }
+
+    // ── leagues: submit create/edit form ──
+    if (action === "submitLeagueSettings") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      const nameEl     = document.getElementById("gpLeagueName");
+      const yearEl     = document.getElementById("gpLeagueYear");
+      const modeEl     = document.getElementById("gpLeagueScoringMode");
+      const archivedEl = document.getElementById("gpLeagueArchived");
+      const name   = String(nameEl?.value || "").trim();
+      const year   = Number(yearEl?.value || "");
+      const mode   = String(modeEl?.value || "straight");
+      if (!name) { alert("Give the league a name first."); return; }
+
+      btn.disabled = true; btn.textContent = "Saving…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        const mem2 = gpMem();
+        if (leagueId) {
+          await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
+            name, seasonYear: year, scoringModeDefault: mode,
+            archived: archivedEl ? !!archivedEl.checked : undefined
+          });
+        } else {
+          const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
+            name, seasonYear: year, scoringModeDefault: mode
+          });
+          mem2.pickLeagueId = newId;
+          mem2.gpShowLeaguePicker = false;
+          gpSetSelectedLeagueId(newId);
+        }
+        mem2.gpLeagueEditMode  = null;
+        mem2.gpLeagueEditingId = "";
+        await renderPicks();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = leagueId ? "Save Settings" : "Create League";
+        console.error("[GP] submitLeagueSettings error:", err);
+      }
+      return;
+    }
+
     // ── admin: quick-fill this week's date range (Thu–Mon) ──
     if (action === "adminQuickWeekRange") {
       const range = gpDefaultWeekRange();
@@ -563,9 +740,7 @@
       });
       const el = document.getElementById("content");
       if (el) {
-        const hdr = (Render().renderPicksHeaderHTML || (() => ""))({
-          weekSelectHTML: "", weekId: "", weekLabel: "", isAdmin: getRole() === "admin"
-        });
+        const hdr = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin: getRole() === "admin" });
         el.innerHTML = `${hdr}<div class="gpContainer">${gateHTML}</div>`;
         postRender();
         setTimeout(() => { try { document.getElementById("gpIdName")?.focus(); } catch {} }, 0);
@@ -648,16 +823,18 @@
       return;
     }
 
-    // ── admin: create week ──
+    // ── admin: create week (inside the current league) ──
     if (action === "adminCreateWeek") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || gpMem().pickLeagueId || "").trim();
+      if (!leagueId) return;
       if (!confirm("Create a new week?")) return;
       btn.disabled = true; btn.textContent = "Creating…";
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
-        await (Admin().gpAdminCreateNewWeek || (async () => {}))(db2, uid);
-        safeSetLS(PICKS_WEEK_KEY, "");
+        const newWeekId = await (Admin().gpAdminCreateNewWeekInLeague || (async () => ""))(db2, uid, leagueId);
+        if (newWeekId) gpSetSelectedWeekId(leagueId, newWeekId);
         await renderPicks();
       } catch (err) {
         btn.disabled = false; btn.textContent = "+ New Week";
@@ -668,14 +845,15 @@
 
     // ── admin: publish week ──
     if (action === "adminPublish") {
-      const weekId = String(btn.getAttribute("data-weekid") || "");
-      if (!weekId || !confirm(`Publish ${weekId}? Players will see it.`)) return;
+      const weekId   = String(btn.getAttribute("data-weekid") || "");
+      const leagueId = String(btn.getAttribute("data-leagueid") || gpMem().pickLeagueId || "").trim();
+      if (!weekId || !leagueId || !confirm(`Publish ${weekId}? Players will see it.`)) return;
       btn.disabled = true; btn.textContent = "Publishing…";
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
-        await (Admin().gpAdminPublishWeek || (async () => {}))(db2, uid, weekId);
+        await (Admin().gpAdminPublishWeek || (async () => {}))(db2, uid, leagueId, weekId);
         await renderPicks();
       } catch (err) {
         btn.disabled = false; btn.textContent = "Publish";
@@ -691,13 +869,6 @@
   document.addEventListener("change", async (e) => {
     const t = e.target;
     if (!t) return;
-
-    // Week selector
-    if (t.getAttribute("data-gpweeksel") === "1") {
-      const id = String(t.value || "").trim();
-      if (id) { gpSetSelectedWeekId(id); gpPendingClear(); renderPicks(); }
-      return;
-    }
 
     // Admin league selector
     if (t.getAttribute("data-league-select") !== null) {
