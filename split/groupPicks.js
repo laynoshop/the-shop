@@ -52,6 +52,31 @@
     const d = new Date();
     return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
   }
+  function ymd8(d) {
+    return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+  }
+  // Default multi-day builder range: Thu–Mon of the current NFL-style
+  // week (weeks run Tue→Mon, so "this week" is anchored to the most
+  // recent Tuesday on or before today).
+  // Builds the ESPN scoreboard `dates` param from the admin's start/end
+  // mem fields — a single YYYYMMDD, or a YYYYMMDD-YYYYMMDD range when the
+  // two differ (ESPN's scoreboard endpoints accept both forms).
+  function gpAdminDateRangeString(mem2) {
+    const defaults = gpDefaultWeekRange();
+    const start = String(mem2?.gpAdminDateStart || defaults.start);
+    const end   = String(mem2?.gpAdminDateEnd   || defaults.end);
+    if (!end || end === start) return start;
+    return `${start}-${end}`;
+  }
+  function gpDefaultWeekRange() {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun..6=Sat
+    const daysSinceTue = (day - 2 + 7) % 7;
+    const tue = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceTue);
+    const thu = new Date(tue.getFullYear(), tue.getMonth(), tue.getDate() + 2);
+    const mon = new Date(tue.getFullYear(), tue.getMonth(), tue.getDate() + 6);
+    return { start: ymd8(thu), end: ymd8(mon) };
+  }
 
   // ───────────────────────────────────────────
   // Sub-module delegates (fail-safe accessors)
@@ -85,12 +110,27 @@
   }
   function gpPendingClear() {
     window.__GP_PENDING = {};
+    gpPendingClearTiebreaker();
   }
   function gpPendingHasAny() {
-    return Object.keys(gpPendingBucket()).length > 0;
+    return Object.keys(gpPendingBucket()).length > 0 || gpPendingGetTiebreaker() != null;
   }
   // Expose for use in gp-render.js card builder
   window.gpPendingGet = gpPendingGet;
+
+  // ───────────────────────────────────────────
+  // Pending tiebreaker guess (separate slot — not an eventId pick)
+  // ───────────────────────────────────────────
+  function gpPendingSetTiebreaker(value) {
+    const n = Number(value);
+    window.__GP_PENDING_TB = Number.isFinite(n) ? Math.max(0, Math.min(200, Math.round(n))) : null;
+  }
+  function gpPendingGetTiebreaker() {
+    return (typeof window.__GP_PENDING_TB === "number") ? window.__GP_PENDING_TB : null;
+  }
+  function gpPendingClearTiebreaker() {
+    window.__GP_PENDING_TB = null;
+  }
 
   // ───────────────────────────────────────────
   // Cache bust helper
@@ -119,6 +159,76 @@
         if (bodyEl) bodyEl.removeAttribute("data-loaded");
       });
     } catch {}
+  }
+
+  // ───────────────────────────────────────────
+  // Lock reminder — flags picks that lock soon and are still empty
+  // ───────────────────────────────────────────
+  const GP_LOCK_REMINDER_THRESHOLD_MIN = 180; // 3 hours
+  function gpComputeLockReminder(games, myMap) {
+    const now = Date.now();
+    let missingCount = 0;
+    let earliestMs = null;
+    for (const g of (Array.isArray(games) ? games : [])) {
+      const eventId = String(g?.eventId || g?.id || "");
+      if (!eventId) continue;
+      const ms = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+      if (!ms || ms <= now) continue; // already locked or no kickoff time
+      const hasPick = !!(myMap?.[eventId]?.side) || !!gpPendingGet(eventId);
+      if (hasPick) continue;
+      missingCount++;
+      if (earliestMs == null || ms < earliestMs) earliestMs = ms;
+    }
+    if (!missingCount || earliestMs == null) return null;
+    const minutesUntilLock = Math.round((earliestMs - now) / 60000);
+    if (minutesUntilLock > GP_LOCK_REMINDER_THRESHOLD_MIN) return null;
+    return { missingCount, minutesUntilLock };
+  }
+
+  // ───────────────────────────────────────────
+  // Season standings — aggregate every published week
+  // Fully-final weeks are cached in localStorage forever (their result
+  // can never change again); anything still live/upcoming is recomputed
+  // fresh on every load.
+  // ───────────────────────────────────────────
+  function gpSeasonWeekCacheKey(weekId) {
+    return `theShopGpSeasonWeekCache_v1_${weekId}`;
+  }
+  async function gpLoadSeasonLeaderboard(db, weeks) {
+    const published = (Array.isArray(weeks) ? weeks : []).filter(w => w?.published);
+    const results = [];
+    for (const w of published) {
+      const wid = String(w?.id || "");
+      if (!wid) continue;
+      const cacheKey = gpSeasonWeekCacheKey(wid);
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch {}
+      if (cached && cached.final) {
+        results.push({ weekId: wid, weekLabel: w.label, rows: cached.rows, finalsCount: cached.finalsCount });
+        continue;
+      }
+      let games = [];
+      try { games = await (Data().gpGetSlateGames || (async () => []))(db, wid); } catch {}
+      if (!games.length) continue;
+      try { await (ESPN().gpHydrateLiveStateForGames || (async () => {}))(games); } catch {}
+      let allPicks = {};
+      try { allPicks = await (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, wid); } catch {}
+      let slateDoc = {};
+      try { slateDoc = await (Data().gpGetSlateDoc || (async () => ({})))(db, wid); } catch {}
+      const scoringMode = String(slateDoc?.scoringMode || "straight");
+      let tiebreakers = {};
+      try { tiebreakers = await (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, wid); } catch {}
+      const lb = (Data().gpComputeWeeklyLeaderboard || (() => ({ rows: [], finalsCount: 0 })))(
+        games, allPicks, { scoringMode, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
+      );
+      results.push({ weekId: wid, weekLabel: w.label, rows: lb.rows, finalsCount: lb.finalsCount });
+
+      const allFinal = games.length > 0 && lb.finalsCount === games.length;
+      if (allFinal) {
+        try { localStorage.setItem(cacheKey, JSON.stringify({ final: true, rows: lb.rows, finalsCount: lb.finalsCount })); } catch {}
+      }
+    }
+    return (Data().gpComputeSeasonLeaderboard || (() => ({ rows: [], weeksCount: 0 })))(results);
   }
 
   // ───────────────────────────────────────────
@@ -208,7 +318,27 @@
     }
 
     // ── week resolution ──
-    const weeks    = Array.isArray(metaPublic?.weeks) ? metaPublic.weeks : [];
+    const weeks = Array.isArray(metaPublic?.weeks) ? metaPublic.weeks : [];
+
+    // ── season view: cumulative standings across every published week ──
+    if (mem.gpViewMode === "season") {
+      const headerHTML  = (Render().renderPicksHeaderHTML || (() => ""))({
+        weekSelectHTML: "", weekId: "", weekLabel: "Season", isAdmin
+      });
+      const toggleHTML  = (Render().gpBuildViewToggleHTML || (() => ""))("season");
+      let seasonHTML = `<div class="gpNotice">Loading season standings…</div>`;
+      el.innerHTML = `${headerHTML}<div class="gpContainer">${toggleHTML}${seasonHTML}</div>`;
+      try {
+        const seasonLB = await gpLoadSeasonLeaderboard(db, weeks);
+        seasonHTML = (Render().buildSeasonLeaderboardHTML || (() => ""))(seasonLB);
+      } catch (err) {
+        seasonHTML = `<div class="gpNotice">Couldn't load season standings: ${String(err?.message || err)}</div>`;
+      }
+      el.innerHTML = `${headerHTML}<div class="gpContainer">${toggleHTML}${seasonHTML}</div>`;
+      postRender();
+      return;
+    }
+
     let selectedId = gpGetSelectedWeekId(metaPublic);
     const weekMeta = weeks.find(w => String(w?.id) === selectedId) || weeks[weeks.length - 1] || null;
     if (!selectedId && weekMeta) selectedId = String(weekMeta.id || "");
@@ -218,17 +348,27 @@
     // ── store slateId so save handler can always find it ──
     mem.picksSlateId = selectedId;
 
-    // ── games + my picks ──
-    let games    = [];
-    let myMap    = {};
-    let allPicks = {};
+    // ── games + my picks + slate settings (scoring mode / tiebreaker) ──
+    let games       = [];
+    let myMap       = {};
+    let allPicks    = {};
+    let slateDoc    = {};
+    let tiebreakers = {};
+    let myPicksUserDoc = {};
     if (selectedId) {
       try {
-        games    = await (Data().gpGetSlateGames      || (async () => []))(db, selectedId);
-        myMap    = await (Data().gpGetMyPicksMap      || (async () => ({})))(db, selectedId, playerId);
-        allPicks = await (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, selectedId);
+        games          = await (Data().gpGetSlateGames         || (async () => []))(db, selectedId);
+        myMap          = await (Data().gpGetMyPicksMap         || (async () => ({})))(db, selectedId, playerId);
+        allPicks       = await (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, selectedId);
+        slateDoc       = await (Data().gpGetSlateDoc           || (async () => ({})))(db, selectedId);
+        tiebreakers    = await (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, selectedId);
+        myPicksUserDoc = await (Data().gpGetMyPicksUserDoc     || (async () => ({})))(db, selectedId, playerId);
       } catch {}
     }
+    const scoringMode      = String(slateDoc?.scoringMode || "straight");
+    const tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
+    const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
+      ? Number(myPicksUserDoc.tiebreakerGuess) : null;
 
     // ── hydrate live scores + odds ──
     if (games.length) {
@@ -240,28 +380,39 @@
     window.__gpCurrentGames    = games;
     window.__gpCurrentAllPicks = allPicks;
 
+    // ── lock reminder (mine only) ──
+    const lockReminder = gpComputeLockReminder(games, myMap);
+    const lockReminderHTML = lockReminder ? (Render().gpBuildLockReminderHTML || (() => ""))(lockReminder) : "";
+
     // ── build HTML ──
     const weekSelectHTML = buildWeekSelectHTML(weeks, selectedId);
     const headerHTML     = (Render().renderPicksHeaderHTML || (() => ""))({
       weekSelectHTML, weekId: selectedId, weekLabel, isAdmin
     });
+    const toggleHTML = (Render().gpBuildViewToggleHTML || (() => ""))("week");
     const cardsHTML = (Render().gpBuildGroupPicksCardHTML || (() => ""))({
-      weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin
+      weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin,
+      scoringMode, tiebreakerEventId, tiebreakers,
+      myTiebreakerGuess, pendingTiebreakerGuess: gpPendingGetTiebreaker(),
+      lockReminder: lockReminderHTML
     });
 
     // Admin builder goes FIRST inside gpContainer
     let adminBuilderHTML = "";
     if (isAdmin) {
-      const leagueKey = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
-      const dateLabel = mem.gpAdminDateLabel || getSavedDateYYYYMMDDSafe();
-      const avail     = mem.gpAvailableEvents || [];
+      const leagueKey  = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
+      const defaultRange = gpDefaultWeekRange();
+      const dateStart  = mem.gpAdminDateStart || defaultRange.start;
+      const dateEnd    = mem.gpAdminDateEnd   || defaultRange.end;
+      const avail      = mem.gpAvailableEvents || [];
       adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
         weekId: selectedId, weekLabel, availableEvents: avail,
-        leagueKey, dateLabel, isAdmin
+        leagueKey, dateStart, dateEnd, isAdmin,
+        games, scoringMode, tiebreakerEventId
       });
     }
 
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${adminBuilderHTML}${cardsHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${toggleHTML}${adminBuilderHTML}${cardsHTML}</div>`;
     postRender();
   }
 
@@ -306,19 +457,20 @@
     if (action === "savePicks") {
       const slateId  = String(gpMem().picksSlateId || btn.getAttribute("data-slate") || "").trim();
       const pending  = gpPendingBucket();
+      const tbPending = gpPendingGetTiebreaker();
       const idObj2   = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
       const playerId = idObj2.playerId || gpMem().picksPlayerId || "";
 
       if (!slateId)  { console.error("[GP] savePicks: no slateId");  return; }
       if (!playerId) { console.error("[GP] savePicks: no playerId"); return; }
-      if (!Object.keys(pending).length) return;
+      if (!Object.keys(pending).length && tbPending == null) return;
 
       btn.disabled = true;
       btn.textContent = "Saving…";
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
-        await (Data().gpSaveMyPicksBatch || (async () => {}))(db2, slateId, playerId, pending);
+        await (Data().gpSaveMyPicksBatch || (async () => {}))(db2, slateId, playerId, pending, tbPending);
         gpPendingClear();
         // Bust the allPicks cache so the re-render fetches fresh data
         gpBustAllPicksCache(slateId);
@@ -328,6 +480,45 @@
         btn.textContent = "Error — retry";
         btn.disabled = false;
         console.error("[GP] save error:", err);
+      }
+      return;
+    }
+
+    // ── view toggle: this week / season ──
+    if (action === "viewWeek" || action === "viewSeason") {
+      gpMem().gpViewMode = action === "viewSeason" ? "season" : "week";
+      await renderPicks();
+      return;
+    }
+
+    // ── admin: quick-fill this week's date range (Thu–Mon) ──
+    if (action === "adminQuickWeekRange") {
+      const range = gpDefaultWeekRange();
+      gpMem().gpAdminDateStart = range.start;
+      gpMem().gpAdminDateEnd   = range.end;
+      await renderPicks();
+      return;
+    }
+
+    // ── admin: set the weekly tiebreaker game ──
+    if (action === "adminSetTiebreaker") {
+      const weekId = String(btn.getAttribute("data-weekid") || "");
+      const sel    = document.querySelector("[data-gptiebreakerselect]");
+      const eventId = String(sel?.value || "").trim();
+      if (!weekId) return;
+      const games = Array.isArray(window.__gpCurrentGames) ? window.__gpCurrentGames : [];
+      const game  = eventId ? games.find(g => String(g?.eventId || g?.id || "") === eventId) : null;
+      const startMs = game?.startTime?.toMillis ? game.startTime.toMillis() : 0;
+      btn.disabled = true; btn.textContent = "Setting…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        await (Admin().gpAdminSetTiebreaker || (async () => {}))(db2, uid, weekId, eventId, startMs);
+        await renderPicks();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = "Set";
+        console.error("[GP] adminSetTiebreaker error:", err);
       }
       return;
     }
@@ -382,15 +573,15 @@
       return;
     }
 
-    // ── admin: load games ──
+    // ── admin: load games (supports a multi-day date range) ──
     if (action === "adminLoadGames") {
       const mem2       = gpMem();
       const leagueKey  = mem2.gpAdminLeagueKey || getSavedLeagueKeySafe();
-      const dateStr    = mem2.gpAdminDateLabel || getSavedDateYYYYMMDDSafe();
+      const dateRange  = gpAdminDateRangeString(mem2);
       const statusEl   = document.getElementById("gpAdminStatus");
       if (statusEl) statusEl.textContent = "Loading games…";
       try {
-        const events = await (ESPN().fetchEventsFor || (async () => []))(leagueKey, dateStr);
+        const events = await (ESPN().fetchEventsFor || (async () => []))(leagueKey, dateRange);
         mem2.gpAvailableEvents = Array.isArray(events) ? events : [];
         if (statusEl) statusEl.textContent = `Loaded ${mem2.gpAvailableEvents.length} games.`;
       } catch (err) {
@@ -416,7 +607,9 @@
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
         const leagueKey = mem2.gpAdminLeagueKey || getSavedLeagueKeySafe();
-        const dateStr   = mem2.gpAdminDateLabel || getSavedDateYYYYMMDDSafe();
+        // Fallback date if an event has no computable kickoff time — each
+        // added game's real date is otherwise derived from its own start time.
+        const dateStr   = mem2.gpAdminDateStart || gpDefaultWeekRange().start;
         const events    = mem2.gpAvailableEvents || [];
         await (Admin().gpAdminAddSelectedGamesToWeek || (async () => {}))(db2, uid, weekId, leagueKey, dateStr, selected, events);
         mem2.gpAvailableEvents = [];
@@ -468,7 +661,7 @@
   // ───────────────────────────────────────────
   // Change handlers
   // ───────────────────────────────────────────
-  document.addEventListener("change", (e) => {
+  document.addEventListener("change", async (e) => {
     const t = e.target;
     if (!t) return;
 
@@ -485,10 +678,38 @@
       return;
     }
 
-    // Admin date input  (value is YYYY-MM-DD → store as YYYYMMDD)
-    if (t.getAttribute("data-date-input") !== null) {
-      const v = String(t.value || "").replace(/-/g, "");
-      gpMem().gpAdminDateLabel = v;
+    // Admin date range inputs (value is YYYY-MM-DD → store as YYYYMMDD)
+    if (t.getAttribute("data-date-start-input") !== null) {
+      gpMem().gpAdminDateStart = String(t.value || "").replace(/-/g, "");
+      return;
+    }
+    if (t.getAttribute("data-date-end-input") !== null) {
+      gpMem().gpAdminDateEnd = String(t.value || "").replace(/-/g, "");
+      return;
+    }
+
+    // Admin scoring mode select
+    if (t.getAttribute("data-gpscoringmode") === "1") {
+      const weekId = String(gpMem().picksSlateId || "").trim();
+      const mode   = String(t.value || "straight").trim();
+      if (!weekId) return;
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        await (Admin().gpAdminSetScoringMode || (async () => {}))(db2, uid, weekId, mode);
+        await renderPicks();
+      } catch (err) {
+        console.error("[GP] adminSetScoringMode error:", err);
+      }
+      return;
+    }
+
+    // Pending tiebreaker guess
+    if (t.getAttribute("data-gptiebreakerinput") === "1") {
+      const raw = String(t.value || "").trim();
+      if (raw === "") { gpPendingClearTiebreaker(); } else { gpPendingSetTiebreaker(raw); }
+      syncSaveBtnState();
       return;
     }
   });

@@ -59,7 +59,7 @@
   }
   function buildOdds(comp, homeTeam, awayTeam) {
     const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
-    if (!o) return { details: "", overUnder: "", favoredTeam: "" };
+    if (!o) return { details: "", overUnder: "", favoredTeam: "", spreadValue: null, spreadFavoredSide: "" };
     const details   = String(o?.details || "");
     const overUnder = (o?.overUnder != null) ? String(o.overUnder) : "";
     const homeFav   = !!o?.homeTeamOdds?.favorite;
@@ -67,7 +67,24 @@
     const favoredTeam =
       homeFav ? (homeTeam?.abbr || homeTeam?.name || "") :
       awayFav ? (awayTeam?.abbr || awayTeam?.name || "") : "";
-    return { details, overUnder, favoredTeam };
+
+    // spread is signed relative to the home team (negative = home favored)
+    const spreadRaw = Number(o?.spread);
+    let spreadValue = null;
+    let spreadFavoredSide = "";
+    if (Number.isFinite(spreadRaw) && spreadRaw !== 0) {
+      spreadValue = Math.abs(spreadRaw);
+      spreadFavoredSide = spreadRaw < 0 ? "home" : "away";
+    } else if (homeFav || awayFav) {
+      // fall back to parsing the magnitude out of the details string
+      const m = details.match(/-\s*(\d+(\.\d+)?)/);
+      if (m) {
+        spreadValue = Number(m[1]);
+        spreadFavoredSide = homeFav ? "home" : "away";
+      }
+    }
+
+    return { details, overUnder, favoredTeam, spreadValue, spreadFavoredSide };
   }
   function kickoffMsFromEvent(ev) {
     const comp = ev?.competitions?.[0];
@@ -193,9 +210,47 @@
         oddsFavored:  String(odds.favoredTeam || ""),
         homeTeam,
         awayTeam,
+        spreadValue:        odds.spreadValue,
+        spreadFavoredSide:  String(odds.spreadFavoredSide || ""),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     }
+  }
+
+  // --------------- set scoring mode for a week ---------------
+  async function gpAdminSetScoringMode(db, uid, weekId, mode) {
+    const m = (mode === "ats") ? "ats" : "straight";
+    await db.collection("pickSlates").doc(String(weekId)).set({
+      scoringMode: m,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid
+    }, { merge: true });
+    return m;
+  }
+
+  // --------------- set / clear the weekly tiebreaker game ---------------
+  async function gpAdminSetTiebreaker(db, uid, weekId, eventId, startTimeMs) {
+    const slateRef = db.collection("pickSlates").doc(String(weekId));
+    if (!eventId) {
+      await slateRef.set({
+        tiebreakerEventId: firebase.firestore.FieldValue.delete(),
+        tiebreakerLockAt:  firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+      return true;
+    }
+    const ms = Number(startTimeMs);
+    const lockAt = Number.isFinite(ms) && ms > 0
+      ? firebase.firestore.Timestamp.fromMillis(ms)
+      : null;
+    await slateRef.set({
+      tiebreakerEventId: String(eventId),
+      tiebreakerLockAt:  lockAt,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid
+    }, { merge: true });
+    return true;
   }
 
   // --------------- publish week ---------------
@@ -231,7 +286,9 @@
     gpAdminCreateNewWeek,
     gpAdminSetActiveWeek,
     gpAdminAddSelectedGamesToWeek,
-    gpAdminPublishWeek
+    gpAdminPublishWeek,
+    gpAdminSetScoringMode,
+    gpAdminSetTiebreaker
   };
 
 })();
