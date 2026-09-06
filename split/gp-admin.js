@@ -125,33 +125,31 @@
     return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
   }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, scoringModeDefault, totalWeeks }) {
+  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks }) {
     const ref = db.collection("leagues").doc();
     await ref.set({
-      name:               String(name || "New League").trim().slice(0, 40),
-      seasonYear:         Number(seasonYear) || currentYear(),
-      scoringModeDefault: scoringModeDefault === "ats" ? "ats" : "straight",
-      totalWeeks:         normalizeTotalWeeks(totalWeeks),
-      archived:           false,
-      currentWeek:        0,
-      activeWeekId:       "",
-      weeks:              [],
+      name:         String(name || "New League").trim().slice(0, 40),
+      seasonYear:   Number(seasonYear) || currentYear(),
+      totalWeeks:   normalizeTotalWeeks(totalWeeks),
+      archived:     false,
+      currentWeek:  0,
+      activeWeekId: "",
+      weeks:        [],
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     });
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, scoringModeDefault, totalWeeks, archived }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
     };
-    if (name !== undefined)               patch.name = String(name || "").trim().slice(0, 40);
-    if (seasonYear !== undefined)         patch.seasonYear = Number(seasonYear) || currentYear();
-    if (scoringModeDefault !== undefined) patch.scoringModeDefault = scoringModeDefault === "ats" ? "ats" : "straight";
-    if (totalWeeks !== undefined)         patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
-    if (archived !== undefined)           patch.archived = !!archived;
+    if (name !== undefined)       patch.name = String(name || "").trim().slice(0, 40);
+    if (seasonYear !== undefined) patch.seasonYear = Number(seasonYear) || currentYear();
+    if (totalWeeks !== undefined) patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
+    if (archived !== undefined)   patch.archived = !!archived;
     await leaguesRef(db, leagueId).set(patch, { merge: true });
     return true;
   }
@@ -181,7 +179,6 @@
 
       tx.set(db.collection("pickSlates").doc(newId), {
         type: "week", leagueId: String(leagueId), year: y, weekNum: nextWeek, label,
-        scoringMode: l.scoringModeDefault === "ats" ? "ats" : "straight",
         active: true, published: false,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
@@ -245,15 +242,25 @@
     }
   }
 
-  // --------------- set scoring mode for a week ---------------
-  async function gpAdminSetScoringMode(db, uid, weekId, mode) {
-    const m = (mode === "ats") ? "ats" : "straight";
-    await db.collection("pickSlates").doc(String(weekId)).set({
-      scoringMode: m,
+  // --------------- set / clear the week's one against-the-spread game ---------------
+  // Every other game in the week is always graded straight-up; this marks
+  // the single game (if any) that's graded against its spread instead.
+  async function gpAdminSetAtsGame(db, uid, weekId, eventId) {
+    const slateRef = db.collection("pickSlates").doc(String(weekId));
+    if (!eventId) {
+      await slateRef.set({
+        atsEventId: firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+      return true;
+    }
+    await slateRef.set({
+      atsEventId: String(eventId),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
     }, { merge: true });
-    return m;
+    return true;
   }
 
   // --------------- set / clear the weekly tiebreaker game ---------------
@@ -291,13 +298,20 @@
 
     const batch = db.batch();
     batch.delete(gameRef);
-    // If this was the designated tiebreaker game, clear that too —
+    // If this was the designated tiebreaker or ATS game, clear that too —
     // otherwise the leaderboard would keep pointing at a game that no
     // longer exists.
     if (String(slateData.tiebreakerEventId || "") === String(eventId)) {
       batch.set(slateRef, {
         tiebreakerEventId: firebase.firestore.FieldValue.delete(),
         tiebreakerLockAt:  firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+    }
+    if (String(slateData.atsEventId || "") === String(eventId)) {
+      batch.set(slateRef, {
+        atsEventId: firebase.firestore.FieldValue.delete(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: uid
       }, { merge: true });
@@ -342,7 +356,7 @@
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,
     gpAdminPublishWeek,
-    gpAdminSetScoringMode,
+    gpAdminSetAtsGame,
     gpAdminSetTiebreaker,
     gpAdminSummarizeEvent
   };

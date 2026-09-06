@@ -488,7 +488,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 
 /* Scoring legend — bottom of card */
 .gpLeaderScoringFooter {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 8px 10px;
+  flex-wrap: wrap;
   padding: 10px 16px 14px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
@@ -609,6 +610,18 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .gpRemoveGameBtn:active { background: rgba(255,60,60,0.22); }
+
+/* ══════════════════════════════════════════════
+   PICKS SECTION HEADERS (Outright Winners / Against the
+   Spread / Tiebreaker — dividers between pick groups)
+   ══════════════════════════════════════════════ */
+.gpPicksSectionHeader {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 4px 2px;
+  font-size: 11px; font-weight: 900; letter-spacing: 0.1em;
+  text-transform: uppercase; color: rgba(255,255,255,0.4);
+}
+.gpPicksSectionLine { flex: 1; height: 1px; background: rgba(255,255,255,0.08); }
 
 /* ══════════════════════════════════════════════
    WEEK PAGER (replaces the old week <select>)
@@ -989,8 +1002,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Single game card ────────────────────────────────────────────
-  function buildGameCard(g, weekId, myMap, pendingGet, scoringMode, isAdmin) {
-    const isAts   = scoringMode === "ats";
+  function buildGameCard(g, weekId, myMap, pendingGet, isAts, isAdmin) {
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
 
@@ -1272,20 +1284,20 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Leaderboard ─────────────────────────────────────────────────
-  function buildLeaderboardHTML(weekLabel, leaderboard, scoringMode) {
+  function buildLeaderboardHTML(weekLabel, leaderboard) {
     const { rows, finalsCount } = leaderboard || {};
     const list  = Array.isArray(rows) ? rows : [];
     const label = String(weekLabel || "");
 
-    const scoringFooter = scoringMode === "ats" ? `
-<div class="gpLeaderScoringFooter">
-  <span>✅ Cover the spread = 1 pt</span>
-  <span>🤝 Push = 0.5 pts</span>
-</div>` : `
+    // A week can have both straight-up games and one ATS game at once,
+    // so the legend always covers every point source rather than
+    // switching between two mutually-exclusive modes.
+    const scoringFooter = `
 <div class="gpLeaderScoringFooter">
   <span>🐶 Underdog = 2 pts</span>
   <span>❤️ Favorite = 1 pt</span>
-  <span>🤝 Tie = 0.5 pts</span>
+  <span>✅ ATS cover = 1 pt</span>
+  <span>🤝 Tie/Push = 0.5 pts</span>
 </div>`;
 
     // ── No finals yet ──
@@ -1544,7 +1556,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   // ─── Admin builder  (rendered at TOP of page) ────────────────────
   function gpBuildAdminBuilderHTML({
     weekId, weekLabel, availableEvents, leagueKey, dateStart, dateEnd,
-    games, scoringMode, tiebreakerEventId, pickLeagueId
+    games, atsEventId, tiebreakerEventId, pickLeagueId
   }) {
     function kickoffMs(ev) {
       const comp = ev?.competitions?.[0];
@@ -1640,20 +1652,32 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 
     const sorted = summarized.map(x => x.ev);
 
-    // ── scoring mode select ──
-    const mode = scoringMode === "ats" ? "ats" : "straight";
-    const scoringModeHTML = `
+    // ── committed games (already added to this week) ──
+    const committedGames = [...(Array.isArray(games) ? games : [])].sort((a, b) => startMs(a) - startMs(b));
+
+    // ── ATS game select — the one game this week graded against its spread ──
+    let atsHTML = "";
+    if (committedGames.length) {
+      const options = [`<option value="">— None (all straight-up) —</option>`].concat(
+        committedGames.map(g => {
+          const id = String(g?.eventId || g?.id || "");
+          const an = safeTeam(g?.awayTeam || { name: g?.awayName });
+          const hn = safeTeam(g?.homeTeam || { name: g?.homeName });
+          return `<option value="${esc(id)}"${id === String(atsEventId || "") ? " selected" : ""}>${esc(an)} @ ${esc(hn)}</option>`;
+        })
+      ).join("");
+      atsHTML = `
 <div class="gpAdminDateRange">
-  <span class="gpAdminInlineLabel">Scoring:</span>
-  <select data-gpscoringmode="1"
-    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px">
-    <option value="straight"${mode === "straight" ? " selected" : ""}>Straight-up (dog=2, fav=1)</option>
-    <option value="ats"${mode === "ats" ? " selected" : ""}>Against the Spread (1 per cover)</option>
+  <span class="gpAdminInlineLabel">Against-the-spread game:</span>
+  <select data-gpatsselect="1"
+    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px;max-width:100%">
+    ${options}
   </select>
+  <button class="smallBtn" type="button" data-gpaction="adminSetAtsGame" data-weekid="${esc(weekId)}">Set</button>
 </div>`;
+    }
 
     // ── tiebreaker select (from games already committed to this week) ──
-    const committedGames = [...(Array.isArray(games) ? games : [])].sort((a, b) => startMs(a) - startMs(b));
     let tiebreakerHTML = "";
     if (committedGames.length) {
       const options = [`<option value="">— None —</option>`].concat(
@@ -1735,16 +1759,25 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     <button class="smallBtn" type="button" data-gpaction="adminAddGames" data-weekid="${esc(weekId)}">Add Selected</button>
     <button class="smallBtn" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}" data-leagueid="${esc(pickLeagueId || "")}">Publish Week</button>
   </div>` : ""}
-  ${scoringModeHTML}
+  ${atsHTML}
   ${tiebreakerHTML}
   <div class="gpAdminStatus" id="gpAdminStatus"></div>
 </div>`;
   }
 
   // ─── Main group picks card block ──────────────────────────────────
+  function gpBuildSectionHeaderHTML(label) {
+    return `
+<div class="gpPicksSectionHeader">
+  <span class="gpPicksSectionLine"></span>
+  <span>${esc(label)}</span>
+  <span class="gpPicksSectionLine"></span>
+</div>`;
+  }
+
   function gpBuildGroupPicksCardHTML({
     weekId, weekLabel, games, myMap, published, allPicks, isAdmin,
-    scoringMode, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
+    atsEventId, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
     lockReminder
   }) {
     if (!weekId) {
@@ -1761,21 +1794,25 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 
     const pendingGet = window.gpPendingGet || (() => "");
     const isDraft    = !published && isAdmin;
-    const mode       = scoringMode === "ats" ? "ats" : "straight";
+    const atsId      = String(atsEventId || "").trim();
 
-    const sorted    = [...list].sort((a, b) => startMs(a) - startMs(b));
-    const gameCards = sorted.map(g => buildGameCard(g, weekId, myMap, pendingGet, mode, isAdmin)).filter(Boolean);
+    const sorted = [...list].sort((a, b) => startMs(a) - startMs(b));
+    const straightGames = sorted.filter(g => String(g?.eventId || g?.id || "") !== atsId);
+    const atsGames      = sorted.filter(g => atsId && String(g?.eventId || g?.id || "") === atsId);
+
+    const straightCardsHTML = straightGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, false, isAdmin)).filter(Boolean).join("");
+    const atsCardsHTML      = atsGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, true, isAdmin)).filter(Boolean).join("");
 
     const GP_Data = window.GP_Data || {};
     let leaderboardHTML = "";
     if (!isDraft) {
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
-        ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { scoringMode: mode, tiebreakers, tiebreakerEventId })
+        ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventId: atsId, tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
-      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb, mode);
+      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb);
     }
 
-    // ── tiebreaker card ──
+    // ── tiebreaker section (last, right before the save row) ──
     let tiebreakerHTML = "";
     if (tiebreakerEventId) {
       const tbGame = list.find(g => String(g?.eventId || g?.id || "") === String(tiebreakerEventId));
@@ -1787,7 +1824,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         const homeNum  = Number(live?.homeScore ?? tbGame?.finalHomeScore ?? NaN);
         const awayNum  = Number(live?.awayScore ?? tbGame?.finalAwayScore ?? NaN);
         const actualTotal = (isFinal && Number.isFinite(homeNum) && Number.isFinite(awayNum)) ? (homeNum + awayNum) : null;
-        tiebreakerHTML = gpBuildTiebreakerCardHTML({
+        tiebreakerHTML = gpBuildSectionHeaderHTML("🎯 Tiebreaker") + gpBuildTiebreakerCardHTML({
           game: tbGame,
           myGuess: myTiebreakerGuess,
           pendingGuess: pendingTiebreakerGuess,
@@ -1806,9 +1843,10 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     return `
 ${isDraft ? `<div style="padding:0 0 10px"><span class="gpDraftBadge">DRAFT — only admins see this</span></div>` : ""}
 ${lockReminder || ""}
-${tiebreakerHTML}
 ${leaderboardHTML}
-${gameCards.join("")}
+${straightCardsHTML ? gpBuildSectionHeaderHTML("🏈 Outright Winners") + straightCardsHTML : ""}
+${atsCardsHTML ? gpBuildSectionHeaderHTML("📈 Against the Spread") + atsCardsHTML : ""}
+${tiebreakerHTML}
 ${saveRow}`;
   }
 
@@ -1888,7 +1926,6 @@ ${saveRow}`;
     const isEdit = mode === "edit" && league;
     const name    = esc(String(league?.name ?? ""));
     const year    = Number(league?.seasonYear) || new Date().getFullYear();
-    const mode2   = league?.scoringModeDefault === "ats" ? "ats" : "straight";
     const totalWeeks = Number(league?.totalWeeks) || "";
     const archived = !!league?.archived;
 
@@ -1902,13 +1939,6 @@ ${saveRow}`;
   <div class="gpLeagueSettingsRow">
     <div class="gpLeagueSettingsLabel">Season Year</div>
     <input type="number" id="gpLeagueYear" class="gpLeagueSettingsInput" value="${esc(String(year))}"/>
-  </div>
-  <div class="gpLeagueSettingsRow">
-    <div class="gpLeagueSettingsLabel">Default Scoring</div>
-    <select id="gpLeagueScoringMode" class="gpLeagueSettingsInput">
-      <option value="straight"${mode2 === "straight" ? " selected" : ""}>Straight-up (dog=2, fav=1)</option>
-      <option value="ats"${mode2 === "ats" ? " selected" : ""}>Against the Spread (1 per cover)</option>
-    </select>
   </div>
   <div class="gpLeagueSettingsRow">
     <div class="gpLeagueSettingsLabel">Number of Weeks</div>
