@@ -145,7 +145,7 @@
     return list;
   }
 
-  // ─── slate doc (top-level fields: atsEventId, tiebreakerEventId, ...) ──
+  // ─── slate doc (top-level fields: atsEventIds, tiebreakerEventId, ...) ──
   async function gpGetSlateDoc(db, slateId) {
     if (!slateId) return {};
     const snap = await db.collection("pickSlates").doc(String(slateId)).get();
@@ -394,17 +394,34 @@
   }
 
   // ──────────────────────────────────────────────────────────────
+  // gpGetGameWinningSide(g)
+  // Straight-up winner from live/final scores: "home" | "away" | "" (tie
+  // or not enough data yet). Shared by the leaderboard tally below and by
+  // gp-render.js's per-card pick-result coloring, so both agree.
+  // ──────────────────────────────────────────────────────────────
+  function gpGetGameWinningSide(g) {
+    const liveHome = g?.__live?.homeScore;
+    const liveAway = g?.__live?.awayScore;
+    const homeNum  = Number(liveHome ?? g?.finalHomeScore ?? NaN);
+    const awayNum  = Number(liveAway ?? g?.finalAwayScore ?? NaN);
+    if (!Number.isFinite(homeNum) || !Number.isFinite(awayNum)) return "";
+    if (awayNum > homeNum) return "away";
+    if (homeNum > awayNum) return "home";
+    return ""; // tie
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // gpComputeWeeklyLeaderboard(games, allPicks, opts)
-  //   opts.atsEventId         eventId of the *one* game this week graded
-  //                           against its spread — every other game is
-  //                           always graded straight-up (a week can mix both)
+  //   opts.atsEventIds        eventIds of the games this week graded
+  //                           against their spread (up to 5) — every other
+  //                           game is always graded straight-up
   //   opts.tiebreakers        { [playerKey]: { name, guess } } — from gpGetAllTiebreakersForSlate
   //   opts.tiebreakerEventId  eventId of this week's designated tiebreaker game
   // ──────────────────────────────────────────────────────────────
   function gpComputeWeeklyLeaderboard(games, allPicks, opts) {
     const list  = Array.isArray(games)    ? games    : [];
     const picks = (allPicks && typeof allPicks === "object") ? allPicks : {};
-    const atsEventId        = String(opts?.atsEventId || "").trim();
+    const atsEventIds       = new Set((Array.isArray(opts?.atsEventIds) ? opts.atsEventIds : []).map(String));
     const tiebreakers       = (opts && opts.tiebreakers && typeof opts.tiebreakers === "object") ? opts.tiebreakers : {};
     const tiebreakerEventId = String(opts?.tiebreakerEventId || "").trim();
 
@@ -422,26 +439,14 @@
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) continue;
 
-      if (eventId === atsEventId) {
+      if (atsEventIds.has(eventId)) {
         const grade = gpGradeAtsForGame(g);
         if (!grade.ok) continue; // no usable line/score — don't score this game
         gameResults[eventId] = { winningSide: grade.pushed ? "" : grade.coverSide, favSide: "", isAts: true };
         continue;
       }
 
-      const liveHome   = g?.__live?.homeScore;
-      const liveAway   = g?.__live?.awayScore;
-      const homeNum    = Number(liveHome ?? g?.finalHomeScore ?? NaN);
-      const awayNum    = Number(liveAway ?? g?.finalAwayScore ?? NaN);
-
-      let winningSide = "";
-      if (Number.isFinite(homeNum) && Number.isFinite(awayNum)) {
-        if      (awayNum > homeNum) winningSide = "away";
-        else if (homeNum > awayNum) winningSide = "home";
-        // equal scores → winningSide stays "" (tie)
-      }
-
-      gameResults[eventId] = { winningSide, favSide: gpComputeStraightFavSide(g), isAts: false };
+      gameResults[eventId] = { winningSide: gpGetGameWinningSide(g), favSide: gpComputeStraightFavSide(g), isAts: false };
     }
 
     // — tally scores per player —
@@ -642,6 +647,7 @@
     gpComputeWeeklyLeaderboard,
     gpComputeSeasonLeaderboard,
     gpGradeAtsForGame,
+    gpGetGameWinningSide,
   };
 
   window.ensureFirebaseReadySafe = ensureFirebaseReadySafe;

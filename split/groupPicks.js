@@ -229,7 +229,7 @@
       let tiebreakers = {};
       try { tiebreakers = await (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, wid); } catch {}
       const lb = (Data().gpComputeWeeklyLeaderboard || (() => ({ rows: [], finalsCount: 0 })))(
-        games, allPicks, { atsEventId: slateDoc?.atsEventId, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
+        games, allPicks, { atsEventIds: slateDoc?.atsEventIds, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
       );
       results.push({ weekId: wid, weekLabel: w.label, rows: lb.rows, finalsCount: lb.finalsCount });
 
@@ -435,7 +435,7 @@
         myPicksUserDoc = await (Data().gpGetMyPicksUserDoc     || (async () => ({})))(db, selectedId, playerId);
       } catch {}
     }
-    const atsEventId        = String(slateDoc?.atsEventId || "");
+    const atsEventIds       = Array.isArray(slateDoc?.atsEventIds) ? slateDoc.atsEventIds.map(String) : [];
     const tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
     const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
       ? Number(myPicksUserDoc.tiebreakerGuess) : null;
@@ -467,7 +467,7 @@
     }) : "";
     const cardsHTML = (Render().gpBuildGroupPicksCardHTML || (() => ""))({
       weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin,
-      atsEventId, tiebreakerEventId, tiebreakers,
+      atsEventIds, tiebreakerEventId, tiebreakers,
       myTiebreakerGuess, pendingTiebreakerGuess: gpPendingGetTiebreaker(),
       lockReminder: lockReminderHTML
     });
@@ -483,7 +483,7 @@
       adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
         weekId: selectedId, weekLabel, availableEvents: avail,
         leagueKey, dateStart, dateEnd, isAdmin,
-        games, atsEventId, tiebreakerEventId, pickLeagueId
+        games, atsEventIds, tiebreakerEventId, pickLeagueId
       });
     }
 
@@ -704,22 +704,23 @@
       return;
     }
 
-    // ── admin: set the week's one against-the-spread game ──
-    if (action === "adminSetAtsGame") {
+    // ── admin: save the week's against-the-spread games (up to 5) ──
+    if (action === "adminSetAtsGames") {
       const weekId = String(btn.getAttribute("data-weekid") || "");
-      const sel     = document.querySelector("[data-gpatsselect]");
-      const eventId = String(sel?.value || "").trim();
       if (!weekId) return;
-      btn.disabled = true; btn.textContent = "Setting…";
+      const checked  = document.querySelectorAll("[data-gpatscheck]:checked");
+      const eventIds = [...checked].map(c => String(c.value));
+      if (eventIds.length > 5) { alert("Pick at most 5 against-the-spread games."); return; }
+      btn.disabled = true; btn.textContent = "Saving…";
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
-        await (Admin().gpAdminSetAtsGame || (async () => {}))(db2, uid, weekId, eventId);
+        await (Admin().gpAdminSetAtsGames || (async () => {}))(db2, uid, weekId, eventIds);
         await renderPicks();
       } catch (err) {
-        btn.disabled = false; btn.textContent = "Set";
-        console.error("[GP] adminSetAtsGame error:", err);
+        btn.disabled = false; btn.textContent = "Save ATS Games";
+        console.error("[GP] adminSetAtsGames error:", err);
       }
       return;
     }
