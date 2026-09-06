@@ -1513,8 +1513,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const homeRank = Number(summary?.homeTeam?.rank);
       const awayRanked = Number.isFinite(awayRank) && awayRank > 0;
       const homeRanked = Number.isFinite(homeRank) && homeRank > 0;
+      // summary.spreadValue is null when there's no odds at all — Number(null)
+      // is 0, which would otherwise look like a real (tight) spread, so require
+      // an actual value before treating this as having odds.
       const spreadVal  = Number(summary?.spreadValue);
-      const hasSpread  = Number.isFinite(spreadVal);
+      const hasSpread  = summary?.spreadValue != null && Number.isFinite(spreadVal);
       if (awayRanked && homeRanked)         return { tier: 0, badge: "🏆 Ranked matchup", sortKey: awayRank + homeRank };
       if (awayRanked || homeRanked)         return { tier: 1, badge: "🏅 Ranked team", sortKey: awayRanked ? awayRank : homeRank };
       if (hasSpread && spreadVal <= 3)      return { tier: 2, badge: "🎯 Toss-up", sortKey: spreadVal };
