@@ -116,12 +116,22 @@
     return db.collection("leagues").doc(String(leagueId));
   }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, scoringModeDefault }) {
+  // totalWeeks is the planned length of the season (e.g. 12 for a fall
+  // league, 10 for a winter league) — null/0 means "no fixed length".
+  // It's informational only: admins can still create weeks past it
+  // (playoffs, etc.); it drives the "Active" badge on the league picker.
+  function normalizeTotalWeeks(totalWeeks) {
+    const n = Number(totalWeeks);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  }
+
+  async function gpCreateLeague(db, uid, { name, seasonYear, scoringModeDefault, totalWeeks }) {
     const ref = db.collection("leagues").doc();
     await ref.set({
       name:               String(name || "New League").trim().slice(0, 40),
       seasonYear:         Number(seasonYear) || currentYear(),
       scoringModeDefault: scoringModeDefault === "ats" ? "ats" : "straight",
+      totalWeeks:         normalizeTotalWeeks(totalWeeks),
       archived:           false,
       currentWeek:        0,
       activeWeekId:       "",
@@ -132,7 +142,7 @@
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, scoringModeDefault, archived }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, scoringModeDefault, totalWeeks, archived }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
@@ -140,6 +150,7 @@
     if (name !== undefined)               patch.name = String(name || "").trim().slice(0, 40);
     if (seasonYear !== undefined)         patch.seasonYear = Number(seasonYear) || currentYear();
     if (scoringModeDefault !== undefined) patch.scoringModeDefault = scoringModeDefault === "ats" ? "ats" : "straight";
+    if (totalWeeks !== undefined)         patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
     if (archived !== undefined)           patch.archived = !!archived;
     await leaguesRef(db, leagueId).set(patch, { merge: true });
     return true;

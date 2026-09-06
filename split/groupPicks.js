@@ -364,6 +364,11 @@
       const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false });
       let leagues = [];
       try { leagues = await (Data().gpListLeagues || (async () => []))(db); } catch {}
+      const isActiveFn = Data().gpIsLeagueActive || (async () => false);
+      try {
+        const activeFlags = await Promise.all(leagues.map(l => isActiveFn(db, l).catch(() => false)));
+        leagues = leagues.map((l, i) => ({ ...l, active: activeFlags[i] }));
+      } catch {}
       const pickerHTML = (Render().gpBuildLeaguePickerHTML || (() => ""))({ leagues, isAdmin });
       el.innerHTML = `${headerHTML}<div class="gpContainer">${pickerHTML}</div>`;
       postRender();
@@ -630,13 +635,15 @@
     // ── leagues: submit create/edit form ──
     if (action === "submitLeagueSettings") {
       const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
-      const nameEl     = document.getElementById("gpLeagueName");
-      const yearEl     = document.getElementById("gpLeagueYear");
-      const modeEl     = document.getElementById("gpLeagueScoringMode");
-      const archivedEl = document.getElementById("gpLeagueArchived");
-      const name   = String(nameEl?.value || "").trim();
-      const year   = Number(yearEl?.value || "");
-      const mode   = String(modeEl?.value || "straight");
+      const nameEl       = document.getElementById("gpLeagueName");
+      const yearEl       = document.getElementById("gpLeagueYear");
+      const modeEl       = document.getElementById("gpLeagueScoringMode");
+      const totalWeeksEl = document.getElementById("gpLeagueTotalWeeks");
+      const archivedEl   = document.getElementById("gpLeagueArchived");
+      const name       = String(nameEl?.value || "").trim();
+      const year       = Number(yearEl?.value || "");
+      const mode       = String(modeEl?.value || "straight");
+      const totalWeeks = String(totalWeeksEl?.value || "").trim();
       if (!name) { alert("Give the league a name first."); return; }
 
       btn.disabled = true; btn.textContent = "Saving…";
@@ -647,12 +654,12 @@
         const mem2 = gpMem();
         if (leagueId) {
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
-            name, seasonYear: year, scoringModeDefault: mode,
+            name, seasonYear: year, scoringModeDefault: mode, totalWeeks,
             archived: archivedEl ? !!archivedEl.checked : undefined
           });
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
-            name, seasonYear: year, scoringModeDefault: mode
+            name, seasonYear: year, scoringModeDefault: mode, totalWeeks
           });
           mem2.pickLeagueId = newId;
           mem2.gpShowLeaguePicker = false;

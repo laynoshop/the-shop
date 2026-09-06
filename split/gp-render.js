@@ -652,7 +652,20 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   font-size: 20px; background: rgba(187,0,0,0.12); border: 1px solid rgba(187,0,0,0.25);
 }
 .gpLeagueCardInfo { flex: 1; min-width: 0; }
-.gpLeagueCardName { font-size: 16px; font-weight: 900; color: #fff; }
+.gpLeagueCardName { font-size: 16px; font-weight: 900; color: #fff; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gpLeagueActivePill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #17301f;
+  background: linear-gradient(135deg, rgba(120,255,170,0.95), rgba(60,220,140,0.95));
+  border-radius: 999px; padding: 3px 9px 3px 7px;
+  box-shadow: 0 2px 8px rgba(60,220,140,0.35);
+}
+.gpLeagueActiveDot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #0f3d20;
+  animation: gpLivePulse 1.2s ease-in-out infinite;
+}
 .gpLeagueCardMeta { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.4); margin-top: 2px; }
 .gpLeagueCardGear {
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
@@ -1839,12 +1852,15 @@ ${saveRow}`;
 
     const cards = sorted.map(l => {
       const weeksCount = Array.isArray(l.weeks) ? l.weeks.length : 0;
-      const meta = `${esc(String(l.seasonYear || ""))} · ${weeksCount} week${weeksCount !== 1 ? "s" : ""}${l.archived ? " · Archived" : ""}`;
+      const totalWeeks = Number(l.totalWeeks) || 0;
+      const weeksLabel = totalWeeks ? `${weeksCount} of ${totalWeeks} weeks` : `${weeksCount} week${weeksCount !== 1 ? "s" : ""}`;
+      const meta = `${esc(String(l.seasonYear || ""))} · ${weeksLabel}${l.archived ? " · Archived" : ""}`;
+      const activePill = (l.active && !l.archived) ? `<span class="gpLeagueActivePill"><span class="gpLeagueActiveDot"></span>Active</span>` : "";
       return `
 <div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="selectLeague" data-leagueid="${esc(l.id)}">
   <div class="gpLeagueCardIcon">🏈</div>
   <div class="gpLeagueCardInfo">
-    <div class="gpLeagueCardName">${esc(l.name || "League")}</div>
+    <div class="gpLeagueCardName">${esc(l.name || "League")}${activePill}</div>
     <div class="gpLeagueCardMeta">${meta}</div>
   </div>
   ${isAdmin ? `<div class="gpLeagueCardGear" data-gpaction="editLeague" data-leagueid="${esc(l.id)}" title="League settings">⚙</div>` : ""}
@@ -1873,6 +1889,7 @@ ${saveRow}`;
     const name    = esc(String(league?.name ?? ""));
     const year    = Number(league?.seasonYear) || new Date().getFullYear();
     const mode2   = league?.scoringModeDefault === "ats" ? "ats" : "straight";
+    const totalWeeks = Number(league?.totalWeeks) || "";
     const archived = !!league?.archived;
 
     return `
@@ -1892,6 +1909,11 @@ ${saveRow}`;
       <option value="straight"${mode2 === "straight" ? " selected" : ""}>Straight-up (dog=2, fav=1)</option>
       <option value="ats"${mode2 === "ats" ? " selected" : ""}>Against the Spread (1 per cover)</option>
     </select>
+  </div>
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">Number of Weeks</div>
+    <input type="number" id="gpLeagueTotalWeeks" class="gpLeagueSettingsInput" min="1" step="1"
+      value="${esc(String(totalWeeks))}" placeholder="e.g. 12 (leave blank for no fixed length)"/>
   </div>
   ${isEdit ? `
   <label class="gpLeagueSettingsCheckRow">

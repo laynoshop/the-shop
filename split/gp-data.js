@@ -103,6 +103,35 @@
     return list;
   }
 
+  // ─── is a league "active" right now? ──────────────────────────────
+  // Active = at least one published week, AND the season hasn't wrapped
+  // up its configured final week yet.
+  //   - No totalWeeks set, or still short of it → active (no extra reads).
+  //   - At/past totalWeeks → only then check whether the most recently
+  //     created week's games are all done, using scores already
+  //     persisted to Firestore (no live ESPN calls from the picker).
+  async function gpIsLeagueActive(db, league) {
+    const weeks = Array.isArray(league?.weeks) ? league.weeks : [];
+    const hasPublished = weeks.some(w => w?.published);
+    if (!hasPublished) return false;
+
+    const totalWeeks = Number(league?.totalWeeks) || 0;
+    if (!totalWeeks) return true;
+
+    const currentWeek = Number(league?.currentWeek) || 0;
+    if (currentWeek < totalWeeks) return true;
+
+    const finalWeekMeta = weeks[weeks.length - 1];
+    if (!finalWeekMeta?.id) return true;
+
+    let games = [];
+    try { games = await gpGetSlateGames(db, finalWeekMeta.id); } catch { return true; }
+    if (!games.length) return true;
+
+    const allFinal = games.every(g => String(g?.finalState || "").toLowerCase() === "post");
+    return !allFinal;
+  }
+
   // ─── slate games ─────────────────────────────────────────────────────
   async function gpGetSlateGames(db, slateId) {
     const snap = await db.collection("pickSlates").doc(slateId).collection("games").get();
@@ -595,6 +624,7 @@
     getPicksDisplayName,
     gpGetLeague,
     gpListLeagues,
+    gpIsLeagueActive,
     gpGetSlateDoc,
     gpGetSlateGames,
     gpGetMyPicksMap,
