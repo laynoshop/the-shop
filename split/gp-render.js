@@ -160,24 +160,35 @@
 }
 .gpMatchup {
   display: flex; flex-direction: column;
-  padding: 6px 12px 10px; gap: 2px;
+  padding: 6px 12px 10px; gap: 6px;
 }
 
-/* Team pick buttons */
+/* Team pick buttons — the subtle border on every option is a "tap to
+   pick" affordance; it turns green once chosen, then red if the game
+   goes final and the pick was wrong. */
 .gpTeamPickBtn {
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 0; min-height: 44px; border-radius: 8px;
-  background: none; border: none; width: 100%;
+  padding: 7px 10px; min-height: 44px; border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1.5px solid rgba(255,255,255,0.10);
+  width: 100%; box-sizing: border-box;
   text-align: left; cursor: pointer;
-  transition: background 150ms ease;
+  transition: background 150ms ease, border-color 150ms ease;
   -webkit-tap-highlight-color: transparent;
 }
-.gpTeamPickBtn:active { background: rgba(255,255,255,0.05); }
+.gpTeamPickBtn:active { background: rgba(255,255,255,0.06); }
 .gpTeamPickBtn.gpPickRowActive {
-  background: rgba(80,200,120,0.12);
-  border-radius: 8px;
+  background: rgba(80,200,120,0.14);
+  border-color: rgba(90,220,140,0.6);
+  box-shadow: 0 0 0 1px rgba(90,220,140,0.2) inset;
 }
-.gpTeamPickBtn.gpPickRowActive .gpTeamName { color: #6dff9a; }
+.gpTeamPickBtn.gpPickRowActive .gpTeamName { color: #6dff9a; font-weight: 900; }
+.gpTeamPickBtn.gpPickResultLoss {
+  background: rgba(220,60,60,0.14);
+  border-color: rgba(230,90,90,0.6);
+  box-shadow: 0 0 0 1px rgba(230,90,90,0.2) inset;
+}
+.gpTeamPickBtn.gpPickResultLoss .gpTeamName { color: #ff8f8f; font-weight: 900; }
 .gpTeamPickBtn.gpFaded { opacity: 0.38; }
 .gpTeamPickBtn:disabled { cursor: default; pointer-events: none; }
 
@@ -232,6 +243,7 @@
   color: rgba(100,255,160,0.9); letter-spacing: 0.03em;
 }
 .gpYouPicked.gpPending { color: rgba(255,210,60,0.9); }
+.gpYouPicked.gpResultLoss { color: rgba(255,110,110,0.95); }
 .gpNoPick  { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.3); }
 .gpLocked  { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.3); }
 
@@ -616,12 +628,37 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
    Spread / Tiebreaker — dividers between pick groups)
    ══════════════════════════════════════════════ */
 .gpPicksSectionHeader {
-  display: flex; align-items: center; gap: 10px;
-  padding: 14px 4px 2px;
-  font-size: 11px; font-weight: 900; letter-spacing: 0.1em;
-  text-transform: uppercase; color: rgba(255,255,255,0.4);
+  display: flex; align-items: center; gap: 12px;
+  padding: 20px 2px 6px;
 }
-.gpPicksSectionLine { flex: 1; height: 1px; background: rgba(255,255,255,0.08); }
+.gpPicksSectionLine { flex: 1; height: 2px; border-radius: 2px; background: rgba(255,255,255,0.08); }
+.gpPicksSectionLabel {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; font-weight: 900; letter-spacing: 0.05em;
+  text-transform: uppercase; white-space: nowrap;
+  padding: 6px 16px; border-radius: 999px;
+}
+/* Outright Winners — red */
+.gpPicksSection-outright .gpPicksSectionLabel {
+  color: #ffe3e3;
+  background: linear-gradient(135deg, rgba(214,45,70,0.95), rgba(150,20,45,0.95));
+  box-shadow: 0 4px 16px rgba(209,38,63,0.4);
+}
+.gpPicksSection-outright .gpPicksSectionLine { background: rgba(209,38,63,0.35); }
+/* Against the Spread — green */
+.gpPicksSection-ats .gpPicksSectionLabel {
+  color: #e7fff3;
+  background: linear-gradient(135deg, rgba(50,208,140,0.95), rgba(20,150,95,0.95));
+  box-shadow: 0 4px 16px rgba(46,204,135,0.4);
+}
+.gpPicksSection-ats .gpPicksSectionLine { background: rgba(46,204,135,0.35); }
+/* Tiebreaker — purple */
+.gpPicksSection-tiebreaker .gpPicksSectionLabel {
+  color: #f4eeff;
+  background: linear-gradient(135deg, rgba(155,105,255,0.95), rgba(110,60,220,0.95));
+  box-shadow: 0 4px 16px rgba(150,100,255,0.4);
+}
+.gpPicksSection-tiebreaker .gpPicksSectionLine { background: rgba(150,100,255,0.35); }
 
 /* ══════════════════════════════════════════════
    WEEK PAGER (replaces the old week <select>)
@@ -1045,16 +1082,32 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const awayFade   = hasPick && !awayActive;
     const homeFade   = hasPick && !homeActive;
 
+    // — did my pick win, lose, or push, once the game is final? —
+    // "win" grades the same way the leaderboard does: straight games by
+    // final score, the ATS game by its stored spread (a push counts as
+    // neither a win nor a loss, so it keeps the normal picked styling).
+    let myPickResult = "pending";
+    if (hasPick && isFinal) {
+      const GP_Data = window.GP_Data || {};
+      if (isAts) {
+        const grade = typeof GP_Data.gpGradeAtsForGame === "function" ? GP_Data.gpGradeAtsForGame(g) : { ok: false };
+        if (grade.ok) myPickResult = grade.pushed ? "push" : (my === grade.coverSide ? "win" : "loss");
+      } else {
+        const winningSide = typeof GP_Data.gpGetGameWinningSide === "function" ? GP_Data.gpGetGameWinningSide(g) : "";
+        if (winningSide) myPickResult = (my === winningSide) ? "win" : "loss";
+        else if (showScores) myPickResult = "push"; // tie
+      }
+    }
+    const awayIsLoss = awayActive && myPickResult === "loss";
+    const homeIsLoss = homeActive && myPickResult === "loss";
+
     let cardCls = "gpScoreCard";
     if (isLive)  cardCls += " gpCardLive";
     if (hasPick) cardCls += " gpPickedCard";
 
-    const leagueKey = String(g?.leagueKey || "").trim();
-    const LEAGUE_COLORS = {
-      nfl: "#013369", cfb: "#8B1A1A", nba: "#C9082A", ncaam: "#003087",
-      nhl: "#1E90FF", mlb: "#002D72", mls: "#005DAA",
-    };
-    const borderColor = LEAGUE_COLORS[leagueKey] || "#555";
+    // Left border edge is a type indicator, not a sport color: red for
+    // outright/straight-up games, green for the designated ATS game(s).
+    const borderColor = isAts ? "#2ecc87" : "#d1263f";
 
     const oddsLine   = safeOddsLine(g);
     const venueLine  = String(g?.venueLine || "").trim();
@@ -1078,7 +1131,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   </div>` : ""}
   ${venueLine ? `<div class="gpVenueLine">${esc(venueLine)}</div>` : ""}
   <div class="gpMatchup">
-    <button class="gpTeamPickBtn${awayActive ? " gpPickRowActive" : ""}${awayFade ? " gpFaded" : ""}"
+    <button class="gpTeamPickBtn${awayIsLoss ? " gpPickResultLoss" : (awayActive ? " gpPickRowActive" : "")}${awayFade ? " gpFaded" : ""}"
       type="button"
       ${locked ? "disabled" : ""}
       data-gppick="away" data-eid="${esc(eventId)}" data-slate="${esc(weekId)}">
@@ -1089,7 +1142,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       </div>
       ${showScores ? scoreHTML(awayScore, awayWinner, isFinal && !awayWinner) : ""}
     </button>
-    <button class="gpTeamPickBtn${homeActive ? " gpPickRowActive" : ""}${homeFade ? " gpFaded" : ""}"
+    <button class="gpTeamPickBtn${homeIsLoss ? " gpPickResultLoss" : (homeActive ? " gpPickRowActive" : "")}${homeFade ? " gpFaded" : ""}"
       type="button"
       ${locked ? "disabled" : ""}
       data-gppick="home" data-eid="${esc(eventId)}" data-slate="${esc(weekId)}">
@@ -1104,7 +1157,9 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   <div class="gpPickStrip">
     <div>
       ${hasPick
-        ? `<div class="gpYouPicked${isPending ? " gpPending" : ""}">${isPending ? "⏳ Pending: " : (isAts ? "✓ Covering: " : "✓ Picked: ")}${esc(my === "away" ? safeTeam(away) : safeTeam(home))}</div>`
+        ? `<div class="gpYouPicked${isPending ? " gpPending" : ""}${myPickResult === "loss" ? " gpResultLoss" : ""}">${
+            isPending ? "⏳ Pending: " : myPickResult === "loss" ? "✕ Lost: " : (isAts ? "✓ Covering: " : "✓ Picked: ")
+          }${esc(my === "away" ? safeTeam(away) : safeTeam(home))}</div>`
         : locked ? `<div class="gpLocked">🔒 Locked</div>` : `<div class="gpNoPick">No pick yet</div>`}
     </div>
     <details class="gpEveryoneDetails" data-gpeveryone="1"
@@ -1556,7 +1611,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   // ─── Admin builder  (rendered at TOP of page) ────────────────────
   function gpBuildAdminBuilderHTML({
     weekId, weekLabel, availableEvents, leagueKey, dateStart, dateEnd,
-    games, atsEventId, tiebreakerEventId, pickLeagueId
+    games, atsEventIds, tiebreakerEventId, pickLeagueId
   }) {
     function kickoffMs(ev) {
       const comp = ev?.competitions?.[0];
@@ -1655,25 +1710,30 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     // ── committed games (already added to this week) ──
     const committedGames = [...(Array.isArray(games) ? games : [])].sort((a, b) => startMs(a) - startMs(b));
 
-    // ── ATS game select — the one game this week graded against its spread ──
+    // ── ATS games checklist — up to 5 games this week graded against their spread ──
+    const MAX_ATS_GAMES_UI = 5;
     let atsHTML = "";
     if (committedGames.length) {
-      const options = [`<option value="">— None (all straight-up) —</option>`].concat(
-        committedGames.map(g => {
-          const id = String(g?.eventId || g?.id || "");
-          const an = safeTeam(g?.awayTeam || { name: g?.awayName });
-          const hn = safeTeam(g?.homeTeam || { name: g?.homeName });
-          return `<option value="${esc(id)}"${id === String(atsEventId || "") ? " selected" : ""}>${esc(an)} @ ${esc(hn)}</option>`;
-        })
-      ).join("");
+      const atsIdSet = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
+      const atsRows = committedGames.map(g => {
+        const id = String(g?.eventId || g?.id || "");
+        const an = safeTeam(g?.awayTeam || { name: g?.awayName });
+        const hn = safeTeam(g?.homeTeam || { name: g?.homeName });
+        return `
+<div class="gpAdminRow">
+  <label>
+    <input type="checkbox" data-gpatscheck value="${esc(id)}" ${atsIdSet.has(id) ? "checked" : ""} />
+    <span style="flex:1;min-width:0">${esc(an)} <span style="color:rgba(255,255,255,0.38)">@</span> ${esc(hn)}</span>
+  </label>
+</div>`;
+      }).join("");
       atsHTML = `
-<div class="gpAdminDateRange">
-  <span class="gpAdminInlineLabel">Against-the-spread game:</span>
-  <select data-gpatsselect="1"
-    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px;max-width:100%">
-    ${options}
-  </select>
-  <button class="smallBtn" type="button" data-gpaction="adminSetAtsGame" data-weekid="${esc(weekId)}">Set</button>
+<div class="gpAdminInlineLabel" style="padding:4px 2px 0">Against-the-spread games (up to ${MAX_ATS_GAMES_UI}):</div>
+<div class="gpAdminGameList" style="max-height:180px">
+  ${atsRows}
+</div>
+<div class="gpAdminControls">
+  <button class="smallBtn" type="button" data-gpaction="adminSetAtsGames" data-weekid="${esc(weekId)}">Save ATS Games</button>
 </div>`;
     }
 
@@ -1766,18 +1826,18 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Main group picks card block ──────────────────────────────────
-  function gpBuildSectionHeaderHTML(label) {
+  function gpBuildSectionHeaderHTML(label, theme) {
     return `
-<div class="gpPicksSectionHeader">
+<div class="gpPicksSectionHeader gpPicksSection-${esc(theme || "")}">
   <span class="gpPicksSectionLine"></span>
-  <span>${esc(label)}</span>
+  <span class="gpPicksSectionLabel">${esc(label)}</span>
   <span class="gpPicksSectionLine"></span>
 </div>`;
   }
 
   function gpBuildGroupPicksCardHTML({
     weekId, weekLabel, games, myMap, published, allPicks, isAdmin,
-    atsEventId, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
+    atsEventIds, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
     lockReminder
   }) {
     if (!weekId) {
@@ -1794,11 +1854,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 
     const pendingGet = window.gpPendingGet || (() => "");
     const isDraft    = !published && isAdmin;
-    const atsId      = String(atsEventId || "").trim();
+    const atsIdSet   = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
 
     const sorted = [...list].sort((a, b) => startMs(a) - startMs(b));
-    const straightGames = sorted.filter(g => String(g?.eventId || g?.id || "") !== atsId);
-    const atsGames      = sorted.filter(g => atsId && String(g?.eventId || g?.id || "") === atsId);
+    const straightGames = sorted.filter(g => !atsIdSet.has(String(g?.eventId || g?.id || "")));
+    const atsGames      = sorted.filter(g => atsIdSet.has(String(g?.eventId || g?.id || "")));
 
     const straightCardsHTML = straightGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, false, isAdmin)).filter(Boolean).join("");
     const atsCardsHTML      = atsGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, true, isAdmin)).filter(Boolean).join("");
@@ -1807,7 +1867,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     let leaderboardHTML = "";
     if (!isDraft) {
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
-        ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventId: atsId, tiebreakers, tiebreakerEventId })
+        ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds: [...atsIdSet], tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
       leaderboardHTML = buildLeaderboardHTML(weekLabel, lb);
     }
@@ -1824,7 +1884,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         const homeNum  = Number(live?.homeScore ?? tbGame?.finalHomeScore ?? NaN);
         const awayNum  = Number(live?.awayScore ?? tbGame?.finalAwayScore ?? NaN);
         const actualTotal = (isFinal && Number.isFinite(homeNum) && Number.isFinite(awayNum)) ? (homeNum + awayNum) : null;
-        tiebreakerHTML = gpBuildSectionHeaderHTML("🎯 Tiebreaker") + gpBuildTiebreakerCardHTML({
+        tiebreakerHTML = gpBuildSectionHeaderHTML("🎯 Tiebreaker", "tiebreaker") + gpBuildTiebreakerCardHTML({
           game: tbGame,
           myGuess: myTiebreakerGuess,
           pendingGuess: pendingTiebreakerGuess,
@@ -1844,8 +1904,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 ${isDraft ? `<div style="padding:0 0 10px"><span class="gpDraftBadge">DRAFT — only admins see this</span></div>` : ""}
 ${lockReminder || ""}
 ${leaderboardHTML}
-${straightCardsHTML ? gpBuildSectionHeaderHTML("🏈 Outright Winners") + straightCardsHTML : ""}
-${atsCardsHTML ? gpBuildSectionHeaderHTML("📈 Against the Spread") + atsCardsHTML : ""}
+${straightCardsHTML ? gpBuildSectionHeaderHTML("🏈 Outright Winners", "outright") + straightCardsHTML : ""}
+${atsCardsHTML ? gpBuildSectionHeaderHTML("📈 Against the Spread", "ats") + atsCardsHTML : ""}
 ${tiebreakerHTML}
 ${saveRow}`;
   }

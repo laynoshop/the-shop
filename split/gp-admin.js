@@ -242,25 +242,20 @@
     }
   }
 
-  // --------------- set / clear the week's one against-the-spread game ---------------
+  // --------------- set the week's against-the-spread games (up to 5) ---------------
   // Every other game in the week is always graded straight-up; this marks
-  // the single game (if any) that's graded against its spread instead.
-  async function gpAdminSetAtsGame(db, uid, weekId, eventId) {
-    const slateRef = db.collection("pickSlates").doc(String(weekId));
-    if (!eventId) {
-      await slateRef.set({
-        atsEventId: firebase.firestore.FieldValue.delete(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedBy: uid
-      }, { merge: true });
-      return true;
-    }
-    await slateRef.set({
-      atsEventId: String(eventId),
+  // the games (if any, up to MAX_ATS_GAMES) that are graded against their
+  // spread instead.
+  const MAX_ATS_GAMES = 5;
+  async function gpAdminSetAtsGames(db, uid, weekId, eventIds) {
+    const ids = [...new Set((Array.isArray(eventIds) ? eventIds : []).map(String).filter(Boolean))]
+      .slice(0, MAX_ATS_GAMES);
+    await db.collection("pickSlates").doc(String(weekId)).set({
+      atsEventIds: ids,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
     }, { merge: true });
-    return true;
+    return ids;
   }
 
   // --------------- set / clear the weekly tiebreaker game ---------------
@@ -309,9 +304,10 @@
         updatedBy: uid
       }, { merge: true });
     }
-    if (String(slateData.atsEventId || "") === String(eventId)) {
+    const atsEventIds = Array.isArray(slateData.atsEventIds) ? slateData.atsEventIds.map(String) : [];
+    if (atsEventIds.includes(String(eventId))) {
       batch.set(slateRef, {
-        atsEventId: firebase.firestore.FieldValue.delete(),
+        atsEventIds: atsEventIds.filter(id => id !== String(eventId)),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedBy: uid
       }, { merge: true });
@@ -356,7 +352,7 @@
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,
     gpAdminPublishWeek,
-    gpAdminSetAtsGame,
+    gpAdminSetAtsGames,
     gpAdminSetTiebreaker,
     gpAdminSummarizeEvent
   };
