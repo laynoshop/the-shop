@@ -226,11 +226,10 @@
       try { allPicks = await (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, wid); } catch {}
       let slateDoc = {};
       try { slateDoc = await (Data().gpGetSlateDoc || (async () => ({})))(db, wid); } catch {}
-      const scoringMode = String(slateDoc?.scoringMode || "straight");
       let tiebreakers = {};
       try { tiebreakers = await (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, wid); } catch {}
       const lb = (Data().gpComputeWeeklyLeaderboard || (() => ({ rows: [], finalsCount: 0 })))(
-        games, allPicks, { scoringMode, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
+        games, allPicks, { atsEventId: slateDoc?.atsEventId, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
       );
       results.push({ weekId: wid, weekLabel: w.label, rows: lb.rows, finalsCount: lb.finalsCount });
 
@@ -436,7 +435,7 @@
         myPicksUserDoc = await (Data().gpGetMyPicksUserDoc     || (async () => ({})))(db, selectedId, playerId);
       } catch {}
     }
-    const scoringMode      = String(slateDoc?.scoringMode || league.scoringModeDefault || "straight");
+    const atsEventId        = String(slateDoc?.atsEventId || "");
     const tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
     const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
       ? Number(myPicksUserDoc.tiebreakerGuess) : null;
@@ -468,7 +467,7 @@
     }) : "";
     const cardsHTML = (Render().gpBuildGroupPicksCardHTML || (() => ""))({
       weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin,
-      scoringMode, tiebreakerEventId, tiebreakers,
+      atsEventId, tiebreakerEventId, tiebreakers,
       myTiebreakerGuess, pendingTiebreakerGuess: gpPendingGetTiebreaker(),
       lockReminder: lockReminderHTML
     });
@@ -484,7 +483,7 @@
       adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
         weekId: selectedId, weekLabel, availableEvents: avail,
         leagueKey, dateStart, dateEnd, isAdmin,
-        games, scoringMode, tiebreakerEventId, pickLeagueId
+        games, atsEventId, tiebreakerEventId, pickLeagueId
       });
     }
 
@@ -637,12 +636,10 @@
       const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
       const nameEl       = document.getElementById("gpLeagueName");
       const yearEl       = document.getElementById("gpLeagueYear");
-      const modeEl       = document.getElementById("gpLeagueScoringMode");
       const totalWeeksEl = document.getElementById("gpLeagueTotalWeeks");
       const archivedEl   = document.getElementById("gpLeagueArchived");
       const name       = String(nameEl?.value || "").trim();
       const year       = Number(yearEl?.value || "");
-      const mode       = String(modeEl?.value || "straight");
       const totalWeeks = String(totalWeeksEl?.value || "").trim();
       if (!name) { alert("Give the league a name first."); return; }
 
@@ -654,12 +651,12 @@
         const mem2 = gpMem();
         if (leagueId) {
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
-            name, seasonYear: year, scoringModeDefault: mode, totalWeeks,
+            name, seasonYear: year, totalWeeks,
             archived: archivedEl ? !!archivedEl.checked : undefined
           });
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
-            name, seasonYear: year, scoringModeDefault: mode, totalWeeks
+            name, seasonYear: year, totalWeeks
           });
           mem2.pickLeagueId = newId;
           mem2.gpShowLeaguePicker = false;
@@ -703,6 +700,26 @@
       } catch (err) {
         btn.disabled = false; btn.textContent = "Set";
         console.error("[GP] adminSetTiebreaker error:", err);
+      }
+      return;
+    }
+
+    // ── admin: set the week's one against-the-spread game ──
+    if (action === "adminSetAtsGame") {
+      const weekId = String(btn.getAttribute("data-weekid") || "");
+      const sel     = document.querySelector("[data-gpatsselect]");
+      const eventId = String(sel?.value || "").trim();
+      if (!weekId) return;
+      btn.disabled = true; btn.textContent = "Setting…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        await (Admin().gpAdminSetAtsGame || (async () => {}))(db2, uid, weekId, eventId);
+        await renderPicks();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = "Set";
+        console.error("[GP] adminSetAtsGame error:", err);
       }
       return;
     }
@@ -890,23 +907,6 @@
     }
     if (t.getAttribute("data-date-end-input") !== null) {
       gpMem().gpAdminDateEnd = String(t.value || "").replace(/-/g, "");
-      return;
-    }
-
-    // Admin scoring mode select
-    if (t.getAttribute("data-gpscoringmode") === "1") {
-      const weekId = String(gpMem().picksSlateId || "").trim();
-      const mode   = String(t.value || "straight").trim();
-      if (!weekId) return;
-      try {
-        await (Data().ensureFirebaseReadySafe || (async () => {}))();
-        const db2 = firebase.firestore();
-        const uid = firebase.auth().currentUser?.uid || "admin";
-        await (Admin().gpAdminSetScoringMode || (async () => {}))(db2, uid, weekId, mode);
-        await renderPicks();
-      } catch (err) {
-        console.error("[GP] adminSetScoringMode error:", err);
-      }
       return;
     }
 

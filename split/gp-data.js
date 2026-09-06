@@ -145,7 +145,7 @@
     return list;
   }
 
-  // ─── slate doc (top-level fields: scoringMode, tiebreakerEventId, ...) ──
+  // ─── slate doc (top-level fields: atsEventId, tiebreakerEventId, ...) ──
   async function gpGetSlateDoc(db, slateId) {
     if (!slateId) return {};
     const snap = await db.collection("pickSlates").doc(String(slateId)).get();
@@ -395,15 +395,17 @@
 
   // ──────────────────────────────────────────────────────────────
   // gpComputeWeeklyLeaderboard(games, allPicks, opts)
-  //   opts.scoringMode      "straight" (default) | "ats"
-  //   opts.tiebreakers      { [playerKey]: { name, guess } } — from gpGetAllTiebreakersForSlate
+  //   opts.atsEventId         eventId of the *one* game this week graded
+  //                           against its spread — every other game is
+  //                           always graded straight-up (a week can mix both)
+  //   opts.tiebreakers        { [playerKey]: { name, guess } } — from gpGetAllTiebreakersForSlate
   //   opts.tiebreakerEventId  eventId of this week's designated tiebreaker game
   // ──────────────────────────────────────────────────────────────
   function gpComputeWeeklyLeaderboard(games, allPicks, opts) {
     const list  = Array.isArray(games)    ? games    : [];
     const picks = (allPicks && typeof allPicks === "object") ? allPicks : {};
-    const scoringMode      = (opts && opts.scoringMode === "ats") ? "ats" : "straight";
-    const tiebreakers      = (opts && opts.tiebreakers && typeof opts.tiebreakers === "object") ? opts.tiebreakers : {};
+    const atsEventId        = String(opts?.atsEventId || "").trim();
+    const tiebreakers       = (opts && opts.tiebreakers && typeof opts.tiebreakers === "object") ? opts.tiebreakers : {};
     const tiebreakerEventId = String(opts?.tiebreakerEventId || "").trim();
 
     const finalGames = list.filter(g => {
@@ -420,10 +422,10 @@
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) continue;
 
-      if (scoringMode === "ats") {
+      if (eventId === atsEventId) {
         const grade = gpGradeAtsForGame(g);
         if (!grade.ok) continue; // no usable line/score — don't score this game
-        gameResults[eventId] = { winningSide: grade.pushed ? "" : grade.coverSide, favSide: "" };
+        gameResults[eventId] = { winningSide: grade.pushed ? "" : grade.coverSide, favSide: "", isAts: true };
         continue;
       }
 
@@ -439,14 +441,14 @@
         // equal scores → winningSide stays "" (tie)
       }
 
-      gameResults[eventId] = { winningSide, favSide: gpComputeStraightFavSide(g) };
+      gameResults[eventId] = { winningSide, favSide: gpComputeStraightFavSide(g), isAts: false };
     }
 
     // — tally scores per player —
     const players = new Map();
 
     for (const [eventId, result] of Object.entries(gameResults)) {
-      const { winningSide, favSide } = result;
+      const { winningSide, favSide, isAts } = result;
       const eventPicks = Array.isArray(picks[eventId]) ? picks[eventId] : [];
 
       for (const p of eventPicks) {
@@ -469,7 +471,7 @@
           row.points += 0.5;
         } else if (side === winningSide) {
           row.wins++;
-          if (scoringMode === "ats") {
+          if (isAts) {
             row.points += 1;
           } else {
             const pickedUnderdog = !!favSide && side !== favSide;
