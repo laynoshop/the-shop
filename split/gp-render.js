@@ -162,7 +162,7 @@
 .gpOddsLine {
   font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45);
   text-align: right; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; max-width: 100%;
+  text-overflow: ellipsis; max-width: 100%; min-width: 0; flex-shrink: 1;
 }
 .gpMatchup {
   display: flex; flex-direction: column;
@@ -596,6 +596,25 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
    ══════════════════════════════════════════════ */
 .gpAdminDateRange { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .gpAdminInlineLabel { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.4); }
+.gpAdminPriorityBadge {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em;
+  color: rgba(255,210,110,0.9);
+  background: rgba(255,180,40,0.12);
+  border: 1px solid rgba(255,180,40,0.25);
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+.gpAdminOddsHint {
+  font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.42);
+  white-space: nowrap;
+}
+.gpRemoveGameBtn {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,60,60,0.12); border: 1px solid rgba(255,80,80,0.3);
+  color: rgba(255,140,140,0.9); font-size: 13px; line-height: 1;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpRemoveGameBtn:active { background: rgba(255,60,60,0.22); }
 
 /* ══════════════════════════════════════════════
    PLAYER PICKS OVERLAY
@@ -885,7 +904,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Single game card ────────────────────────────────────────────
-  function buildGameCard(g, weekId, myMap, pendingGet, scoringMode) {
+  function buildGameCard(g, weekId, myMap, pendingGet, scoringMode, isAdmin) {
     const isAts   = scoringMode === "ats";
     const eventId = String(g?.eventId || g?.id || "");
     if (!eventId) return "";
@@ -952,6 +971,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     ${statusHTML}
     <div class="gpCardHeaderRight">
       ${oddsLine ? `<div class="gpOddsLine">${esc(oddsLine)}</div>` : ""}
+      ${isAdmin ? `<button type="button" class="gpRemoveGameBtn" data-gpaction="adminRemoveGame" data-eid="${esc(eventId)}" data-weekid="${esc(weekId)}" title="Remove from week" aria-label="Remove game from week">✕</button>` : ""}
     </div>
   </div>
   ${kickoffDate || kickoffTime ? `
@@ -1469,8 +1489,48 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const startInputVal = toDateInputVal(dateStart);
     const endInputVal   = toDateInputVal(dateEnd);
 
-    const sorted = [...(Array.isArray(availableEvents) ? availableEvents : [])]
-      .sort((a, b) => kickoffMs(a) - kickoffMs(b));
+    // ── summarize + prioritize available events ──
+    // Surfaces the games most worth picking first: ranked-vs-ranked
+    // matchups, then any game with a ranked team, then close spreads
+    // (Vegas thinks it's a toss-up), then everything else chronologically.
+    const summarizeFn = window.GP_Admin?.gpAdminSummarizeEvent;
+    function summarize(ev) {
+      if (typeof summarizeFn === "function") return summarizeFn(ev);
+      // Fallback if gp-admin.js hasn't loaded for some reason
+      const comp  = ev?.competitions?.[0] || {};
+      const comps = Array.isArray(comp?.competitors) ? comp.competitors : [];
+      const home  = comps.find(c => c?.homeAway === "home") || comps[1] || {};
+      const away  = comps.find(c => c?.homeAway === "away") || comps[0] || {};
+      return {
+        id: String(ev?.id || ""),
+        homeTeam: { name: String(home?.team?.displayName || home?.team?.name || "Home"), rank: null },
+        awayTeam: { name: String(away?.team?.displayName || away?.team?.name || "Away"), rank: null },
+        kickoffMs: kickoffMs(ev), spreadValue: null, spreadFavoredSide: "", oddsDetails: ""
+      };
+    }
+    function priorityFor(summary) {
+      const awayRank = Number(summary?.awayTeam?.rank);
+      const homeRank = Number(summary?.homeTeam?.rank);
+      const awayRanked = Number.isFinite(awayRank) && awayRank > 0;
+      const homeRanked = Number.isFinite(homeRank) && homeRank > 0;
+      const spreadVal  = Number(summary?.spreadValue);
+      const isTight    = Number.isFinite(spreadVal) && spreadVal <= 3;
+      if (awayRanked && homeRanked) return { tier: 0, badge: "🏆 Ranked matchup", sortKey: awayRank + homeRank };
+      if (awayRanked || homeRanked) return { tier: 1, badge: "🏅 Ranked team", sortKey: awayRanked ? awayRank : homeRank };
+      if (isTight)                  return { tier: 2, badge: "🎯 Toss-up", sortKey: spreadVal };
+      return { tier: 3, badge: "", sortKey: 0 };
+    }
+
+    const summarized = [...(Array.isArray(availableEvents) ? availableEvents : [])]
+      .map(ev => ({ ev, summary: summarize(ev) }))
+      .map(x => ({ ...x, priority: priorityFor(x.summary) }))
+      .sort((a, b) => {
+        if (a.priority.tier !== b.priority.tier) return a.priority.tier - b.priority.tier;
+        if (a.priority.tier === 3) return a.summary.kickoffMs - b.summary.kickoffMs;
+        return a.priority.sortKey - b.priority.sortKey;
+      });
+
+    const sorted = summarized.map(x => x.ev);
 
     // ── scoring mode select ──
     const mode = scoringMode === "ats" ? "ats" : "straight";
@@ -1507,22 +1567,25 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 </div>`;
     }
 
-    const gameRows = sorted.map(ev => {
-      const id   = String(ev?.id || "");
+    const gameRows = summarized.map(({ ev, summary, priority }) => {
+      const id = String(summary?.id || ev?.id || "");
       if (!id) return "";
-      const comp  = ev?.competitions?.[0];
-      const comps = Array.isArray(comp?.competitors) ? comp.competitors : [];
-      const home  = comps.find(c => c?.homeAway === "home") || comps[1] || {};
-      const away  = comps.find(c => c?.homeAway === "away") || comps[0] || {};
-      const hn    = String(home?.team?.displayName || home?.team?.name || "Home").trim();
-      const an    = String(away?.team?.displayName || away?.team?.name || "Away").trim();
-      const ms    = kickoffMs(ev);
-      const started = ms > 0 && ms < Date.now();
+      const an = safeTeam(summary.awayTeam);
+      const hn = safeTeam(summary.homeTeam);
+      const ms = summary.kickoffMs;
+      const started  = ms > 0 && ms < Date.now();
+      const oddsLine = summary.oddsDetails ? `Fav: ${summary.oddsDetails}` : "";
       return `
 <div class="gpAdminRow">
   <label>
     <input type="checkbox" data-gpgamesel value="${esc(id)}" />
-    <span style="flex:1;min-width:0">${esc(an)} <span style="color:rgba(255,255,255,0.38)">@</span> ${esc(hn)}</span>
+    <span style="flex:1;min-width:0">
+      <span style="display:block">${esc(an)} <span style="color:rgba(255,255,255,0.38)">@</span> ${esc(hn)}</span>
+      ${(priority.badge || oddsLine) ? `<span style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+        ${priority.badge ? `<span class="gpAdminPriorityBadge">${esc(priority.badge)}</span>` : ""}
+        ${oddsLine ? `<span class="gpAdminOddsHint">${esc(oddsLine)}</span>` : ""}
+      </span>` : ""}
+    </span>
     <span class="gpAdminTime">${ms ? esc(fmtTime(ms)) : ""}${started ? " ✓" : ""}</span>
   </label>
 </div>`;
@@ -1590,7 +1653,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const mode       = scoringMode === "ats" ? "ats" : "straight";
 
     const sorted    = [...list].sort((a, b) => startMs(a) - startMs(b));
-    const gameCards = sorted.map(g => buildGameCard(g, weekId, myMap, pendingGet, mode)).filter(Boolean);
+    const gameCards = sorted.map(g => buildGameCard(g, weekId, myMap, pendingGet, mode, isAdmin)).filter(Boolean);
 
     const GP_Data = window.GP_Data || {};
     let leaderboardHTML = "";

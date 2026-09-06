@@ -93,6 +93,29 @@
     return Number.isFinite(t) ? t : 0;
   }
 
+  // --------------- summarize a raw ESPN scoreboard event ---------------
+  // Single source of truth for "what does this event look like" — used both
+  // by the admin picker (before a game is added) and by gpAdminAddSelectedGamesToWeek
+  // (when it's actually committed), so the rank/spread shown while picking
+  // always matches what gets stored.
+  function gpAdminSummarizeEvent(ev) {
+    const comp        = ev?.competitions?.[0] || {};
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const homeC       = competitors.find(c => c?.homeAway === "home") || competitors[1] || {};
+    const awayC       = competitors.find(c => c?.homeAway === "away") || competitors[0] || {};
+    const homeTeam    = buildTeam(homeC);
+    const awayTeam    = buildTeam(awayC);
+    const odds        = buildOdds(comp, homeTeam, awayTeam);
+    return {
+      id:                String(ev?.id || ""),
+      homeTeam, awayTeam,
+      kickoffMs:         kickoffMsFromEvent(ev),
+      spreadValue:       odds.spreadValue,
+      spreadFavoredSide: odds.spreadFavoredSide,
+      oddsDetails:       odds.details
+    };
+  }
+
   // --------------- create new week ---------------
   async function gpAdminCreateNewWeek(db, uid) {
     const y         = currentYear();
@@ -253,6 +276,31 @@
     return true;
   }
 
+  // --------------- remove a committed game from a week ---------------
+  async function gpAdminRemoveGameFromWeek(db, uid, weekId, eventId) {
+    const slateRef = db.collection("pickSlates").doc(String(weekId));
+    const gameRef  = slateRef.collection("games").doc(String(eventId));
+
+    const slateSnap = await slateRef.get();
+    const slateData = slateSnap.exists ? (slateSnap.data() || {}) : {};
+
+    const batch = db.batch();
+    batch.delete(gameRef);
+    // If this was the designated tiebreaker game, clear that too —
+    // otherwise the leaderboard would keep pointing at a game that no
+    // longer exists.
+    if (String(slateData.tiebreakerEventId || "") === String(eventId)) {
+      batch.set(slateRef, {
+        tiebreakerEventId: firebase.firestore.FieldValue.delete(),
+        tiebreakerLockAt:  firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: uid
+      }, { merge: true });
+    }
+    await batch.commit();
+    return true;
+  }
+
   // --------------- publish week ---------------
   async function gpAdminPublishWeek(db, uid, weekId) {
     const slateRef  = db.collection("pickSlates").doc(String(weekId));
@@ -286,9 +334,11 @@
     gpAdminCreateNewWeek,
     gpAdminSetActiveWeek,
     gpAdminAddSelectedGamesToWeek,
+    gpAdminRemoveGameFromWeek,
     gpAdminPublishWeek,
     gpAdminSetScoringMode,
-    gpAdminSetTiebreaker
+    gpAdminSetTiebreaker,
+    gpAdminSummarizeEvent
   };
 
 })();
