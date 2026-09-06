@@ -593,6 +593,33 @@
       return;
     }
 
+    // ── admin: remove a committed game from the week ──
+    if (action === "adminRemoveGame") {
+      const weekId  = String(btn.getAttribute("data-weekid") || "");
+      const eventId = String(btn.getAttribute("data-eid")    || "");
+      if (!weekId || !eventId) return;
+
+      const picksForGame = window.__gpCurrentAllPicks?.[eventId];
+      const pickCount = Array.isArray(picksForGame) ? picksForGame.length : 0;
+      const warn = pickCount
+        ? ` ${pickCount} player${pickCount !== 1 ? "s" : ""} already picked this game — their picks won't be deleted, but the game (and their picks for it) will drop out of the standings.`
+        : "";
+      if (!confirm(`Remove this game from the week?${warn}`)) return;
+
+      btn.disabled = true;
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        await (Admin().gpAdminRemoveGameFromWeek || (async () => {}))(db2, uid, weekId, eventId);
+        await renderPicks();
+      } catch (err) {
+        btn.disabled = false;
+        console.error("[GP] adminRemoveGame error:", err);
+      }
+      return;
+    }
+
     // ── admin: add selected games ──
     if (action === "adminAddGames") {
       const weekId = String(btn.getAttribute("data-weekid") || "");
