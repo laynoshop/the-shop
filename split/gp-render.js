@@ -101,9 +101,16 @@
 }
 .gpAdminRow label:active { background: rgba(255,255,255,0.08); }
 .gpAdminTime {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  white-space: nowrap; margin-left: auto; flex-shrink: 0;
+}
+.gpAdminTimeDate {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em;
+  color: rgba(255,255,255,0.32); text-transform: uppercase;
+}
+.gpAdminTimeClock {
   font-size: 12px; font-weight: 600;
-  color: rgba(255,255,255,0.42); white-space: nowrap;
-  margin-left: auto; flex-shrink: 0;
+  color: rgba(255,255,255,0.42);
 }
 .gpAdminStatus {
   font-size: 12px; font-weight: 700; color: rgba(255,220,100,0.7);
@@ -940,6 +947,14 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const weekday  = d.toLocaleDateString(undefined, { weekday: "long" });
     const monthDay = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     return `${weekday} ${monthDay}`;
+  }
+  // Compact "Sat 9/6" form — used where space is tight (admin picker list).
+  function fmtShortDate(ms) {
+    if (!ms) return "";
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return "";
+    const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
+    return `${weekday} ${d.getMonth() + 1}/${d.getDate()}`;
   }
   function startMs(g) {
     return g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
@@ -1790,7 +1805,10 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         ${oddsLine ? `<span class="gpAdminOddsHint">${esc(oddsLine)}</span>` : ""}
       </span>` : ""}
     </span>
-    <span class="gpAdminTime">${ms ? esc(fmtTime(ms)) : ""}${started ? " ✓" : ""}</span>
+    <span class="gpAdminTime">
+      ${ms ? `<span class="gpAdminTimeDate">${esc(fmtShortDate(ms))}</span>` : ""}
+      <span class="gpAdminTimeClock">${ms ? esc(fmtTime(ms)) : ""}${started ? " ✓" : ""}</span>
+    </span>
   </label>
 </div>`;
     }).join("");
