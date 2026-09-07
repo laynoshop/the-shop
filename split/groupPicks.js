@@ -281,6 +281,14 @@
   // ───────────────────────────────────────────
   function postRender() {
     syncSaveBtnState();
+    // Never show Michigan's real name on the Picks page — admin picker,
+    // committed game cards, leaderboard, everywhere.
+    try {
+      const el = document.getElementById("content");
+      if (el && typeof window.replaceMichiganText === "function") {
+        window.replaceMichiganText(el, "The Team Up North");
+      }
+    } catch {}
   }
 
   function syncSaveBtnState() {

@@ -617,66 +617,6 @@
     return { rows, weeksCount: weeks.length };
   }
 
-  // ─── everyone's picks lazy-load toggle listener ───────────────────
-  function esc(s) {
-    if (typeof window.escapeHtml === "function") return window.escapeHtml(s);
-    return String(s ?? "")
-      .replace(/&/g,  "&amp;").replace(/</g, "&lt;")
-      .replace(/>/g,  "&gt;")
-      .replace(/"/g,  "&quot;")
-      .replace(/'/g,  "&#39;");
-  }
-
-  function gpBuildEveryoneLinesForEvent({ everyoneArr, awayName, homeName }) {
-    const arr = Array.isArray(everyoneArr) ? everyoneArr : [];
-    if (!arr.length) return `<div class="muted">No picks yet.</div>`;
-    return arr.map(p => {
-      const nm   = String(p?.name || "Someone");
-      const side = String(p?.side || "");
-      const team = side === "away" ? (awayName || "—") : side === "home" ? (homeName || "—") : "—";
-      return `<div class="gpPickLine"><b>${esc(nm)}:</b> ${esc(team)}</div>`;
-    }).join("");
-  }
-
-  if (!window.__GP_EVERYONE_TOGGLE_BOUND) {
-    window.__GP_EVERYONE_TOGGLE_BOUND = true;
-    document.addEventListener("toggle", (e) => {
-      const details = e.target;
-      if (!details || details.tagName !== "DETAILS") return;
-      if (details.getAttribute("data-gpeveryone") !== "1") return;
-      if (!details.open) return;
-      (async () => {
-        try {
-          const weekId  = String(details.getAttribute("data-weekid") || "").trim();
-          const eventId = String(details.getAttribute("data-eid")    || "").trim();
-          if (!weekId || !eventId) return;
-          const bodyId = `gpEveryone_${weekId}_${eventId}`;
-          const bodyEl = document.getElementById(bodyId);
-          if (!bodyEl) return;
-          if (bodyEl.getAttribute("data-loaded") === "1") return;
-          bodyEl.innerHTML = `<div class="muted">Loading&#x2026;</div>`;
-          await ensureFirebaseReadySafe();
-          const db  = firebase.firestore();
-          const all = await gpEnsureAllPicksForWeek(db, weekId);
-          const everyoneArr = Array.isArray(all?.[eventId]) ? all[eventId] : [];
-          const awayName = String(details.getAttribute("data-away") || "Away");
-          const homeName = String(details.getAttribute("data-home") || "Home");
-          bodyEl.innerHTML = gpBuildEveryoneLinesForEvent({ everyoneArr, awayName, homeName });
-          bodyEl.setAttribute("data-loaded", "1");
-        } catch (err) {
-          console.error("Everyone's Picks lazy-load error:", err);
-          try {
-            const det2    = e.target;
-            const weekId  = String(det2?.getAttribute("data-weekid") || "").trim();
-            const eventId = String(det2?.getAttribute("data-eid")    || "").trim();
-            const bodyEl  = document.getElementById(`gpEveryone_${weekId}_${eventId}`);
-            if (bodyEl) bodyEl.innerHTML = `<div class="muted">Couldn't load picks.</div>`;
-          } catch {}
-        }
-      })();
-    }, true);
-  }
-
   // ─── expose on window ──────────────────────────────────────────────────
   window.GP_Data = {
     ensureFirebaseReadySafe,
