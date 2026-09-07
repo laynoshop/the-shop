@@ -307,12 +307,20 @@
   // that timer, then gets swapped in once both are done, so the blip is
   // never on screen for less than 5s no matter how fast the fetch is.
   //
+  // renderPicksInto can hang (a stuck Firestore/auth/ESPN call somewhere
+  // downstream never settling) rather than throw, which a plain
+  // try/catch can't protect against — a hang there used to strand the
+  // user on the blip forever, with no way out but switching tabs. A hard
+  // timeout races against it so the blip always resolves to *something*
+  // — real content, or a retry screen with a working refresh button.
+  //
   // DOM order written:
   //   1. Header  (gpPageHeader — sticky)
   //   2. gpContainer
   //        a. League picker OR league settings form OR week content
   // ───────────────────────────────────────────
-  const GP_LOADING_BLIP_MS = 5000;
+  const GP_LOADING_BLIP_MS   = 5000;
+  const GP_RENDER_TIMEOUT_MS = 15000;
   async function renderPicks(showLoading) {
     const contentEl = document.getElementById("content");
     if (!contentEl) return;
@@ -324,12 +332,34 @@
 
     try { contentEl.innerHTML = (Render().gpBuildLoadingBlipHTML || (() => ""))(); } catch {}
     const scratch = document.createElement("div");
-    await Promise.all([
-      renderPicksInto(scratch),
-      new Promise(resolve => setTimeout(resolve, GP_LOADING_BLIP_MS)),
-    ]);
+    const started = Date.now();
+
+    const renderTask = renderPicksInto(scratch).catch((err) => {
+      console.error("[GP] renderPicksInto failed:", err);
+      scratch.innerHTML = gpBuildRetryScreenHTML("Something went wrong loading the picks page.");
+    });
+    let timedOut = false;
+    const timeoutTask = new Promise((resolve) => setTimeout(resolve, GP_RENDER_TIMEOUT_MS))
+      .then(() => { timedOut = true; });
+
+    await Promise.race([renderTask, timeoutTask]);
+    if (timedOut && !scratch.innerHTML) {
+      scratch.innerHTML = gpBuildRetryScreenHTML("This is taking longer than expected.");
+    }
+
+    const remaining = GP_LOADING_BLIP_MS - (Date.now() - started);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+
     contentEl.innerHTML = scratch.innerHTML;
     postRender();
+  }
+
+  function gpBuildRetryScreenHTML(message) {
+    const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
+      isAdmin: getRole() === "admin", showLeaguesBtn: false
+    });
+    const esc = typeof window.escapeHtml === "function" ? window.escapeHtml : String;
+    return `${headerHTML}<div class="gpContainer"><div class="gpNotice">${esc(message)} Tap &#8635; above to try again.</div></div>`;
   }
 
   async function renderPicksInto(el) {
