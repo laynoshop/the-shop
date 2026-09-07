@@ -446,86 +446,39 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   white-space: nowrap;
 }
 
-/* Standings list */
-.gpLeaderList {
-  display: flex; flex-direction: column;
-  padding: 4px 10px 6px;
-  gap: 5px;
+/* Standings table — one compact table, no horizontal scroll */
+.gpStandingsTableWrap { padding: 4px 10px 6px; }
+.gpStandingsTable {
+  width: 100%; table-layout: fixed; border-collapse: collapse;
 }
-
-.gpLeaderRow {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.035);
-  border: 1px solid rgba(255,255,255,0.06);
-  transition: background 150ms ease;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+.gpStandingsTable th {
+  font-size: 9.5px; font-weight: 900; letter-spacing: 0.03em; text-transform: uppercase;
+  color: rgba(255,255,255,0.35); text-align: center;
+  padding: 0 2px 6px; white-space: nowrap;
 }
-.gpLeaderRow:active { background: rgba(255,255,255,0.07); }
-
-/* Rank number circle */
-.gpLeaderRankBadge {
-  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 900;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.10);
-  color: rgba(255,255,255,0.6);
+.gpStandingsTable th.gpStName, .gpStandingsTable td.gpStName { text-align: left; }
+.gpStandingsTable td {
+  font-size: 12.5px; font-weight: 800; color: rgba(255,255,255,0.85);
+  text-align: center; padding: 7px 2px;
+  border-top: 1px solid rgba(255,255,255,0.06);
   font-variant-numeric: tabular-nums;
-}
-
-/* Avatar initials circle in list */
-.gpLeaderAvatar {
-  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 900; text-transform: uppercase;
-  border: 1px solid rgba(255,255,255,0.10);
-}
-
-.gpLeaderInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.gpLeaderName {
-  font-size: 15px; font-weight: 800; color: #eee;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  line-height: 1.2;
-}
-
-/* Record + pick breakdown */
-.gpLeaderRecord {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-}
-.gpRecordBadge {
-  font-size: 12px; font-weight: 900; letter-spacing: 0.04em;
-  font-variant-numeric: tabular-nums;
-  color: rgba(255,255,255,0.7);
-}
-.gpRecordBreakdown {
-  font-size: 11px; font-weight: 700;
-  color: rgba(255,255,255,0.32);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.gpRecordBreakdown .gpDogCount  { color: rgba(120,190,255,0.7); }
-.gpRecordBreakdown .gpFavCount  { color: rgba(255,160,160,0.7); }
+.gpStandingsRow { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.gpStandingsRow:active td { background: rgba(255,255,255,0.05); }
+.gpStandingsRow.gpStRowGold   td { background: rgba(255,200,40,0.05); }
+.gpStandingsRow.gpStRowSilver td { background: rgba(190,190,210,0.045); }
+.gpStandingsRow.gpStRowBronze td { background: rgba(200,120,60,0.045); }
+.gpStRank { color: rgba(255,255,255,0.4); font-weight: 900; }
+.gpStName { color: #fff; }
+.gpStPts  { color: rgba(255,218,80,0.9); font-weight: 900; }
+.gpStDogs { color: rgba(120,190,255,0.85); }
 
-/* Points pill */
-.gpLeaderPtsPill {
-  display: flex; align-items: baseline; gap: 2px;
-  padding: 5px 11px; border-radius: 999px;
-  white-space: nowrap; flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.05);
-  color: rgba(255,255,255,0.6);
-}
-.gpLeaderPtsNum  { font-size: 16px; font-weight: 900; line-height: 1; }
-.gpLeaderPtsUnit { font-size: 11px; font-weight: 800; opacity: 0.7; margin-left: 1px; }
-
-/* Scoring legend — bottom of card */
+/* Legends — bottom of card */
 .gpLeaderScoringFooter {
   display: flex; align-items: center; justify-content: center; gap: 8px 10px;
   flex-wrap: wrap;
-  padding: 10px 16px 14px;
+  padding: 10px 16px 10px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .gpLeaderScoringFooter span {
@@ -536,6 +489,12 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 999px; padding: 3px 10px;
 }
+.gpColumnLegend {
+  padding: 0 16px 14px;
+  font-size: 10.5px; font-weight: 600; line-height: 1.6;
+  color: rgba(255,255,255,0.3); text-align: center;
+}
+.gpColumnLegend b { color: rgba(255,255,255,0.5); font-weight: 900; }
 
 /* Draft badge */
 .gpDraftBadge {
@@ -1244,15 +1203,62 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     return String(name || "?").slice(0, 2).toUpperCase();
   }
 
-  // ─── Pick breakdown helper ────────────────────────────────────────
-  function pickBreakdown(u) {
-    const dogs = Number(u?.dogWins ?? 0);
-    const favs = Number(u?.favWins ?? 0);
-    if (!dogs && !favs) return "";
-    const parts = [];
-    if (dogs) parts.push(`<span class="gpDogCount">🐶 ${dogs} dog${dogs !== 1 ? "s" : ""}</span>`);
-    if (favs) parts.push(`<span class="gpFavCount">❤️ ${favs} fav${favs !== 1 ? "s" : ""}</span>`);
-    return parts.join(" &middot; ");
+  // ─── Standings table (shared by weekly + season leaderboards) ─────
+  // Columns: rank · player · total points · Outright Winner record (W-L-T)
+  // · correct underdog picks · Against-the-Spread record (W-L-P). One
+  // fixed-layout table so it never needs horizontal scrolling on mobile.
+  function gpBuildStandingsTableHTML(list) {
+    const rows = (Array.isArray(list) ? list : []).map((u, i) => {
+      const rank = i + 1;
+      const nm   = String(u?.name || "Someone");
+      const pts  = Number(u?.points ?? 0);
+
+      const owW = Number(u?.owWins ?? 0), owL = Number(u?.owLosses ?? 0), owT = Number(u?.owTies ?? 0);
+      const owRecord = owT > 0 ? `${owW}-${owL}-${owT}` : `${owW}-${owL}`;
+
+      const dogs = Number(u?.dogWins ?? 0);
+
+      const atsW = Number(u?.atsWins ?? 0), atsL = Number(u?.atsLosses ?? 0), atsP = Number(u?.atsPushes ?? 0);
+      const atsRecord = (atsW + atsL + atsP) > 0
+        ? (atsP > 0 ? `${atsW}-${atsL}-${atsP}` : `${atsW}-${atsL}`)
+        : "–";
+
+      const rowCls = rank === 1 ? " gpStRowGold" : rank === 2 ? " gpStRowSilver" : rank === 3 ? " gpStRowBronze" : "";
+
+      return `
+<tr class="gpStandingsRow${rowCls}" data-gpplayername="${esc(nm)}">
+  <td class="gpStRank">${rank}</td>
+  <td class="gpStName">${esc(nm)}</td>
+  <td class="gpStPts">${esc(String(pts))}</td>
+  <td>${esc(owRecord)}</td>
+  <td class="gpStDogs">${dogs}</td>
+  <td>${esc(atsRecord)}</td>
+</tr>`;
+    }).join("");
+
+    return `
+<div class="gpStandingsTableWrap">
+  <table class="gpStandingsTable">
+    <thead>
+      <tr>
+        <th class="gpStRank">#</th>
+        <th class="gpStName">Player</th>
+        <th>Pts</th>
+        <th>OW</th>
+        <th>🐶</th>
+        <th>ATS</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+</div>`;
+  }
+
+  function gpBuildColumnLegendHTML() {
+    return `
+<div class="gpColumnLegend">
+  <b>Pts</b> total points &middot; <b>OW</b> Outright Winner record (W-L-T) &middot; 🐶 correct underdog picks &middot; <b>ATS</b> Against-the-Spread record (W-L-P)
+</div>`;
   }
 
   // ─── Player Picks Overlay ─────────────────────────────────────────
@@ -1260,10 +1266,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   // `playerName`  — display name string
   // `games`       — array of game objects (same shape as used by buildGameCard)
   // `picksMap`    — { [eventId]: { side: "away"|"home" } }  (the player's picks for this week)
-  function gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap) {
+  function gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap, atsEventIds) {
     const nm = String(playerName || "Someone");
     const { bg, color } = avatarStyle(nm);
     const list = Array.isArray(games) ? [...games].sort((a, b) => startMs(a) - startMs(b)) : [];
+    const atsIdSet = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
 
     const rows = list.map(g => {
       const eventId = String(g?.eventId || g?.id || "");
@@ -1307,24 +1314,36 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const pickedTeam = side === "away" ? away : home;
       const pickedLogo = side === "away" ? awayLogo : homeLogo;
       const oppTeam    = side === "away" ? home     : away;
+      const isAts      = atsIdSet.has(eventId);
 
-      // Determine result from live state
-      const live      = g?.__live || g?.live || null;
-      const state     = String(live?.state || "").toLowerCase();
-      const isFinal   = state === "post";
-      const awayScore = Number(live?.awayScore ?? -1);
-      const homeScore = Number(live?.homeScore ?? -1);
-      let resultCls   = "gpResultPending";
-      let resultIcon  = "·";
-      if (isFinal && awayScore >= 0 && homeScore >= 0) {
-        const isTie = awayScore === homeScore;
-        if (isTie) {
-          resultCls  = "gpResultTie";
-          resultIcon = "🤝";
+      // Determine result — ATS games grade against the stored spread (a
+      // team can lose outright but still cover, and vice versa), straight
+      // games grade by final score. Same helpers gp-data.js's leaderboard
+      // and buildGameCard's per-card coloring use, so this always agrees.
+      const live    = g?.__live || g?.live || null;
+      const state   = String(live?.state || "").toLowerCase();
+      const isFinal = state === "post";
+      let resultCls  = "gpResultPending";
+      let resultIcon = "·";
+      if (isFinal) {
+        const GP_Data = window.GP_Data || {};
+        if (isAts) {
+          const grade = typeof GP_Data.gpGradeAtsForGame === "function" ? GP_Data.gpGradeAtsForGame(g) : { ok: false };
+          if (grade.ok) {
+            if (grade.pushed) { resultCls = "gpResultTie"; resultIcon = "🤝"; }
+            else { const won = side === grade.coverSide; resultCls = won ? "gpResultWin" : "gpResultLoss"; resultIcon = won ? "✓" : "✕"; }
+          }
         } else {
-          const pickedWon = side === "away" ? awayScore > homeScore : homeScore > awayScore;
-          resultCls  = pickedWon ? "gpResultWin"  : "gpResultLoss";
-          resultIcon = pickedWon ? "✓"            : "✕";
+          const winningSide = typeof GP_Data.gpGetGameWinningSide === "function" ? GP_Data.gpGetGameWinningSide(g) : "";
+          if (winningSide) {
+            const won = side === winningSide;
+            resultCls  = won ? "gpResultWin" : "gpResultLoss";
+            resultIcon = won ? "✓" : "✕";
+          } else {
+            const awayScore = Number(live?.awayScore ?? NaN);
+            const homeScore = Number(live?.homeScore ?? NaN);
+            if (Number.isFinite(awayScore) && Number.isFinite(homeScore)) { resultCls = "gpResultTie"; resultIcon = "🤝"; }
+          }
         }
       }
 
@@ -1336,7 +1355,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 <div class="gpOverlayPickRow">
   ${logoEl}
   <div style="flex:1;min-width:0">
-    <div class="gpOverlayPickTeamName">${esc(safeTeam(pickedTeam))}</div>
+    <div class="gpOverlayPickTeamName">${esc(safeTeam(pickedTeam))}${isAts ? spreadChipHTML(g, side) : ""}</div>
     <div class="gpOverlayPickGameLabel">vs ${esc(safeTeam(oppTeam))}</div>
   </div>
   <div class="gpOverlayPickResult ${resultCls}">${resultIcon}</div>
@@ -1365,14 +1384,14 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Show / dismiss overlay (DOM management) ─────────────────────
-  function gpShowPlayerPicksOverlay(playerName, games, picksMap) {
+  function gpShowPlayerPicksOverlay(playerName, games, picksMap, atsEventIds) {
     // Remove any existing overlay first
     const existing = document.getElementById("gpPicksOverlay");
     if (existing) existing.remove();
 
     // Inject into body
     document.body.insertAdjacentHTML("beforeend",
-      gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap)
+      gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap, atsEventIds)
     );
 
     const backdrop = document.getElementById("gpPicksOverlay");
@@ -1416,8 +1435,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     // switching between two mutually-exclusive modes.
     const scoringFooter = `
 <div class="gpLeaderScoringFooter">
-  <span>🐶 Underdog = 2 pts</span>
-  <span>❤️ Favorite = 1 pt</span>
+  <span>🐶 Underdog win = 2 pts</span>
+  <span>❤️ Favorite win = 1 pt</span>
   <span>✅ ATS cover = 1 pt</span>
   <span>🤝 Tie/Push = 0.5 pts</span>
 </div>`;
@@ -1476,43 +1495,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     }).join("");
 
     // ── Full Standings — clicking a row opens the player picks overlay ──
-    const allRows = list.map((u, i) => {
-      const rank   = i + 1;
-      const nm     = String(u?.name || "Someone");
-      const pts    = Number(u?.points ?? 0);
-      const wins   = Number(u?.wins   ?? 0);
-      const losses = Number(u?.losses ?? 0);
-      const ties   = Number(u?.ties   ?? 0);
-      const { bg, color } = avatarStyle(nm);
-
-      // Show W-L-T when ties exist, otherwise W-L
-      const record    = ties > 0 ? `${wins}–${losses}–${ties}` : `${wins}–${losses}`;
-      const breakdown = pickBreakdown(u);
-
-      const topStyle = rank <= 3
-        ? rank === 1 ? " style=\"border-color:rgba(255,210,60,0.18);background:rgba(255,200,40,0.05)\""
-        : rank === 2 ? " style=\"border-color:rgba(190,190,210,0.14)\""
-        : " style=\"border-color:rgba(200,120,60,0.14)\""
-        : "";
-
-      // Encode name safely for data attribute (esc handles quotes)
-      return `
-<div class="gpLeaderRow" data-gpplayername="${esc(nm)}"${topStyle}>
-  <div class="gpLeaderRankBadge">${esc(String(rank))}</div>
-  <div class="gpLeaderAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
-  <div class="gpLeaderInfo">
-    <div class="gpLeaderName">${esc(nm)}</div>
-    <div class="gpLeaderRecord">
-      <span class="gpRecordBadge">${esc(record)}</span>
-      ${breakdown ? `<span class="gpRecordBreakdown">${breakdown}</span>` : ""}
-    </div>
-  </div>
-  <div class="gpLeaderPtsPill">
-    <span class="gpLeaderPtsNum">${esc(String(pts))}</span>
-    <span class="gpLeaderPtsUnit">pts</span>
-  </div>
-</div>`;
-    }).join("");
+    const standingsTableHTML = gpBuildStandingsTableHTML(list);
 
     return `
 <div class="gpLeaderCard">
@@ -1530,8 +1513,9 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     <div class="gpStandingsDividerLabel">Full Standings</div>
     <div class="gpStandingsDividerLine"></div>
   </div>
-  <div class="gpLeaderList">${allRows}</div>
+  ${standingsTableHTML}
   ${scoringFooter}
+  ${gpBuildColumnLegendHTML()}
 </div>`;
   }
 
@@ -1572,42 +1556,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 </div>`;
     }).join("");
 
-    const allRows = list.map((u, i) => {
-      const rank   = i + 1;
-      const nm     = String(u?.name || "Someone");
-      const pts    = Number(u?.points ?? 0);
-      const wins   = Number(u?.wins   ?? 0);
-      const losses = Number(u?.losses ?? 0);
-      const ties   = Number(u?.ties   ?? 0);
-      const weeksPlayed = Number(u?.weeksPlayed ?? 0);
-      const { bg, color } = avatarStyle(nm);
-      const record    = ties > 0 ? `${wins}–${losses}–${ties}` : `${wins}–${losses}`;
-      const breakdown = pickBreakdown(u);
-
-      const topStyle = rank <= 3
-        ? rank === 1 ? " style=\"border-color:rgba(255,210,60,0.18);background:rgba(255,200,40,0.05)\""
-        : rank === 2 ? " style=\"border-color:rgba(190,190,210,0.14)\""
-        : " style=\"border-color:rgba(200,120,60,0.14)\""
-        : "";
-
-      return `
-<div class="gpLeaderRow"${topStyle}>
-  <div class="gpLeaderRankBadge">${esc(String(rank))}</div>
-  <div class="gpLeaderAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
-  <div class="gpLeaderInfo">
-    <div class="gpLeaderName">${esc(nm)}</div>
-    <div class="gpLeaderRecord">
-      <span class="gpRecordBadge">${esc(record)}</span>
-      <span class="gpRecordBreakdown">${weeksPlayed} wk${weeksPlayed !== 1 ? "s" : ""}</span>
-      ${breakdown ? `<span class="gpRecordBreakdown">${breakdown}</span>` : ""}
-    </div>
-  </div>
-  <div class="gpLeaderPtsPill">
-    <span class="gpLeaderPtsNum">${esc(String(pts))}</span>
-    <span class="gpLeaderPtsUnit">pts</span>
-  </div>
-</div>`;
-    }).join("");
+    const standingsTableHTML = gpBuildStandingsTableHTML(list);
 
     return `
 <div class="gpLeaderCard">
@@ -1625,7 +1574,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     <div class="gpStandingsDividerLabel">Full Standings</div>
     <div class="gpStandingsDividerLine"></div>
   </div>
-  <div class="gpLeaderList">${allRows}</div>
+  ${standingsTableHTML}
+  ${gpBuildColumnLegendHTML()}
 </div>`;
   }
 
@@ -2122,19 +2072,20 @@ ${saveRow}`;
   }
 
   // ─── Leaderboard row click → player overlay ──────────────────────
-  // Delegated listener: tapping any .gpLeaderRow fires the overlay.
+  // Delegated listener: tapping any .gpStandingsRow fires the overlay.
   // Requires window.__gpCurrentGames and window.__gpCurrentAllPicks to be
   // kept up-to-date by groupPicks.js (the orchestrator) after each render.
   if (!window.__GP_LEADER_ROW_BOUND) {
     window.__GP_LEADER_ROW_BOUND = true;
     document.addEventListener("click", (e) => {
-      const row = e.target.closest(".gpLeaderRow[data-gpplayername]");
+      const row = e.target.closest(".gpStandingsRow[data-gpplayername]");
       if (!row) return;
       const playerName = String(row.getAttribute("data-gpplayername") || "");
       if (!playerName) return;
 
-      const games    = Array.isArray(window.__gpCurrentGames)    ? window.__gpCurrentGames    : [];
-      const allPicks = window.__gpCurrentAllPicks || {};
+      const games      = Array.isArray(window.__gpCurrentGames)       ? window.__gpCurrentGames       : [];
+      const allPicks   = window.__gpCurrentAllPicks || {};
+      const atsEventIds = Array.isArray(window.__gpCurrentAtsEventIds) ? window.__gpCurrentAtsEventIds : [];
 
       // allPicks shape: { [eventId]: [ { name, side }, ... ] }
       // We need to flip it to { [eventId]: { side } } for this player
@@ -2145,7 +2096,7 @@ ${saveRow}`;
         if (entry?.side) picksMap[eventId] = { side: entry.side };
       }
 
-      gpShowPlayerPicksOverlay(playerName, games, picksMap);
+      gpShowPlayerPicksOverlay(playerName, games, picksMap, atsEventIds);
     });
   }
 
