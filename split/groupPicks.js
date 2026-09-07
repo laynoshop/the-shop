@@ -458,11 +458,13 @@
       if (isEdit) {
         try { league = await (Data().gpGetLeague || (async () => null))(db, mem.gpLeagueEditingId); } catch {}
       }
+      let registeredPlayers = [];
+      try { registeredPlayers = await (Data().gpListRegisteredPlayers || (async () => []))(db); } catch {}
       const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
         leagueName: league?.name || "", isAdmin, showLeaguesBtn: !!gpGetSelectedLeagueId()
       });
       const formHTML = (Render().gpBuildLeagueSettingsHTML || (() => ""))({
-        mode: isEdit ? "edit" : "create", league
+        mode: isEdit ? "edit" : "create", league, registeredPlayers
       });
       el.innerHTML = `${headerHTML}<div class="gpContainer">${formHTML}</div>`;
       postRender();
@@ -768,11 +770,14 @@
       const archivedEl   = document.getElementById("gpLeagueArchived");
       const formatEl     = document.getElementById("gpLeagueFormat");
       const rosterEl     = document.getElementById("gpLeagueH2HRoster");
+      const checkedPlayerNames = Array.from(document.querySelectorAll('[data-gp-h2h-player="1"]:checked'))
+        .map(el => String(el.value || "").trim()).filter(Boolean);
       const name       = String(nameEl?.value || "").trim();
       const year       = Number(yearEl?.value || "");
       const totalWeeks = String(totalWeeksEl?.value || "").trim();
       const format     = String(formatEl?.value || "points").trim();
-      const h2hRoster  = String(rosterEl?.value || "");
+      const extraNames = String(rosterEl?.value || "").split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+      const h2hRoster  = [...checkedPlayerNames, ...extraNames];
       if (!name) { alert("Give the league a name first."); return; }
 
       btn.disabled = true; btn.textContent = "Saving…";
@@ -880,6 +885,12 @@
       }
       const pid = await (ID().gpComputePlayerId || (async () => ""))(nm, cd);
       (ID().gpSetIdentity || (() => {}))({ name: nm, code: cd, remember: rem, playerId: pid });
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        await (Data().gpRegisterPlayer || (async () => {}))(firebase.firestore(), pid, nm);
+      } catch (err) {
+        console.error("[GP] gpRegisterPlayer failed:", err);
+      }
       // Logging in is a fresh entry into the app, same as switching to
       // the tab: show the light blip and land on the league picker
       // rather than jumping straight back into whatever league was

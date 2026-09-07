@@ -103,6 +103,42 @@
     return list;
   }
 
+  // ─── player registry ─────────────────────────────────────────────
+  // A lightweight global record of everyone who has ever completed the
+  // name+code identity screen (see gp-identity.js's playerContinue),
+  // keyed by their computed playerId. Lets admins build an H2H roster
+  // by picking from known players instead of retyping names by hand.
+  // Not an accounts system — anyone can still enter any name+code, this
+  // just remembers the names that have actually been used before.
+  async function gpRegisterPlayer(db, playerId, name) {
+    const pid = String(playerId || "").trim();
+    const nm  = String(name || "").trim().slice(0, 20);
+    if (!pid || !nm) return;
+    try {
+      await db.collection("players").doc(pid).set({
+        name: nm,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (err) {
+      console.error("[GP] gpRegisterPlayer failed:", err);
+    }
+  }
+  async function gpListRegisteredPlayers(db) {
+    try {
+      const snap = await db.collection("players").get();
+      const out = [];
+      snap.forEach(doc => {
+        const nm = String(doc.data()?.name || "").trim();
+        if (nm) out.push({ playerId: doc.id, name: nm });
+      });
+      out.sort((a, b) => a.name.localeCompare(b.name));
+      return out;
+    } catch (err) {
+      console.error("[GP] gpListRegisteredPlayers failed:", err);
+      return [];
+    }
+  }
+
   // ─── is a league "active" right now? ──────────────────────────────
   // Active = at least one published week, AND the season hasn't wrapped
   // up its configured final week yet.
@@ -844,6 +880,8 @@
     gpGetLeague,
     gpListLeagues,
     gpIsLeagueActive,
+    gpRegisterPlayer,
+    gpListRegisteredPlayers,
     gpGetSlateDoc,
     gpGetSlateGames,
     gpGetMyPicksMap,

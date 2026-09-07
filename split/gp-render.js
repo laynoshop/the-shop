@@ -922,6 +922,21 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpLeagueSettingsCheckRow { display: flex; align-items: center; gap: 10px; }
 .gpLeagueSettingsActions { display: flex; gap: 10px; margin-top: 4px; }
 
+/* Head-to-Head roster: registered-player checklist */
+.gpH2HPlayerChecklist {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 220px; overflow-y: auto;
+  border-radius: 12px; background: rgba(0,0,0,0.14);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 4px 6px;
+}
+.gpH2HPlayerCheckRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px; border-radius: 8px;
+  font-size: 14px; font-weight: 700;
+}
+.gpH2HPlayerCheckRow:active { background: rgba(255,255,255,0.05); }
+
 /* ══════════════════════════════════════════════
    PLAYER PICKS OVERLAY
    ══════════════════════════════════════════════ */
@@ -2658,14 +2673,33 @@ ${saveRow}`;
   }
 
   // ─── League settings form (create or edit) ────────────────────────
-  function gpBuildLeagueSettingsHTML({ mode, league }) {
+  function gpBuildLeagueSettingsHTML({ mode, league, registeredPlayers }) {
     const isEdit = mode === "edit" && league;
     const name    = esc(String(league?.name ?? ""));
     const year    = Number(league?.seasonYear) || new Date().getFullYear();
     const totalWeeks = Number(league?.totalWeeks) || "";
     const archived = !!league?.archived;
     const isH2H = league?.format === "h2h";
-    const rosterText = esc(Array.isArray(league?.h2hRoster) ? league.h2hRoster.join("\n") : "");
+
+    // Registered players (anyone who's ever completed the name+code screen)
+    // get a checkbox each; the roster's chosen names not found in that
+    // list (someone who hasn't logged in yet) fall through to the
+    // free-text "add anyone else" box below instead.
+    const registered = Array.isArray(registeredPlayers) ? registeredPlayers : [];
+    const rosterNames = Array.isArray(league?.h2hRoster) ? league.h2hRoster : [];
+    const registeredNameSet = new Set(registered.map(p => String(p.name).toLowerCase()));
+    const selectedSet = new Set(rosterNames.map(n => String(n).toLowerCase()));
+    const extraNames = rosterNames.filter(n => !registeredNameSet.has(String(n).toLowerCase()));
+    const rosterText = esc(extraNames.join("\n"));
+
+    const playerChecklistHTML = registered.length ? `
+    <div class="gpH2HPlayerChecklist">
+      ${registered.map(p => `
+      <label class="gpH2HPlayerCheckRow">
+        <input type="checkbox" data-gp-h2h-player="1" value="${esc(p.name)}" ${selectedSet.has(String(p.name).toLowerCase()) ? "checked" : ""}/>
+        <span>${esc(p.name)}</span>
+      </label>`).join("")}
+    </div>` : `<div class="muted" style="font-size:12px">No registered players yet — they'll show up here once someone logs in on the entry page.</div>`;
 
     return `
 <div class="gpLeagueSettingsForm" data-leagueid="${esc(league?.id || "")}">
@@ -2692,9 +2726,11 @@ ${saveRow}`;
   </div>
   <div class="gpLeagueSettingsRow" id="gpLeagueH2HRosterRow" ${isH2H ? "" : 'style="display:none"'}>
     <div class="gpLeagueSettingsLabel">Head-to-Head Roster</div>
-    <textarea id="gpLeagueH2HRoster" class="gpLeagueSettingsInput" rows="6"
-      placeholder="One player name per line (or comma-separated)&#10;e.g.&#10;Alice&#10;Bob&#10;Charlie">${rosterText}</textarea>
-    <div class="muted" style="font-size:12px;margin-top:4px">Names should match how players are entered on the entry page. The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
+    ${playerChecklistHTML}
+    <div class="muted" style="font-size:12px;margin-top:10px">Add anyone not listed above:</div>
+    <textarea id="gpLeagueH2HRoster" class="gpLeagueSettingsInput" rows="3"
+      placeholder="One player name per line (or comma-separated)&#10;e.g. Alice, Bob">${rosterText}</textarea>
+    <div class="muted" style="font-size:12px;margin-top:4px">The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
   </div>
   ${isEdit ? `
   <label class="gpLeagueSettingsCheckRow">
