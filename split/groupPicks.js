@@ -300,13 +300,21 @@
   // ───────────────────────────────────────────
   // Main renderer
   //
-  // `showLoading` (fresh tab load / explicit refresh only — never on an
-  // internal reload after saving picks, changing weeks, etc.) shows the
-  // fun loading blip for a hardwired minimum of 9 seconds — 5s of the
-  // original gif/joke, then 4s of a second "one more second" phase — the
-  // real content renders into a detached scratch element in parallel
-  // with that, then gets swapped in once both are done, so the blip is
-  // never on screen for less than 9s no matter how fast the fetch is.
+  // `loadingMode` picks which blip plays, matched to what's actually
+  // about to render rather than to how the render was triggered:
+  //   "light" — landing on the (cheap) league picker: fresh tab entry,
+  //             the Leagues button, or a refresh while already there.
+  //             Plays the 5s gif/joke blip.
+  //   "heavy" — landing inside an actual league's week/season view,
+  //             which fetches real games/picks data: selecting a
+  //             league, or a refresh while already inside one. Plays
+  //             the 4s "one more second" blip.
+  //   falsy   — internal reload (save, week nav, admin actions) — no
+  //             blip, renders straight through.
+  // Either mode renders the real content into a detached scratch
+  // element in parallel with its timer, then swaps it in once both are
+  // done, so the blip is never on screen for less than its full time no
+  // matter how fast the fetch is.
   //
   // renderPicksInto can hang (a stuck Firestore/auth/ESPN call somewhere
   // downstream never settling) rather than throw, which a plain
@@ -320,31 +328,30 @@
   //   2. gpContainer
   //        a. League picker OR league settings form OR week content
   // ───────────────────────────────────────────
-  const GP_LOADING_PHASE1_MS = 5000;
-  const GP_LOADING_PHASE2_MS = 4000;
-  const GP_LOADING_BLIP_MS   = GP_LOADING_PHASE1_MS + GP_LOADING_PHASE2_MS;
+  const GP_LOADING_PHASE1_MS = 5000; // "light" — league picker
+  const GP_LOADING_PHASE2_MS = 4000; // "heavy" — inside a league
   const GP_RENDER_TIMEOUT_MS = 15000;
-  async function renderPicks(showLoading) {
+
+  async function renderPicks(loadingMode, forceLeaguePicker) {
     const contentEl = document.getElementById("content");
     if (!contentEl) return;
+    const opts = { forceLeaguePicker: !!forceLeaguePicker };
 
-    if (!showLoading) {
-      await renderPicksInto(contentEl);
+    if (!loadingMode) {
+      await renderPicksInto(contentEl, opts);
+      gpScheduleInactivityCheck();
       return;
     }
 
-    try { contentEl.innerHTML = (Render().gpBuildLoadingBlipHTML || (() => ""))(); } catch {}
-    setTimeout(() => {
-      try {
-        const inner = document.getElementById("gpLoadingBlipInner");
-        if (inner) inner.innerHTML = (Render().gpBuildLoadingBlipPhase2HTML || (() => ""))();
-      } catch {}
-    }, GP_LOADING_PHASE1_MS);
+    const blipMs = loadingMode === "heavy" ? GP_LOADING_PHASE2_MS : GP_LOADING_PHASE1_MS;
+    try {
+      contentEl.innerHTML = (Render().gpBuildLoadingBlipHTML || (() => ""))(loadingMode === "heavy" ? 2 : 1);
+    } catch {}
 
     const scratch = document.createElement("div");
     const started = Date.now();
 
-    const renderTask = renderPicksInto(scratch).catch((err) => {
+    const renderTask = renderPicksInto(scratch, opts).catch((err) => {
       console.error("[GP] renderPicksInto failed:", err);
       scratch.innerHTML = gpBuildRetryScreenHTML("Something went wrong loading the picks page.");
     });
@@ -357,11 +364,38 @@
       scratch.innerHTML = gpBuildRetryScreenHTML("This is taking longer than expected.");
     }
 
-    const remaining = GP_LOADING_BLIP_MS - (Date.now() - started);
+    const remaining = blipMs - (Date.now() - started);
     if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
 
     contentEl.innerHTML = scratch.innerHTML;
     postRender();
+    gpScheduleInactivityCheck();
+  }
+
+  // ── Inactivity: bounce back to the league picker after 15 idle
+  //    minutes inside an actual league, so a forgotten-open tab doesn't
+  //    just sit on stale data forever ──
+  const GP_INACTIVITY_MS = 15 * 60 * 1000;
+  let gpInactivityTimer = null;
+
+  function gpScheduleInactivityCheck() {
+    if (gpInactivityTimer) { clearTimeout(gpInactivityTimer); gpInactivityTimer = null; }
+    if (window.__activeTab !== "picks") return;
+    gpInactivityTimer = setTimeout(async () => {
+      gpInactivityTimer = null;
+      if (window.__activeTab !== "picks") return;
+      const mem = gpMem();
+      if (!mem.pickLeagueId || mem.gpShowLeaguePicker) return; // already on the picker
+      mem.gpShowLeaguePicker = true;
+      await renderPicks("light");
+    }, GP_INACTIVITY_MS);
+  }
+
+  if (!window.__GP_INACTIVITY_BOUND) {
+    window.__GP_INACTIVITY_BOUND = true;
+    document.addEventListener("click", () => {
+      if (window.__activeTab === "picks") gpScheduleInactivityCheck();
+    }, true);
   }
 
   function gpBuildRetryScreenHTML(message) {
@@ -372,7 +406,8 @@
     return `${headerHTML}<div class="gpContainer"><div class="gpNotice">${esc(message)} Tap &#8635; above to try again.</div></div>`;
   }
 
-  async function renderPicksInto(el) {
+  async function renderPicksInto(el, opts) {
+    const forceLeaguePicker = !!opts?.forceLeaguePicker;
 
     const isAdmin = getRole() === "admin";
     const mem     = gpMem();
@@ -430,10 +465,10 @@
 
     // ── league resolution ──
     const pickLeagueId = mem.pickLeagueId || gpGetSelectedLeagueId();
-    const showPicker = !pickLeagueId || mem.gpShowLeaguePicker;
+    const showPicker = forceLeaguePicker || !pickLeagueId || mem.gpShowLeaguePicker;
 
     if (showPicker) {
-      const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false });
+      const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false, showSaveBtn: false });
       let leagues = [];
       try { leagues = await (Data().gpListLeagues || (async () => []))(db); } catch {}
       const isActiveFn = Data().gpIsLeagueActive || (async () => false);
@@ -458,7 +493,7 @@
       // loading-blip scratch element) this call was already using.
       mem.pickLeagueId = "";
       gpSetSelectedLeagueId("");
-      await renderPicksInto(el);
+      await renderPicksInto(el, opts);
       return;
     }
 
@@ -667,7 +702,7 @@
     // ── leagues: open the picker ──
     if (action === "showLeaguePicker") {
       gpMem().gpShowLeaguePicker = true;
-      await renderPicks();
+      await renderPicks("light");
       return;
     }
 
@@ -681,7 +716,7 @@
       mem2.gpViewMode = "week";
       gpSetSelectedLeagueId(leagueId);
       gpPendingClear();
-      await renderPicks();
+      await renderPicks("heavy");
       return;
     }
 
@@ -808,9 +843,11 @@
       return;
     }
 
-    // ── refresh ──
+    // ── refresh ── (light on the league picker, heavy inside a league)
     if (action === "refresh") {
-      await renderPicks(true);
+      const mem2 = gpMem();
+      const onPicker = !(mem2.pickLeagueId || gpGetSelectedLeagueId()) || mem2.gpShowLeaguePicker;
+      await renderPicks(onPicker ? "light" : "heavy");
       return;
     }
 
