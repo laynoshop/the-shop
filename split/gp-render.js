@@ -70,8 +70,11 @@
    ══════════════════════════════════════════════ */
 .gpLoadingBlip {
   display: flex; flex-direction: column; align-items: center;
+  justify-content: center;
   gap: 18px; text-align: center;
-  padding: 40px 20px 40px;
+  padding: 20px;
+  min-height: calc(100vh - var(--tabsH, 44px) - var(--bannerH, 28px) - env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 .gpLoadingGif {
   width: 280px; height: 280px; max-width: 90%; border-radius: 16px;
