@@ -125,8 +125,32 @@
     return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
   }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks }) {
+  // Head-to-Head is an opt-in league format (see gp-data.js's
+  // gpGenerateH2HSchedule): the admin supplies a roster of player names
+  // — matched case-insensitively the same way the points leaderboard
+  // matches unregistered players — and the app auto-generates a
+  // round-robin schedule from it. `roster` can be the array itself or
+  // raw textarea input (one name per line, or comma-separated).
+  function normalizeH2HRoster(roster) {
+    const raw = Array.isArray(roster) ? roster : String(roster || "").split(/[\n,]/);
+    const seen = new Set();
+    const out = [];
+    for (const entry of raw) {
+      const name = String(entry || "").trim().slice(0, 40);
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(name);
+      if (out.length >= 24) break;
+    }
+    return out;
+  }
+
+  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, h2hRoster }) {
     const ref = db.collection("leagues").doc();
+    const isH2H = format === "h2h";
+    const roster = isH2H ? normalizeH2HRoster(h2hRoster) : [];
     await ref.set({
       name:         String(name || "New League").trim().slice(0, 40),
       seasonYear:   Number(seasonYear) || currentYear(),
@@ -135,13 +159,16 @@
       currentWeek:  0,
       activeWeekId: "",
       weeks:        [],
+      format:       isH2H ? "h2h" : "points",
+      h2hRoster:    roster,
+      h2hSchedule:  isH2H ? ((window.GP_Data?.gpGenerateH2HSchedule || (() => []))(roster)) : [],
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     });
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, h2hRoster }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
@@ -150,6 +177,25 @@
     if (seasonYear !== undefined) patch.seasonYear = Number(seasonYear) || currentYear();
     if (totalWeeks !== undefined) patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
     if (archived !== undefined)   patch.archived = !!archived;
+    if (format !== undefined) {
+      const isH2H = format === "h2h";
+      patch.format = isH2H ? "h2h" : "points";
+      if (isH2H) {
+        // Only regenerate the schedule when the roster actually changed —
+        // re-saving other settings shouldn't reshuffle anyone's matchups.
+        const roster = normalizeH2HRoster(h2hRoster);
+        let prevRoster = [];
+        try {
+          const snap = await leaguesRef(db, leagueId).get();
+          prevRoster = Array.isArray(snap.data()?.h2hRoster) ? snap.data().h2hRoster : [];
+        } catch {}
+        const rosterChanged = JSON.stringify(roster) !== JSON.stringify(prevRoster);
+        patch.h2hRoster = roster;
+        if (rosterChanged) {
+          patch.h2hSchedule = (window.GP_Data?.gpGenerateH2HSchedule || (() => []))(roster);
+        }
+      }
+    }
     await leaguesRef(db, leagueId).set(patch, { merge: true });
     return true;
   }

@@ -205,17 +205,20 @@
   function gpSeasonWeekCacheKey(weekId) {
     return `theShopGpSeasonWeekCache_v1_${weekId}`;
   }
-  async function gpLoadSeasonLeaderboard(db, weeks) {
-    const published = (Array.isArray(weeks) ? weeks : []).filter(w => w?.published);
+  async function gpLoadSeasonLeaderboard(db, league) {
+    const allWeeks = Array.isArray(league?.weeks) ? league.weeks : [];
+    const published = allWeeks.filter(w => w?.published);
+    const isH2H = league?.format === "h2h";
     const results = [];
     for (const w of published) {
       const wid = String(w?.id || "");
       if (!wid) continue;
+      const weekIndex = allWeeks.findIndex(x => String(x?.id) === wid);
       const cacheKey = gpSeasonWeekCacheKey(wid);
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch {}
       if (cached && cached.final) {
-        results.push({ weekId: wid, weekLabel: w.label, rows: cached.rows, finalsCount: cached.finalsCount });
+        results.push({ weekId: wid, weekLabel: w.label, weekIndex, rows: cached.rows, finalsCount: cached.finalsCount, gamesCount: cached.finalsCount });
         continue;
       }
       let games = [];
@@ -231,12 +234,15 @@
       const lb = (Data().gpComputeWeeklyLeaderboard || (() => ({ rows: [], finalsCount: 0 })))(
         games, allPicks, { atsEventIds: slateDoc?.atsEventIds, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
       );
-      results.push({ weekId: wid, weekLabel: w.label, rows: lb.rows, finalsCount: lb.finalsCount });
+      results.push({ weekId: wid, weekLabel: w.label, weekIndex, rows: lb.rows, finalsCount: lb.finalsCount, gamesCount: games.length });
 
       const allFinal = games.length > 0 && lb.finalsCount === games.length;
       if (allFinal) {
         try { localStorage.setItem(cacheKey, JSON.stringify({ final: true, rows: lb.rows, finalsCount: lb.finalsCount })); } catch {}
       }
+    }
+    if (isH2H) {
+      return (Data().gpComputeH2HSeasonStandings || (() => ({ rows: [], weeksCount: 0 })))(results, league?.h2hSchedule);
     }
     return (Data().gpComputeSeasonLeaderboard || (() => ({ rows: [], weeksCount: 0 })))(results);
   }
@@ -509,8 +515,10 @@
       let seasonHTML = `<div class="gpNotice">Loading season standings…</div>`;
       el.innerHTML = `${headerHTML}<div class="gpContainer">${toggleHTML}${seasonHTML}</div>`;
       try {
-        const seasonLB = await gpLoadSeasonLeaderboard(db, weeks);
-        seasonHTML = (Render().buildSeasonLeaderboardHTML || (() => ""))(seasonLB);
+        const seasonLB = await gpLoadSeasonLeaderboard(db, league);
+        seasonHTML = league.format === "h2h"
+          ? (Render().gpBuildH2HSeasonStandingsHTML || (() => ""))(seasonLB)
+          : (Render().buildSeasonLeaderboardHTML || (() => ""))(seasonLB);
       } catch (err) {
         seasonHTML = `<div class="gpNotice">Couldn't load season standings: ${String(err?.message || err)}</div>`;
       }
@@ -582,7 +590,9 @@
       weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin,
       atsEventIds, tiebreakerEventId, tiebreakers,
       myTiebreakerGuess, pendingTiebreakerGuess: gpPendingGetTiebreaker(),
-      lockReminder: lockReminderHTML
+      lockReminder: lockReminderHTML,
+      h2hFormat: league.format === "h2h", h2hSchedule: league.h2hSchedule,
+      weekIndex: weeks.findIndex(w => String(w?.id) === selectedId)
     });
 
     // Admin builder goes FIRST inside gpContainer
@@ -756,9 +766,13 @@
       const yearEl       = document.getElementById("gpLeagueYear");
       const totalWeeksEl = document.getElementById("gpLeagueTotalWeeks");
       const archivedEl   = document.getElementById("gpLeagueArchived");
+      const formatEl     = document.getElementById("gpLeagueFormat");
+      const rosterEl     = document.getElementById("gpLeagueH2HRoster");
       const name       = String(nameEl?.value || "").trim();
       const year       = Number(yearEl?.value || "");
       const totalWeeks = String(totalWeeksEl?.value || "").trim();
+      const format     = String(formatEl?.value || "points").trim();
+      const h2hRoster  = String(rosterEl?.value || "");
       if (!name) { alert("Give the league a name first."); return; }
 
       btn.disabled = true; btn.textContent = "Saving…";
@@ -770,11 +784,12 @@
         if (leagueId) {
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
             name, seasonYear: year, totalWeeks,
-            archived: archivedEl ? !!archivedEl.checked : undefined
+            archived: archivedEl ? !!archivedEl.checked : undefined,
+            format, h2hRoster
           });
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
-            name, seasonYear: year, totalWeeks
+            name, seasonYear: year, totalWeeks, format, h2hRoster
           });
           mem2.pickLeagueId = newId;
           mem2.gpShowLeaguePicker = false;
@@ -1032,6 +1047,13 @@
     }
     if (t.getAttribute("data-date-end-input") !== null) {
       gpMem().gpAdminDateEnd = String(t.value || "").replace(/-/g, "");
+      return;
+    }
+
+    // League format selector — toggle the roster field without a full re-render
+    if (t.getAttribute("data-gp-format-select") === "1") {
+      const row = document.getElementById("gpLeagueH2HRosterRow");
+      if (row) row.style.display = (t.value === "h2h") ? "" : "none";
       return;
     }
 
