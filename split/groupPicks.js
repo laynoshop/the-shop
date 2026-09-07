@@ -320,7 +320,7 @@
   //        a. League picker OR league settings form OR week content
   // ───────────────────────────────────────────
   const GP_LOADING_BLIP_MS   = 5000;
-  const GP_RENDER_TIMEOUT_MS = 15000;
+  const GP_RENDER_TIMEOUT_MS = 10000;
   async function renderPicks(showLoading) {
     const contentEl = document.getElementById("content");
     if (!contentEl) return;
