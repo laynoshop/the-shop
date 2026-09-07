@@ -556,15 +556,28 @@
 
     // Flag every row in a genuine points+wins tie (more than one player)
     // so the UI can show players exactly when the tiebreaker decided
-    // their order — visible proof it's actually being factored in.
+    // their order — visible proof it's actually being factored in. Also
+    // credit a tiebreakerWon to whichever single player in that tied
+    // group has the best (strictly better than everyone else's) guess —
+    // this is what the season standings count up as "tiebreakers won".
     if (tiebreakerActual != null) {
-      const groupCounts = new Map();
+      const groups = new Map();
       for (const r of rows) {
         const gk = `${r.points}|${r.wins}`;
-        groupCounts.set(gk, (groupCounts.get(gk) || 0) + 1);
+        if (!groups.has(gk)) groups.set(gk, []);
+        groups.get(gk).push(r);
       }
-      for (const r of rows) {
-        r.tiebreakerUsed = groupCounts.get(`${r.points}|${r.wins}`) > 1;
+      for (const groupRows of groups.values()) {
+        const used = groupRows.length > 1;
+        for (const r of groupRows) r.tiebreakerUsed = used;
+        if (!used) continue;
+        const scored = groupRows
+          .map(r => ({ r, d: tiebreakerDiff(r) }))
+          .filter(x => Number.isFinite(x.d))
+          .sort((a, b) => a.d - b.d);
+        if (scored.length && (scored.length === 1 || scored[0].d < scored[1].d)) {
+          scored[0].r.tiebreakerWon = true;
+        }
       }
     }
 
@@ -587,7 +600,7 @@
         if (!players.has(key)) {
           players.set(key, {
             key, name: r.name, points: 0, wins: 0, losses: 0, ties: 0, dogWins: 0, favWins: 0, weeksPlayed: 0,
-            owWins: 0, owLosses: 0, owTies: 0, atsWins: 0, atsLosses: 0, atsPushes: 0,
+            owWins: 0, owLosses: 0, owTies: 0, atsWins: 0, atsLosses: 0, atsPushes: 0, tbWins: 0,
           });
         }
         const acc = players.get(key);
@@ -604,13 +617,22 @@
         acc.atsWins    += Number(r.atsWins   || 0);
         acc.atsLosses  += Number(r.atsLosses || 0);
         acc.atsPushes  += Number(r.atsPushes || 0);
+        acc.tbWins     += r.tiebreakerWon ? 1 : 0;
         acc.weeksPlayed += 1;
       }
     }
 
+    // Season tie-break chain (all after points, in order):
+    //   1. 🎯 tiebreakers won this season
+    //   2. Best ATS win percentage
+    //   3. Most correct underdog picks
+    const atsWinPct = p => (p.atsWins + p.atsLosses) > 0 ? p.atsWins / (p.atsWins + p.atsLosses) : 0;
     const rows = [...players.values()].sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points;
-      if (b.wins   !== a.wins)   return b.wins   - a.wins;
+      if (b.tbWins !== a.tbWins) return b.tbWins - a.tbWins;
+      const pctDiff = atsWinPct(b) - atsWinPct(a);
+      if (pctDiff !== 0) return pctDiff;
+      if (b.dogWins !== a.dogWins) return b.dogWins - a.dogWins;
       return String(a.name).localeCompare(String(b.name));
     });
 
