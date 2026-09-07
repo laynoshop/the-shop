@@ -665,6 +665,124 @@
   }
 
   // ──────────────────────────────────────────────────────────────
+  // Head-to-Head format — an optional per-league alternative to the
+  // cumulative-points format above. The admin supplies a roster of
+  // player names (matched case-insensitively, same as the points
+  // leaderboard's unregistered-player fallback); the app auto-generates
+  // a round-robin schedule so every week is a 1-on-1 matchup, and
+  // season standings become a win-loss-tie matchup record instead of
+  // total points. Entirely opt-in — a league with no `format` field
+  // (i.e. every league created before this existed) behaves exactly as
+  // it always has.
+  // ──────────────────────────────────────────────────────────────
+
+  // gpGenerateH2HSchedule(roster) — standard "circle method" round robin.
+  // An odd roster gets a bye slot. Returns N-1 rounds (N players, or N
+  // rounds if a bye was added) each covering every player exactly once;
+  // gpGetH2HRoundForWeek cycles this for seasons longer than one full
+  // round-robin. Pure function of the roster — same input always
+  // produces the same schedule, so re-saving league settings without
+  // touching the roster doesn't reshuffle anyone's matchups.
+  function gpGenerateH2HSchedule(roster) {
+    const names = (Array.isArray(roster) ? roster : []).map(n => String(n || "").trim()).filter(Boolean);
+    if (names.length < 2) return [];
+    const work = [...names];
+    if (work.length % 2 !== 0) work.push(null); // null = bye slot
+    const n = work.length;
+    const rounds = [];
+    for (let r = 0; r < n - 1; r++) {
+      const pairs = [];
+      for (let i = 0; i < n / 2; i++) {
+        const a = work[i], b = work[n - 1 - i];
+        if (a == null)      pairs.push({ bye: b });
+        else if (b == null) pairs.push({ bye: a });
+        else                pairs.push({ players: [a, b] });
+      }
+      rounds.push(pairs);
+      const fixed = work[0];
+      const rest  = work.slice(1);
+      rest.unshift(rest.pop());
+      work.splice(0, work.length, fixed, ...rest);
+    }
+    return rounds;
+  }
+
+  // gpGetH2HRoundForWeek(schedule, weekIndex) — weekIndex is the week's
+  // 0-based position within league.weeks (creation order, not just
+  // published weeks), so Week 1 always gets Round 1 regardless of which
+  // weeks happen to be published yet.
+  function gpGetH2HRoundForWeek(schedule, weekIndex) {
+    if (!Array.isArray(schedule) || !schedule.length) return [];
+    const i = Number(weekIndex);
+    if (!Number.isFinite(i) || i < 0) return schedule[0] || [];
+    return schedule[i % schedule.length] || [];
+  }
+
+  // gpComputeH2HWeekResults(round, weeklyRows) — matches this week's
+  // scheduled pairings to that week's points (from the already-computed
+  // gpComputeWeeklyLeaderboard rows), and decides each matchup's winner.
+  function gpComputeH2HWeekResults(round, weeklyRows) {
+    const byName = new Map();
+    for (const r of (Array.isArray(weeklyRows) ? weeklyRows : [])) {
+      byName.set(String(r?.name || "").trim().toLowerCase(), r);
+    }
+    return (Array.isArray(round) ? round : []).map(m => {
+      if (m.bye) {
+        return { bye: m.bye, row: byName.get(String(m.bye).trim().toLowerCase()) || null };
+      }
+      const [nameA, nameB] = m.players;
+      const rowA = byName.get(String(nameA).trim().toLowerCase()) || null;
+      const rowB = byName.get(String(nameB).trim().toLowerCase()) || null;
+      const ptsA = Number(rowA?.points ?? 0);
+      const ptsB = Number(rowB?.points ?? 0);
+      let winner = null;
+      if (rowA || rowB) winner = ptsA > ptsB ? "a" : ptsB > ptsA ? "b" : "tie";
+      return { players: [nameA, nameB], rows: [rowA, rowB], points: [ptsA, ptsB], winner };
+    });
+  }
+
+  // gpComputeH2HSeasonStandings(weeklyResults, schedule)
+  // weeklyResults: [{ weekIndex, rows, finalsCount, gamesCount }, ...]
+  // A week only counts once every game in it has gone final — same
+  // "fully final" signal the points format's season cache uses. Byes
+  // never affect anyone's record.
+  function gpComputeH2HSeasonStandings(weeklyResults, schedule) {
+    const players = new Map();
+    function ensure(name) {
+      const key = String(name).trim().toLowerCase();
+      if (!players.has(key)) players.set(key, { name, wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 });
+      return players.get(key);
+    }
+    const weeks = Array.isArray(weeklyResults) ? weeklyResults : [];
+    let weeksFinal = 0;
+    for (const wr of weeks) {
+      const gamesCount = Number(wr?.gamesCount ?? 0);
+      const isFinal = gamesCount > 0 && Number(wr?.finalsCount ?? 0) === gamesCount;
+      if (!isFinal) continue;
+      weeksFinal++;
+      const round = gpGetH2HRoundForWeek(schedule, wr.weekIndex);
+      for (const m of gpComputeH2HWeekResults(round, wr.rows)) {
+        if (m.bye) continue;
+        const [nameA, nameB] = m.players;
+        const a = ensure(nameA), b = ensure(nameB);
+        a.pointsFor += m.points[0]; a.pointsAgainst += m.points[1];
+        b.pointsFor += m.points[1]; b.pointsAgainst += m.points[0];
+        if (m.winner === "a")      { a.wins++;  b.losses++; }
+        else if (m.winner === "b") { b.wins++;  a.losses++; }
+        else if (m.winner === "tie") { a.ties++; b.ties++; }
+      }
+    }
+    const rows = [...players.values()].sort((x, y) => {
+      if (y.wins !== x.wins) return y.wins - x.wins;
+      if (y.ties !== x.ties) return y.ties - x.ties;
+      const xDiff = x.pointsFor - x.pointsAgainst, yDiff = y.pointsFor - y.pointsAgainst;
+      if (yDiff !== xDiff) return yDiff - xDiff;
+      return String(x.name).localeCompare(String(y.name));
+    });
+    return { rows, weeksCount: weeksFinal };
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // gpComputeSeasonLeaderboard
   // Sums per-player points/record across an array of already-computed
   // weekly results: [{ weekId, weekLabel, rows, finalsCount }, ...]
@@ -745,6 +863,10 @@
     gpComputeTiebreakerActual,
     gpScoreTiebreakerGuess,
     gpComputeWeeklyRecap,
+    gpGenerateH2HSchedule,
+    gpGetH2HRoundForWeek,
+    gpComputeH2HWeekResults,
+    gpComputeH2HSeasonStandings,
   };
 
   window.ensureFirebaseReadySafe = ensureFirebaseReadySafe;

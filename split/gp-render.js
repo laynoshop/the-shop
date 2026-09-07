@@ -445,6 +445,51 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpRecapText b { color: #fff; font-weight: 900; }
 
+/* Head-to-Head weekly matchups */
+.gpH2HMatchupsList {
+  display: flex; flex-direction: column;
+  padding: 10px 16px 16px;
+}
+.gpH2HMatchupRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.gpH2HMatchupRow:last-child { border-bottom: none; }
+.gpH2HSide {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+}
+.gpH2HSideRight { flex-direction: row-reverse; text-align: right; }
+.gpH2HAvatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 900; letter-spacing: -0.3px;
+  text-transform: uppercase; flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.gpH2HName {
+  font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.75);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpH2HPts {
+  font-size: 16px; font-weight: 900; color: rgba(255,255,255,0.6);
+  flex-shrink: 0;
+}
+.gpH2HSide.gpH2HWinner .gpH2HName { color: #fff; }
+.gpH2HSide.gpH2HWinner .gpH2HPts { color: #ffd76a; }
+.gpH2HVs {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: rgba(255,255,255,0.3);
+  flex-shrink: 0; padding: 0 2px;
+}
+.gpH2HByeRow { justify-content: flex-start; }
+.gpH2HByeLabel {
+  margin-left: auto;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+  text-transform: uppercase; color: rgba(255,255,255,0.35);
+}
+
 /* Header bar */
 .gpLeaderHeader {
   display: flex; align-items: center; justify-content: space-between;
@@ -1757,6 +1802,58 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // ─── Head-to-Head weekly matchups ──────────────────────────────────
+  // `results` is gpComputeH2HWeekResults' output: [{ bye } | { players,
+  // points, winner }, ...]. Winner reflects current (possibly still-live)
+  // points, same as the rest of the page shows before a week is final.
+  function gpBuildH2HMatchupsHTML(results, weekLabel) {
+    const list = Array.isArray(results) ? results : [];
+    if (!list.length) return "";
+
+    const rows = list.map(m => {
+      if (m.bye) {
+        const nm = String(m.bye || "Someone");
+        const { bg, color } = avatarStyle(nm);
+        return `
+<div class="gpH2HMatchupRow gpH2HByeRow">
+  <div class="gpH2HAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
+  <div class="gpH2HName">${esc(nm)}</div>
+  <div class="gpH2HByeLabel">BYE</div>
+</div>`;
+      }
+      const [nameA, nameB] = m.players;
+      const [ptsA, ptsB] = m.points;
+      const aWin = m.winner === "a", bWin = m.winner === "b", tie = m.winner === "tie";
+      const { bg: bgA, color: colorA } = avatarStyle(nameA);
+      const { bg: bgB, color: colorB } = avatarStyle(nameB);
+      return `
+<div class="gpH2HMatchupRow">
+  <div class="gpH2HSide${aWin ? " gpH2HWinner" : ""}">
+    <div class="gpH2HAvatar" style="background:${bgA};color:${colorA}">${esc(initials(nameA))}</div>
+    <div class="gpH2HName">${esc(nameA)}${aWin ? " 🏆" : ""}</div>
+    <div class="gpH2HPts">${esc(String(ptsA))}</div>
+  </div>
+  <div class="gpH2HVs">${tie ? "TIE" : "vs"}</div>
+  <div class="gpH2HSide gpH2HSideRight${bWin ? " gpH2HWinner" : ""}">
+    <div class="gpH2HPts">${esc(String(ptsB))}</div>
+    <div class="gpH2HName">${bWin ? "🏆 " : ""}${esc(nameB)}</div>
+    <div class="gpH2HAvatar" style="background:${bgB};color:${colorB}">${esc(initials(nameB))}</div>
+  </div>
+</div>`;
+    }).join("");
+
+    return `
+<div class="gpLeaderCard gpH2HMatchupsCard">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">⚔️ Head-to-Head Matchups</div>
+      ${weekLabel ? `<div class="gpLeaderWeekLabel">${esc(weekLabel)}</div>` : ""}
+    </div>
+  </div>
+  <div class="gpH2HMatchupsList">${rows}</div>
+</div>`;
+  }
+
   // ─── Leaderboard ─────────────────────────────────────────────────
   function buildLeaderboardHTML(weekLabel, leaderboard) {
     const { rows, finalsCount } = leaderboard || {};
@@ -1910,6 +2007,112 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   ${standingsTableHTML}
   ${gpBuildColumnLegendHTML({ season: true })}
   ${gpBuildSeasonTiebreakRulesHTML()}
+</div>`;
+  }
+
+  // ─── Head-to-Head season standings (win-loss-tie record) ──────────
+  function gpBuildH2HSeasonStandingsHTML(seasonStandings) {
+    const { rows, weeksCount } = seasonStandings || {};
+    const list = Array.isArray(rows) ? rows : [];
+
+    if (!list.length) {
+      return `
+<div class="gpLeaderCard">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">⚔️ Head-to-Head Standings</div>
+      <div class="gpLeaderWeekLabel">${weeksCount || 0} week${weeksCount === 1 ? "" : "s"} played</div>
+    </div>
+  </div>
+  <div class="gpEmpty" style="padding:28px 20px">No completed weeks yet.</div>
+</div>`;
+    }
+
+    const podiumSlots = list.slice(0, 3);
+    const podiumHTML = podiumSlots.map((u, i) => {
+      const rank = i + 1;
+      const nm   = String(u?.name || "Someone");
+      const { bg, color } = avatarStyle(nm);
+      const record = u.ties > 0 ? `${u.wins}-${u.losses}-${u.ties}` : `${u.wins}-${u.losses}`;
+      const CROWNS = ["👑", "🥈", "🥉"];
+      return `
+<div class="gpPodiumSlot" data-rank="${rank}">
+  <div class="gpPodiumAvatar" style="background:${bg};color:${color}">
+    ${rank === 1 ? `<span class="gpPodiumCrown">${CROWNS[0]}</span>` : ""}
+    ${esc(initials(nm))}
+  </div>
+  <div class="gpPodiumName">${esc(nm)}</div>
+  <div class="gpPodiumPoints">${esc(record)}</div>
+  <div class="gpPodiumBase">${rank === 1 ? "" : rank === 2 ? CROWNS[1] : CROWNS[2]}</div>
+</div>`;
+    }).join("");
+
+    const rowsHTML = list.map((u, i) => {
+      const rank = i + 1;
+      const nm   = String(u?.name || "Someone");
+      const record = u.ties > 0 ? `${u.wins}-${u.losses}-${u.ties}` : `${u.wins}-${u.losses}`;
+      const diff = Number(u.pointsFor || 0) - Number(u.pointsAgainst || 0);
+      const diffStr = diff > 0 ? `+${diff}` : String(diff);
+      const rowCls = rank === 1 ? " gpStRowGold" : rank === 2 ? " gpStRowSilver" : rank === 3 ? " gpStRowBronze" : "";
+      return `
+<tr class="gpStandingsRow${rowCls}">
+  <td class="gpStRank">${rank}</td>
+  <td class="gpStName"><div class="gpStNameWrap"><span class="gpStNameText">${esc(nm)}</span></div></td>
+  <td>${esc(record)}</td>
+  <td>${esc(String(u.pointsFor ?? 0))}</td>
+  <td>${esc(String(u.pointsAgainst ?? 0))}</td>
+  <td>${esc(diffStr)}</td>
+</tr>`;
+    }).join("");
+
+    const standingsTableHTML = `
+<div class="gpStandingsTableWrap">
+  <table class="gpStandingsTable">
+    <colgroup>
+      <col style="width:9%"/>
+      <col style="width:33%"/>
+      <col style="width:16%"/>
+      <col style="width:14%"/>
+      <col style="width:14%"/>
+      <col style="width:14%"/>
+    </colgroup>
+    <thead>
+      <tr>
+        <th class="gpStRank">#</th>
+        <th class="gpStName">Player</th>
+        <th>W-L-T</th>
+        <th>PF</th>
+        <th>PA</th>
+        <th>Diff</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHTML}</tbody>
+  </table>
+</div>`;
+
+    return `
+<div class="gpLeaderCard">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">⚔️ Head-to-Head Standings</div>
+      <div class="gpLeaderWeekLabel">${weeksCount || 0} week${weeksCount === 1 ? "" : "s"} played</div>
+    </div>
+  </div>
+  <div class="gpLeaderPodium">
+    ${podiumHTML}
+  </div>
+  <div class="gpStandingsDivider">
+    <div class="gpStandingsDividerLine"></div>
+    <div class="gpStandingsDividerLabel">Full Standings</div>
+    <div class="gpStandingsDividerLine"></div>
+  </div>
+  ${standingsTableHTML}
+  <div class="gpColumnLegend">
+    <b>W-L-T</b> matchup record &middot; <b>PF</b> points scored in matchups &middot; <b>PA</b> points allowed &middot; <b>Diff</b> point differential
+  </div>
+  <div class="gpColumnLegend">
+    <b>Ties</b> (after wins) are broken by point differential, then name.
+  </div>
 </div>`;
   }
 
@@ -2256,7 +2459,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   function gpBuildGroupPicksCardHTML({
     weekId, weekLabel, games, myMap, published, allPicks, isAdmin,
     atsEventIds, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
-    lockReminder
+    lockReminder, h2hFormat, h2hSchedule, weekIndex
   }) {
     if (!weekId) {
       return `<div class="gpEmpty">No active week yet. Ask your admin to create one.</div>`;
@@ -2284,11 +2487,18 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const GP_Data = window.GP_Data || {};
     let leaderboardHTML = "";
     let recapHTML = "";
+    let matchupsHTML = "";
     if (!isDraft) {
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
         ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds: [...atsIdSet], tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
       leaderboardHTML = buildLeaderboardHTML(weekLabel, lb);
+
+      if (h2hFormat && typeof GP_Data.gpGetH2HRoundForWeek === "function" && typeof GP_Data.gpComputeH2HWeekResults === "function") {
+        const round = GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex);
+        const results = GP_Data.gpComputeH2HWeekResults(round, lb.rows);
+        matchupsHTML = gpBuildH2HMatchupsHTML(results, weekLabel);
+      }
 
       // Recap only once every committed game for the week has gone
       // final — same signal the season view uses to permanently cache a
@@ -2335,6 +2545,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return `
 ${isDraft ? `<div style="padding:0 0 10px"><span class="gpDraftBadge">DRAFT — only admins see this</span></div>` : ""}
 ${lockReminder || ""}
+${matchupsHTML}
 ${recapHTML}
 ${leaderboardHTML}
 ${straightCardsHTML ? gpBuildSectionHeaderHTML("🏈 Outright Winners", "outright") + straightCardsHTML : ""}
@@ -2453,6 +2664,8 @@ ${saveRow}`;
     const year    = Number(league?.seasonYear) || new Date().getFullYear();
     const totalWeeks = Number(league?.totalWeeks) || "";
     const archived = !!league?.archived;
+    const isH2H = league?.format === "h2h";
+    const rosterText = esc(Array.isArray(league?.h2hRoster) ? league.h2hRoster.join("\n") : "");
 
     return `
 <div class="gpLeagueSettingsForm" data-leagueid="${esc(league?.id || "")}">
@@ -2469,6 +2682,19 @@ ${saveRow}`;
     <div class="gpLeagueSettingsLabel">Number of Weeks</div>
     <input type="number" id="gpLeagueTotalWeeks" class="gpLeagueSettingsInput" min="1" step="1"
       value="${esc(String(totalWeeks))}" placeholder="e.g. 12 (leave blank for no fixed length)"/>
+  </div>
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">Format</div>
+    <select id="gpLeagueFormat" class="gpLeagueSettingsInput" data-gp-format-select="1">
+      <option value="points" ${!isH2H ? "selected" : ""}>Points (cumulative leaderboard)</option>
+      <option value="h2h" ${isH2H ? "selected" : ""}>Head-to-Head (weekly matchups)</option>
+    </select>
+  </div>
+  <div class="gpLeagueSettingsRow" id="gpLeagueH2HRosterRow" ${isH2H ? "" : 'style="display:none"'}>
+    <div class="gpLeagueSettingsLabel">Head-to-Head Roster</div>
+    <textarea id="gpLeagueH2HRoster" class="gpLeagueSettingsInput" rows="6"
+      placeholder="One player name per line (or comma-separated)&#10;e.g.&#10;Alice&#10;Bob&#10;Charlie">${rosterText}</textarea>
+    <div class="muted" style="font-size:12px;margin-top:4px">Names should match how players are entered on the entry page. The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
   </div>
   ${isEdit ? `
   <label class="gpLeagueSettingsCheckRow">
@@ -2534,6 +2760,8 @@ ${saveRow}`;
     gpBuildAdminBuilderHTML,
     buildLeaderboardHTML,
     buildSeasonLeaderboardHTML,
+    gpBuildH2HMatchupsHTML,
+    gpBuildH2HSeasonStandingsHTML,
     gpBuildViewToggleHTML,
     gpBuildTiebreakerCardHTML,
     gpBuildLockReminderHTML,
