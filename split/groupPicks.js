@@ -865,7 +865,11 @@
       }
       const pid = await (ID().gpComputePlayerId || (async () => ""))(nm, cd);
       (ID().gpSetIdentity || (() => {}))({ name: nm, code: cd, remember: rem, playerId: pid });
-      await renderPicks();
+      // Logging in is a fresh entry into the app, same as switching to
+      // the tab: show the light blip and land on the league picker
+      // rather than jumping straight back into whatever league was
+      // selected before logging out.
+      await renderPicks("light", true);
       return;
     }
 
