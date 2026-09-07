@@ -527,12 +527,21 @@
       }
     }
 
-    // — tiebreaker: combined-score guess closeness breaks ties in points+wins —
+    // — tiebreaker: combined-score guess breaks ties in points+wins —
+    // Price-is-Right rule: closest to the actual total WITHOUT going over
+    // wins. A guess that goes over always ranks behind every guess that
+    // doesn't, no matter how close; only when everyone went over does the
+    // smallest overage win. Encoded as one sortable number by adding a
+    // large penalty to over guesses, so plain ascending comparison still
+    // works: 0 (exact) is best, then increasing under-amounts, then any
+    // over-amount (worse than every under amount, closest-over first).
     const tiebreakerActual = gpComputeTiebreakerActual(list, tiebreakerEventId);
+    const OVER_PENALTY = 1e6;
     function tiebreakerDiff(row) {
       const tb = tiebreakers[row.key];
       if (tiebreakerActual == null || !tb || !Number.isFinite(tb.guess)) return Infinity;
-      return Math.abs(tb.guess - tiebreakerActual);
+      const diff = tb.guess - tiebreakerActual;
+      return diff > 0 ? diff + OVER_PENALTY : -diff;
     }
 
     const rows = [...players.values()].sort((a, b) => {
@@ -544,6 +553,20 @@
       }
       return String(a.name).localeCompare(String(b.name));
     });
+
+    // Flag every row in a genuine points+wins tie (more than one player)
+    // so the UI can show players exactly when the tiebreaker decided
+    // their order — visible proof it's actually being factored in.
+    if (tiebreakerActual != null) {
+      const groupCounts = new Map();
+      for (const r of rows) {
+        const gk = `${r.points}|${r.wins}`;
+        groupCounts.set(gk, (groupCounts.get(gk) || 0) + 1);
+      }
+      for (const r of rows) {
+        r.tiebreakerUsed = groupCounts.get(`${r.points}|${r.wins}`) > 1;
+      }
+    }
 
     return { rows, finalsCount, tiebreakerActual };
   }
