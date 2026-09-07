@@ -447,32 +447,42 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 }
 
 /* Standings table — one compact table, no horizontal scroll */
-.gpStandingsTableWrap { padding: 4px 10px 6px; }
+.gpStandingsTableWrap { padding: 2px 10px 6px; }
+.gpStandingsHint {
+  font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.3);
+  text-align: center; padding: 0 4px 8px;
+}
 .gpStandingsTable {
   width: 100%; table-layout: fixed; border-collapse: collapse;
 }
 .gpStandingsTable th {
-  font-size: 9.5px; font-weight: 900; letter-spacing: 0.03em; text-transform: uppercase;
-  color: rgba(255,255,255,0.35); text-align: center;
-  padding: 0 2px 6px; white-space: nowrap;
+  font-size: 11px; font-weight: 900; letter-spacing: 0.03em; text-transform: uppercase;
+  color: rgba(255,255,255,0.4); text-align: center;
+  padding: 0 3px 9px; white-space: nowrap;
 }
 .gpStandingsTable th.gpStName, .gpStandingsTable td.gpStName { text-align: left; }
 .gpStandingsTable td {
-  font-size: 12.5px; font-weight: 800; color: rgba(255,255,255,0.85);
-  text-align: center; padding: 7px 2px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 14.5px; font-weight: 800; color: rgba(255,255,255,0.85);
+  text-align: center; padding: 12px 3px;
+  border-top: 1px solid rgba(255,255,255,0.07);
   font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.gpStandingsRow { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.gpStandingsRow:active td { background: rgba(255,255,255,0.05); }
-.gpStandingsRow.gpStRowGold   td { background: rgba(255,200,40,0.05); }
-.gpStandingsRow.gpStRowSilver td { background: rgba(190,190,210,0.045); }
-.gpStandingsRow.gpStRowBronze td { background: rgba(200,120,60,0.045); }
-.gpStRank { color: rgba(255,255,255,0.4); font-weight: 900; }
-.gpStName { color: #fff; }
-.gpStPts  { color: rgba(255,218,80,0.9); font-weight: 900; }
-.gpStDogs { color: rgba(120,190,255,0.85); }
+.gpStandingsRow { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 120ms ease; }
+.gpStandingsRow:active td { background: rgba(255,255,255,0.06); }
+.gpStandingsRow.gpStRowGold   td { background: rgba(255,200,40,0.06); }
+.gpStandingsRow.gpStRowSilver td { background: rgba(190,190,210,0.05); }
+.gpStandingsRow.gpStRowBronze td { background: rgba(200,120,60,0.05); }
+.gpStRank { color: rgba(255,255,255,0.4); font-weight: 900; font-size: 13px; }
+.gpStNameWrap { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.gpStNameText {
+  color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-decoration: underline; text-decoration-style: dotted;
+  text-decoration-color: rgba(255,255,255,0.25); text-underline-offset: 3px;
+}
+.gpStChevron { color: rgba(255,255,255,0.25); font-size: 15px; font-weight: 900; flex-shrink: 0; }
+.gpStPts  { color: rgba(255,218,80,0.95); font-weight: 900; font-size: 16px; }
+.gpStDogs { color: rgba(120,190,255,0.9); }
 
 /* Legends — bottom of card */
 .gpLeaderScoringFooter {
@@ -1228,7 +1238,12 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       return `
 <tr class="gpStandingsRow${rowCls}" data-gpplayername="${esc(nm)}">
   <td class="gpStRank">${rank}</td>
-  <td class="gpStName">${esc(nm)}</td>
+  <td class="gpStName">
+    <div class="gpStNameWrap">
+      <span class="gpStNameText">${esc(nm)}</span>
+      <span class="gpStChevron">›</span>
+    </div>
+  </td>
   <td class="gpStPts">${esc(String(pts))}</td>
   <td>${esc(owRecord)}</td>
   <td class="gpStDogs">${dogs}</td>
@@ -1238,6 +1253,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 
     return `
 <div class="gpStandingsTableWrap">
+  <div class="gpStandingsHint">Tap a player to see their full picks ›</div>
   <table class="gpStandingsTable">
     <thead>
       <tr>
@@ -1263,16 +1279,20 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 
   // ─── Player Picks Overlay ─────────────────────────────────────────
   // Builds the bottom-sheet overlay showing one player's picks for the week.
-  // `playerName`  — display name string
-  // `games`       — array of game objects (same shape as used by buildGameCard)
-  // `picksMap`    — { [eventId]: { side: "away"|"home" } }  (the player's picks for this week)
-  function gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap, atsEventIds) {
+  // `playerName`        — display name string
+  // `games`             — array of game objects (same shape as used by buildGameCard)
+  // `picksMap`          — { [eventId]: { side: "away"|"home" } }  (the player's picks for this week)
+  // `atsEventIds`       — eventIds graded against the spread this week
+  // `tiebreakerEventId` — eventId of this week's designated tiebreaker game
+  // `myTiebreaker`      — { name, guess, updatedAt } for this player, or null
+  function gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap, atsEventIds, tiebreakerEventId, myTiebreaker) {
     const nm = String(playerName || "Someone");
     const { bg, color } = avatarStyle(nm);
     const list = Array.isArray(games) ? [...games].sort((a, b) => startMs(a) - startMs(b)) : [];
     const atsIdSet = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
+    const tbEventId = String(tiebreakerEventId || "");
 
-    const rows = list.map(g => {
+    function buildOverlayGameRow(g) {
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) return "";
 
@@ -1360,7 +1380,61 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   </div>
   <div class="gpOverlayPickResult ${resultCls}">${resultIcon}</div>
 </div>`;
-    }).filter(Boolean).join("");
+    }
+
+    // Same grouping/order as the main picks page: Outright Winners, then
+    // Against the Spread, then the Tiebreaker guess last.
+    const outrightRows = list.filter(g => !atsIdSet.has(String(g?.eventId || g?.id || ""))).map(buildOverlayGameRow).filter(Boolean).join("");
+    const atsRows       = list.filter(g =>  atsIdSet.has(String(g?.eventId || g?.id || ""))).map(buildOverlayGameRow).filter(Boolean).join("");
+
+    let tiebreakerHTML = "";
+    const tbGame = tbEventId ? list.find(g => String(g?.eventId || g?.id || "") === tbEventId) : null;
+    if (tbGame) {
+      const away = tbGame?.awayTeam || { name: tbGame?.awayName || "Away" };
+      const home = tbGame?.homeTeam || { name: tbGame?.homeName || "Home" };
+      const gameLocked = startMs(tbGame) > 0 && Date.now() >= startMs(tbGame);
+      const GP_Data = window.GP_Data || {};
+      const actual  = typeof GP_Data.gpComputeTiebreakerActual === "function"
+        ? GP_Data.gpComputeTiebreakerActual(list, tbEventId) : null;
+      const guess = Number.isFinite(Number(myTiebreaker?.guess)) ? Number(myTiebreaker.guess) : null;
+
+      let tbRow;
+      if (!gameLocked) {
+        tbRow = `
+<div class="gpOverlayPickRow" style="opacity:0.5">
+  <div class="gpOverlayPickTeamLogoPlaceholder">🔒</div>
+  <div style="flex:1;min-width:0">
+    <div class="gpOverlayPickTeamName" style="color:rgba(255,255,255,0.35)">Locked</div>
+    <div class="gpOverlayPickGameLabel">${esc(safeTeam(away))} @ ${esc(safeTeam(home))}</div>
+  </div>
+  <div class="gpOverlayPickResult gpResultPending">🔒</div>
+</div>`;
+      } else if (guess == null) {
+        tbRow = `
+<div class="gpOverlayPickRow" style="opacity:0.45">
+  <div class="gpOverlayPickTeamLogoPlaceholder">–</div>
+  <div style="flex:1;min-width:0">
+    <div class="gpOverlayPickTeamName" style="color:rgba(255,255,255,0.35)">No guess</div>
+    <div class="gpOverlayPickGameLabel">${esc(safeTeam(away))} @ ${esc(safeTeam(home))}</div>
+  </div>
+  <div class="gpOverlayPickResult gpResultPending">–</div>
+</div>`;
+      } else {
+        tbRow = `
+<div class="gpOverlayPickRow">
+  <div class="gpOverlayPickTeamLogoPlaceholder">🎯</div>
+  <div style="flex:1;min-width:0">
+    <div class="gpOverlayPickTeamName">Guessed ${esc(String(guess))}${actual != null ? ` <span style="color:rgba(255,255,255,0.4);font-weight:700">(Actual: ${esc(String(actual))})</span>` : ""}</div>
+    <div class="gpOverlayPickGameLabel">${esc(safeTeam(away))} @ ${esc(safeTeam(home))}</div>
+  </div>
+</div>`;
+      }
+      tiebreakerHTML = gpBuildSectionHeaderHTML("🎯 Tiebreaker", "tiebreaker") + tbRow;
+    }
+
+    const outrightHTML = outrightRows ? gpBuildSectionHeaderHTML("🏈 Outright Winners", "outright") + outrightRows : "";
+    const atsHTML       = atsRows      ? gpBuildSectionHeaderHTML("📈 Against the Spread", "ats")     + atsRows      : "";
+    const bodyContent   = outrightHTML + atsHTML + tiebreakerHTML;
 
     return `
 <div class="gpPicksOverlayBackdrop" id="gpPicksOverlay" role="dialog" aria-modal="true" aria-label="${esc(nm)}'s picks">
@@ -1377,21 +1451,21 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       <button class="gpOverlayCloseBtn" id="gpPicksOverlayClose" aria-label="Close">✕</button>
     </div>
     <div class="gpOverlayBody">
-      ${rows || `<div class="gpOverlayEmpty">No picks to show.</div>`}
+      ${bodyContent || `<div class="gpOverlayEmpty">No picks to show.</div>`}
     </div>
   </div>
 </div>`;
   }
 
   // ─── Show / dismiss overlay (DOM management) ─────────────────────
-  function gpShowPlayerPicksOverlay(playerName, games, picksMap, atsEventIds) {
+  function gpShowPlayerPicksOverlay(playerName, games, picksMap, atsEventIds, tiebreakerEventId, myTiebreaker) {
     // Remove any existing overlay first
     const existing = document.getElementById("gpPicksOverlay");
     if (existing) existing.remove();
 
     // Inject into body
     document.body.insertAdjacentHTML("beforeend",
-      gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap, atsEventIds)
+      gpBuildPlayerPicksOverlayHTML(playerName, games, picksMap, atsEventIds, tiebreakerEventId, myTiebreaker)
     );
 
     const backdrop = document.getElementById("gpPicksOverlay");
@@ -2086,6 +2160,8 @@ ${saveRow}`;
       const games      = Array.isArray(window.__gpCurrentGames)       ? window.__gpCurrentGames       : [];
       const allPicks   = window.__gpCurrentAllPicks || {};
       const atsEventIds = Array.isArray(window.__gpCurrentAtsEventIds) ? window.__gpCurrentAtsEventIds : [];
+      const tiebreakerEventId = String(window.__gpCurrentTiebreakerEventId || "");
+      const tiebreakers       = window.__gpCurrentTiebreakers || {};
 
       // allPicks shape: { [eventId]: [ { name, side }, ... ] }
       // We need to flip it to { [eventId]: { side } } for this player
@@ -2096,7 +2172,11 @@ ${saveRow}`;
         if (entry?.side) picksMap[eventId] = { side: entry.side };
       }
 
-      gpShowPlayerPicksOverlay(playerName, games, picksMap, atsEventIds);
+      // tiebreakers shape: { [playerKey]: { name, guess, updatedAt } } —
+      // keyed by uid, not name, so find this player's guess by name.
+      const myTiebreaker = Object.values(tiebreakers).find(t => String(t?.name || "") === playerName) || null;
+
+      gpShowPlayerPicksOverlay(playerName, games, picksMap, atsEventIds, tiebreakerEventId, myTiebreaker);
     });
   }
 
