@@ -29,7 +29,7 @@
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(255,255,255,0.07);
-  padding: 10px 14px 10px;
+  padding: 12px 14px 12px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.45);
 }
 .gpPageHeader::after {
@@ -42,22 +42,26 @@
   box-shadow: 0 0 10px rgba(187,0,0,0.6);
   opacity: 0.85;
 }
-.gpHeaderTop {
-  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
-}
+.gpHeaderTitleBlock { margin-bottom: 10px; }
 .gpHeaderTitle {
-  font-size: 20px; font-weight: 900; color: #fff;
-  letter-spacing: 0.02em; line-height: 1;
+  font-size: 28px; font-weight: 950; color: #fff;
+  letter-spacing: 0.01em; line-height: 1.05;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gpHeaderTitle span {
-  display: block; font-size: 11px; font-weight: 600;
-  color: rgba(255,255,255,0.45); letter-spacing: 0.08em;
-  text-transform: uppercase; margin-top: 2px;
+  display: block; font-size: 14px; font-weight: 700;
+  color: rgba(255,255,255,0.55); letter-spacing: 0.03em;
+  margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gpHeaderActions {
-  margin-left: auto;
-  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  display: flex; align-items: stretch; gap: 8px;
+}
+.gpHeaderActions .gpHeaderBtn {
+  flex: 1 1 0;
+  text-align: center;
+  padding: 10px 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 /* ══════════════════════════════════════════════
@@ -2199,14 +2203,14 @@ ${saveRow}`;
   function renderPicksHeaderHTML({ leagueName, isAdmin, showLeaguesBtn }) {
     return `
 <div class="gpPageHeader">
-  <div class="gpHeaderTop">
-    <div class="gpHeaderTitle">Picks<span>${esc(leagueName || "Group Picks")}</span></div>
-    <div class="gpHeaderActions">
-      ${showLeaguesBtn ? `<button class="smallBtn" type="button" data-gpaction="showLeaguePicker">Leagues</button>` : ""}
-      <button class="smallBtn" type="button" data-gpaction="name">Name</button>
-      <button class="smallBtn" type="button" data-gpaction="savePicks" disabled>Save</button>
-      <button class="smallBtn" type="button" data-gpaction="refresh">↺</button>
-    </div>
+  <div class="gpHeaderTitleBlock">
+    <div class="gpHeaderTitle">Pick&#8217;em<span>${esc(leagueName || "Group Picks")}</span></div>
+  </div>
+  <div class="gpHeaderActions">
+    ${showLeaguesBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="showLeaguePicker">Leagues</button>` : ""}
+    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="name">Logout</button>
+    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="savePicks" disabled>Save</button>
+    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="refresh">↺</button>
   </div>
 </div>`;
   }
