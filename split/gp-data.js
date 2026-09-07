@@ -416,6 +416,27 @@
   }
 
   // ──────────────────────────────────────────────────────────────
+  // gpComputeTiebreakerActual(games, tiebreakerEventId)
+  // Combined final score for the designated tiebreaker game, or null if
+  // that game hasn't gone final yet (or there is no tiebreaker this week).
+  // Shared by the leaderboard tally and the player picks overlay.
+  // ──────────────────────────────────────────────────────────────
+  function gpComputeTiebreakerActual(games, tiebreakerEventId) {
+    const eid = String(tiebreakerEventId || "").trim();
+    if (!eid) return null;
+    const list = Array.isArray(games) ? games : [];
+    const tbGame = list.find(g => String(g?.eventId || g?.id || "") === eid);
+    if (!tbGame) return null;
+    const liveHome = tbGame?.__live?.homeScore;
+    const liveAway = tbGame?.__live?.awayScore;
+    const homeNum  = Number(liveHome ?? tbGame?.finalHomeScore ?? NaN);
+    const awayNum  = Number(liveAway ?? tbGame?.finalAwayScore ?? NaN);
+    const isFinal  = String(tbGame?.__live?.state || tbGame?.finalState || "").toLowerCase() === "post";
+    if (isFinal && Number.isFinite(homeNum) && Number.isFinite(awayNum)) return homeNum + awayNum;
+    return null;
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // gpComputeWeeklyLeaderboard(games, allPicks, opts)
   //   opts.atsEventIds        eventIds of the games this week graded
   //                           against their spread (up to 5) — every other
@@ -507,20 +528,7 @@
     }
 
     // — tiebreaker: combined-score guess closeness breaks ties in points+wins —
-    let tiebreakerActual = null;
-    if (tiebreakerEventId) {
-      const tbGame = list.find(g => String(g?.eventId || g?.id || "") === tiebreakerEventId);
-      if (tbGame) {
-        const liveHome = tbGame?.__live?.homeScore;
-        const liveAway = tbGame?.__live?.awayScore;
-        const homeNum  = Number(liveHome ?? tbGame?.finalHomeScore ?? NaN);
-        const awayNum  = Number(liveAway ?? tbGame?.finalAwayScore ?? NaN);
-        const isFinal  = String(tbGame?.__live?.state || tbGame?.finalState || "").toLowerCase() === "post";
-        if (isFinal && Number.isFinite(homeNum) && Number.isFinite(awayNum)) {
-          tiebreakerActual = homeNum + awayNum;
-        }
-      }
-    }
+    const tiebreakerActual = gpComputeTiebreakerActual(list, tiebreakerEventId);
     function tiebreakerDiff(row) {
       const tb = tiebreakers[row.key];
       if (tiebreakerActual == null || !tb || !Number.isFinite(tb.guess)) return Infinity;
@@ -669,6 +677,7 @@
     gpComputeSeasonLeaderboard,
     gpGradeAtsForGame,
     gpGetGameWinningSide,
+    gpComputeTiebreakerActual,
   };
 
   window.ensureFirebaseReadySafe = ensureFirebaseReadySafe;
