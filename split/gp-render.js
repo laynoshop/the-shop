@@ -407,6 +407,44 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
 }
 
+/* Weekly recap — sits above the leaderboard once a week is fully final */
+.gpRecapCard {
+  border-radius: 18px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  background: linear-gradient(160deg, rgba(255,200,40,0.10) 0%, rgba(20,10,10,0.75) 55%);
+  border: 1px solid rgba(255,210,60,0.28);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.gpRecapHeader {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(255,210,60,0.18);
+}
+.gpRecapTitle {
+  font-size: 16px; font-weight: 900; color: #fff; letter-spacing: 0.01em;
+}
+.gpRecapSub {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: rgba(255,214,110,0.65);
+}
+.gpRecapBody {
+  display: flex; flex-direction: column;
+  padding: 6px 16px 14px;
+}
+.gpRecapRow {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.gpRecapRow:last-child { border-bottom: none; }
+.gpRecapIcon { font-size: 17px; line-height: 1.3; flex-shrink: 0; }
+.gpRecapText {
+  font-size: 13px; font-weight: 600; line-height: 1.45;
+  color: rgba(255,255,255,0.8);
+}
+.gpRecapText b { color: #fff; font-weight: 900; }
+
 /* Header bar */
 .gpLeaderHeader {
   display: flex; align-items: center; justify-content: space-between;
@@ -1664,6 +1702,61 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     document.addEventListener("keydown", onKey);
   }
 
+  // ─── Weekly recap — shown above the leaderboard once every game in
+  // the week has gone final ──────────────────────────────────────────
+  function gpBuildWeeklyRecapHTML(recap, weekLabel) {
+    if (!recap) return "";
+    const { champions, biggestUpset, perfectWeekPlayers, tiebreaker } = recap;
+
+    const rows = [];
+
+    if (Array.isArray(champions) && champions.length) {
+      const names = champions.map(c => esc(c.name)).join(" &amp; ");
+      const pts   = champions[0]?.points;
+      const verb  = champions.length > 1 ? "tie atop" : "takes";
+      rows.push(`
+<div class="gpRecapRow">
+  <div class="gpRecapIcon">👑</div>
+  <div class="gpRecapText"><b>${names}</b> ${verb} ${esc(weekLabel || "the week")} with ${esc(String(pts))} pts.</div>
+</div>`);
+    }
+
+    if (biggestUpset) {
+      rows.push(`
+<div class="gpRecapRow">
+  <div class="gpRecapIcon">😱</div>
+  <div class="gpRecapText"><b>Biggest upset:</b> ${esc(biggestUpset.winnerName)} (+${esc(String(biggestUpset.spread))}) knocked off ${esc(biggestUpset.loserName)}.</div>
+</div>`);
+    }
+
+    if (Array.isArray(perfectWeekPlayers) && perfectWeekPlayers.length) {
+      rows.push(`
+<div class="gpRecapRow">
+  <div class="gpRecapIcon">💯</div>
+  <div class="gpRecapText"><b>Perfect week:</b> ${perfectWeekPlayers.map(esc).join(", ")} didn&#8217;t lose a single pick.</div>
+</div>`);
+    }
+
+    if (tiebreaker) {
+      rows.push(`
+<div class="gpRecapRow">
+  <div class="gpRecapIcon">🎯</div>
+  <div class="gpRecapText"><b>Tiebreaker:</b> actual was ${esc(String(tiebreaker.actual))} — ${esc(tiebreaker.winnerName)} called it closest with ${esc(String(tiebreaker.guess))}.</div>
+</div>`);
+    }
+
+    if (!rows.length) return "";
+
+    return `
+<div class="gpRecapCard">
+  <div class="gpRecapHeader">
+    <div class="gpRecapTitle">🏆 Week Recap</div>
+    ${weekLabel ? `<div class="gpRecapSub">${esc(weekLabel)}</div>` : ""}
+  </div>
+  <div class="gpRecapBody">${rows.join("")}</div>
+</div>`;
+  }
+
   // ─── Leaderboard ─────────────────────────────────────────────────
   function buildLeaderboardHTML(weekLabel, leaderboard) {
     const { rows, finalsCount } = leaderboard || {};
@@ -2190,11 +2283,22 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
     const GP_Data = window.GP_Data || {};
     let leaderboardHTML = "";
+    let recapHTML = "";
     if (!isDraft) {
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
         ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds: [...atsIdSet], tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
       leaderboardHTML = buildLeaderboardHTML(weekLabel, lb);
+
+      // Recap only once every committed game for the week has gone
+      // final — same signal the season view uses to permanently cache a
+      // week, so it's never shown (or shown wrong) mid-week.
+      if (lb.finalsCount > 0 && lb.finalsCount === list.length) {
+        const recap = typeof GP_Data.gpComputeWeeklyRecap === "function"
+          ? GP_Data.gpComputeWeeklyRecap(list, lb, tiebreakers, tiebreakerEventId, lb.tiebreakerActual)
+          : null;
+        recapHTML = gpBuildWeeklyRecapHTML(recap, weekLabel);
+      }
     }
 
     // ── tiebreaker section (last, right before the save row) ──
@@ -2231,6 +2335,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return `
 ${isDraft ? `<div style="padding:0 0 10px"><span class="gpDraftBadge">DRAFT — only admins see this</span></div>` : ""}
 ${lockReminder || ""}
+${recapHTML}
 ${leaderboardHTML}
 ${straightCardsHTML ? gpBuildSectionHeaderHTML("🏈 Outright Winners", "outright") + straightCardsHTML : ""}
 ${atsCardsHTML ? gpBuildSectionHeaderHTML("📈 Against the Spread", "ats") + atsCardsHTML : ""}
