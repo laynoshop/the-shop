@@ -259,38 +259,83 @@
 .gpNoPick  { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.3); }
 .gpLocked  { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.3); }
 
-/* Everyone's Picks expandable */
-.gpEveryoneDetails {
-  padding: 0;
-}
+/* Everyone's Picks / Everyone's Predictions — roster reveal */
+.gpEveryoneDetails { padding: 0; }
 .gpEveryoneSummary {
-  font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.38);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 900; letter-spacing: 0.03em;
+  color: rgba(255,255,255,0.55);
   cursor: pointer; list-style: none; user-select: none;
   -webkit-tap-highlight-color: transparent;
-  letter-spacing: 0.04em;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.09);
+  transition: background 120ms ease;
 }
+.gpEveryoneSummary:active { background: rgba(255,255,255,0.08); }
 .gpEveryoneSummary::-webkit-details-marker { display: none; }
-.gpEveryoneSummary::before { content: "▸ "; font-size: 10px; }
-details[open] .gpEveryoneSummary::before { content: "▾ "; }
-.gpEveryoneBody { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.gpEveryoneSummary::after { content: "▸"; margin-left: 2px; font-size: 9px; color: rgba(255,255,255,0.3); }
+details[open] > .gpEveryoneSummary::after { content: "▾"; }
+.gpEveryoneBody {
+  margin-top: 8px; display: flex; flex-direction: column;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px; padding: 2px 12px;
+}
 .gpEveryoneLocked {
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em;
   color: rgba(255,255,255,0.28);
 }
-.gpPickLine {
-  font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.7);
-  padding: 4px 0;
+
+/* One player's pick/guess inside Everyone's Picks or Everyone's Predictions */
+.gpRosterRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0;
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
-.gpPickLine:last-child { border-bottom: none; }
-.gpPickLine b { color: #fff; }
-.gpPickSavedAt {
-  display: block; font-size: 10.5px; font-weight: 700;
-  color: rgba(255,255,255,0.3); margin-top: 1px;
+.gpRosterRow:last-child { border-bottom: none; }
+.gpRosterAvatar {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 900; text-transform: uppercase;
+  border: 1px solid rgba(255,255,255,0.12);
 }
-.gpPickSavedAtInline {
-  font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.3);
+.gpRosterInfo { flex: 1; min-width: 0; }
+.gpRosterName {
+  font-size: 13px; font-weight: 800; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.gpRosterTeam {
+  font-size: 11.5px; font-weight: 700; margin-top: 1px;
+  color: rgba(255,255,255,0.5);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gpRosterTeam.gpResultWin  { color: #5ddb8a; }
+.gpRosterTeam.gpResultLoss { color: #e88888; }
+.gpRosterSavedAt {
+  font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.28);
+  margin-top: 2px;
+}
+.gpRosterResult {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; line-height: 1;
+}
+.gpRosterResult.gpResultWin     { background: rgba(50,200,100,0.15); border: 1px solid rgba(50,200,100,0.3); color: #5ddb8a; }
+.gpRosterResult.gpResultLoss    { background: rgba(220,60,60,0.12); border: 1px solid rgba(220,60,60,0.28); color: #e05555; }
+.gpRosterResult.gpResultTie     { background: rgba(255,200,80,0.12); border: 1px solid rgba(255,200,80,0.28); color: rgba(255,210,100,0.9); }
+.gpRosterResult.gpResultPending { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.3); }
+
+/* Tiebreaker guess + current-leader highlight */
+.gpRosterGuess {
+  font-size: 16px; font-weight: 900; color: #fff;
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.gpRosterRow.gpTbLeader {
+  background: rgba(150,105,255,0.07);
+  border-radius: 10px; margin: 0 -8px; padding: 9px 8px;
+}
+.gpRosterRow.gpTbLeader .gpRosterGuess { color: rgba(210,190,255,0.95); }
+.gpTbLeaderBadge { font-size: 10px; font-weight: 900; color: rgba(210,190,255,0.8); margin-top: 1px; }
 
 /* Win prob bar */
 .gpWinProbBar {
@@ -1031,7 +1076,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const bodyId  = `gpEv_${weekId}_${eventId}`;
       const bodyEl  = document.getElementById(bodyId);
       if (!bodyEl || bodyEl.getAttribute("data-loaded") === "1") return;
-      bodyEl.innerHTML = `<div class="muted" style="font-size:12px">Loading…</div>`;
+      bodyEl.innerHTML = `<div class="muted" style="font-size:12px;padding:8px 0">Loading…</div>`;
       try {
         const Data = () => window.GP_Data || {};
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
@@ -1040,21 +1085,58 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         const arr = Array.isArray(all?.[eventId]) ? all[eventId] : [];
         const awayName = String(det.getAttribute("data-away") || "Away");
         const homeName = String(det.getAttribute("data-home") || "Home");
+
+        // Look up the live game object for win/loss coloring — same
+        // grading helpers the leaderboard and player overlay use, so
+        // every place a pick's result shows up always agrees.
+        const games      = Array.isArray(window.__gpCurrentGames) ? window.__gpCurrentGames : [];
+        const g          = games.find(gg => String(gg?.eventId || gg?.id || "") === eventId) || null;
+        const atsIdSet   = new Set((Array.isArray(window.__gpCurrentAtsEventIds) ? window.__gpCurrentAtsEventIds : []).map(String));
+        const isAtsGame  = atsIdSet.has(eventId);
+        const isFinalG   = String(g?.__live?.state || "").toLowerCase() === "post";
+
         if (!arr.length) {
-          bodyEl.innerHTML = `<div class="muted" style="font-size:12px">No picks yet.</div>`;
+          bodyEl.innerHTML = `<div class="muted" style="font-size:12px;padding:8px 0">No picks yet.</div>`;
         } else {
           bodyEl.innerHTML = arr.map(p => {
-            const nm     = esc(String(p?.name || "Someone"));
-            const side   = String(p?.side || "");
-            const team   = esc(side === "away" ? awayName : side === "home" ? homeName : side);
-            const saved  = fmtSavedAt(p?.updatedAt);
-            return `<div class="gpPickLine"><b>${nm}</b> → ${team}${saved ? `<span class="gpPickSavedAt">${nm} last saved at ${esc(saved)}</span>` : ""}</div>`;
+            const nm    = String(p?.name || "Someone");
+            const side  = String(p?.side || "");
+            const team  = side === "away" ? awayName : side === "home" ? homeName : side;
+            const saved = fmtSavedAt(p?.updatedAt);
+            const { bg, color } = avatarStyle(nm);
+
+            let resultCls = "gpResultPending", resultIcon = "·";
+            if (g && isFinalG && side) {
+              if (isAtsGame) {
+                const grade = typeof Data().gpGradeAtsForGame === "function" ? Data().gpGradeAtsForGame(g) : { ok: false };
+                if (grade.ok) {
+                  if (grade.pushed) { resultCls = "gpResultTie"; resultIcon = "🤝"; }
+                  else { const won = side === grade.coverSide; resultCls = won ? "gpResultWin" : "gpResultLoss"; resultIcon = won ? "✓" : "✕"; }
+                }
+              } else {
+                const winningSide = typeof Data().gpGetGameWinningSide === "function" ? Data().gpGetGameWinningSide(g) : "";
+                if (winningSide) { const won = side === winningSide; resultCls = won ? "gpResultWin" : "gpResultLoss"; resultIcon = won ? "✓" : "✕"; }
+                else { resultCls = "gpResultTie"; resultIcon = "🤝"; }
+              }
+            }
+
+            return `
+<div class="gpRosterRow">
+  <div class="gpRosterAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
+  <div class="gpRosterInfo">
+    <div class="gpRosterName">${esc(nm)}</div>
+    <div class="gpRosterTeam ${resultCls}">${esc(team)}</div>
+    ${saved ? `<div class="gpRosterSavedAt">${esc(nm)} last saved at ${esc(saved)}</div>` : ""}
+  </div>
+  <div class="gpRosterResult ${resultCls}">${resultIcon}</div>
+</div>`;
           }).join("");
         }
+        try { window.replaceMichiganText && window.replaceMichiganText(bodyEl, "The Team Up North"); } catch {}
         bodyEl.setAttribute("data-loaded", "1");
       } catch {
         const bodyEl2 = document.getElementById(bodyId);
-        if (bodyEl2) bodyEl2.innerHTML = `<div class="muted" style="font-size:12px">Couldn't load picks.</div>`;
+        if (bodyEl2) bodyEl2.innerHTML = `<div class="muted" style="font-size:12px;padding:8px 0">Couldn't load picks.</div>`;
       }
     }, true);
   }
@@ -1192,9 +1274,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     <details class="gpEveryoneDetails" data-gpeveryone="1"
       data-weekid="${esc(weekId)}" data-eid="${esc(eventId)}"
       data-away="${esc(safeTeam(away))}" data-home="${esc(safeTeam(home))}">
-      <summary class="gpEveryoneSummary">Everyone's Picks</summary>
+      <summary class="gpEveryoneSummary">👥 Everyone's Picks</summary>
       <div class="gpEveryoneBody" id="gpEv_${esc(weekId)}_${esc(eventId)}">
-        <div class="muted" style="font-size:12px">Loading picks…</div>
       </div>
     </details>` : `
     <div class="gpEveryoneLocked">🔒 Picks reveal when the game locks in</div>`}
@@ -1490,6 +1571,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     );
 
     const backdrop = document.getElementById("gpPicksOverlay");
+    try { window.replaceMichiganText && window.replaceMichiganText(backdrop, "The Team Up North"); } catch {}
     const sheet    = document.getElementById("gpPicksOverlaySheet");
     const closeBtn = document.getElementById("gpPicksOverlayClose");
     if (!backdrop) return;
@@ -1700,17 +1782,47 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     let everyoneHTML = "";
     if (locked) {
       const entries = Object.values(tiebreakers && typeof tiebreakers === "object" ? tiebreakers : {});
+
+      // Find the current tiebreaker leader (closest without going over) so
+      // players can see, at a glance, that the rule from above is actually
+      // deciding something — same scoring gp-data.js's leaderboard uses.
+      let leader = null;
+      if (actualTotal != null && entries.length) {
+        const OVER_PENALTY = 1e6;
+        const scored = entries
+          .map(t => {
+            const guess = Number(t?.guess);
+            if (!Number.isFinite(guess)) return null;
+            const diff = guess - actualTotal;
+            return { t, score: diff > 0 ? diff + OVER_PENALTY : -diff };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.score - b.score);
+        if (scored.length) leader = scored[0].t;
+      }
+
       const lines = entries.length
         ? entries.map(t => {
-            const nm    = esc(String(t?.name || "Someone"));
-            const guess = esc(String(t?.guess ?? ""));
+            const nm    = String(t?.name || "Someone");
+            const guess = String(t?.guess ?? "—");
             const saved = fmtSavedAt(t?.updatedAt);
-            return `<div class="gpPickLine"><b>${nm}</b> → ${guess}${saved ? ` <span class="gpPickSavedAtInline">(${nm} last saved at ${esc(saved)})</span>` : ""}</div>`;
+            const { bg, color } = avatarStyle(nm);
+            const isLeader = t === leader;
+            return `
+<div class="gpRosterRow${isLeader ? " gpTbLeader" : ""}">
+  <div class="gpRosterAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
+  <div class="gpRosterInfo">
+    <div class="gpRosterName">${esc(nm)}</div>
+    ${isLeader ? `<div class="gpTbLeaderBadge">🏆 Leading the tiebreaker</div>` : ""}
+    ${saved ? `<div class="gpRosterSavedAt">${esc(nm)} last saved at ${esc(saved)}</div>` : ""}
+  </div>
+  <div class="gpRosterGuess">${esc(guess)}</div>
+</div>`;
           }).join("")
-        : `<div class="muted" style="font-size:12px">No predictions yet.</div>`;
+        : `<div class="muted" style="font-size:12px;padding:8px 0">No predictions yet.</div>`;
       everyoneHTML = `
 <details class="gpEveryoneDetails">
-  <summary class="gpEveryoneSummary">Everyone's Predictions</summary>
+  <summary class="gpEveryoneSummary">🎯 Everyone's Predictions</summary>
   <div class="gpEveryoneBody">${lines}</div>
 </details>`;
     } else {

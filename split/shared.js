@@ -61,7 +61,7 @@ window.hardResetAppInitState = function hardResetAppInitState() {
   // ------------------------------------------------------------
   // TTUN text replacer (global)
   // ------------------------------------------------------------
-  function replaceMichiganText(root = document.body) {
+  function replaceMichiganText(root = document.body, replacement = "TTUN") {
   try {
     const rxFull = /Michigan\s+Wolverines/gi;
     const rxWolv = /\bWolverines\b/gi;
@@ -72,10 +72,10 @@ window.hardResetAppInitState = function hardResetAppInitState() {
       const t = node.nodeValue;
       if (!t) continue;
 
-      let next = t.replace(rxFull, "TTUN");
+      let next = t.replace(rxFull, replacement);
 
       if (/Michigan/i.test(t)) {
-        next = next.replace(rxWolv, "TTUN");
+        next = next.replace(rxWolv, replacement);
       }
 
       if (next !== t) node.nodeValue = next;
