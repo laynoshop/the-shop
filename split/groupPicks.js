@@ -302,10 +302,11 @@
   //
   // `showLoading` (fresh tab load / explicit refresh only — never on an
   // internal reload after saving picks, changing weeks, etc.) shows the
-  // fun loading blip for a hardwired minimum of 5 seconds: the real
-  // content renders into a detached scratch element in parallel with
-  // that timer, then gets swapped in once both are done, so the blip is
-  // never on screen for less than 5s no matter how fast the fetch is.
+  // fun loading blip for a hardwired minimum of 9 seconds — 5s of the
+  // original gif/joke, then 4s of a second "one more second" phase — the
+  // real content renders into a detached scratch element in parallel
+  // with that, then gets swapped in once both are done, so the blip is
+  // never on screen for less than 9s no matter how fast the fetch is.
   //
   // renderPicksInto can hang (a stuck Firestore/auth/ESPN call somewhere
   // downstream never settling) rather than throw, which a plain
@@ -319,8 +320,10 @@
   //   2. gpContainer
   //        a. League picker OR league settings form OR week content
   // ───────────────────────────────────────────
-  const GP_LOADING_BLIP_MS   = 5000;
-  const GP_RENDER_TIMEOUT_MS = 10000;
+  const GP_LOADING_PHASE1_MS = 5000;
+  const GP_LOADING_PHASE2_MS = 4000;
+  const GP_LOADING_BLIP_MS   = GP_LOADING_PHASE1_MS + GP_LOADING_PHASE2_MS;
+  const GP_RENDER_TIMEOUT_MS = 15000;
   async function renderPicks(showLoading) {
     const contentEl = document.getElementById("content");
     if (!contentEl) return;
@@ -331,6 +334,13 @@
     }
 
     try { contentEl.innerHTML = (Render().gpBuildLoadingBlipHTML || (() => ""))(); } catch {}
+    setTimeout(() => {
+      try {
+        const inner = document.getElementById("gpLoadingBlipInner");
+        if (inner) inner.innerHTML = (Render().gpBuildLoadingBlipPhase2HTML || (() => ""))();
+      } catch {}
+    }, GP_LOADING_PHASE1_MS);
+
     const scratch = document.createElement("div");
     const started = Date.now();
 
