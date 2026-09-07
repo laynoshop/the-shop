@@ -450,6 +450,82 @@
   }
 
   // ──────────────────────────────────────────────────────────────
+  // gpScoreTiebreakerGuess(guess, actual)
+  // Price-is-Right rule: closest to the actual total WITHOUT going over
+  // wins. A guess that goes over always ranks behind every guess that
+  // doesn't, no matter how close; only when everyone went over does the
+  // smallest overage win. Returns one sortable number (ascending =
+  // better) so callers can just compare/sort directly; Infinity for a
+  // missing/invalid guess. Shared by the weekly leaderboard's tiebreak
+  // and the weekly recap's "closest guess" callout, so they always agree.
+  // ──────────────────────────────────────────────────────────────
+  const GP_TIEBREAKER_OVER_PENALTY = 1e6;
+  function gpScoreTiebreakerGuess(guess, actual) {
+    const g = Number(guess);
+    if (actual == null || !Number.isFinite(g)) return Infinity;
+    const diff = g - actual;
+    return diff > 0 ? diff + GP_TIEBREAKER_OVER_PENALTY : -diff;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // gpComputeWeeklyRecap(games, leaderboard, tiebreakers, tiebreakerEventId, tiebreakerActual)
+  // A short "what happened this week" summary, meant to run once a week
+  // is fully final: the weekly champion(s), the biggest upset (pregame
+  // underdog winning outright, by largest spread), anyone who went
+  // perfect (no losses across outright + ATS), and — regardless of
+  // whether the standings needed it — who guessed the tiebreaker
+  // closest without going over, for bragging rights.
+  // ──────────────────────────────────────────────────────────────
+  function gpComputeWeeklyRecap(games, leaderboard, tiebreakers, tiebreakerEventId, tiebreakerActual) {
+    const rows = Array.isArray(leaderboard?.rows) ? leaderboard.rows : [];
+    if (!rows.length) return null;
+
+    const topPoints = rows[0].points;
+    const champions = rows.filter(r => r.points === topPoints).map(r => ({ name: r.name, points: r.points }));
+
+    let biggestUpset = null;
+    for (const g of (Array.isArray(games) ? games : [])) {
+      const winner = gpGetGameWinningSide(g);
+      if (!winner) continue; // not final yet, or a tie
+      const favSide = gpComputeStraightFavSide(g);
+      const spread  = Number(g?.spreadValue);
+      if (!favSide || !Number.isFinite(spread) || spread <= 0 || winner === favSide) continue;
+      if (biggestUpset && spread <= biggestUpset.spread) continue;
+      const away = g?.awayTeam || { name: g?.awayName || "Away" };
+      const home = g?.homeTeam || { name: g?.homeName || "Home" };
+      const winnerTeam = winner === "away" ? away : home;
+      const loserTeam  = winner === "away" ? home  : away;
+      biggestUpset = {
+        spread,
+        winnerName: String(winnerTeam?.name || "The underdog"),
+        loserName:  String(loserTeam?.name  || "the favorite"),
+      };
+    }
+
+    const perfectWeekPlayers = rows
+      .filter(r => Number(r.picks || 0) > 0 && (Number(r.owLosses || 0) + Number(r.atsLosses || 0)) === 0)
+      .map(r => r.name);
+
+    let tiebreaker = null;
+    if (tiebreakerEventId && tiebreakerActual != null) {
+      const entries = Object.values(tiebreakers && typeof tiebreakers === "object" ? tiebreakers : {});
+      const scored = entries
+        .map(t => ({ t, score: gpScoreTiebreakerGuess(t?.guess, tiebreakerActual) }))
+        .filter(x => Number.isFinite(x.score))
+        .sort((a, b) => a.score - b.score);
+      if (scored.length) {
+        tiebreaker = {
+          actual: tiebreakerActual,
+          winnerName: String(scored[0].t.name || "Someone"),
+          guess: Number(scored[0].t.guess),
+        };
+      }
+    }
+
+    return { champions, biggestUpset, perfectWeekPlayers, tiebreaker };
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // gpComputeWeeklyLeaderboard(games, allPicks, opts)
   //   opts.atsEventIds        eventIds of the games this week graded
   //                           against their spread (up to 5) — every other
@@ -541,20 +617,11 @@
     }
 
     // — tiebreaker: combined-score guess breaks ties in points+wins —
-    // Price-is-Right rule: closest to the actual total WITHOUT going over
-    // wins. A guess that goes over always ranks behind every guess that
-    // doesn't, no matter how close; only when everyone went over does the
-    // smallest overage win. Encoded as one sortable number by adding a
-    // large penalty to over guesses, so plain ascending comparison still
-    // works: 0 (exact) is best, then increasing under-amounts, then any
-    // over-amount (worse than every under amount, closest-over first).
+    // (closest without going over — see gpScoreTiebreakerGuess)
     const tiebreakerActual = gpComputeTiebreakerActual(list, tiebreakerEventId);
-    const OVER_PENALTY = 1e6;
     function tiebreakerDiff(row) {
       const tb = tiebreakers[row.key];
-      if (tiebreakerActual == null || !tb || !Number.isFinite(tb.guess)) return Infinity;
-      const diff = tb.guess - tiebreakerActual;
-      return diff > 0 ? diff + OVER_PENALTY : -diff;
+      return gpScoreTiebreakerGuess(tb?.guess, tiebreakerActual);
     }
 
     const rows = [...players.values()].sort((a, b) => {
@@ -676,6 +743,8 @@
     gpGradeAtsForGame,
     gpGetGameWinningSide,
     gpComputeTiebreakerActual,
+    gpScoreTiebreakerGuess,
+    gpComputeWeeklyRecap,
   };
 
   window.ensureFirebaseReadySafe = ensureFirebaseReadySafe;
