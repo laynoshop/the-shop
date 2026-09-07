@@ -245,8 +245,8 @@
 
 /* Pick badge strip at bottom of card */
 .gpPickStrip {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 7px 12px 9px;
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: 6px; padding: 7px 12px 9px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .gpYouPicked {
@@ -261,7 +261,7 @@
 
 /* Everyone's Picks expandable */
 .gpEveryoneDetails {
-  padding: 0 12px 8px;
+  padding: 0;
 }
 .gpEveryoneSummary {
   font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.38);
@@ -274,7 +274,6 @@
 details[open] .gpEveryoneSummary::before { content: "▾ "; }
 .gpEveryoneBody { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
 .gpEveryoneLocked {
-  padding: 0 12px 8px;
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em;
   color: rgba(255,255,255,0.28);
 }
@@ -285,6 +284,10 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 }
 .gpPickLine:last-child { border-bottom: none; }
 .gpPickLine b { color: #fff; }
+.gpPickSavedAt {
+  display: block; font-size: 10.5px; font-weight: 700;
+  color: rgba(255,255,255,0.3); margin-top: 1px;
+}
 
 /* Win prob bar */
 .gpWinProbBar {
@@ -961,6 +964,19 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
     return `${weekday} ${d.getMonth() + 1}/${d.getDate()}`;
   }
+  // "9/6, 5:47pm" — when a pick/prediction was last saved, for the
+  // Everyone's Picks / Everyone's Predictions rosters.
+  function fmtSavedAt(ts) {
+    const ms = ts?.toMillis ? ts.toMillis() : (Number(ts?.seconds) ? Number(ts.seconds) * 1000 : 0);
+    if (!ms) return "";
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return "";
+    let h = d.getHours();
+    const min = String(d.getMinutes()).padStart(2, "0");
+    const ampm = h >= 12 ? "pm" : "am";
+    h = h % 12 || 12;
+    return `${d.getMonth() + 1}/${d.getDate()}, ${h}:${min}${ampm}`;
+  }
   function startMs(g) {
     return g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
   }
@@ -1049,10 +1065,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
           bodyEl.innerHTML = `<div class="muted" style="font-size:12px">No picks yet.</div>`;
         } else {
           bodyEl.innerHTML = arr.map(p => {
-            const nm   = esc(String(p?.name || "Someone"));
-            const side = String(p?.side || "");
-            const team = esc(side === "away" ? awayName : side === "home" ? homeName : side);
-            return `<div class="gpPickLine"><b>${nm}</b> → ${team}</div>`;
+            const nm     = esc(String(p?.name || "Someone"));
+            const side   = String(p?.side || "");
+            const team   = esc(side === "away" ? awayName : side === "home" ? homeName : side);
+            const saved  = fmtSavedAt(p?.updatedAt);
+            return `<div class="gpPickLine"><b>${nm}</b> → ${team}${saved ? `<span class="gpPickSavedAt">${esc(saved)}</span>` : ""}</div>`;
           }).join("");
         }
         bodyEl.setAttribute("data-loaded", "1");
@@ -1620,13 +1637,37 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   }
 
   // ─── Tiebreaker card ────────────────────────────────────────────
-  function gpBuildTiebreakerCardHTML({ game, myGuess, pendingGuess, locked, actualTotal }) {
+  function gpBuildTiebreakerCardHTML({ game, myGuess, pendingGuess, locked, actualTotal, tiebreakers }) {
     if (!game) return "";
     const eventId = String(game?.eventId || game?.id || "");
     if (!eventId) return "";
     const away = game?.awayTeam || { name: game?.awayName || "Away" };
     const home = game?.homeTeam || { name: game?.homeName || "Home" };
     const val  = (pendingGuess != null) ? pendingGuess : (myGuess != null ? myGuess : "");
+
+    // Everyone's guesses are already loaded (no per-game lazy fetch needed
+    // here, unlike Everyone's Picks) — same lock rule though: nobody sees
+    // any prediction, including their own guess's status vs. others, until
+    // the tiebreaker game has actually started.
+    let everyoneHTML = "";
+    if (locked) {
+      const entries = Object.values(tiebreakers && typeof tiebreakers === "object" ? tiebreakers : {});
+      const lines = entries.length
+        ? entries.map(t => {
+            const nm    = esc(String(t?.name || "Someone"));
+            const guess = esc(String(t?.guess ?? ""));
+            const saved = fmtSavedAt(t?.updatedAt);
+            return `<div class="gpPickLine"><b>${nm}</b> → ${guess}${saved ? `<span class="gpPickSavedAt">${esc(saved)}</span>` : ""}</div>`;
+          }).join("")
+        : `<div class="muted" style="font-size:12px">No predictions yet.</div>`;
+      everyoneHTML = `
+<details class="gpEveryoneDetails">
+  <summary class="gpEveryoneSummary">Everyone's Predictions</summary>
+  <div class="gpEveryoneBody">${lines}</div>
+</details>`;
+    } else {
+      everyoneHTML = `<div class="gpEveryoneLocked">🔒 Predictions reveal when the game locks in</div>`;
+    }
 
     return `
 <div class="gpTiebreakerCard">
@@ -1639,6 +1680,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     ${actualTotal != null ? `<div class="gpTiebreakerActual">Actual: ${esc(String(actualTotal))}</div>` : ""}
   </div>
   ${locked ? `<div class="gpLocked">🔒 Locked</div>` : ""}
+  ${everyoneHTML}
 </div>`;
   }
 
@@ -1928,7 +1970,9 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
       const tbGame = list.find(g => String(g?.eventId || g?.id || "") === String(tiebreakerEventId));
       if (tbGame) {
         const tbMs     = startMs(tbGame);
-        const tbLocked = !isAdmin && tbMs > 0 && Date.now() >= tbMs;
+        // No admin bypass here, unlike some other admin affordances — once
+        // the tiebreaker game starts, the input locks for everyone.
+        const tbLocked = tbMs > 0 && Date.now() >= tbMs;
         const live     = tbGame?.__live || null;
         const isFinal  = String(live?.state || tbGame?.finalState || "").toLowerCase() === "post";
         const homeNum  = Number(live?.homeScore ?? tbGame?.finalHomeScore ?? NaN);
@@ -1939,7 +1983,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
           myGuess: myTiebreakerGuess,
           pendingGuess: pendingTiebreakerGuess,
           locked: tbLocked,
-          actualTotal
+          actualTotal,
+          tiebreakers
         });
       }
     }
