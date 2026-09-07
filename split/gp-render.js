@@ -483,6 +483,11 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 .gpStChevron { color: rgba(255,255,255,0.25); font-size: 15px; font-weight: 900; flex-shrink: 0; }
 .gpStPts  { color: rgba(255,218,80,0.95); font-weight: 900; font-size: 16px; }
 .gpStDogs { color: rgba(120,190,255,0.9); }
+.gpStTbBadge { font-size: 11px; margin-left: 4px; }
+.gpTbUsedNote {
+  font-size: 10.5px; font-weight: 700; color: rgba(150,105,255,0.7);
+  text-align: center; padding: 8px 10px 0;
+}
 
 /* Legends — bottom of card */
 .gpLeaderScoringFooter {
@@ -569,6 +574,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 }
 .gpTiebreakerTitle { font-size: 13px; font-weight: 900; color: rgba(210,190,255,0.9); }
 .gpTiebreakerSub { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.5); }
+.gpTiebreakerRule { font-size: 11px; font-weight: 600; color: rgba(210,190,255,0.6); }
+.gpTiebreakerRule b { color: rgba(220,200,255,0.9); font-weight: 900; }
 .gpTiebreakerRow { display: flex; align-items: center; gap: 10px; }
 .gpTiebreakerInput {
   width: 110px; padding: 9px 12px; border-radius: 10px;
@@ -1234,13 +1241,15 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
         : "–";
 
       const rowCls = rank === 1 ? " gpStRowGold" : rank === 2 ? " gpStRowSilver" : rank === 3 ? " gpStRowBronze" : "";
+      const tbBadge = u?.tiebreakerUsed
+        ? `<span class="gpStTbBadge" title="Rank decided by the tiebreaker">🎯</span>` : "";
 
       return `
 <tr class="gpStandingsRow${rowCls}" data-gpplayername="${esc(nm)}">
   <td class="gpStRank">${rank}</td>
   <td class="gpStName">
     <div class="gpStNameWrap">
-      <span class="gpStNameText">${esc(nm)}</span>
+      <span class="gpStNameText">${esc(nm)}${tbBadge}</span>
       <span class="gpStChevron">›</span>
     </div>
   </td>
@@ -1250,6 +1259,8 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   <td>${esc(atsRecord)}</td>
 </tr>`;
     }).join("");
+
+    const anyTiebreakerUsed = (Array.isArray(list) ? list : []).some(u => u?.tiebreakerUsed);
 
     return `
 <div class="gpStandingsTableWrap">
@@ -1267,6 +1278,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     </thead>
     <tbody>${rows}</tbody>
   </table>
+  ${anyTiebreakerUsed ? `<div class="gpTbUsedNote">🎯 = these players were tied and ranked by the tiebreaker (closest guess without going over)</div>` : ""}
 </div>`;
   }
 
@@ -1274,6 +1286,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
     return `
 <div class="gpColumnLegend">
   <b>Pts</b> total points &middot; <b>OW</b> Outright Winner record (W-L-T) &middot; 🐶 correct underdog picks &middot; <b>ATS</b> Against-the-Spread record (W-L-P)
+  <br/>Ties in points/record are broken by the tiebreaker: closest guess to the actual combined score <b>without going over</b> wins.
 </div>`;
   }
 
@@ -1700,6 +1713,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 <div class="gpTiebreakerCard">
   <div class="gpTiebreakerTitle">🎯 Tiebreaker</div>
   <div class="gpTiebreakerSub">Guess the combined final score: ${esc(safeTeam(away))} @ ${esc(safeTeam(home))}</div>
+  <div class="gpTiebreakerRule">Breaks ties in the standings — closest guess <b>without going over</b> wins.</div>
   <div class="gpTiebreakerRow">
     <input type="number" inputmode="numeric" min="0" max="200" step="1"
       class="gpTiebreakerInput" data-gptiebreakerinput="1" data-eid="${esc(eventId)}"
