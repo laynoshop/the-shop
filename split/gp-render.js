@@ -65,6 +65,30 @@
 }
 
 /* ══════════════════════════════════════════════
+   LOADING BLIP — shown while a full render is in flight
+   (initial load, identity/login, or a slow reload)
+   ══════════════════════════════════════════════ */
+.gpLoadingBlip {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 14px; text-align: center;
+  padding: 60px 28px 40px;
+}
+.gpLoadingGif {
+  width: 140px; height: 140px; border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+.gpLoadingTitle {
+  font-size: 16px; font-weight: 900; color: #fff;
+}
+.gpLoadingSub {
+  font-size: 13px; font-weight: 600; line-height: 1.5;
+  color: rgba(255,255,255,0.45);
+  max-width: 320px;
+}
+
+/* ══════════════════════════════════════════════
    GP CONTAINER
    ══════════════════════════════════════════════ */
 .gpContainer {
@@ -2199,6 +2223,23 @@ ${tiebreakerHTML}
 ${saveRow}`;
   }
 
+  // ─── Loading blip — shown while the Picks page does a full render ──
+  const GP_LOADING_JOKES = [
+    "Please be patient — the page is loading while we make sure Connor Stallions isn't in the stands filming our picks.",
+    "Hang tight… sweeping the press box for hidden cameras and anyone in a hoodie who looks a little too interested in our signs.",
+    "Loading… also confirming nobody bought a same-day sideline pass just to scout this pick&#8217;em league.",
+    "One sec — encrypting your picks so they don&#8217;t end up in a $500,000 scouting operation.",
+  ];
+  function gpBuildLoadingBlipHTML() {
+    const joke = GP_LOADING_JOKES[Math.floor(Math.random() * GP_LOADING_JOKES.length)];
+    return `
+<div class="gpLoadingBlip">
+  <img class="gpLoadingGif" src="spygate.gif" alt="" />
+  <div class="gpLoadingTitle">Hang tight, loading your picks&#8217;em&#8230;</div>
+  <div class="gpLoadingSub">${joke}</div>
+</div>`;
+  }
+
   // ─── Header ─────────────────────────────────────────────────────
   function renderPicksHeaderHTML({ leagueName, isAdmin, showLeaguesBtn }) {
     return `
@@ -2350,6 +2391,7 @@ ${saveRow}`;
   // ─── Expose public API ──────────────────────────────────────────
   window.GP_Render = {
     renderPicksHeaderHTML,
+    gpBuildLoadingBlipHTML,
     gpBuildWeekPagerHTML,
     gpBuildLeaguePickerHTML,
     gpBuildLeagueSettingsHTML,

@@ -309,6 +309,10 @@
     const el = document.getElementById("content");
     if (!el) return;
 
+    // Full render is about to fetch a bunch of Firestore/ESPN data — show
+    // a fun blip immediately instead of leaving the page blank while it loads.
+    try { el.innerHTML = (Render().gpBuildLoadingBlipHTML || (() => ""))(); } catch {}
+
     const isAdmin = getRole() === "admin";
     const mem     = gpMem();
 
