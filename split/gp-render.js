@@ -2238,7 +2238,7 @@ ${saveRow}`;
     return `
 <div class="gpLoadingBlip">
   <img class="gpLoadingGif" src="spygate.gif" alt="" />
-  <div class="gpLoadingTitle">Hang tight, loading your picks&#8217;em&#8230;</div>
+  <div class="gpLoadingTitle">Hang tight, loading the pick&#8217;em page&#8230;</div>
   <div class="gpLoadingSub">${joke}</div>
 </div>`;
   }
