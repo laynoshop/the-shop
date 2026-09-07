@@ -252,14 +252,25 @@
     gpBustTiebreakersCache(k);
   }
 
+  // A stuck in-flight fetch (a Firestore call that never settles rather
+  // than rejecting) would otherwise pin bucket.promise forever — the
+  // `finally` that clears it never runs, so every future call keeps
+  // returning the same dead promise. Anything pending longer than this
+  // is abandoned in favor of a fresh attempt (shorter than the Picks
+  // page's own render timeout, so a manual refresh always gets a real
+  // retry instead of re-hitting the same stuck promise).
+  const GP_CACHE_MAX_PENDING_MS = 8000;
+
   async function gpEnsureAllPicksForWeek(db, weekId) {
     const k = String(weekId || "").trim();
     if (!k) return {};
     const bucket = gpGetAllPicksCacheBucket(k);
     const TTL    = 2 * 60 * 1000;
     const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
-    if (fresh)          return bucket.data || {};
-    if (bucket.promise) return bucket.promise;
+    if (fresh) return bucket.data || {};
+    const pendingTooLong = bucket.promise && bucket.startedAt && (Date.now() - bucket.startedAt) > GP_CACHE_MAX_PENDING_MS;
+    if (bucket.promise && !pendingTooLong) return bucket.promise;
+    bucket.startedAt = Date.now();
     bucket.promise = (async () => {
       try {
         const data  = await gpGetAllPicksForSlate(db, k);
@@ -308,8 +319,10 @@
     const bucket = gpGetTiebreakersCacheBucket(k);
     const TTL    = 2 * 60 * 1000;
     const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
-    if (fresh)          return bucket.data || {};
-    if (bucket.promise) return bucket.promise;
+    if (fresh) return bucket.data || {};
+    const pendingTooLong = bucket.promise && bucket.startedAt && (Date.now() - bucket.startedAt) > GP_CACHE_MAX_PENDING_MS;
+    if (bucket.promise && !pendingTooLong) return bucket.promise;
+    bucket.startedAt = Date.now();
     bucket.promise = (async () => {
       try {
         const data  = await gpGetAllTiebreakersForSlate(db, k);
