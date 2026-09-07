@@ -71,10 +71,13 @@
 .gpLoadingBlip {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center;
-  gap: 18px; text-align: center;
   padding: 20px;
   min-height: calc(100vh - var(--tabsH, 44px) - var(--bannerH, 28px) - env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+#gpLoadingBlipInner {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 18px; text-align: center;
 }
 .gpLoadingGif {
   width: 280px; height: 280px; max-width: 90%; border-radius: 16px;
@@ -2237,10 +2240,20 @@ ${saveRow}`;
     const joke = GP_LOADING_JOKES[Math.floor(Math.random() * GP_LOADING_JOKES.length)];
     return `
 <div class="gpLoadingBlip">
-  <img class="gpLoadingGif" src="spygate.gif" alt="" />
-  <div class="gpLoadingTitle">Hang tight, loading the pick&#8217;em page&#8230;</div>
-  <div class="gpLoadingSub">${joke}</div>
+  <div id="gpLoadingBlipInner">
+    <img class="gpLoadingGif" src="spygate.gif" alt="" />
+    <div class="gpLoadingTitle">Hang tight, loading the pick&#8217;em page&#8230;</div>
+    <div class="gpLoadingSub">${joke}</div>
+  </div>
 </div>`;
+  }
+
+  // Second phase, swapped into #gpLoadingBlipInner after the first phase
+  // has had its time — same gpLoadingSub size the caller asked for.
+  function gpBuildLoadingBlipPhase2HTML() {
+    return `
+<img class="gpLoadingGif" src="onemoresecond.jpg" alt="" />
+<div class="gpLoadingSub">Hold on, we just need one more second&#8230;</div>`;
   }
 
   // ─── Header ─────────────────────────────────────────────────────
@@ -2395,6 +2408,7 @@ ${saveRow}`;
   window.GP_Render = {
     renderPicksHeaderHTML,
     gpBuildLoadingBlipHTML,
+    gpBuildLoadingBlipPhase2HTML,
     gpBuildWeekPagerHTML,
     gpBuildLeaguePickerHTML,
     gpBuildLeagueSettingsHTML,
