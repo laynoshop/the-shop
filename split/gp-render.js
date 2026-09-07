@@ -528,6 +528,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpStChevron { color: rgba(255,255,255,0.25); font-size: 15px; font-weight: 900; flex-shrink: 0; }
 .gpStPts  { color: rgba(255,218,80,0.95); font-weight: 900; font-size: 16px; }
 .gpStDogs { color: rgba(120,190,255,0.9); }
+.gpStTbWins { color: rgba(190,150,255,0.95); font-weight: 900; }
 .gpStTbBadge { font-size: 11px; margin-left: 4px; }
 .gpTbUsedNote {
   font-size: 10.5px; font-weight: 700; color: rgba(150,105,255,0.7);
@@ -1302,10 +1303,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   }
 
   // ─── Standings table (shared by weekly + season leaderboards) ─────
-  // Columns: rank · player · total points · Outright Winner record (W-L-T)
-  // · correct underdog picks · Against-the-Spread record (W-L-P). One
-  // fixed-layout table so it never needs horizontal scrolling on mobile.
-  function gpBuildStandingsTableHTML(list) {
+  // Columns: rank · player · total points · [🎯 tiebreakers won, season
+  // view only] · Outright Winner record (W-L-T) · correct underdog picks
+  // · Against-the-Spread record (W-L-P). One fixed-layout table so it
+  // never needs horizontal scrolling on mobile.
+  // opts.showTbWins: season view adds a 🎯 column (season tie-break #1).
+  function gpBuildStandingsTableHTML(list, opts) {
+    const showTbWins = !!opts?.showTbWins;
+
     const rows = (Array.isArray(list) ? list : []).map((u, i) => {
       const rank = i + 1;
       const nm   = String(u?.name || "Someone");
@@ -1335,6 +1340,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     </div>
   </td>
   <td class="gpStPts">${esc(String(pts))}</td>
+  ${showTbWins ? `<td class="gpStTbWins">${Number(u?.tbWins ?? 0)}</td>` : ""}
   <td>${esc(owRecord)}</td>
   <td class="gpStDogs">${dogs}</td>
   <td>${esc(atsRecord)}</td>
@@ -1343,10 +1349,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
     const anyTiebreakerUsed = (Array.isArray(list) ? list : []).some(u => u?.tiebreakerUsed);
 
-    return `
-<div class="gpStandingsTableWrap">
-  <div class="gpStandingsHint">Tap a player to see their full picks ›</div>
-  <table class="gpStandingsTable">
+    const colgroupHTML = showTbWins ? `
+    <colgroup>
+      <col style="width:8%"/>
+      <col style="width:29%"/>
+      <col style="width:10%"/>
+      <col style="width:9%"/>
+      <col style="width:14%"/>
+      <col style="width:9%"/>
+      <col style="width:14%"/>
+    </colgroup>` : `
     <colgroup>
       <col style="width:9%"/>
       <col style="width:38%"/>
@@ -1354,12 +1366,19 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       <col style="width:16%"/>
       <col style="width:10%"/>
       <col style="width:14%"/>
-    </colgroup>
+    </colgroup>`;
+
+    return `
+<div class="gpStandingsTableWrap">
+  <div class="gpStandingsHint">Tap a player to see their full picks ›</div>
+  <table class="gpStandingsTable">
+    ${colgroupHTML}
     <thead>
       <tr>
         <th class="gpStRank">#</th>
         <th class="gpStName">Player</th>
         <th>Pts</th>
+        ${showTbWins ? `<th>🎯</th>` : ""}
         <th>OW</th>
         <th>🐶</th>
         <th>ATS</th>
@@ -1371,11 +1390,12 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
-  function gpBuildColumnLegendHTML() {
+  function gpBuildColumnLegendHTML(opts) {
+    const season = !!opts?.season;
     return `
 <div class="gpColumnLegend">
-  <b>Pts</b> total points &middot; <b>OW</b> Outright Winner record (W-L-T) &middot; 🐶 correct underdog picks &middot; <b>ATS</b> Against-the-Spread record (W-L-P)
-  <br/>Ties in points/record are broken by the tiebreaker: closest guess to the actual combined score <b>without going over</b> wins.
+  <b>Pts</b> total points &middot; ${season ? `🎯 tiebreakers won this season &middot; ` : ""}<b>OW</b> Outright Winner record (W-L-T) &middot; 🐶 correct underdog picks &middot; <b>ATS</b> Against-the-Spread record (W-L-P)
+  ${season ? "" : `<br/>Ties in points/record are broken by the tiebreaker: closest guess to the actual combined score <b>without going over</b> wins.`}
 </div>`;
   }
 
@@ -1733,7 +1753,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
     }).join("");
 
-    const standingsTableHTML = gpBuildStandingsTableHTML(list);
+    const standingsTableHTML = gpBuildStandingsTableHTML(list, { showTbWins: true });
 
     return `
 <div class="gpLeaderCard">
@@ -1752,7 +1772,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     <div class="gpStandingsDividerLine"></div>
   </div>
   ${standingsTableHTML}
-  ${gpBuildColumnLegendHTML()}
+  ${gpBuildColumnLegendHTML({ season: true })}
+  ${gpBuildSeasonTiebreakRulesHTML()}
+</div>`;
+  }
+
+  // ─── Season standings tie-break chain (fine print) ────────────────
+  function gpBuildSeasonTiebreakRulesHTML() {
+    return `
+<div class="gpColumnLegend">
+  <b>Season ties</b> (after total points) are broken in order: 1) most 🎯 tiebreakers won, 2) best ATS win percentage, 3) most correct underdog picks.
 </div>`;
   }
 
