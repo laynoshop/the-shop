@@ -288,6 +288,9 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
   display: block; font-size: 10.5px; font-weight: 700;
   color: rgba(255,255,255,0.3); margin-top: 1px;
 }
+.gpPickSavedAtInline {
+  font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.3);
+}
 
 /* Win prob bar */
 .gpWinProbBar {
@@ -1657,7 +1660,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
             const nm    = esc(String(t?.name || "Someone"));
             const guess = esc(String(t?.guess ?? ""));
             const saved = fmtSavedAt(t?.updatedAt);
-            return `<div class="gpPickLine"><b>${nm}</b> → ${guess}${saved ? `<span class="gpPickSavedAt">${nm} last saved at ${esc(saved)}</span>` : ""}</div>`;
+            return `<div class="gpPickLine"><b>${nm}</b> → ${guess}${saved ? ` <span class="gpPickSavedAtInline">(${nm} last saved at ${esc(saved)})</span>` : ""}</div>`;
           }).join("")
         : `<div class="muted" style="font-size:12px">No predictions yet.</div>`;
       everyoneHTML = `
