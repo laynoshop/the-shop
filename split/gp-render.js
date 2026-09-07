@@ -1266,6 +1266,14 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
 <div class="gpStandingsTableWrap">
   <div class="gpStandingsHint">Tap a player to see their full picks ›</div>
   <table class="gpStandingsTable">
+    <colgroup>
+      <col style="width:9%"/>
+      <col style="width:38%"/>
+      <col style="width:13%"/>
+      <col style="width:16%"/>
+      <col style="width:10%"/>
+      <col style="width:14%"/>
+    </colgroup>
     <thead>
       <tr>
         <th class="gpStRank">#</th>
