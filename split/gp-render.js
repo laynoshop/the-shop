@@ -2453,6 +2453,9 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     <button class="smallBtn" type="button" data-gpselect="all">All</button>
     <button class="smallBtn" type="button" data-gpselect="none">None</button>
     <button class="smallBtn" type="button" data-gpaction="adminAddGames" data-weekid="${esc(weekId)}">Add Selected</button>
+  </div>` : ""}
+  ${committedGames.length ? `
+  <div class="gpAdminControls">
     <button class="smallBtn" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}" data-leagueid="${esc(pickLeagueId || "")}">Publish Week</button>
   </div>` : ""}
   ${atsHTML}
