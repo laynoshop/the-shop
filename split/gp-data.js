@@ -469,7 +469,10 @@
         if (!side) continue;
 
         if (!players.has(key)) {
-          players.set(key, { key, name, points: 0, wins: 0, losses: 0, ties: 0, picks: 0, dogWins: 0, favWins: 0 });
+          players.set(key, {
+            key, name, points: 0, wins: 0, losses: 0, ties: 0, picks: 0, dogWins: 0, favWins: 0,
+            owWins: 0, owLosses: 0, owTies: 0, atsWins: 0, atsLosses: 0, atsPushes: 0,
+          });
         }
         const row = players.get(key);
         row.name = name;
@@ -479,11 +482,14 @@
           // Tie / push — award 0.5 points
           row.ties++;
           row.points += 0.5;
+          if (isAts) row.atsPushes++; else row.owTies++;
         } else if (side === winningSide) {
           row.wins++;
           if (isAts) {
             row.points += 1;
+            row.atsWins++;
           } else {
+            row.owWins++;
             const pickedUnderdog = !!favSide && side !== favSide;
             if (pickedUnderdog) {
               row.points  += 2;
@@ -495,6 +501,7 @@
           }
         } else {
           row.losses++;
+          if (isAts) row.atsLosses++; else row.owLosses++;
         }
       }
     }
@@ -547,16 +554,25 @@
       for (const r of rows) {
         const key = r?.key || `name:${String(r?.name || "").toLowerCase()}`;
         if (!players.has(key)) {
-          players.set(key, { key, name: r.name, points: 0, wins: 0, losses: 0, ties: 0, dogWins: 0, favWins: 0, weeksPlayed: 0 });
+          players.set(key, {
+            key, name: r.name, points: 0, wins: 0, losses: 0, ties: 0, dogWins: 0, favWins: 0, weeksPlayed: 0,
+            owWins: 0, owLosses: 0, owTies: 0, atsWins: 0, atsLosses: 0, atsPushes: 0,
+          });
         }
         const acc = players.get(key);
         acc.name        = r.name || acc.name;
-        acc.points     += Number(r.points  || 0);
-        acc.wins       += Number(r.wins    || 0);
-        acc.losses     += Number(r.losses  || 0);
-        acc.ties       += Number(r.ties    || 0);
-        acc.dogWins    += Number(r.dogWins || 0);
-        acc.favWins    += Number(r.favWins || 0);
+        acc.points     += Number(r.points    || 0);
+        acc.wins       += Number(r.wins      || 0);
+        acc.losses     += Number(r.losses    || 0);
+        acc.ties       += Number(r.ties      || 0);
+        acc.dogWins    += Number(r.dogWins   || 0);
+        acc.favWins    += Number(r.favWins   || 0);
+        acc.owWins     += Number(r.owWins    || 0);
+        acc.owLosses   += Number(r.owLosses  || 0);
+        acc.owTies     += Number(r.owTies    || 0);
+        acc.atsWins    += Number(r.atsWins   || 0);
+        acc.atsLosses  += Number(r.atsLosses || 0);
+        acc.atsPushes  += Number(r.atsPushes || 0);
         acc.weeksPlayed += 1;
       }
     }

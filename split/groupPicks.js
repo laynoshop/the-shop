@@ -447,8 +447,9 @@
     }
 
     // ── expose current state for player picks overlay ──
-    window.__gpCurrentGames    = games;
-    window.__gpCurrentAllPicks = allPicks;
+    window.__gpCurrentGames       = games;
+    window.__gpCurrentAllPicks    = allPicks;
+    window.__gpCurrentAtsEventIds = atsEventIds;
 
     // ── lock reminder (mine only) ──
     const lockReminder = gpComputeLockReminder(games, myMap);
