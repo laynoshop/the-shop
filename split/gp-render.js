@@ -85,6 +85,15 @@
   border: 1px solid rgba(255,255,255,0.10);
   box-shadow: 0 8px 30px rgba(0,0,0,0.4);
 }
+/* Not square like the gif — sized by width only, height auto, so the
+   whole photo (every corner, including the game clock) always shows
+   instead of getting cropped by a fixed square box. */
+.gpLoadingPhoto {
+  width: 252px; height: auto; max-width: 90%; border-radius: 16px;
+  object-fit: contain;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
 .gpLoadingTitle {
   font-size: 24px; font-weight: 900; color: #fff;
 }
@@ -2252,7 +2261,7 @@ ${saveRow}`;
   // has had its time — same gpLoadingSub size the caller asked for.
   function gpBuildLoadingBlipPhase2HTML() {
     return `
-<img class="gpLoadingGif" src="onemoresecond.jpg" alt="" />
+<img class="gpLoadingPhoto" src="onemoresecond.jpg" alt="" />
 <div class="gpLoadingSub">Hold on, we just need one more second&#8230;</div>`;
   }
 
