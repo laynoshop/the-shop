@@ -70,22 +70,22 @@
    ══════════════════════════════════════════════ */
 .gpLoadingBlip {
   display: flex; flex-direction: column; align-items: center;
-  gap: 14px; text-align: center;
-  padding: 60px 28px 40px;
+  gap: 18px; text-align: center;
+  padding: 40px 20px 40px;
 }
 .gpLoadingGif {
-  width: 140px; height: 140px; border-radius: 16px;
+  width: 280px; height: 280px; max-width: 90%; border-radius: 16px;
   object-fit: cover;
   border: 1px solid rgba(255,255,255,0.10);
   box-shadow: 0 8px 30px rgba(0,0,0,0.4);
 }
 .gpLoadingTitle {
-  font-size: 16px; font-weight: 900; color: #fff;
+  font-size: 24px; font-weight: 900; color: #fff;
 }
 .gpLoadingSub {
-  font-size: 13px; font-weight: 600; line-height: 1.5;
-  color: rgba(255,255,255,0.45);
-  max-width: 320px;
+  font-size: 18px; font-weight: 700; line-height: 1.5;
+  color: rgba(255,255,255,0.65);
+  max-width: 360px;
 }
 
 /* ══════════════════════════════════════════════

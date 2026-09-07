@@ -300,18 +300,39 @@
   // ───────────────────────────────────────────
   // Main renderer
   //
+  // `showLoading` (fresh tab load / explicit refresh only — never on an
+  // internal reload after saving picks, changing weeks, etc.) shows the
+  // fun loading blip for a hardwired minimum of 5 seconds: the real
+  // content renders into a detached scratch element in parallel with
+  // that timer, then gets swapped in once both are done, so the blip is
+  // never on screen for less than 5s no matter how fast the fetch is.
+  //
   // DOM order written:
   //   1. Header  (gpPageHeader — sticky)
   //   2. gpContainer
   //        a. League picker OR league settings form OR week content
   // ───────────────────────────────────────────
-  async function renderPicks() {
-    const el = document.getElementById("content");
-    if (!el) return;
+  const GP_LOADING_BLIP_MS = 5000;
+  async function renderPicks(showLoading) {
+    const contentEl = document.getElementById("content");
+    if (!contentEl) return;
 
-    // Full render is about to fetch a bunch of Firestore/ESPN data — show
-    // a fun blip immediately instead of leaving the page blank while it loads.
-    try { el.innerHTML = (Render().gpBuildLoadingBlipHTML || (() => ""))(); } catch {}
+    if (!showLoading) {
+      await renderPicksInto(contentEl);
+      return;
+    }
+
+    try { contentEl.innerHTML = (Render().gpBuildLoadingBlipHTML || (() => ""))(); } catch {}
+    const scratch = document.createElement("div");
+    await Promise.all([
+      renderPicksInto(scratch),
+      new Promise(resolve => setTimeout(resolve, GP_LOADING_BLIP_MS)),
+    ]);
+    contentEl.innerHTML = scratch.innerHTML;
+    postRender();
+  }
+
+  async function renderPicksInto(el) {
 
     const isAdmin = getRole() === "admin";
     const mem     = gpMem();
@@ -392,10 +413,12 @@
     let league = null;
     try { league = await (Data().gpGetLeague || (async () => null))(db, pickLeagueId); } catch {}
     if (!league) {
-      // League vanished (deleted, or a stale/bad id) — fall back to the picker.
+      // League vanished (deleted, or a stale/bad id) — fall back to the
+      // picker, rendering into whatever target (real element or the
+      // loading-blip scratch element) this call was already using.
       mem.pickLeagueId = "";
       gpSetSelectedLeagueId("");
-      await renderPicks();
+      await renderPicksInto(el);
       return;
     }
 
@@ -747,7 +770,7 @@
 
     // ── refresh ──
     if (action === "refresh") {
-      await renderPicks();
+      await renderPicks(true);
       return;
     }
 
