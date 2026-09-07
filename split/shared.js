@@ -279,7 +279,7 @@ window.replaceMichiganText = replaceMichiganText;
     };
 
     if (tab === "scores")          safe("loadScores", true);
-    else if (tab === "picks")      safe("renderPicks", true);
+    else if (tab === "picks")      safe("renderPicks", "light", true);
     else if (tab === "beat")       safe("renderBeatTTUN");
     else if (tab === "news")       safe("renderTopNews", true);
     else if (tab === "shop")       safe("renderShop");

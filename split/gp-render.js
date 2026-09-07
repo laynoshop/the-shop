@@ -2239,13 +2239,26 @@ ${saveRow}`;
   }
 
   // ─── Loading blip — shown while the Picks page does a full render ──
+  // phase 1 (light — league picker, 5s): the gif + a rotating joke.
+  // phase 2 (heavy — inside an actual league, 4s): the "one more
+  // second" photo. Only one plays per render, chosen by what's about
+  // to load, not stacked together.
   const GP_LOADING_JOKES = [
     "Please be patient — the page is loading while we make sure Connor Stallions isn't in the stands filming our picks.",
     "Hang tight… sweeping the press box for hidden cameras and anyone in a hoodie who looks a little too interested in our signs.",
     "Loading… also confirming nobody bought a same-day sideline pass just to scout this pick&#8217;em league.",
     "One sec — encrypting your picks so they don&#8217;t end up in a $500,000 scouting operation.",
   ];
-  function gpBuildLoadingBlipHTML() {
+  function gpBuildLoadingBlipHTML(phase) {
+    if (phase === 2) {
+      return `
+<div class="gpLoadingBlip">
+  <div id="gpLoadingBlipInner">
+    <img class="gpLoadingPhoto" src="onemoresecond.jpg" alt="" />
+    <div class="gpLoadingSub">Hold on, we just need one more second&#8230;</div>
+  </div>
+</div>`;
+    }
     const joke = GP_LOADING_JOKES[Math.floor(Math.random() * GP_LOADING_JOKES.length)];
     return `
 <div class="gpLoadingBlip">
@@ -2257,16 +2270,8 @@ ${saveRow}`;
 </div>`;
   }
 
-  // Second phase, swapped into #gpLoadingBlipInner after the first phase
-  // has had its time — same gpLoadingSub size the caller asked for.
-  function gpBuildLoadingBlipPhase2HTML() {
-    return `
-<img class="gpLoadingPhoto" src="onemoresecond.jpg" alt="" />
-<div class="gpLoadingSub">Hold on, we just need one more second&#8230;</div>`;
-  }
-
   // ─── Header ─────────────────────────────────────────────────────
-  function renderPicksHeaderHTML({ leagueName, isAdmin, showLeaguesBtn }) {
+  function renderPicksHeaderHTML({ leagueName, isAdmin, showLeaguesBtn, showSaveBtn = true }) {
     return `
 <div class="gpPageHeader">
   <div class="gpHeaderTitleBlock">
@@ -2275,7 +2280,7 @@ ${saveRow}`;
   <div class="gpHeaderActions">
     ${showLeaguesBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="showLeaguePicker">Leagues</button>` : ""}
     <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="name">Logout</button>
-    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="savePicks" disabled>Save</button>
+    ${showSaveBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="savePicks" disabled>Save</button>` : ""}
     <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="refresh">↺</button>
   </div>
 </div>`;
@@ -2417,7 +2422,6 @@ ${saveRow}`;
   window.GP_Render = {
     renderPicksHeaderHTML,
     gpBuildLoadingBlipHTML,
-    gpBuildLoadingBlipPhase2HTML,
     gpBuildWeekPagerHTML,
     gpBuildLeaguePickerHTML,
     gpBuildLeagueSettingsHTML,
