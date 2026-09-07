@@ -187,7 +187,7 @@
         const name    = String(data.name || (u.data()?.name || "Someone"));
         const side    = String(data.side || "");
         if (!out[eventId]) out[eventId] = [];
-        out[eventId].push({ uid: playerId, name, side });
+        out[eventId].push({ uid: playerId, name, side, updatedAt: data.updatedAt || null });
       });
     }
     Object.keys(out).forEach(eventId => {
@@ -214,6 +214,11 @@
     };
     if (hasTiebreaker) {
       userDoc.tiebreakerGuess = Math.max(0, Math.min(200, Math.round(tiebreakerGuess)));
+      // Separate from the parent doc's general updatedAt (which bumps on
+      // every save regardless of what changed) so "last saved" for the
+      // tiebreaker specifically stays accurate even if a later save only
+      // touches game picks.
+      userDoc.tiebreakerUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
     }
     batch.set(picksUserRef, userDoc, { merge: true });
     for (const eventId of keys) {
@@ -278,7 +283,7 @@
       const data  = d.data() || {};
       const guess = Number(data.tiebreakerGuess);
       if (!Number.isFinite(guess)) return;
-      out[d.id] = { name: String(data.name || "Someone"), guess };
+      out[d.id] = { name: String(data.name || "Someone"), guess, updatedAt: data.tiebreakerUpdatedAt || null };
     });
     return out;
   }
