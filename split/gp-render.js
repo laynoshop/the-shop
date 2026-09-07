@@ -1069,7 +1069,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
             const side   = String(p?.side || "");
             const team   = esc(side === "away" ? awayName : side === "home" ? homeName : side);
             const saved  = fmtSavedAt(p?.updatedAt);
-            return `<div class="gpPickLine"><b>${nm}</b> → ${team}${saved ? `<span class="gpPickSavedAt">${esc(saved)}</span>` : ""}</div>`;
+            return `<div class="gpPickLine"><b>${nm}</b> → ${team}${saved ? `<span class="gpPickSavedAt">${nm} last saved at ${esc(saved)}</span>` : ""}</div>`;
           }).join("");
         }
         bodyEl.setAttribute("data-loaded", "1");
@@ -1657,7 +1657,7 @@ details[open] .gpEveryoneSummary::before { content: "▾ "; }
             const nm    = esc(String(t?.name || "Someone"));
             const guess = esc(String(t?.guess ?? ""));
             const saved = fmtSavedAt(t?.updatedAt);
-            return `<div class="gpPickLine"><b>${nm}</b> → ${guess}${saved ? `<span class="gpPickSavedAt">${esc(saved)}</span>` : ""}</div>`;
+            return `<div class="gpPickLine"><b>${nm}</b> → ${guess}${saved ? `<span class="gpPickSavedAt">${nm} last saved at ${esc(saved)}</span>` : ""}</div>`;
           }).join("")
         : `<div class="muted" style="font-size:12px">No predictions yet.</div>`;
       everyoneHTML = `
