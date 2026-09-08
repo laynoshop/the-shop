@@ -405,8 +405,9 @@
   }
 
   function gpBuildRetryScreenHTML(message) {
+    const idObj = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
     const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
-      isAdmin: getRole() === "admin", showLeaguesBtn: false
+      isAdmin: getRole() === "admin", showLeaguesBtn: false, playerName: idObj.name
     });
     const esc = typeof window.escapeHtml === "function" ? window.escapeHtml : String;
     return `${headerHTML}<div class="gpContainer"><div class="gpNotice">${esc(message)} Tap &#8635; above to try again.</div></div>`;
@@ -461,7 +462,7 @@
       let registeredPlayers = [];
       try { registeredPlayers = await (Data().gpListRegisteredPlayers || (async () => []))(db); } catch {}
       const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
-        leagueName: league?.name || "", isAdmin, showLeaguesBtn: !!gpGetSelectedLeagueId()
+        leagueName: league?.name || "", isAdmin, showLeaguesBtn: !!gpGetSelectedLeagueId(), playerName: name
       });
       const formHTML = (Render().gpBuildLeagueSettingsHTML || (() => ""))({
         mode: isEdit ? "edit" : "create", league, registeredPlayers
@@ -476,7 +477,7 @@
     const showPicker = forceLeaguePicker || !pickLeagueId || mem.gpShowLeaguePicker;
 
     if (showPicker) {
-      const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false, showSaveBtn: false });
+      const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false, showSaveBtn: false, playerName: name });
       let leagues = [];
       try { leagues = await (Data().gpListLeagues || (async () => []))(db); } catch {}
       const isActiveFn = Data().gpIsLeagueActive || (async () => false);
@@ -511,7 +512,7 @@
     // ── season view: cumulative standings across every published week ──
     if (mem.gpViewMode === "season") {
       const headerHTML  = (Render().renderPicksHeaderHTML || (() => ""))({
-        leagueName: league.name, isAdmin, showLeaguesBtn: true
+        leagueName: league.name, isAdmin, showLeaguesBtn: true, playerName: name
       });
       const toggleHTML  = (Render().gpBuildViewToggleHTML || (() => ""))("season");
       let seasonHTML = `<div class="gpNotice">Loading season standings…</div>`;
@@ -579,7 +580,7 @@
 
     // ── build HTML ──
     const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
-      leagueName: league.name, isAdmin, showLeaguesBtn: true
+      leagueName: league.name, isAdmin, showLeaguesBtn: true, playerName: name
     });
     const toggleHTML = (Render().gpBuildViewToggleHTML || (() => ""))("week");
     const pagerHTML  = weeks.length ? (Render().gpBuildWeekPagerHTML || (() => ""))({
@@ -921,7 +922,7 @@
       });
       const el = document.getElementById("content");
       if (el) {
-        const hdr = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin: getRole() === "admin" });
+        const hdr = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin: getRole() === "admin", playerName: idObj.name });
         el.innerHTML = `${hdr}<div class="gpContainer">${gateHTML}</div>`;
         postRender();
         setTimeout(() => { try { document.getElementById("gpIdName")?.focus(); } catch {} }, 0);
