@@ -734,7 +734,10 @@
         else if (b == null) pairs.push({ bye: a });
         else                pairs.push({ players: [a, b] });
       }
-      rounds.push(pairs);
+      // Firestore rejects an array directly containing another array, so
+      // each round is wrapped in a { pairs } object rather than stored
+      // as a bare array — gpGetH2HRoundForWeek unwraps it back out.
+      rounds.push({ pairs });
       const fixed = work[0];
       const rest  = work.slice(1);
       rest.unshift(rest.pop());
@@ -750,8 +753,8 @@
   function gpGetH2HRoundForWeek(schedule, weekIndex) {
     if (!Array.isArray(schedule) || !schedule.length) return [];
     const i = Number(weekIndex);
-    if (!Number.isFinite(i) || i < 0) return schedule[0] || [];
-    return schedule[i % schedule.length] || [];
+    const idx = (!Number.isFinite(i) || i < 0) ? 0 : (i % schedule.length);
+    return schedule[idx]?.pairs || [];
   }
 
   // gpComputeH2HWeekResults(round, weeklyRows) — matches this week's
