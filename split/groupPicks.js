@@ -209,38 +209,49 @@
     const allWeeks = Array.isArray(league?.weeks) ? league.weeks : [];
     const published = allWeeks.filter(w => w?.published);
     const isH2H = league?.format === "h2h";
-    const results = [];
-    for (const w of published) {
+
+    // Every week's data is independent of every other week's, so fetch
+    // them all at once instead of one at a time — sequentially, a season
+    // with several not-yet-final weeks adds up fast enough (each week
+    // does its own Firestore + ESPN round trips) to trip the page's hard
+    // render timeout on a slow connection even though nothing is
+    // actually stuck, just cumulatively slow.
+    const weekResults = await Promise.all(published.map(async (w) => {
       const wid = String(w?.id || "");
-      if (!wid) continue;
+      if (!wid) return null;
       const weekIndex = allWeeks.findIndex(x => String(x?.id) === wid);
       const cacheKey = gpSeasonWeekCacheKey(wid);
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch {}
       if (cached && cached.final) {
-        results.push({ weekId: wid, weekLabel: w.label, weekIndex, rows: cached.rows, finalsCount: cached.finalsCount, gamesCount: cached.finalsCount });
-        continue;
+        return { weekId: wid, weekLabel: w.label, weekIndex, rows: cached.rows, finalsCount: cached.finalsCount, gamesCount: cached.finalsCount };
       }
       let games = [];
       try { games = await (Data().gpGetSlateGames || (async () => []))(db, wid); } catch {}
-      if (!games.length) continue;
-      try { await (ESPN().gpHydrateLiveStateForGames || (async () => {}))(games); } catch {}
-      let allPicks = {};
-      try { allPicks = await (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, wid); } catch {}
-      let slateDoc = {};
-      try { slateDoc = await (Data().gpGetSlateDoc || (async () => ({})))(db, wid); } catch {}
-      let tiebreakers = {};
-      try { tiebreakers = await (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, wid); } catch {}
+      if (!games.length) return null;
+
+      let allPicks = {}, slateDoc = {}, tiebreakers = {};
+      try {
+        [, allPicks, slateDoc, tiebreakers] = await Promise.all([
+          (ESPN().gpHydrateLiveStateForGames || (async () => {}))(games),
+          (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, wid),
+          (Data().gpGetSlateDoc || (async () => ({})))(db, wid),
+          (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, wid),
+        ]);
+      } catch {}
+
       const lb = (Data().gpComputeWeeklyLeaderboard || (() => ({ rows: [], finalsCount: 0 })))(
         games, allPicks, { atsEventIds: slateDoc?.atsEventIds, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
       );
-      results.push({ weekId: wid, weekLabel: w.label, weekIndex, rows: lb.rows, finalsCount: lb.finalsCount, gamesCount: games.length });
 
       const allFinal = games.length > 0 && lb.finalsCount === games.length;
       if (allFinal) {
         try { localStorage.setItem(cacheKey, JSON.stringify({ final: true, rows: lb.rows, finalsCount: lb.finalsCount })); } catch {}
       }
-    }
+      return { weekId: wid, weekLabel: w.label, weekIndex, rows: lb.rows, finalsCount: lb.finalsCount, gamesCount: games.length };
+    }));
+
+    const results = weekResults.filter(Boolean);
     if (isH2H) {
       return (Data().gpComputeH2HSeasonStandings || (() => ({ rows: [], weeksCount: 0 })))(results, league?.h2hSchedule);
     }
@@ -547,13 +558,22 @@
     let tiebreakers = {};
     let myPicksUserDoc = {};
     if (selectedId) {
+      // These six reads are independent of one another — fetching them
+      // in parallel instead of one-at-a-time cuts total wait time from
+      // the sum of all six round trips down to whichever is slowest,
+      // which matters a lot on a weak connection (each sequential await
+      // adds its own latency, and enough of them stacked up can trip the
+      // page's hard render timeout on its own, with nothing actually
+      // "stuck").
       try {
-        games          = await (Data().gpGetSlateGames         || (async () => []))(db, selectedId);
-        myMap          = await (Data().gpGetMyPicksMap         || (async () => ({})))(db, selectedId, playerId);
-        allPicks       = await (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, selectedId);
-        slateDoc       = await (Data().gpGetSlateDoc           || (async () => ({})))(db, selectedId);
-        tiebreakers    = await (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, selectedId);
-        myPicksUserDoc = await (Data().gpGetMyPicksUserDoc     || (async () => ({})))(db, selectedId, playerId);
+        [games, myMap, allPicks, slateDoc, tiebreakers, myPicksUserDoc] = await Promise.all([
+          (Data().gpGetSlateGames         || (async () => []))(db, selectedId),
+          (Data().gpGetMyPicksMap         || (async () => ({})))(db, selectedId, playerId),
+          (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, selectedId),
+          (Data().gpGetSlateDoc           || (async () => ({})))(db, selectedId),
+          (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, selectedId),
+          (Data().gpGetMyPicksUserDoc     || (async () => ({})))(db, selectedId, playerId),
+        ]);
       } catch {}
     }
     const atsEventIds       = Array.isArray(slateDoc?.atsEventIds) ? slateDoc.atsEventIds.map(String) : [];
@@ -561,10 +581,15 @@
     const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
       ? Number(myPicksUserDoc.tiebreakerGuess) : null;
 
-    // ── hydrate live scores + odds ──
+    // ── hydrate live scores + odds ── (independent — different fields
+    // on each game object, safe to run at the same time)
     if (games.length) {
-      try { await (ESPN().gpHydrateLiveStateForGames || (async () => {}))(games); } catch {}
-      try { await (ESPN().gpHydrateOddsForGames     || (async () => {}))(games); } catch {}
+      try {
+        await Promise.all([
+          (ESPN().gpHydrateLiveStateForGames || (async () => {}))(games),
+          (ESPN().gpHydrateOddsForGames     || (async () => {}))(games),
+        ]);
+      } catch {}
     }
 
     // ── expose current state for player picks overlay ──
