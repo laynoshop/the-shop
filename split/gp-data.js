@@ -208,23 +208,39 @@
   }
 
   // ─── all picks for slate ────────────────────────────────────────────
+  // One Firestore round trip per player's games subcollection — with a
+  // league of any real size, doing these one at a time (in sequence) is
+  // exactly the kind of cumulative latency that can trip the picks
+  // page's hard render timeout on a slow connection, even though no
+  // single call is actually stuck. Fetched in parallel instead, since
+  // every player's data here is independent of every other's.
   async function gpGetAllPicksForSlate(db, slateId) {
     const out = {};
     const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
     const userDocs  = usersSnap.docs || [];
-    for (const u of userDocs) {
+    const perUser = await Promise.all(userDocs.map(async (u) => {
       const playerId  = u.id;
       const gamesSnap = await db.collection("pickSlates").doc(slateId)
         .collection("picks").doc(playerId)
         .collection("games").get();
+      const rows = [];
       gamesSnap.forEach(d => {
-        const eventId = d.id;
-        const data    = d.data() || {};
-        const name    = String(data.name || (u.data()?.name || "Someone"));
-        const side    = String(data.side || "");
-        if (!out[eventId]) out[eventId] = [];
-        out[eventId].push({ uid: playerId, name, side, updatedAt: data.updatedAt || null });
+        const data = d.data() || {};
+        rows.push({
+          eventId: d.id,
+          uid: playerId,
+          name: String(data.name || (u.data()?.name || "Someone")),
+          side: String(data.side || ""),
+          updatedAt: data.updatedAt || null
+        });
       });
+      return rows;
+    }));
+    for (const rows of perUser) {
+      for (const { eventId, ...row } of rows) {
+        if (!out[eventId]) out[eventId] = [];
+        out[eventId].push(row);
+      }
     }
     Object.keys(out).forEach(eventId => {
       out[eventId].sort((a, b) => String(a.name).localeCompare(String(b.name)));
