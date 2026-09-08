@@ -147,7 +147,19 @@
     return out;
   }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, h2hRoster }) {
+  // League Announcement — a short admin-authored notice shown at the top
+  // of the week view for every player in the league. null (not an empty
+  // object) when there's nothing to say, so the render side can tell
+  // "no announcement" apart from "announcement with blank fields" with
+  // a single falsy check.
+  function normalizeAnnouncement(title, message) {
+    const t = String(title || "").trim().slice(0, 60);
+    const m = String(message || "").trim().slice(0, 280);
+    if (!t && !m) return null;
+    return { title: t, message: m };
+  }
+
+  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, h2hRoster, announcementTitle, announcementMessage }) {
     const ref = db.collection("leagues").doc();
     const isH2H = format === "h2h";
     const roster = isH2H ? normalizeH2HRoster(h2hRoster) : [];
@@ -162,13 +174,14 @@
       format:       isH2H ? "h2h" : "points",
       h2hRoster:    roster,
       h2hSchedule:  isH2H ? ((window.GP_Data?.gpGenerateH2HSchedule || (() => []))(roster)) : [],
+      announcement: normalizeAnnouncement(announcementTitle, announcementMessage),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     });
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, h2hRoster }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, h2hRoster, announcementTitle, announcementMessage }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
@@ -177,6 +190,9 @@
     if (seasonYear !== undefined) patch.seasonYear = Number(seasonYear) || currentYear();
     if (totalWeeks !== undefined) patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
     if (archived !== undefined)   patch.archived = !!archived;
+    if (announcementTitle !== undefined || announcementMessage !== undefined) {
+      patch.announcement = normalizeAnnouncement(announcementTitle, announcementMessage);
+    }
     if (format !== undefined) {
       const isH2H = format === "h2h";
       patch.format = isH2H ? "h2h" : "points";
