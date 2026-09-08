@@ -43,10 +43,10 @@
   opacity: 0.85;
 }
 .gpHeaderTopRow {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center;
   gap: 12px; margin-bottom: 10px;
 }
-.gpHeaderTitleBlock { min-width: 0; }
+.gpHeaderTitleBlock { min-width: 0; margin-left: auto; text-align: right; }
 .gpHeaderTitle {
   font-size: 28px; font-weight: 950; color: #fff;
   letter-spacing: 0.01em; line-height: 1.05;
@@ -61,7 +61,7 @@
 .gpHeaderWelcome {
   flex: 0 1 auto; min-width: 0;
   font-size: 20px; font-weight: 800; color: rgba(255,255,255,0.82);
-  letter-spacing: 0.005em; text-align: right;
+  letter-spacing: 0.005em; text-align: left;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gpHeaderActions {
@@ -2620,10 +2620,10 @@ ${saveRow}`;
     return `
 <div class="gpPageHeader">
   <div class="gpHeaderTopRow">
+    ${welcomeName ? `<div class="gpHeaderWelcome">Welcome, ${esc(welcomeName)}</div>` : ""}
     <div class="gpHeaderTitleBlock">
       <div class="gpHeaderTitle">Pick&#8217;em<span>${esc(leagueName || "Group Picks")}</span></div>
     </div>
-    ${welcomeName ? `<div class="gpHeaderWelcome">Welcome, ${esc(welcomeName)}</div>` : ""}
   </div>
   <div class="gpHeaderActions">
     ${showLeaguesBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="showLeaguePicker">Leagues</button>` : ""}
