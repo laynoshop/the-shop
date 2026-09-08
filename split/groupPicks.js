@@ -713,7 +713,13 @@
 
     // ── leagues: open the picker ──
     if (action === "showLeaguePicker") {
-      gpMem().gpShowLeaguePicker = true;
+      const mem2 = gpMem();
+      mem2.gpShowLeaguePicker = true;
+      // Clear any in-progress league settings form — otherwise the
+      // render gate for it takes priority over the picker and this
+      // button silently does nothing.
+      mem2.gpLeagueEditMode  = null;
+      mem2.gpLeagueEditingId = "";
       await renderPicks("light");
       return;
     }
