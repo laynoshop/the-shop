@@ -768,6 +768,27 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpTiebreakerActual { font-size: 12px; font-weight: 800; color: rgba(120,220,160,0.85); }
 
 /* ══════════════════════════════════════════════
+   LEAGUE ANNOUNCEMENT BANNER — admin-authored, top of the week view
+   ══════════════════════════════════════════════ */
+.gpAnnouncementBanner {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-bottom: 14px; padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(40,140,255,0.16) 0%, rgba(12,16,26,0.8) 60%);
+  border: 1px solid rgba(90,170,255,0.4);
+  box-shadow: 0 8px 26px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.gpAnnouncementIcon { font-size: 22px; line-height: 1.2; flex-shrink: 0; }
+.gpAnnouncementBody { min-width: 0; }
+.gpAnnouncementTitle {
+  font-size: 15px; font-weight: 900; color: #fff; letter-spacing: 0.01em;
+}
+.gpAnnouncementMessage {
+  margin-top: 4px; font-size: 13px; font-weight: 600; line-height: 1.45;
+  color: rgba(255,255,255,0.82);
+}
+
+/* ══════════════════════════════════════════════
    LOCK REMINDER BANNER
    ══════════════════════════════════════════════ */
 .gpLockBanner {
@@ -2239,6 +2260,24 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   }
 
   // ─── Lock reminder banner ──────────────────────────────────────────
+  // ─── League announcement — admin-authored notice at the very top of
+  // the week view. Absent entirely (returns "") when there's nothing
+  // set, for every user including admins — editing happens in League
+  // Settings, not inline here.
+  function gpBuildLeagueAnnouncementHTML(announcement) {
+    const title   = String(announcement?.title || "").trim();
+    const message = String(announcement?.message || "").trim();
+    if (!title && !message) return "";
+    return `
+<div class="gpAnnouncementBanner">
+  <div class="gpAnnouncementIcon">📣</div>
+  <div class="gpAnnouncementBody">
+    ${title ? `<div class="gpAnnouncementTitle">${esc(title)}</div>` : ""}
+    ${message ? `<div class="gpAnnouncementMessage">${esc(message)}</div>` : ""}
+  </div>
+</div>`;
+  }
+
   function gpBuildLockReminderHTML({ missingCount, minutesUntilLock }) {
     if (!missingCount || minutesUntilLock == null) return "";
     const hrs = Math.floor(minutesUntilLock / 60);
@@ -2697,6 +2736,8 @@ ${saveRow}`;
     const totalWeeks = Number(league?.totalWeeks) || "";
     const archived = !!league?.archived;
     const isH2H = league?.format === "h2h";
+    const announcementTitle   = esc(String(league?.announcement?.title ?? ""));
+    const announcementMessage = esc(String(league?.announcement?.message ?? ""));
 
     // Registered players (anyone who's ever completed the name+code screen)
     // get a checkbox each; the roster's chosen names not found in that
@@ -2748,6 +2789,13 @@ ${saveRow}`;
     <textarea id="gpLeagueH2HRoster" class="gpLeagueSettingsInput" rows="3"
       placeholder="One player name per line (or comma-separated)&#10;e.g. Alice, Bob">${rosterText}</textarea>
     <div class="muted" style="font-size:12px;margin-top:4px">The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
+  </div>
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">League Announcement</div>
+    <input type="text" id="gpLeagueAnnouncementTitle" class="gpLeagueSettingsInput" value="${announcementTitle}" placeholder="e.g. Playoffs start next week!" maxlength="60"/>
+    <textarea id="gpLeagueAnnouncementMessage" class="gpLeagueSettingsInput" rows="3" maxlength="280"
+      placeholder="Optional message shown below the title" style="margin-top:8px">${announcementMessage}</textarea>
+    <div class="muted" style="font-size:12px;margin-top:4px">Shown at the top of the week view for everyone in this league. Leave both fields blank to remove it.</div>
   </div>
   ${isEdit ? `
   <label class="gpLeagueSettingsCheckRow">
@@ -2818,6 +2866,7 @@ ${saveRow}`;
     gpBuildViewToggleHTML,
     gpBuildTiebreakerCardHTML,
     gpBuildLockReminderHTML,
+    gpBuildLeagueAnnouncementHTML,
     gpApplyAdminSelection,
     gpShowPlayerPicksOverlay,
   };

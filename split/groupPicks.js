@@ -599,6 +599,9 @@
     window.__gpCurrentTiebreakerEventId = tiebreakerEventId;
     window.__gpCurrentTiebreakers       = tiebreakers;
 
+    // ── league announcement (admin-authored, top of the page) ──
+    const announcementHTML = (Render().gpBuildLeagueAnnouncementHTML || (() => ""))(league.announcement);
+
     // ── lock reminder (mine only) ──
     const lockReminder = gpComputeLockReminder(games, myMap);
     const lockReminderHTML = lockReminder ? (Render().gpBuildLockReminderHTML || (() => ""))(lockReminder) : "";
@@ -638,7 +641,7 @@
       });
     }
 
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${toggleHTML}${pagerHTML}${adminBuilderHTML}${cardsHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${toggleHTML}${pagerHTML}${adminBuilderHTML}${cardsHTML}</div>`;
     postRender();
   }
 
@@ -802,6 +805,8 @@
       const archivedEl   = document.getElementById("gpLeagueArchived");
       const formatEl     = document.getElementById("gpLeagueFormat");
       const rosterEl     = document.getElementById("gpLeagueH2HRoster");
+      const announcementTitleEl   = document.getElementById("gpLeagueAnnouncementTitle");
+      const announcementMessageEl = document.getElementById("gpLeagueAnnouncementMessage");
       const checkedPlayerNames = Array.from(document.querySelectorAll('[data-gp-h2h-player="1"]:checked'))
         .map(el => String(el.value || "").trim()).filter(Boolean);
       const name       = String(nameEl?.value || "").trim();
@@ -810,6 +815,8 @@
       const format     = String(formatEl?.value || "points").trim();
       const extraNames = String(rosterEl?.value || "").split(/[\n,]/).map(s => s.trim()).filter(Boolean);
       const h2hRoster  = [...checkedPlayerNames, ...extraNames];
+      const announcementTitle   = String(announcementTitleEl?.value || "").trim();
+      const announcementMessage = String(announcementMessageEl?.value || "").trim();
       if (!name) { alert("Give the league a name first."); return; }
 
       btn.disabled = true; btn.textContent = "Saving…";
@@ -822,11 +829,11 @@
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
             name, seasonYear: year, totalWeeks,
             archived: archivedEl ? !!archivedEl.checked : undefined,
-            format, h2hRoster
+            format, h2hRoster, announcementTitle, announcementMessage
           });
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
-            name, seasonYear: year, totalWeeks, format, h2hRoster
+            name, seasonYear: year, totalWeeks, format, h2hRoster, announcementTitle, announcementMessage
           });
           mem2.pickLeagueId = newId;
           mem2.gpShowLeaguePicker = false;
