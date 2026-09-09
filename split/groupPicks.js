@@ -482,12 +482,18 @@
         try { league = await (Data().gpGetLeague || (async () => null))(db, mem.gpLeagueEditingId); } catch {}
       }
       let registeredPlayers = [];
-      try { registeredPlayers = await (Data().gpListRegisteredPlayers || (async () => []))(db); } catch {}
+      let leagueMembers = [];
+      try {
+        [registeredPlayers, leagueMembers] = await Promise.all([
+          (Data().gpListRegisteredPlayers || (async () => []))(db),
+          isEdit ? (Data().gpGetLeagueMembers || (async () => []))(db, mem.gpLeagueEditingId) : Promise.resolve([]),
+        ]);
+      } catch {}
       const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
         leagueName: league?.name || "", isAdmin, showLeaguesBtn: !!gpGetSelectedLeagueId(), playerName: name
       });
       const formHTML = (Render().gpBuildLeagueSettingsHTML || (() => ""))({
-        mode: isEdit ? "edit" : "create", league, registeredPlayers
+        mode: isEdit ? "edit" : "create", league, registeredPlayers, leagueMembers
       });
       el.innerHTML = `${headerHTML}<div class="gpContainer">${formHTML}</div>`;
       postRender();

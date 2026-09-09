@@ -3023,7 +3023,7 @@ ${saveRow}`;
   }
 
   // ─── League settings form (create or edit) ────────────────────────
-  function gpBuildLeagueSettingsHTML({ mode, league, registeredPlayers }) {
+  function gpBuildLeagueSettingsHTML({ mode, league, registeredPlayers, leagueMembers }) {
     const isEdit = mode === "edit" && league;
     const name    = esc(String(league?.name ?? ""));
     const year    = Number(league?.seasonYear) || new Date().getFullYear();
@@ -3059,6 +3059,25 @@ ${saveRow}`;
     const extraNames = rosterNames.filter(n => !registeredNameSet.has(String(n).toLowerCase()));
     const rosterText = esc(extraNames.join("\n"));
 
+    // Who has actually joined this league — admin-only visibility, using
+    // the same avatar/name row styling as the player-facing Join overlay.
+    const membersList = Array.isArray(leagueMembers) ? leagueMembers : [];
+    const membersRowsHTML = membersList.map(m => {
+      const { bg, color } = avatarStyle(String(m.name || "Someone"));
+      return `
+      <div class="gpJoinMemberRow">
+        <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(m.name))}</div>
+        <div class="gpJoinMemberName">${esc(m.name)}</div>
+      </div>`;
+    }).join("");
+    const membersSectionHTML = isEdit ? `
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">Joined Players (${membersList.length})</div>
+    ${membersList.length
+      ? `<div class="gpJoinMembersList">${membersRowsHTML}</div>`
+      : `<div class="gpJoinMembersEmpty">Nobody's joined this league yet.</div>`}
+  </div>` : "";
+
     const playerChecklistHTML = registered.length ? `
     <div class="gpH2HPlayerChecklist">
       ${registered.map(p => `
@@ -3075,6 +3094,7 @@ ${saveRow}`;
     <div class="gpLeagueSettingsLabel">League Name</div>
     <input type="text" id="gpLeagueName" class="gpLeagueSettingsInput" value="${name}" placeholder="e.g. Work League" maxlength="40"/>
   </div>
+  ${membersSectionHTML}
   <div class="gpLeagueSettingsRow">
     <div class="gpLeagueSettingsLabel">Season Year</div>
     <input type="number" id="gpLeagueYear" class="gpLeagueSettingsInput" value="${esc(String(year))}"/>
