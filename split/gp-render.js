@@ -716,6 +716,54 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 
 /* ══════════════════════════════════════════════
+   PRE-LOCK PROGRESS — leaderboard before any game is final
+   ══════════════════════════════════════════════ */
+.gpPreLockList {
+  display: flex; flex-direction: column;
+  gap: 14px;
+  padding: 18px 16px 22px;
+}
+.gpPreLockRow {
+  display: flex; align-items: center; gap: 12px;
+}
+.gpPreLockAvatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 900; letter-spacing: -0.3px;
+  text-transform: uppercase; flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.gpPreLockInfo {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.gpPreLockName {
+  font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.85);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpPreLockBarWrap {
+  position: relative;
+  height: 22px; border-radius: 999px; overflow: hidden;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.gpPreLockBarFill {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 0%;
+  background: linear-gradient(90deg, rgba(120,150,255,0.55), rgba(130,175,255,0.85));
+  transition: width 0.35s ease, background 0.35s ease;
+}
+.gpPreLockBarFillDone {
+  background: linear-gradient(90deg, #1a8f5c, #2ecf82);
+}
+.gpPreLockBarLabel {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em;
+  color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.65);
+  white-space: nowrap; padding: 0 8px;
+}
+
+/* ══════════════════════════════════════════════
    SPREAD CHIP (ATS weeks)
    ══════════════════════════════════════════════ */
 .gpSpreadChip {
@@ -2052,8 +2100,75 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // ─── Pre-lock progress (leaderboard before any game has gone final) ──
+  // Every league member should be visible from the moment a week opens,
+  // not just once someone's picks start scoring — so instead of an empty
+  // "check back later" card, each member gets a "N of N games locked in"
+  // progress bar. Falls back to whoever's picked so far for leagues
+  // created before the Join League members list existed, so this never
+  // regresses to showing nobody.
+  function gpComputePreLockProgress(members, games, allPicks) {
+    const total = Array.isArray(games) ? games.length : 0;
+    const picks = (allPicks && typeof allPicks === "object") ? allPicks : {};
+
+    const nameById = new Map();
+    for (const m of (Array.isArray(members) ? members : [])) {
+      const pid = String(m?.playerId || m?.uid || "").trim();
+      if (!pid) continue;
+      nameById.set(pid, String(m?.name || "Someone").trim() || "Someone");
+    }
+
+    const countById = new Map();
+    for (const eventId of Object.keys(picks)) {
+      const eventPicks = Array.isArray(picks[eventId]) ? picks[eventId] : [];
+      for (const p of eventPicks) {
+        const pid = String(p?.uid || "").trim();
+        if (!pid) continue;
+        if (!nameById.has(pid)) nameById.set(pid, String(p?.name || "Someone").trim() || "Someone");
+        countById.set(pid, (countById.get(pid) || 0) + 1);
+      }
+    }
+
+    const rows = [...nameById.entries()].map(([pid, name]) => {
+      const done = Math.min(total, countById.get(pid) || 0);
+      const pct  = total > 0 ? Math.round((done / total) * 100) : 0;
+      return { pid, name, done, total, pct };
+    });
+
+    rows.sort((a, b) => (b.pct - a.pct) || String(a.name).localeCompare(String(b.name)));
+    return rows;
+  }
+
+  function gpBuildPreLockProgressHTML(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+      return `
+<div class="gpEmpty" style="padding:28px 20px">
+  <div style="font-size:28px;margin-bottom:8px">⏳</div>
+  <div style="font-size:14px;font-weight:800;color:rgba(255,255,255,0.5)">Leaderboard locks in once games go final</div>
+</div>`;
+    }
+    const rowsHTML = list.map(r => {
+      const { bg, color } = avatarStyle(r.name);
+      const complete = r.total > 0 && r.done >= r.total;
+      const barLabel = complete ? "100% locked in" : `${r.done} of ${r.total} games locked in`;
+      return `
+<div class="gpPreLockRow">
+  <div class="gpPreLockAvatar" style="background:${bg};color:${color}">${esc(initials(r.name))}</div>
+  <div class="gpPreLockInfo">
+    <div class="gpPreLockName">${esc(r.name)}</div>
+    <div class="gpPreLockBarWrap">
+      <div class="gpPreLockBarFill${complete ? " gpPreLockBarFillDone" : ""}" style="width:${r.pct}%"></div>
+      <div class="gpPreLockBarLabel">${esc(barLabel)}</div>
+    </div>
+  </div>
+</div>`;
+    }).join("");
+    return `<div class="gpPreLockList">${rowsHTML}</div>`;
+  }
+
   // ─── Leaderboard ─────────────────────────────────────────────────
-  function buildLeaderboardHTML(weekLabel, leaderboard) {
+  function buildLeaderboardHTML(weekLabel, leaderboard, opts) {
     const { rows, finalsCount } = leaderboard || {};
     const list  = Array.isArray(rows) ? rows : [];
     const label = String(weekLabel || "");
@@ -2069,8 +2184,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   <span>🤝 Tie/Push = 0.5 pts</span>
 </div>`;
 
-    // ── No finals yet ──
+    // ── No finals yet — show everyone in the league with how many of
+    //    this week's games they've locked in a pick for, instead of an
+    //    empty/all-zero table nobody can do anything with yet ──
     if (!finalsCount) {
+      const progressRows = gpComputePreLockProgress(opts?.leagueMembers, opts?.games, opts?.allPicks);
       return `
 <div class="gpLeaderCard">
   <div class="gpLeaderHeader">
@@ -2079,10 +2197,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
     </div>
   </div>
-  <div class="gpEmpty" style="padding:28px 20px">
-    <div style="font-size:28px;margin-bottom:8px">⏳</div>
-    <div style="font-size:14px;font-weight:800;color:rgba(255,255,255,0.5)">Leaderboard locks in once games go final</div>
-  </div>
+  ${gpBuildPreLockProgressHTML(progressRows)}
   ${scoringFooter}
 </div>`;
     }
@@ -2710,7 +2825,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
   function gpBuildGroupPicksCardHTML({
     weekId, weekLabel, games, myMap, published, allPicks, isAdmin,
     atsEventIds, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
-    lockReminder, h2hFormat, h2hSchedule, weekIndex
+    lockReminder, h2hFormat, h2hSchedule, weekIndex, leagueMembers
   }) {
     if (!weekId) {
       return `<div class="gpEmpty">No active week yet. Ask your admin to create one.</div>`;
@@ -2743,7 +2858,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
         ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds: [...atsIdSet], tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
-      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb);
+      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks });
 
       if (h2hFormat && typeof GP_Data.gpGetH2HRoundForWeek === "function" && typeof GP_Data.gpComputeH2HWeekResults === "function") {
         const round = GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex);
