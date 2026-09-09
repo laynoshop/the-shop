@@ -308,36 +308,41 @@
   }
 
   // ───────────────────────────────────────────
-  // Leaderboard kickoff countdown (pre-lock header) — ticks live once
-  // per second against the #gpLbCountdown element gp-render.js renders
-  // with a data-target timestamp. Re-armed on every render since a full
+  // Kickoff countdowns (leaderboard header + league picker cards) — any
+  // number of .gpCountdownWidget[data-gp-countdown] elements can be on
+  // screen at once, each with its own data-target timestamp; one shared
+  // 1s interval ticks all of them. Re-armed on every render since a full
   // re-render tears out the old DOM nodes the previous interval pointed at.
   // ───────────────────────────────────────────
-  let _gpLbCountdownTimer = null;
-  function gpStopLeaderboardCountdown() {
-    if (_gpLbCountdownTimer) { clearInterval(_gpLbCountdownTimer); _gpLbCountdownTimer = null; }
+  let _gpCountdownTimer = null;
+  function gpStopAllCountdowns() {
+    if (_gpCountdownTimer) { clearInterval(_gpCountdownTimer); _gpCountdownTimer = null; }
   }
-  function gpStartLeaderboardCountdown() {
-    gpStopLeaderboardCountdown();
-    const wrap = document.getElementById("gpLbCountdown");
-    if (!wrap) return;
-    const target = Number(wrap.getAttribute("data-target") || 0);
-    if (!target) return;
-    const daysEl = document.getElementById("gpLbCdDays");
-    const hrsEl  = document.getElementById("gpLbCdHrs");
-    const minsEl = document.getElementById("gpLbCdMins");
-    const secsEl = document.getElementById("gpLbCdSecs");
-    const tick = () => {
-      const ms = target - Date.now();
-      if (ms <= 0) { gpStopLeaderboardCountdown(); return; }
+  function gpTickAllCountdowns() {
+    const nodes = document.querySelectorAll(".gpCountdownWidget[data-gp-countdown]");
+    if (!nodes.length) { gpStopAllCountdowns(); return; }
+    const now = Date.now();
+    nodes.forEach(node => {
+      const target = Number(node.getAttribute("data-target") || 0);
+      if (!target) return;
+      const ms = target - now;
+      if (ms <= 0) return; // frozen at 0 until the next render replaces it
       const total = Math.floor(ms / 1000);
-      if (daysEl) daysEl.textContent = String(Math.floor(total / 86400));
-      if (hrsEl)  hrsEl.textContent  = String(Math.floor((total % 86400) / 3600)).padStart(2, "0");
-      if (minsEl) minsEl.textContent = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
-      if (secsEl) secsEl.textContent = String(total % 60).padStart(2, "0");
-    };
-    tick();
-    _gpLbCountdownTimer = setInterval(tick, 1000);
+      const d = node.querySelector('[data-cd="d"]');
+      const h = node.querySelector('[data-cd="h"]');
+      const m = node.querySelector('[data-cd="m"]');
+      const s = node.querySelector('[data-cd="s"]');
+      if (d) d.textContent = String(Math.floor(total / 86400));
+      if (h) h.textContent = String(Math.floor((total % 86400) / 3600)).padStart(2, "0");
+      if (m) m.textContent = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
+      if (s) s.textContent = String(total % 60).padStart(2, "0");
+    });
+  }
+  function gpStartAllCountdowns() {
+    gpStopAllCountdowns();
+    if (!document.querySelector(".gpCountdownWidget[data-gp-countdown]")) return;
+    gpTickAllCountdowns();
+    _gpCountdownTimer = setInterval(gpTickAllCountdowns, 1000);
   }
 
   // ───────────────────────────────────────────
@@ -345,7 +350,7 @@
   // ───────────────────────────────────────────
   function postRender() {
     syncSaveBtnState();
-    gpStartLeaderboardCountdown();
+    gpStartAllCountdowns();
     // Never show Michigan's real name on the Picks page — admin picker,
     // committed game cards, leaderboard, everywhere.
     try {
@@ -547,14 +552,34 @@
       try { leagues = await (Data().gpListLeagues || (async () => []))(db); } catch {}
       const isActiveFn = Data().gpIsLeagueActive    || (async () => false);
       const membersFn  = Data().gpGetLeagueMembers  || (async () => []);
+      const gamesFn    = Data().gpGetSlateGames     || (async () => []);
+      // Current week per league (activeWeekId, falling back to the most
+      // recently created week) — fetched so the card can show "Week N
+      // starts in" without the picker screen otherwise ever touching a
+      // week's games.
+      const currentWeekOf = leagues.map(l => {
+        const weeks = Array.isArray(l.weeks) ? l.weeks : [];
+        const weekId = String(l.activeWeekId || (weeks.length ? weeks[weeks.length - 1].id : "") || "");
+        const weekMeta = weeks.find(w => String(w?.id) === weekId) || null;
+        return { weekId, weekLabel: String(weekMeta?.label || "") };
+      });
       try {
-        const [activeFlags, memberLists] = await Promise.all([
+        const [activeFlags, memberLists, weekGamesLists] = await Promise.all([
           Promise.all(leagues.map(l => isActiveFn(db, l).catch(() => false))),
           Promise.all(leagues.map(l => membersFn(db, l.id).catch(() => []))),
+          Promise.all(currentWeekOf.map(w => w.weekId ? gamesFn(db, w.weekId).catch(() => []) : Promise.resolve([]))),
         ]);
+        const earliestKickoffMsFn = Render().gpEarliestKickoffMs || (() => null);
         leagues = leagues.map((l, i) => {
           const members = memberLists[i] || [];
-          return { ...l, active: activeFlags[i], members, isMember: members.some(m => m.playerId === playerId) };
+          return {
+            ...l,
+            active: activeFlags[i],
+            members,
+            isMember: members.some(m => m.playerId === playerId),
+            currentWeekLabel: currentWeekOf[i].weekLabel,
+            currentWeekFirstKickoffMs: earliestKickoffMsFn(weekGamesLists[i]),
+          };
         });
       } catch {}
       // Stashed so the Join League overlay (opened from a card tap) can
