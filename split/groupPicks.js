@@ -620,8 +620,13 @@
     window.__gpCurrentTiebreakerEventId = tiebreakerEventId;
     window.__gpCurrentTiebreakers       = tiebreakers;
 
-    // ── league announcement (admin-authored, top of the page) ──
-    const announcementHTML = (Render().gpBuildLeagueAnnouncementHTML || (() => ""))(league.announcement);
+    // ── league announcements (admin-authored, top of the page) —
+    //    a league saved before multi-announcement support only has the
+    //    old singular `announcement` field; treat it as a 1-item list ──
+    const announcementsList = Array.isArray(league.announcements)
+      ? league.announcements
+      : (league.announcement ? [league.announcement] : []);
+    const announcementHTML = (Render().gpBuildLeagueAnnouncementsHTML || (() => ""))(announcementsList);
 
     // ── lock reminder (mine only) — missing picks + tiebreaker ──
     const lockReminder = gpComputeLockReminder(
@@ -903,8 +908,6 @@
       const archivedEl   = document.getElementById("gpLeagueArchived");
       const formatEl     = document.getElementById("gpLeagueFormat");
       const rosterEl     = document.getElementById("gpLeagueH2HRoster");
-      const announcementTitleEl   = document.getElementById("gpLeagueAnnouncementTitle");
-      const announcementMessageEl = document.getElementById("gpLeagueAnnouncementMessage");
       const checkedPlayerNames = Array.from(document.querySelectorAll('[data-gp-h2h-player="1"]:checked'))
         .map(el => String(el.value || "").trim()).filter(Boolean);
       const name       = String(nameEl?.value || "").trim();
@@ -913,8 +916,10 @@
       const format     = String(formatEl?.value || "points").trim();
       const extraNames = String(rosterEl?.value || "").split(/[\n,]/).map(s => s.trim()).filter(Boolean);
       const h2hRoster  = [...checkedPlayerNames, ...extraNames];
-      const announcementTitle   = String(announcementTitleEl?.value || "").trim();
-      const announcementMessage = String(announcementMessageEl?.value || "").trim();
+      const announcements = [0, 1, 2].map(i => ({
+        title:   String(document.getElementById(`gpLeagueAnnouncementTitle${i}`)?.value || "").trim(),
+        message: String(document.getElementById(`gpLeagueAnnouncementMessage${i}`)?.value || "").trim(),
+      }));
       if (!name) { alert("Give the league a name first."); return; }
 
       btn.disabled = true; btn.textContent = "Saving…";
@@ -927,11 +932,11 @@
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
             name, seasonYear: year, totalWeeks,
             archived: archivedEl ? !!archivedEl.checked : undefined,
-            format, h2hRoster, announcementTitle, announcementMessage
+            format, h2hRoster, announcements
           });
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
-            name, seasonYear: year, totalWeeks, format, h2hRoster, announcementTitle, announcementMessage
+            name, seasonYear: year, totalWeeks, format, h2hRoster, announcements
           });
           // The admin creating a league is almost always a player in it
           // too — auto-join them so they don't hit their own "Join"
