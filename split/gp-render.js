@@ -873,6 +873,13 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpPicksSection-tiebreaker .gpPicksSectionLine { background: rgba(150,100,255,0.35); }
 
+.gpPicksSectionSubtitle {
+  padding: 2px 4px 4px;
+  font-size: 12.5px; font-weight: 600; line-height: 1.45;
+  color: rgba(255,255,255,0.5);
+}
+.gpPicksSectionSubtitle b { color: rgba(255,255,255,0.75); font-weight: 800; }
+
 /* ══════════════════════════════════════════════
    WEEK PAGER (replaces the old week <select>)
    ══════════════════════════════════════════════ */
@@ -2656,13 +2663,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   }
 
   // ─── Main group picks card block ──────────────────────────────────
-  function gpBuildSectionHeaderHTML(label, theme) {
+  function gpBuildSectionHeaderHTML(label, theme, subtitle) {
     return `
 <div class="gpPicksSectionHeader gpPicksSection-${esc(theme || "")}">
   <span class="gpPicksSectionLine"></span>
   <span class="gpPicksSectionLabel">${esc(label)}</span>
   <span class="gpPicksSectionLine"></span>
-</div>`;
+</div>
+${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
   }
 
   function gpBuildGroupPicksCardHTML({
@@ -2757,8 +2765,14 @@ ${lockReminder || ""}
 ${matchupsHTML}
 ${recapHTML}
 ${leaderboardHTML}
-${straightCardsHTML ? gpBuildSectionHeaderHTML("🏈 Outright Winners", "outright") + straightCardsHTML : ""}
-${atsCardsHTML ? gpBuildSectionHeaderHTML("📈 Against the Spread", "ats") + atsCardsHTML : ""}
+${straightCardsHTML ? gpBuildSectionHeaderHTML(
+  "🏈 Outright Winners", "outright",
+  "Pick the team you think will <b>win the game</b> — margin of victory doesn't matter, just get the winner right."
+) + straightCardsHTML : ""}
+${atsCardsHTML ? gpBuildSectionHeaderHTML(
+  "📈 Against the Spread", "ats",
+  `Pick the team you think will <b>cover the spread</b>, not just win outright. Example: Ohio State &minus;7.5 must win by 8+ points to cover. The underdog (+7.5) covers with a loss of 7 points or less &mdash; or a win.`
+) + atsCardsHTML : ""}
 ${tiebreakerHTML}
 ${saveRow}`;
   }
