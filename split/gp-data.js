@@ -286,17 +286,30 @@
     return out;
   }
 
-  // ─── save picks (batch write) ────────────────────────────────────────
+  // ─── save picks (independent writes) ───────────────────────────────
   // tiebreakerGuess (optional): finite number → written onto the parent
   // picks/{playerId} doc alongside uid/name. Omit/undefined to leave as-is.
+  //
+  // Each pick (and the parent doc) is written as its own request rather
+  // than one atomic batch. A single rejected write — a game that locked
+  // between choosing and saving, a tiebreaker that locked, or anything
+  // else Firestore's rules reject — used to fail the whole batch and take
+  // every other still-valid pick down with it, surfacing only a generic
+  // "Missing or insufficient permissions" error and saving nothing at
+  // all. Independent writes let every valid pick go through regardless of
+  // what happens to the others, and the return value reports exactly
+  // which ones failed and why so the UI (and the next bug report) can be
+  // specific instead of guessing.
   async function gpSaveMyPicksBatch(db, slateId, playerId, pendingMap, tiebreakerGuess) {
     const keys = Object.keys(pendingMap || {});
     const hasTiebreaker = Number.isFinite(tiebreakerGuess);
-    if (!keys.length && !hasTiebreaker) return;
+    const result = { parent: null, games: {} };
+    if (!keys.length && !hasTiebreaker) return result;
+
     const picksUserRef = db.collection("pickSlates").doc(slateId)
       .collection("picks").doc(playerId);
-    const name  = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
-    const batch = db.batch();
+    const name = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
+
     const userDoc = {
       uid: String(playerId || ""),
       name,
@@ -310,18 +323,30 @@
       // touches game picks.
       userDoc.tiebreakerUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
     }
-    batch.set(picksUserRef, userDoc, { merge: true });
-    for (const eventId of keys) {
+    try {
+      await picksUserRef.set(userDoc, { merge: true });
+      result.parent = { ok: true };
+    } catch (err) {
+      result.parent = { ok: false, error: String(err?.message || err) };
+    }
+
+    await Promise.all(keys.map(async (eventId) => {
       const side    = String(pendingMap[eventId] || "");
       const gameRef = picksUserRef.collection("games").doc(String(eventId));
-      batch.set(gameRef, {
-        uid:       String(playerId || ""),
-        name,
-        side,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-    await batch.commit();
+      try {
+        await gameRef.set({
+          uid:       String(playerId || ""),
+          name,
+          side,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        result.games[eventId] = { ok: true };
+      } catch (err) {
+        result.games[eventId] = { ok: false, error: String(err?.message || err) };
+      }
+    }));
+
+    return result;
   }
 
   // ─── everyone's picks cache ─────────────────────────────────────────

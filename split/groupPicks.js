@@ -119,6 +119,9 @@
   function gpPendingGet(eventId) {
     return String(gpPendingBucket()[String(eventId)] || "");
   }
+  function gpPendingDelete(eventId) {
+    delete gpPendingBucket()[String(eventId)];
+  }
   function gpPendingClear() {
     window.__GP_PENDING = {};
     gpPendingClearTiebreaker();
@@ -756,13 +759,14 @@
       const pending = {};
       let droppedGames = 0;
       for (const [eventId, side] of Object.entries(pendingRaw)) {
-        if (isLocked(eventId)) { droppedGames++; continue; }
+        if (isLocked(eventId)) { droppedGames++; gpPendingDelete(eventId); continue; }
         pending[eventId] = side;
       }
       let droppedTiebreaker = false;
       if (tbPending != null && isLocked(window.__gpCurrentTiebreakerEventId)) {
         tbPending = null;
         droppedTiebreaker = true;
+        gpPendingClearTiebreaker();
       }
 
       if (!Object.keys(pending).length && tbPending == null) {
@@ -777,16 +781,43 @@
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
-        await (Data().gpSaveMyPicksBatch || (async () => {}))(db2, slateId, playerId, pending, tbPending);
-        gpPendingClear();
-        // Bust the allPicks cache so the re-render fetches fresh data
+        // Each pick (and the tiebreaker) is written independently now, so
+        // one write Firestore rejects can't take the others down with it
+        // the way a single atomic batch used to — this call reports
+        // exactly which writes succeeded and which didn't, and why.
+        const result = await (Data().gpSaveMyPicksBatch || (async () => ({ parent: null, games: {} })))(
+          db2, slateId, playerId, pending, tbPending
+        );
+
+        const rejectedGames = [];
+        for (const [eventId, r] of Object.entries(result.games || {})) {
+          if (r?.ok) { gpPendingDelete(eventId); }
+          else { rejectedGames.push({ eventId, error: r?.error || "unknown error" }); }
+        }
+        const parentRejected = result.parent && result.parent.ok === false;
+        const tiebreakerSaved = tbPending != null && result.parent && result.parent.ok !== false;
+        if (tiebreakerSaved) gpPendingClearTiebreaker();
+
         gpBustAllPicksCache(slateId);
-        if (droppedGames || droppedTiebreaker) {
-          const parts = [];
-          if (droppedGames) parts.push(`${droppedGames} pick${droppedGames !== 1 ? "s" : ""}`);
-          if (droppedTiebreaker) parts.push("the tiebreaker");
-          btn.textContent = "Saved (some locked)";
-          setTimeout(() => alert(`Heads up: ${parts.join(" and ")} locked before you saved, so ${parts.length > 1 ? "those weren't" : "that wasn't"} included. Everything else saved fine.`), 50);
+
+        const lockedParts = [];
+        if (droppedGames) lockedParts.push(`${droppedGames} pick${droppedGames !== 1 ? "s" : ""} locked before you saved`);
+        if (droppedTiebreaker) lockedParts.push("the tiebreaker locked before you saved");
+
+        const failedParts = [];
+        if (rejectedGames.length) failedParts.push(`${rejectedGames.length} pick${rejectedGames.length !== 1 ? "s" : ""} couldn't save (${rejectedGames[0].error})`);
+        if (parentRejected) {
+          failedParts.push(tbPending != null
+            ? `the tiebreaker couldn't save (${result.parent.error})`
+            : `couldn't save (${result.parent.error})`);
+        }
+
+        if (lockedParts.length || failedParts.length) {
+          btn.textContent = "Saved (see note)";
+          const msgParts = [];
+          if (lockedParts.length) msgParts.push(`${lockedParts.join(" and ")} — those are gone for good.`);
+          if (failedParts.length) msgParts.push(`${failedParts.join("; ")} — still pending, so you can try Save again.`);
+          setTimeout(() => alert(`Heads up — ${msgParts.join(" ")} Everything else saved fine.`), 50);
         } else {
           btn.textContent = "Saved!";
         }
@@ -795,6 +826,7 @@
         btn.textContent = "Error — retry";
         btn.disabled = false;
         console.error("[GP] save error:", err);
+        alert(`Couldn't save: ${String(err?.message || err)}`);
       }
       return;
     }
