@@ -587,22 +587,24 @@
     let slateDoc    = {};
     let tiebreakers = {};
     let myPicksUserDoc = {};
+    let leagueMembers  = [];
     if (selectedId) {
-      // These six reads are independent of one another — fetching them
+      // These seven reads are independent of one another — fetching them
       // in parallel instead of one-at-a-time cuts total wait time from
-      // the sum of all six round trips down to whichever is slowest,
+      // the sum of all seven round trips down to whichever is slowest,
       // which matters a lot on a weak connection (each sequential await
       // adds its own latency, and enough of them stacked up can trip the
       // page's hard render timeout on its own, with nothing actually
       // "stuck").
       try {
-        [games, myMap, allPicks, slateDoc, tiebreakers, myPicksUserDoc] = await Promise.all([
+        [games, myMap, allPicks, slateDoc, tiebreakers, myPicksUserDoc, leagueMembers] = await Promise.all([
           (Data().gpGetSlateGames         || (async () => []))(db, selectedId),
           (Data().gpGetMyPicksMap         || (async () => ({})))(db, selectedId, playerId),
           (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, selectedId),
           (Data().gpGetSlateDoc           || (async () => ({})))(db, selectedId),
           (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, selectedId),
           (Data().gpGetMyPicksUserDoc     || (async () => ({})))(db, selectedId, playerId),
+          (Data().gpGetLeagueMembers      || (async () => []))(db, pickLeagueId),
         ]);
       } catch {}
     }
@@ -656,7 +658,7 @@
     }) : "";
     const cardsHTML = (Render().gpBuildGroupPicksCardHTML || (() => ""))({
       weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin,
-      atsEventIds, tiebreakerEventId, tiebreakers,
+      atsEventIds, tiebreakerEventId, tiebreakers, leagueMembers,
       myTiebreakerGuess, pendingTiebreakerGuess: gpPendingGetTiebreaker(),
       lockReminder: lockReminderHTML,
       h2hFormat: league.format === "h2h", h2hSchedule: league.h2hSchedule,
