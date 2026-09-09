@@ -139,6 +139,44 @@
     }
   }
 
+  // ─── league membership ───────────────────────────────────────────
+  // A lightweight "who's actually playing this league" roster, separate
+  // from the player registry above (that's everyone who's ever logged
+  // in anywhere; this is who's opted into THIS league). Joining is
+  // self-service — any signed-in player can add themselves — matching
+  // this app's existing trust model (no real per-player auth binding
+  // anywhere, e.g. pickSlates/picks/{playerId} works the same way).
+  async function gpJoinLeague(db, leagueId, playerId, name) {
+    const pid = String(playerId || "").trim();
+    const nm  = String(name || "").trim().slice(0, 20);
+    if (!leagueId || !pid || !nm) return;
+    try {
+      await db.collection("leagues").doc(String(leagueId))
+        .collection("members").doc(pid)
+        .set({ uid: pid, name: nm, joinedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    } catch (err) {
+      console.error("[GP] gpJoinLeague failed:", err);
+    }
+  }
+
+  async function gpGetLeagueMembers(db, leagueId) {
+    if (!leagueId) return [];
+    try {
+      const snap = await db.collection("leagues").doc(String(leagueId)).collection("members").get();
+      const out = [];
+      snap.forEach(doc => {
+        const data = doc.data() || {};
+        const nm = String(data?.name || "").trim();
+        if (nm) out.push({ playerId: doc.id, name: nm, joinedAt: data?.joinedAt || null });
+      });
+      out.sort((a, b) => a.name.localeCompare(b.name));
+      return out;
+    } catch (err) {
+      console.error("[GP] gpGetLeagueMembers failed:", err);
+      return [];
+    }
+  }
+
   // ─── is a league "active" right now? ──────────────────────────────
   // Active = at least one published week, AND the season hasn't wrapped
   // up its configured final week yet.
@@ -901,6 +939,8 @@
     gpIsLeagueActive,
     gpRegisterPlayer,
     gpListRegisteredPlayers,
+    gpJoinLeague,
+    gpGetLeagueMembers,
     gpGetSlateDoc,
     gpGetSlateGames,
     gpGetMyPicksMap,

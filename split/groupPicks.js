@@ -173,14 +173,16 @@
   }
 
   // ───────────────────────────────────────────
-  // Lock reminder — flags picks that lock soon and are still empty
-  // ───────────────────────────────────────────
-  const GP_LOCK_REMINDER_THRESHOLD_MIN = 180; // 3 hours
-  function gpComputeLockReminder(games, myMap) {
+  // Lock reminder — flags any still-open games without a pick, and an
+  // unanswered tiebreaker, every time the player lands on this week (not
+  // just when a lock is imminent — that's a supplementary detail here,
+  // not a gate on whether the reminder shows at all).
+  function gpComputeLockReminder(games, myMap, tiebreakerEventId, myTiebreakerGuess, pendingTiebreakerGuess) {
     const now = Date.now();
+    const list = Array.isArray(games) ? games : [];
     let missingCount = 0;
     let earliestMs = null;
-    for (const g of (Array.isArray(games) ? games : [])) {
+    for (const g of list) {
       const eventId = String(g?.eventId || g?.id || "");
       if (!eventId) continue;
       const ms = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
@@ -190,10 +192,19 @@
       missingCount++;
       if (earliestMs == null || ms < earliestMs) earliestMs = ms;
     }
-    if (!missingCount || earliestMs == null) return null;
-    const minutesUntilLock = Math.round((earliestMs - now) / 60000);
-    if (minutesUntilLock > GP_LOCK_REMINDER_THRESHOLD_MIN) return null;
-    return { missingCount, minutesUntilLock };
+
+    let tiebreakerMissing = false;
+    if (tiebreakerEventId) {
+      const tbGame = list.find(g => String(g?.eventId || g?.id || "") === String(tiebreakerEventId));
+      const tbMs = tbGame ? (tbGame?.startTime?.toMillis ? tbGame.startTime.toMillis() : 0) : 0;
+      const tbLocked = tbMs > 0 && now >= tbMs;
+      const hasGuess = myTiebreakerGuess != null || pendingTiebreakerGuess != null;
+      if (!tbLocked && !hasGuess) tiebreakerMissing = true;
+    }
+
+    if (!missingCount && !tiebreakerMissing) return null;
+    const minutesUntilLock = earliestMs != null ? Math.round((earliestMs - now) / 60000) : null;
+    return { missingCount, tiebreakerMissing, minutesUntilLock };
   }
 
   // ───────────────────────────────────────────
@@ -491,11 +502,21 @@
       const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false, showSaveBtn: false, playerName: name });
       let leagues = [];
       try { leagues = await (Data().gpListLeagues || (async () => []))(db); } catch {}
-      const isActiveFn = Data().gpIsLeagueActive || (async () => false);
+      const isActiveFn = Data().gpIsLeagueActive    || (async () => false);
+      const membersFn  = Data().gpGetLeagueMembers  || (async () => []);
       try {
-        const activeFlags = await Promise.all(leagues.map(l => isActiveFn(db, l).catch(() => false)));
-        leagues = leagues.map((l, i) => ({ ...l, active: activeFlags[i] }));
+        const [activeFlags, memberLists] = await Promise.all([
+          Promise.all(leagues.map(l => isActiveFn(db, l).catch(() => false))),
+          Promise.all(leagues.map(l => membersFn(db, l.id).catch(() => []))),
+        ]);
+        leagues = leagues.map((l, i) => {
+          const members = memberLists[i] || [];
+          return { ...l, active: activeFlags[i], members, isMember: members.some(m => m.playerId === playerId) };
+        });
       } catch {}
+      // Stashed so the Join League overlay (opened from a card tap) can
+      // reuse this same data instead of re-fetching it.
+      mem.gpLeaguePickerLeagues = leagues;
       const pickerHTML = (Render().gpBuildLeaguePickerHTML || (() => ""))({ leagues, isAdmin });
       el.innerHTML = `${headerHTML}<div class="gpContainer">${pickerHTML}</div>`;
       postRender();
@@ -602,8 +623,10 @@
     // ── league announcement (admin-authored, top of the page) ──
     const announcementHTML = (Render().gpBuildLeagueAnnouncementHTML || (() => ""))(league.announcement);
 
-    // ── lock reminder (mine only) ──
-    const lockReminder = gpComputeLockReminder(games, myMap);
+    // ── lock reminder (mine only) — missing picks + tiebreaker ──
+    const lockReminder = gpComputeLockReminder(
+      games, myMap, tiebreakerEventId, myTiebreakerGuess, gpPendingGetTiebreaker()
+    );
     const lockReminderHTML = lockReminder ? (Render().gpBuildLockReminderHTML || (() => ""))(lockReminder) : "";
 
     // ── build HTML ──
@@ -767,6 +790,50 @@
       return;
     }
 
+    // ── leagues: show the "Join League" overlay for a league the
+    //    player hasn't joined yet (uses the picker's already-fetched
+    //    league + member data, no extra round trip) ──
+    if (action === "openJoinOverlay") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      const leagues = gpMem().gpLeaguePickerLeagues || [];
+      const league  = leagues.find(l => String(l.id) === leagueId);
+      if (!league) return;
+      (Render().gpShowJoinLeagueOverlay || (() => {}))(league, league.members || []);
+      return;
+    }
+
+    // ── leagues: confirm joining from inside the overlay ──
+    if (action === "confirmJoinLeague") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      const idObj2    = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
+      const playerId  = idObj2.playerId || gpMem().picksPlayerId || "";
+      const playerNm  = idObj2.name     || gpMem().picksName     || "";
+      if (!playerId || !playerNm) return;
+
+      const originalLabel = btn.innerHTML;
+      btn.disabled = true; btn.textContent = "Joining…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        await (Data().gpJoinLeague || (async () => {}))(db2, leagueId, playerId, playerNm);
+        (Render().gpDismissJoinLeagueOverlay || (() => {}))();
+
+        const mem2 = gpMem();
+        mem2.pickLeagueId = leagueId;
+        mem2.gpShowLeaguePicker = false;
+        mem2.gpViewMode = "week";
+        gpSetSelectedLeagueId(leagueId);
+        gpPendingClear();
+        await renderPicks("heavy");
+      } catch (err) {
+        btn.disabled = false; btn.innerHTML = originalLabel;
+        console.error("[GP] confirmJoinLeague error:", err);
+      }
+      return;
+    }
+
     // ── leagues: open create form ──
     if (action === "createLeague") {
       const mem2 = gpMem();
@@ -835,6 +902,15 @@
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
             name, seasonYear: year, totalWeeks, format, h2hRoster, announcementTitle, announcementMessage
           });
+          // The admin creating a league is almost always a player in it
+          // too — auto-join them so they don't hit their own "Join"
+          // button the first time they open it.
+          const myIdObj = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
+          const myPlayerId = myIdObj.playerId || gpMem().picksPlayerId || "";
+          const myPlayerNm = myIdObj.name     || gpMem().picksName     || "";
+          if (myPlayerId && myPlayerNm) {
+            try { await (Data().gpJoinLeague || (async () => {}))(db2, newId, myPlayerId, myPlayerNm); } catch {}
+          }
           mem2.pickLeagueId = newId;
           mem2.gpShowLeaguePicker = false;
           gpSetSelectedLeagueId(newId);
