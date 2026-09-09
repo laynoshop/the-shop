@@ -308,10 +308,44 @@
   }
 
   // ───────────────────────────────────────────
+  // Leaderboard kickoff countdown (pre-lock header) — ticks live once
+  // per second against the #gpLbCountdown element gp-render.js renders
+  // with a data-target timestamp. Re-armed on every render since a full
+  // re-render tears out the old DOM nodes the previous interval pointed at.
+  // ───────────────────────────────────────────
+  let _gpLbCountdownTimer = null;
+  function gpStopLeaderboardCountdown() {
+    if (_gpLbCountdownTimer) { clearInterval(_gpLbCountdownTimer); _gpLbCountdownTimer = null; }
+  }
+  function gpStartLeaderboardCountdown() {
+    gpStopLeaderboardCountdown();
+    const wrap = document.getElementById("gpLbCountdown");
+    if (!wrap) return;
+    const target = Number(wrap.getAttribute("data-target") || 0);
+    if (!target) return;
+    const daysEl = document.getElementById("gpLbCdDays");
+    const hrsEl  = document.getElementById("gpLbCdHrs");
+    const minsEl = document.getElementById("gpLbCdMins");
+    const secsEl = document.getElementById("gpLbCdSecs");
+    const tick = () => {
+      const ms = target - Date.now();
+      if (ms <= 0) { gpStopLeaderboardCountdown(); return; }
+      const total = Math.floor(ms / 1000);
+      if (daysEl) daysEl.textContent = String(Math.floor(total / 86400));
+      if (hrsEl)  hrsEl.textContent  = String(Math.floor((total % 86400) / 3600)).padStart(2, "0");
+      if (minsEl) minsEl.textContent = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
+      if (secsEl) secsEl.textContent = String(total % 60).padStart(2, "0");
+    };
+    tick();
+    _gpLbCountdownTimer = setInterval(tick, 1000);
+  }
+
+  // ───────────────────────────────────────────
   // postRender — wire up save-button state
   // ───────────────────────────────────────────
   function postRender() {
     syncSaveBtnState();
+    gpStartLeaderboardCountdown();
     // Never show Michigan's real name on the Picks page — admin picker,
     // committed game cards, leaderboard, everywhere.
     try {

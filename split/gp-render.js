@@ -503,6 +503,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 /* Header bar */
 .gpLeaderHeader {
   display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; row-gap: 8px;
   padding: 14px 16px 12px;
   border-bottom: 1px solid rgba(255,255,255,0.07);
   background: rgba(255,255,255,0.03);
@@ -518,6 +519,41 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   font-size: 11px; font-weight: 700;
   color: rgba(255,255,255,0.38); letter-spacing: 0.08em;
   text-transform: uppercase; margin-top: 3px;
+}
+
+/* Kickoff countdown — sits on the right of the leaderboard header
+   while the week is pre-lock (no games final yet) */
+.gpLeaderCountdown {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: 4px; flex-shrink: 0;
+}
+.gpLeaderCountdownLabel {
+  font-size: 9.5px; font-weight: 800;
+  color: rgba(255,255,255,0.4); letter-spacing: 0.09em;
+  text-transform: uppercase; white-space: nowrap;
+}
+.gpLeaderCountdownClock {
+  display: flex; align-items: baseline; gap: 5px;
+}
+.gpLbCdUnit {
+  display: flex; align-items: baseline; gap: 1px;
+  background: rgba(255,210,60,0.1);
+  border: 1px solid rgba(255,210,60,0.22);
+  border-radius: 7px;
+  padding: 3px 6px 2px;
+}
+.gpLbCdVal {
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 14px; font-weight: 800; color: #ffd76a;
+  font-variant-numeric: tabular-nums;
+}
+.gpLbCdUnitLabel {
+  font-size: 9px; font-weight: 700; color: rgba(255,215,106,0.55);
+  text-transform: lowercase;
+}
+.gpLeaderCountdownLive {
+  font-size: 12px; font-weight: 800; color: rgba(120,220,150,0.85);
+  white-space: nowrap;
 }
 
 /* Podium — top 3 */
@@ -2167,11 +2203,41 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return `<div class="gpPreLockList">${rowsHTML}</div>`;
   }
 
+  // ─── Countdown to this week's first kickoff ───────────────────────
+  // Rendered once with a data-target timestamp; groupPicks.js's
+  // gpStartLeaderboardCountdown() finds it by id after each render and
+  // ticks the digits live, same pattern as the Beat TTUN countdown.
+  function gpEarliestKickoffMs(games) {
+    let min = null;
+    for (const g of (Array.isArray(games) ? games : [])) {
+      const ms = g?.startTime?.toMillis ? g.startTime.toMillis() : null;
+      if (ms != null && (min == null || ms < min)) min = ms;
+    }
+    return min;
+  }
+
+  function gpBuildLeaderboardCountdownHTML(games) {
+    const earliestMs = gpEarliestKickoffMs(games);
+    if (earliestMs == null) return "";
+    if (earliestMs <= Date.now()) {
+      return `<div class="gpLeaderCountdown gpLeaderCountdownLive">🏈 Games underway</div>`;
+    }
+    return `
+<div class="gpLeaderCountdown" id="gpLbCountdown" data-target="${earliestMs}">
+  <div class="gpLeaderCountdownLabel">First game starts in</div>
+  <div class="gpLeaderCountdownClock">
+    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdDays">0</span><span class="gpLbCdUnitLabel">d</span></div>
+    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdHrs">00</span><span class="gpLbCdUnitLabel">h</span></div>
+    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdMins">00</span><span class="gpLbCdUnitLabel">m</span></div>
+    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdSecs">00</span><span class="gpLbCdUnitLabel">s</span></div>
+  </div>
+</div>`;
+  }
+
   // ─── Leaderboard ─────────────────────────────────────────────────
   function buildLeaderboardHTML(weekLabel, leaderboard, opts) {
     const { rows, finalsCount } = leaderboard || {};
     const list  = Array.isArray(rows) ? rows : [];
-    const label = String(weekLabel || "");
 
     // A week can have both straight-up games and one ATS game at once,
     // so the legend always covers every point source rather than
@@ -2189,13 +2255,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     //    empty/all-zero table nobody can do anything with yet ──
     if (!finalsCount) {
       const progressRows = gpComputePreLockProgress(opts?.leagueMembers, opts?.games, opts?.allPicks);
+      const countdownHTML = gpBuildLeaderboardCountdownHTML(opts?.games);
       return `
 <div class="gpLeaderCard">
   <div class="gpLeaderHeader">
     <div class="gpLeaderHeaderLeft">
       <div class="gpLeaderTitle">🏆 Leaderboard</div>
-      ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
     </div>
+    ${countdownHTML}
   </div>
   ${gpBuildPreLockProgressHTML(progressRows)}
   ${scoringFooter}
@@ -2209,7 +2276,6 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   <div class="gpLeaderHeader">
     <div class="gpLeaderHeaderLeft">
       <div class="gpLeaderTitle">🏆 Leaderboard</div>
-      ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
     </div>
   </div>
   <div class="gpEmpty" style="padding:28px 20px">No picks recorded this week.</div>
@@ -2245,7 +2311,6 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   <div class="gpLeaderHeader">
     <div class="gpLeaderHeaderLeft">
       <div class="gpLeaderTitle">🏆 Leaderboard</div>
-      ${label ? `<div class="gpLeaderWeekLabel">${esc(label)}</div>` : ""}
     </div>
   </div>
   <div class="gpLeaderPodium">
