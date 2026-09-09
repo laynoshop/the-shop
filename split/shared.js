@@ -147,6 +147,12 @@ window.replaceMichiganText = replaceMichiganText;
     const stocksDoor = document.querySelector('.doorBtn[data-go="stocks"]');
     if (stocksDoor) stocksDoor.style.display = isAdmin ? "" : "none";
 
+    // =========================
+    // PUTT PUTT: admin only
+    // =========================
+    const golfDoor = document.querySelector('.doorBtn[data-go="golf"]');
+    if (golfDoor) golfDoor.style.display = isAdmin ? "" : "none";
+
     updateRivalryBanner();
 
     if (!showEntryScreen._bound) {
@@ -194,7 +200,9 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "picks",  label: "Pick &#8217;em" },
       { key: "beat",   label: "Beat<br/>TTUN" },
       { key: "news",   label: "Top<br/>News" },
-      { key: "golf",   label: "&#x26F3;<br/>Putt" },
+      // Putt Putt: admin only \u2014 kept in its original spot in the order
+      // rather than tacked on with Stocks/Shop below.
+      ...(role === "admin" ? [{ key: "golf", label: "&#x26F3;<br/>Putt" }] : []),
       { key: "fun",    label: "\uD83E\uDD2A<br/>Family" },
     ];
 
