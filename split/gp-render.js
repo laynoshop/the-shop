@@ -947,6 +947,23 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.12);
 }
+.gpLeagueCardCtaGroup {
+  flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+}
+.gpLeagueCardCtaGroup .gpLeagueCardCta { text-align: center; }
+.gpLeagueCardCtaInvite {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 999px; text-align: center;
+  font-size: 11.5px; font-weight: 800; letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: rgba(140,200,255,0.9);
+  background: rgba(70,150,255,0.1);
+  border: 1px dashed rgba(90,170,255,0.4);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpLeagueCardCtaInvite:active { background: rgba(70,150,255,0.2); }
 .gpLeagueCardGear {
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -2828,7 +2845,10 @@ ${saveRow}`;
       const activePill = (l.active && !l.archived) ? `<span class="gpLeagueActivePill"><span class="gpLeagueActiveDot"></span>Active</span>` : "";
       const isMember = !!l.isMember;
       const cta = isMember
-        ? `<div class="gpLeagueCardCta gpLeagueCardCtaVisit">Visit League ›</div>`
+        ? `<div class="gpLeagueCardCtaGroup">
+    <div class="gpLeagueCardCta gpLeagueCardCtaVisit">Visit League ›</div>
+    <div class="gpLeagueCardCtaInvite" data-gpaction="inviteToLeague" data-leagueid="${esc(l.id)}" data-leaguename="${esc(l.name || "")}" title="Invite someone to this league">📤 Invite</div>
+  </div>`
         : `<div class="gpLeagueCardCta gpLeagueCardCtaJoin">Join</div>`;
       return `
 <div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="${isMember ? "selectLeague" : "openJoinOverlay"}" data-leagueid="${esc(l.id)}">
