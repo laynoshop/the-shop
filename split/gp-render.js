@@ -123,30 +123,121 @@
 
 /* ══════════════════════════════════════════════
    GP ADMIN BUILDER  (top-of-page panel)
+   Restyled as labeled blocks (Load / Available / Publish / ATS /
+   Tiebreaker) instead of one undifferentiated stack of controls, so the
+   workflow reads left-to-right, top-to-bottom without guessing what
+   each row does. Every data-gpaction / data-* hook is unchanged — this
+   only touches markup structure and appearance.
    ══════════════════════════════════════════════ */
 .gpAdminPanel {
-  background: rgba(255,200,0,0.06);
+  background: rgba(255,200,0,0.055);
   border: 1px solid rgba(255,200,0,0.22);
-  border-radius: 14px;
-  padding: 14px;
+  border-radius: 16px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
 }
-.gpAdminPanelTitle {
-  font-size: 12px; font-weight: 900; letter-spacing: 0.1em;
-  text-transform: uppercase; color: rgba(255,220,80,0.85);
+.gpAdminHead {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
 }
+.gpAdminHeadTitle { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gpAdminHeadIcon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,200,0,0.14); border: 1px solid rgba(255,200,0,0.32);
+  font-size: 17px;
+}
+.gpAdminHeadLabel {
+  font-size: 10px; font-weight: 900; letter-spacing: 0.12em;
+  text-transform: uppercase; color: rgba(255,220,80,0.75);
+  line-height: 1.3;
+}
+.gpAdminHeadWeek {
+  font-size: 16px; font-weight: 900; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gpAdminHeadActions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.gpAdminBlock {
+  display: flex; flex-direction: column; gap: 9px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.gpAdminBlock:first-of-type { padding-top: 0; border-top: none; }
+.gpAdminBlockLabel {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 900; letter-spacing: 0.05em;
+  text-transform: uppercase; color: rgba(255,255,255,0.55);
+}
+.gpAdminBlockCount {
+  background: rgba(255,200,0,0.16); color: rgba(255,222,120,0.95);
+  border-radius: 999px; padding: 1px 8px; font-size: 10.5px;
+}
+.gpAdminBlockHint {
+  font-weight: 700; text-transform: none; letter-spacing: 0;
+  color: rgba(255,255,255,0.35); font-size: 10.5px;
+}
+
+/* Buttons — ghost for secondary/navigational actions, primary (amber)
+   for the main action in a block, publish (green) for the one action
+   that takes a week live. Scoped to the admin panel so the shared global
+   .smallBtn class elsewhere in the app is untouched. */
+.gpAdminPanel .gpAdminBtn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.8);
+  padding: 9px 14px; border-radius: 10px;
+  font-weight: 800; font-size: 13px;
+  cursor: pointer; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 100ms ease, background 100ms ease;
+}
+.gpAdminPanel .gpAdminBtn:active { transform: scale(0.97); }
+.gpAdminPanel .gpAdminBtnGhost:active { background: rgba(255,255,255,0.11); }
+.gpAdminPanel .gpAdminBtnPrimary {
+  background: linear-gradient(135deg, rgba(255,195,50,0.92), rgba(255,140,20,0.92));
+  border-color: rgba(255,195,70,0.6);
+  color: #241700;
+  box-shadow: 0 4px 14px rgba(255,160,0,0.25);
+}
+.gpAdminPanel .gpAdminBtnPublish {
+  background: linear-gradient(135deg, #1a8f5c, #2ecf82);
+  border-color: rgba(70,225,150,0.6);
+  color: #052b16;
+  font-size: 14.5px; padding: 12px 18px;
+  box-shadow: 0 4px 18px rgba(40,200,120,0.32);
+  width: 100%;
+}
+
 .gpAdminControls {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
 }
+.gpAdminDateRange { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gpAdminInlineLabel { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.4); }
+.gpAdminSelect, .gpAdminDateInput {
+  background: rgba(255,255,255,0.07); color: inherit;
+  border: 1px solid rgba(255,255,255,0.16);
+  padding: 9px 12px; border-radius: 10px;
+  font-weight: 800; font-size: 14px;
+}
+.gpAdminSelectWide { flex: 1 1 160px; min-width: 0; }
+
 .gpAdminGameList {
   display: flex; flex-direction: column; gap: 6px;
   max-height: 280px; overflow-y: auto;
 }
+.gpAdminEmptyHint {
+  font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.4);
+  text-align: center; padding: 16px 10px;
+  background: rgba(255,255,255,0.03); border-radius: 10px;
+  border: 1px dashed rgba(255,255,255,0.12);
+}
 .gpAdminRow label {
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; border-radius: 10px;
+  padding: 9px 11px; border-radius: 10px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.07);
   cursor: pointer; font-size: 14px; font-weight: 700;
@@ -934,10 +1025,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 
 /* ══════════════════════════════════════════════
-   ADMIN — date range / mode controls
+   ADMIN — game list priority badges / remove button
    ══════════════════════════════════════════════ */
-.gpAdminDateRange { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.gpAdminInlineLabel { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.4); }
 .gpAdminPriorityBadge {
   font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em;
   color: rgba(255,210,110,0.9);
@@ -1117,6 +1206,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   display: flex; flex-direction: column; gap: 12px;
   padding: 16px; border-radius: 16px;
   background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.09);
+}
+.gpAdminPanelTitle {
+  font-size: 12px; font-weight: 900; letter-spacing: 0.1em;
+  text-transform: uppercase; color: rgba(255,220,80,0.85);
 }
 .gpLeagueSettingsRow { display: flex; flex-direction: column; gap: 6px; }
 .gpLeagueSettingsLabel { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.4); }
@@ -2811,12 +2904,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
       }).join("");
       atsHTML = `
-<div class="gpAdminInlineLabel" style="padding:4px 2px 0">Against-the-spread games (up to ${MAX_ATS_GAMES_UI}):</div>
-<div class="gpAdminGameList" style="max-height:180px">
-  ${atsRows}
-</div>
-<div class="gpAdminControls">
-  <button class="smallBtn" type="button" data-gpaction="adminSetAtsGames" data-weekid="${esc(weekId)}">Save ATS Games</button>
+<div class="gpAdminBlock">
+  <div class="gpAdminBlockLabel">📊 Against the Spread<span class="gpAdminBlockHint">up to ${MAX_ATS_GAMES_UI}</span></div>
+  <div class="gpAdminGameList" style="max-height:180px">
+    ${atsRows}
+  </div>
+  <div class="gpAdminControls">
+    <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminSetAtsGames" data-weekid="${esc(weekId)}">Save ATS Games</button>
+  </div>
 </div>`;
     }
 
@@ -2832,13 +2927,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
         })
       ).join("");
       tiebreakerHTML = `
-<div class="gpAdminDateRange">
-  <span class="gpAdminInlineLabel">Tiebreaker game:</span>
-  <select data-gptiebreakerselect="1"
-    style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px;max-width:100%">
-    ${options}
-  </select>
-  <button class="smallBtn" type="button" data-gpaction="adminSetTiebreaker" data-weekid="${esc(weekId)}">Set</button>
+<div class="gpAdminBlock">
+  <div class="gpAdminBlockLabel">🎯 Tiebreaker Game</div>
+  <div class="gpAdminDateRange">
+    <select data-gptiebreakerselect="1" class="gpAdminSelect gpAdminSelectWide">
+      ${options}
+    </select>
+    <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminSetTiebreaker" data-weekid="${esc(weekId)}">Set</button>
+  </div>
 </div>`;
     }
 
@@ -2873,40 +2969,56 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
     return `
 <div class="gpAdminPanel" data-gpadminpanel>
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-    <div class="gpAdminPanelTitle">⚙ Admin · ${esc(weekLabel || weekId || "")}</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="smallBtn" type="button" data-gpaction="editLeague" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
-      <button class="smallBtn" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
+  <div class="gpAdminHead">
+    <div class="gpAdminHeadTitle">
+      <div class="gpAdminHeadIcon">⚙️</div>
+      <div>
+        <div class="gpAdminHeadLabel">Admin Tools</div>
+        <div class="gpAdminHeadWeek">${esc(weekLabel || weekId || "")}</div>
+      </div>
+    </div>
+    <div class="gpAdminHeadActions">
+      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="editLeague" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
+      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
     </div>
   </div>
-  <div class="gpAdminControls">
-    <select data-league-select style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px">
-      ${leagueOptions}
-    </select>
-    <button class="smallBtn" type="button" data-gpaction="adminQuickWeekRange">This Week (Thu–Mon)</button>
+
+  <div class="gpAdminBlock">
+    <div class="gpAdminBlockLabel">🗓️ Load Games</div>
+    <div class="gpAdminControls">
+      <select data-league-select class="gpAdminSelect">
+        ${leagueOptions}
+      </select>
+      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminQuickWeekRange">This Week (Thu–Mon)</button>
+    </div>
+    <div class="gpAdminDateRange">
+      <span class="gpAdminInlineLabel">From</span>
+      <input type="date" data-date-start-input value="${esc(startInputVal)}" class="gpAdminDateInput"/>
+      <span class="gpAdminInlineLabel">to</span>
+      <input type="date" data-date-end-input value="${esc(endInputVal)}" class="gpAdminDateInput"/>
+      <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminLoadGames">Load Games</button>
+    </div>
   </div>
-  <div class="gpAdminDateRange">
-    <span class="gpAdminInlineLabel">From</span>
-    <input type="date" data-date-start-input value="${esc(startInputVal)}"
-      style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px"/>
-    <span class="gpAdminInlineLabel">to</span>
-    <input type="date" data-date-end-input value="${esc(endInputVal)}"
-      style="background:rgba(255,255,255,0.07);color:inherit;border:1px solid rgba(255,255,255,0.14);padding:8px 12px;border-radius:12px;font-weight:800;font-size:16px"/>
-    <button class="smallBtn" type="button" data-gpaction="adminLoadGames">Load</button>
+
+  <div class="gpAdminBlock">
+    <div class="gpAdminBlockLabel">🏈 Available Games${sorted.length ? `<span class="gpAdminBlockCount">${sorted.length}</span>` : ""}</div>
+    <div id="gpAdminGameList" class="gpAdminGameList">
+      ${sorted.length ? gameRows : `<div class="gpAdminEmptyHint">No games loaded yet — pick a date range above and tap Load Games.</div>`}
+    </div>
+    ${sorted.length ? `
+    <div class="gpAdminControls">
+      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpselect="all">Select All</button>
+      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpselect="none">Select None</button>
+      <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminAddGames" data-weekid="${esc(weekId)}">Add Selected</button>
+    </div>` : ""}
   </div>
-  <div id="gpAdminGameList" class="gpAdminGameList">
-    ${sorted.length ? gameRows : `<div class="muted" style="font-size:13px">No games loaded yet — tap Load.</div>`}
-  </div>
-  ${sorted.length ? `
-  <div class="gpAdminControls">
-    <button class="smallBtn" type="button" data-gpselect="all">All</button>
-    <button class="smallBtn" type="button" data-gpselect="none">None</button>
-    <button class="smallBtn" type="button" data-gpaction="adminAddGames" data-weekid="${esc(weekId)}">Add Selected</button>
-  </div>` : ""}
+
   ${committedGames.length ? `
-  <div class="gpAdminControls">
-    <button class="smallBtn" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}" data-leagueid="${esc(pickLeagueId || "")}">Publish Week</button>
+  <div class="gpAdminBlock">
+    <div class="gpAdminBlockLabel">📤 Publish</div>
+    <div class="gpAdminControls">
+      <button class="gpAdminBtn gpAdminBtnPublish" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}" data-leagueid="${esc(pickLeagueId || "")}">Publish Week</button>
+    </div>
   </div>` : ""}
   ${atsHTML}
   ${tiebreakerHTML}
