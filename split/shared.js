@@ -203,7 +203,7 @@ window.replaceMichiganText = replaceMichiganText;
       // Putt Putt: admin only \u2014 kept in its original spot in the order
       // rather than tacked on with Stocks/Shop below.
       ...(role === "admin" ? [{ key: "golf", label: "&#x26F3;<br/>Putt" }] : []),
-      { key: "fun",    label: "\uD83E\uDD2A<br/>Family" },
+      { key: "fun",    label: "\uD83E\uDD2A<br/>Random" },
     ];
 
     // =========================
