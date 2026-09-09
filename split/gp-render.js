@@ -756,6 +756,15 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpTiebreakerTitle { font-size: 13px; font-weight: 900; color: rgba(210,190,255,0.9); }
 .gpTiebreakerSub { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.5); }
+.gpTiebreakerOU {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 4px; padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.01em;
+  color: rgba(220,200,255,0.85);
+  background: rgba(150,100,255,0.12);
+  border: 1px solid rgba(150,100,255,0.3);
+}
 .gpTiebreakerRule { font-size: 11px; font-weight: 600; color: rgba(210,190,255,0.6); }
 .gpTiebreakerRule b { color: rgba(220,200,255,0.9); font-weight: 900; }
 .gpTiebreakerRow { display: flex; align-items: center; gap: 10px; }
@@ -1314,13 +1323,22 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   function safeRecord(t) { return String(t?.record || "").trim(); }
   function safeAbbr(t)   { return String(t?.abbr   || t?.name || "").slice(0, 4); }
 
+  // The over/under is persisted on the game doc as `oddsOU` (see
+  // gpAdminAddSelectedGamesToWeek's buildOdds() capture) — this used to
+  // only check a `g.odds.overUnder` path that was never actually
+  // written anywhere, so the O/U silently never showed even though it
+  // was sitting right there on the game the whole time.
+  function safeOverUnder(g) {
+    const hydrated = String(g?.__odds?.overUnder || "").trim();
+    const legacy    = String(g?.oddsOU || g?.odds?.overUnder || "").trim();
+    return hydrated || legacy;
+  }
+
   function safeOddsLine(g) {
-    const hydratedDetails   = String(g?.__odds?.details   || "").trim();
-    const hydratedOverUnder = String(g?.__odds?.overUnder  || "").trim();
-    const legacyDetails     = String(g?.oddsDetails || g?.odds?.details || "").trim();
-    const legacyOverUnder   = String(g?.odds?.overUnder || "").trim();
-    const d  = hydratedDetails   || legacyDetails;
-    const ou = hydratedOverUnder || legacyOverUnder;
+    const hydratedDetails = String(g?.__odds?.details || "").trim();
+    const legacyDetails   = String(g?.oddsDetails || g?.odds?.details || "").trim();
+    const d  = hydratedDetails || legacyDetails;
+    const ou = safeOverUnder(g);
     const parts = [];
     if (d)  parts.push(`Fav: ${d}`);
     if (ou) parts.push(`O/U ${ou}`);
@@ -2317,6 +2335,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const away = game?.awayTeam || { name: game?.awayName || "Away" };
     const home = game?.homeTeam || { name: game?.homeName || "Home" };
     const val  = (pendingGuess != null) ? pendingGuess : (myGuess != null ? myGuess : "");
+    const ou   = safeOverUnder(game);
 
     // Everyone's guesses are already loaded (no per-game lazy fetch needed
     // here, unlike Everyone's Picks) — same lock rule though: nobody sees
@@ -2376,6 +2395,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 <div class="gpTiebreakerCard">
   <div class="gpTiebreakerTitle">🎯 Tiebreaker</div>
   <div class="gpTiebreakerSub">Guess the combined final score: ${esc(safeTeam(away))} @ ${esc(safeTeam(home))}</div>
+  ${ou ? `<div class="gpTiebreakerOU">Vegas O/U: ${esc(ou)}</div>` : ""}
   <div class="gpTiebreakerRule">Breaks ties in the standings — closest guess <b>without going over</b> wins.</div>
   <div class="gpTiebreakerRow">
     <input type="number" inputmode="numeric" min="0" max="200" step="1"
