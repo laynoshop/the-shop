@@ -563,16 +563,26 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   border-top: 1px solid rgba(255,255,255,0.08);
 }
 .gpLeagueCardCountdownRow .gpCountdownWidget {
-  align-items: stretch;
+  align-items: center;
 }
 .gpLeagueCardCountdownRow .gpCountdownLabel {
-  text-align: left;
+  text-align: center;
 }
 .gpLeagueCardCountdownRow .gpCountdownClock {
-  justify-content: flex-start;
+  justify-content: center;
+  gap: 8px;
+}
+.gpLeagueCardCountdownRow .gpCdUnit {
+  padding: 6px 10px 4px;
+}
+.gpLeagueCardCountdownRow .gpCdVal {
+  font-size: 28px;
+}
+.gpLeagueCardCountdownRow .gpCdUnitLabel {
+  font-size: 12px;
 }
 .gpLeagueCardCountdownRow .gpCountdownLive {
-  text-align: left; display: block;
+  text-align: center; display: block;
 }
 
 /* Podium — top 3 */
