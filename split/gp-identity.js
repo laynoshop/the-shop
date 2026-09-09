@@ -215,7 +215,7 @@
               "
             />
             <div class="muted" style="margin-top:6px; font-weight:800;">
-              Tip: &ldquo;buckeyes27&rdquo; / &ldquo;victor-1595&rdquo; / etc.
+              Tip: &ldquo;buckeyes27&rdquo; / &ldquo;1-more-sec&rdquo; / etc.
             </div>
           </div>
 
