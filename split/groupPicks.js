@@ -724,14 +724,53 @@
     // ── save picks ──
     if (action === "savePicks") {
       const slateId  = String(gpMem().picksSlateId || btn.getAttribute("data-slate") || "").trim();
-      const pending  = gpPendingBucket();
-      const tbPending = gpPendingGetTiebreaker();
+      const pendingRaw = gpPendingBucket();
+      let tbPending  = gpPendingGetTiebreaker();
       const idObj2   = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
       const playerId = idObj2.playerId || gpMem().picksPlayerId || "";
 
       if (!slateId)  { console.error("[GP] savePicks: no slateId");  return; }
       if (!playerId) { console.error("[GP] savePicks: no playerId"); return; }
-      if (!Object.keys(pending).length && tbPending == null) return;
+      if (!Object.keys(pendingRaw).length && tbPending == null) return;
+
+      // A pick can sit "pending" (chosen but not yet saved) for a while
+      // before Save is tapped — if its game has since locked, Firestore
+      // rejects that one write, and since every pending pick saves in a
+      // single atomic batch, that one rejection takes every other
+      // still-valid pick down with it (surfaces as a generic "Missing or
+      // insufficient permissions" error, with nothing actually saved).
+      // Drop anything that's locked before saving so the rest goes
+      // through.
+      const now = Date.now();
+      const gamesById = new Map();
+      for (const g of (window.__gpCurrentGames || [])) {
+        const eid = String(g?.eventId || g?.id || "");
+        if (eid) gamesById.set(eid, g);
+      }
+      function isLocked(eventId) {
+        const g = gamesById.get(String(eventId));
+        const ms = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
+        return ms > 0 && now >= ms;
+      }
+
+      const pending = {};
+      let droppedGames = 0;
+      for (const [eventId, side] of Object.entries(pendingRaw)) {
+        if (isLocked(eventId)) { droppedGames++; continue; }
+        pending[eventId] = side;
+      }
+      let droppedTiebreaker = false;
+      if (tbPending != null && isLocked(window.__gpCurrentTiebreakerEventId)) {
+        tbPending = null;
+        droppedTiebreaker = true;
+      }
+
+      if (!Object.keys(pending).length && tbPending == null) {
+        gpPendingClear();
+        alert("Those picks locked before you could save them — nothing left to save. Refreshing to show the latest.");
+        await renderPicks();
+        return;
+      }
 
       btn.disabled = true;
       btn.textContent = "Saving…";
@@ -742,7 +781,15 @@
         gpPendingClear();
         // Bust the allPicks cache so the re-render fetches fresh data
         gpBustAllPicksCache(slateId);
-        btn.textContent = "Saved!";
+        if (droppedGames || droppedTiebreaker) {
+          const parts = [];
+          if (droppedGames) parts.push(`${droppedGames} pick${droppedGames !== 1 ? "s" : ""}`);
+          if (droppedTiebreaker) parts.push("the tiebreaker");
+          btn.textContent = "Saved (some locked)";
+          setTimeout(() => alert(`Heads up: ${parts.join(" and ")} locked before you saved, so ${parts.length > 1 ? "those weren't" : "that wasn't"} included. Everything else saved fine.`), 50);
+        } else {
+          btn.textContent = "Saved!";
+        }
         setTimeout(() => renderPicks(), 800);
       } catch (err) {
         btn.textContent = "Error — retry";
