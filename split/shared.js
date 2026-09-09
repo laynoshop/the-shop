@@ -191,7 +191,7 @@ window.replaceMichiganText = replaceMichiganText;
     // Base tabs visible to everyone
     const baseTabs = [
       { key: "scores", label: "Scores" },
-      { key: "picks",  label: "Picks" },
+      { key: "picks",  label: "Pick &#8217;em" },
       { key: "beat",   label: "Beat<br/>TTUN" },
       { key: "news",   label: "Top<br/>News" },
       { key: "golf",   label: "&#x26F3;<br/>Putt" },
