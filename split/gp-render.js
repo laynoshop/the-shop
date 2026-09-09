@@ -521,39 +521,58 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   text-transform: uppercase; margin-top: 3px;
 }
 
-/* Kickoff countdown — sits on the right of the leaderboard header
-   while the week is pre-lock (no games final yet) */
-.gpLeaderCountdown {
+/* Kickoff countdown widget — shared by the leaderboard header (right
+   side, while pre-lock) and league picker cards (bottom row) */
+.gpCountdownWidget {
   display: flex; flex-direction: column; align-items: flex-end;
   gap: 4px; flex-shrink: 0;
 }
-.gpLeaderCountdownLabel {
+.gpCountdownLabel {
   font-size: 9.5px; font-weight: 800;
   color: rgba(255,255,255,0.4); letter-spacing: 0.09em;
   text-transform: uppercase; white-space: nowrap;
 }
-.gpLeaderCountdownClock {
+.gpCountdownClock {
   display: flex; align-items: baseline; gap: 5px;
 }
-.gpLbCdUnit {
+.gpCdUnit {
   display: flex; align-items: baseline; gap: 1px;
   background: rgba(255,210,60,0.1);
   border: 1px solid rgba(255,210,60,0.22);
   border-radius: 7px;
   padding: 3px 6px 2px;
 }
-.gpLbCdVal {
+.gpCdVal {
   font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   font-size: 14px; font-weight: 800; color: #ffd76a;
   font-variant-numeric: tabular-nums;
 }
-.gpLbCdUnitLabel {
+.gpCdUnitLabel {
   font-size: 9px; font-weight: 700; color: rgba(255,215,106,0.55);
   text-transform: lowercase;
 }
-.gpLeaderCountdownLive {
+.gpCountdownLive {
   font-size: 12px; font-weight: 800; color: rgba(120,220,150,0.85);
   white-space: nowrap;
+}
+
+/* League picker card — countdown sits on its own full-width row at the
+   bottom of the card, below the icon/name/CTA row */
+.gpLeagueCardCountdownRow {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.gpLeagueCardCountdownRow .gpCountdownWidget {
+  align-items: stretch;
+}
+.gpLeagueCardCountdownRow .gpCountdownLabel {
+  text-align: left;
+}
+.gpLeagueCardCountdownRow .gpCountdownClock {
+  justify-content: flex-start;
+}
+.gpLeagueCardCountdownRow .gpCountdownLive {
+  text-align: left; display: block;
 }
 
 /* Podium — top 3 */
@@ -1000,7 +1019,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   display: flex; flex-direction: column; gap: 10px;
 }
 .gpLeagueCard {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; flex-direction: column;
   padding: 14px 16px;
   border-radius: 16px;
   background: rgba(255,255,255,0.045);
@@ -1009,6 +1028,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpLeagueCard:active { background: rgba(255,255,255,0.08); }
 .gpLeagueCard.gpLeagueArchived { opacity: 0.5; }
+.gpLeagueCardMain { display: flex; align-items: center; gap: 12px; }
 .gpLeagueCardIcon {
   width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -2203,10 +2223,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return `<div class="gpPreLockList">${rowsHTML}</div>`;
   }
 
-  // ─── Countdown to this week's first kickoff ───────────────────────
-  // Rendered once with a data-target timestamp; groupPicks.js's
-  // gpStartLeaderboardCountdown() finds it by id after each render and
-  // ticks the digits live, same pattern as the Beat TTUN countdown.
+  // ─── Kickoff countdown widget ──────────────────────────────────────
+  // Shared by the leaderboard header ("First game starts in") and league
+  // picker cards ("Week N starts in") — any number of these can be on
+  // screen at once. Each is rendered with a data-target timestamp;
+  // groupPicks.js's gpStartAllCountdowns() finds every one of them after
+  // each render (by class, not id, since there can be several) and ticks
+  // their digits live off one shared 1s interval, same pattern as the
+  // Beat TTUN countdown.
   function gpEarliestKickoffMs(games) {
     let min = null;
     for (const g of (Array.isArray(games) ? games : [])) {
@@ -2216,20 +2240,20 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return min;
   }
 
-  function gpBuildLeaderboardCountdownHTML(games) {
-    const earliestMs = gpEarliestKickoffMs(games);
-    if (earliestMs == null) return "";
-    if (earliestMs <= Date.now()) {
-      return `<div class="gpLeaderCountdown gpLeaderCountdownLive">🏈 Games underway</div>`;
+  function gpBuildCountdownWidgetHTML({ label, targetMs, liveLabel, extraClass }) {
+    if (targetMs == null) return "";
+    const cls = `gpCountdownWidget${extraClass ? ` ${extraClass}` : ""}`;
+    if (targetMs <= Date.now()) {
+      return liveLabel ? `<div class="${cls} gpCountdownLive">${esc(liveLabel)}</div>` : "";
     }
     return `
-<div class="gpLeaderCountdown" id="gpLbCountdown" data-target="${earliestMs}">
-  <div class="gpLeaderCountdownLabel">First game starts in</div>
-  <div class="gpLeaderCountdownClock">
-    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdDays">0</span><span class="gpLbCdUnitLabel">d</span></div>
-    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdHrs">00</span><span class="gpLbCdUnitLabel">h</span></div>
-    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdMins">00</span><span class="gpLbCdUnitLabel">m</span></div>
-    <div class="gpLbCdUnit"><span class="gpLbCdVal" id="gpLbCdSecs">00</span><span class="gpLbCdUnitLabel">s</span></div>
+<div class="${cls}" data-gp-countdown data-target="${targetMs}">
+  <div class="gpCountdownLabel">${esc(label || "Starts in")}</div>
+  <div class="gpCountdownClock">
+    <div class="gpCdUnit"><span class="gpCdVal" data-cd="d">0</span><span class="gpCdUnitLabel">d</span></div>
+    <div class="gpCdUnit"><span class="gpCdVal" data-cd="h">00</span><span class="gpCdUnitLabel">h</span></div>
+    <div class="gpCdUnit"><span class="gpCdVal" data-cd="m">00</span><span class="gpCdUnitLabel">m</span></div>
+    <div class="gpCdUnit"><span class="gpCdVal" data-cd="s">00</span><span class="gpCdUnitLabel">s</span></div>
   </div>
 </div>`;
   }
@@ -2255,7 +2279,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     //    empty/all-zero table nobody can do anything with yet ──
     if (!finalsCount) {
       const progressRows = gpComputePreLockProgress(opts?.leagueMembers, opts?.games, opts?.allPicks);
-      const countdownHTML = gpBuildLeaderboardCountdownHTML(opts?.games);
+      const countdownHTML = gpBuildCountdownWidgetHTML({
+        label: "First game starts in",
+        targetMs: gpEarliestKickoffMs(opts?.games),
+        liveLabel: "🏈 Games underway"
+      });
       return `
 <div class="gpLeaderCard">
   <div class="gpLeaderHeader">
@@ -3078,15 +3106,30 @@ ${saveRow}`;
     <div class="gpLeagueCardCtaInvite" data-gpaction="inviteToLeague" data-leagueid="${esc(l.id)}" data-leaguename="${esc(l.name || "")}" title="Invite someone to this league">📤 Invite</div>
   </div>`
         : `<div class="gpLeagueCardCta gpLeagueCardCtaJoin">Join</div>`;
+
+      // Countdown to the current week's first kickoff — groupPicks.js
+      // stashes this on the league object before handing it here (a
+      // week's games aren't otherwise fetched on the picker screen).
+      // Once that week is actually underway there's nothing meaningful
+      // to count down to, so the row just doesn't render.
+      const cdLabel = l.currentWeekLabel ? `${l.currentWeekLabel} starts in` : "Next week starts in";
+      const countdownHTML = (!l.archived && l.currentWeekFirstKickoffMs != null)
+        ? gpBuildCountdownWidgetHTML({ label: cdLabel, targetMs: l.currentWeekFirstKickoffMs })
+        : "";
+      const countdownRowHTML = countdownHTML ? `<div class="gpLeagueCardCountdownRow">${countdownHTML}</div>` : "";
+
       return `
 <div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="${isMember ? "selectLeague" : "openJoinOverlay"}" data-leagueid="${esc(l.id)}">
-  <div class="gpLeagueCardIcon">🏈</div>
-  <div class="gpLeagueCardInfo">
-    <div class="gpLeagueCardName">${esc(l.name || "League")}${activePill}</div>
-    <div class="gpLeagueCardMeta">${meta}</div>
+  <div class="gpLeagueCardMain">
+    <div class="gpLeagueCardIcon">🏈</div>
+    <div class="gpLeagueCardInfo">
+      <div class="gpLeagueCardName">${esc(l.name || "League")}${activePill}</div>
+      <div class="gpLeagueCardMeta">${meta}</div>
+    </div>
+    ${cta}
+    ${isAdmin ? `<div class="gpLeagueCardGear" data-gpaction="editLeague" data-leagueid="${esc(l.id)}" title="League settings">⚙</div>` : ""}
   </div>
-  ${cta}
-  ${isAdmin ? `<div class="gpLeagueCardGear" data-gpaction="editLeague" data-leagueid="${esc(l.id)}" title="League settings">⚙</div>` : ""}
+  ${countdownRowHTML}
 </div>`;
     }).join("");
 
@@ -3380,6 +3423,7 @@ ${saveRow}`;
     gpBuildJoinLeagueOverlayHTML,
     gpShowJoinLeagueOverlay,
     gpDismissJoinLeagueOverlay,
+    gpEarliestKickoffMs,
   };
 
 })();
