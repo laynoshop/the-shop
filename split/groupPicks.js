@@ -790,6 +790,37 @@
       return;
     }
 
+    // ── leagues: invite someone via the device's native share sheet ──
+    if (action === "inviteToLeague") {
+      const leagueName = String(btn.getAttribute("data-leaguename") || "our league").trim();
+      const url = window.location.origin + window.location.pathname;
+      const title = "Join my Pick’em League!";
+      const text = `Welcome to The Shop! 🏈 I'm inviting you to join our "${leagueName}" Pick’em League. Tap the link below, enter 2026 as the Scarlet Key, head to the Pick’em page, and follow the steps from there to join the league. Let's go! 🏆`;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ title, text, url });
+        } catch (err) {
+          // AbortError just means the player closed the share sheet — not an error.
+          if (err?.name !== "AbortError") console.error("[GP] inviteToLeague share error:", err);
+        }
+        return;
+      }
+
+      // No native share sheet (e.g. desktop) — copy the whole invite to
+      // the clipboard instead, same fallback pattern used elsewhere in
+      // this app (see boot.js's debug-log copy button).
+      const fullMessage = `${text}\n${url}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(fullMessage)
+          .then(() => alert("Invite message copied! Paste it anywhere to share."))
+          .catch(() => prompt("Copy this invite message:", fullMessage));
+      } else {
+        prompt("Copy this invite message:", fullMessage);
+      }
+      return;
+    }
+
     // ── leagues: show the "Join League" overlay for a league the
     //    player hasn't joined yet (uses the picker's already-fetched
     //    league + member data, no extra round trip) ──
