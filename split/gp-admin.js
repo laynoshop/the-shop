@@ -147,19 +147,27 @@
     return out;
   }
 
-  // League Announcement — a short admin-authored notice shown at the top
-  // of the week view for every player in the league. null (not an empty
-  // object) when there's nothing to say, so the render side can tell
-  // "no announcement" apart from "announcement with blank fields" with
-  // a single falsy check.
+  // League Announcements — up to 3 short admin-authored notices shown
+  // stacked at the top of the week view for every player in the league.
+  // Each slot normalizes to null (not an empty object) when there's
+  // nothing to say, then gets filtered out — blank slots never end up
+  // stored, and the list compacts automatically (e.g. filling only
+  // slots 1 and 3 still saves as a 2-item array).
   function normalizeAnnouncement(title, message) {
     const t = String(title || "").trim().slice(0, 60);
     const m = String(message || "").trim().slice(0, 280);
     if (!t && !m) return null;
     return { title: t, message: m };
   }
+  const MAX_ANNOUNCEMENTS = 3;
+  function normalizeAnnouncements(list) {
+    return (Array.isArray(list) ? list : [])
+      .map(a => normalizeAnnouncement(a?.title, a?.message))
+      .filter(Boolean)
+      .slice(0, MAX_ANNOUNCEMENTS);
+  }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, h2hRoster, announcementTitle, announcementMessage }) {
+  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, h2hRoster, announcements }) {
     const ref = db.collection("leagues").doc();
     const isH2H = format === "h2h";
     const roster = isH2H ? normalizeH2HRoster(h2hRoster) : [];
@@ -174,14 +182,14 @@
       format:       isH2H ? "h2h" : "points",
       h2hRoster:    roster,
       h2hSchedule:  isH2H ? ((window.GP_Data?.gpGenerateH2HSchedule || (() => []))(roster)) : [],
-      announcement: normalizeAnnouncement(announcementTitle, announcementMessage),
+      announcements: normalizeAnnouncements(announcements),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     });
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, h2hRoster, announcementTitle, announcementMessage }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, h2hRoster, announcements }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
@@ -190,8 +198,8 @@
     if (seasonYear !== undefined) patch.seasonYear = Number(seasonYear) || currentYear();
     if (totalWeeks !== undefined) patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
     if (archived !== undefined)   patch.archived = !!archived;
-    if (announcementTitle !== undefined || announcementMessage !== undefined) {
-      patch.announcement = normalizeAnnouncement(announcementTitle, announcementMessage);
+    if (announcements !== undefined) {
+      patch.announcements = normalizeAnnouncements(announcements);
     }
     if (format !== undefined) {
       const isH2H = format === "h2h";

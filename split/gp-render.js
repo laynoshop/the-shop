@@ -1012,6 +1012,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   color: inherit; font-weight: 700; font-size: 16px; outline: none;
 }
 .gpLeagueSettingsCheckRow { display: flex; align-items: center; gap: 10px; }
+.gpAnnouncementSlot {
+  padding: 10px 0 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.gpAnnouncementSlot:last-child { border-bottom: none; padding-bottom: 0; }
 .gpLeagueSettingsActions { display: flex; gap: 10px; margin-top: 4px; }
 
 /* Head-to-Head roster: registered-player checklist */
@@ -2427,6 +2432,15 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // Up to 3 announcements, stacked in the order the admin entered them.
+  // Each one reuses the exact same banner as a single announcement, so
+  // one, two, or three all look consistent — an empty/missing list just
+  // renders nothing, same as before.
+  function gpBuildLeagueAnnouncementsHTML(announcements) {
+    const list = Array.isArray(announcements) ? announcements : [];
+    return list.map(gpBuildLeagueAnnouncementHTML).filter(Boolean).join("");
+  }
+
   // Shows whenever this player has open, unlocked games without a pick,
   // and/or an unanswered tiebreaker for this week — every time they land
   // on the league, not just when a lock is imminent, per the "make it
@@ -3016,8 +3030,23 @@ ${saveRow}`;
     const totalWeeks = Number(league?.totalWeeks) || "";
     const archived = !!league?.archived;
     const isH2H = league?.format === "h2h";
-    const announcementTitle   = esc(String(league?.announcement?.title ?? ""));
-    const announcementMessage = esc(String(league?.announcement?.message ?? ""));
+    // Backward-compat: a league saved before multi-announcement support
+    // only has the old singular `announcement` field — treat it as slot 1.
+    const existingAnnouncements = Array.isArray(league?.announcements)
+      ? league.announcements
+      : (league?.announcement ? [league.announcement] : []);
+    const announcementSlotsHTML = [0, 1, 2].map(i => {
+      const a = existingAnnouncements[i] || {};
+      const t = esc(String(a?.title ?? ""));
+      const m = esc(String(a?.message ?? ""));
+      return `
+    <div class="gpAnnouncementSlot">
+      <div class="gpLeagueSettingsLabel">Announcement ${i + 1}</div>
+      <input type="text" id="gpLeagueAnnouncementTitle${i}" class="gpLeagueSettingsInput" value="${t}" placeholder="e.g. Playoffs start next week!" maxlength="60"/>
+      <textarea id="gpLeagueAnnouncementMessage${i}" class="gpLeagueSettingsInput" rows="2" maxlength="280"
+        placeholder="Optional message shown below the title" style="margin-top:8px">${m}</textarea>
+    </div>`;
+    }).join("");
 
     // Registered players (anyone who's ever completed the name+code screen)
     // get a checkbox each; the roster's chosen names not found in that
@@ -3071,11 +3100,9 @@ ${saveRow}`;
     <div class="muted" style="font-size:12px;margin-top:4px">The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
   </div>
   <div class="gpLeagueSettingsRow">
-    <div class="gpLeagueSettingsLabel">League Announcement</div>
-    <input type="text" id="gpLeagueAnnouncementTitle" class="gpLeagueSettingsInput" value="${announcementTitle}" placeholder="e.g. Playoffs start next week!" maxlength="60"/>
-    <textarea id="gpLeagueAnnouncementMessage" class="gpLeagueSettingsInput" rows="3" maxlength="280"
-      placeholder="Optional message shown below the title" style="margin-top:8px">${announcementMessage}</textarea>
-    <div class="muted" style="font-size:12px;margin-top:4px">Shown at the top of the week view for everyone in this league. Leave both fields blank to remove it.</div>
+    <div class="gpLeagueSettingsLabel">League Announcements (up to 3)</div>
+    <div class="muted" style="font-size:12px;margin-bottom:6px">Shown stacked at the top of the week view for everyone in this league. Leave a slot's fields blank to remove it.</div>
+    ${announcementSlotsHTML}
   </div>
   ${isEdit ? `
   <label class="gpLeagueSettingsCheckRow">
@@ -3147,6 +3174,7 @@ ${saveRow}`;
     gpBuildTiebreakerCardHTML,
     gpBuildLockReminderHTML,
     gpBuildLeagueAnnouncementHTML,
+    gpBuildLeagueAnnouncementsHTML,
     gpApplyAdminSelection,
     gpShowPlayerPicksOverlay,
     gpBuildJoinLeagueOverlayHTML,
