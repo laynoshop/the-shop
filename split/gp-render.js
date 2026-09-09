@@ -793,12 +793,23 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
    ══════════════════════════════════════════════ */
 .gpLockBanner {
   display: flex; align-items: center; gap: 10px;
-  background: rgba(255,150,0,0.10);
-  border: 1px solid rgba(255,170,40,0.3);
-  border-radius: 14px; padding: 10px 14px;
-  font-size: 13px; font-weight: 800; color: rgba(255,210,150,0.95);
+  margin-bottom: 14px;
+  background: linear-gradient(135deg, rgba(220,40,40,0.18) 0%, rgba(30,10,10,0.55) 100%);
+  border: 1px solid rgba(255,90,80,0.5);
+  border-radius: 14px; padding: 12px 16px;
+  font-size: 13.5px; font-weight: 700; color: rgba(255,225,220,0.95);
+  box-shadow: 0 0 0 1px rgba(255,90,80,0.08), 0 6px 20px rgba(200,30,30,0.25);
+  animation: gpLockBannerPulse 2.4s ease-in-out infinite;
 }
-.gpLockBanner .gpLockBannerIcon { font-size: 16px; flex-shrink: 0; }
+.gpLockBanner b { color: #fff; font-weight: 950; }
+.gpLockBanner .gpLockBannerIcon { font-size: 17px; flex-shrink: 0; }
+@keyframes gpLockBannerPulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,90,80,0.08), 0 6px 20px rgba(200,30,30,0.25); }
+  50%      { box-shadow: 0 0 0 1px rgba(255,90,80,0.18), 0 6px 26px rgba(200,30,30,0.4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gpLockBanner { animation: none; }
+}
 
 /* ══════════════════════════════════════════════
    ADMIN — date range / mode controls
@@ -919,6 +930,23 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   animation: gpLivePulse 1.2s ease-in-out infinite;
 }
 .gpLeagueCardMeta { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.4); margin-top: 2px; }
+.gpLeagueCardCta {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12.5px; font-weight: 900; letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.gpLeagueCardCtaJoin {
+  color: #fff5ea;
+  background: linear-gradient(135deg, #ff5a3c 0%, #c81e1e 100%);
+  box-shadow: 0 4px 16px rgba(200,30,30,0.4);
+}
+.gpLeagueCardCtaVisit {
+  color: rgba(255,255,255,0.65);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+}
 .gpLeagueCardGear {
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -1122,6 +1150,83 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   padding: 32px 16px; text-align: center;
   color: rgba(255,255,255,0.35); font-size: 14px; font-weight: 700;
 }
+
+/* ══════════════════════════════════════════════
+   JOIN LEAGUE OVERLAY (built on the shared overlay shell above)
+   ══════════════════════════════════════════════ */
+.gpJoinHeaderIcon {
+  width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; background: rgba(187,0,0,0.16); border: 1px solid rgba(187,0,0,0.3);
+}
+.gpJoinStatsRow {
+  display: flex; gap: 10px;
+  padding: 4px 2px 14px;
+}
+.gpJoinStatTile {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 14px 10px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.09);
+}
+.gpJoinStatNum {
+  font-size: 22px; font-weight: 950; color: #fff; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.gpJoinStatLabel {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+  color: rgba(255,255,255,0.42);
+}
+.gpJoinMembersLabel {
+  font-size: 11px; font-weight: 900; letter-spacing: 0.07em; text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+  padding: 2px 4px 8px;
+}
+.gpJoinMembersList {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.gpJoinMemberRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.gpJoinMemberAvatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 900; letter-spacing: -0.3px; text-transform: uppercase;
+}
+.gpJoinMemberName {
+  font-size: 13.5px; font-weight: 800; color: rgba(255,255,255,0.85);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpJoinMembersEmpty {
+  padding: 22px 14px; text-align: center; border-radius: 14px;
+  background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.42); font-size: 13px; font-weight: 700;
+}
+.gpJoinCtaRow {
+  flex-shrink: 0;
+  padding: 14px 18px calc(env(safe-area-inset-bottom) + 6px);
+  border-top: 1px solid rgba(255,255,255,0.07);
+  background: rgba(23,22,26,0.96);
+}
+.gpJoinCtaBtn {
+  width: 100%;
+  padding: 15px 18px;
+  border: 0; border-radius: 16px;
+  font-size: 16px; font-weight: 900; letter-spacing: 0.01em;
+  color: #fff5ea;
+  background: linear-gradient(135deg, #ff5a3c 0%, #c81e1e 100%);
+  box-shadow: 0 8px 26px rgba(200,30,30,0.45), inset 0 1px 0 rgba(255,255,255,0.18);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms ease;
+}
+.gpJoinCtaBtn:active { transform: scale(0.98); }
+.gpJoinCtaBtn:disabled { opacity: 0.6; }
 
     `;
     document.head.appendChild(style);
@@ -2278,15 +2383,35 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
-  function gpBuildLockReminderHTML({ missingCount, minutesUntilLock }) {
-    if (!missingCount || minutesUntilLock == null) return "";
-    const hrs = Math.floor(minutesUntilLock / 60);
-    const mins = minutesUntilLock % 60;
-    const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+  // Shows whenever this player has open, unlocked games without a pick,
+  // and/or an unanswered tiebreaker for this week — every time they land
+  // on the league, not just when a lock is imminent, per the "make it
+  // feel official" ask. Time-to-lock is still shown as a supplementary
+  // detail when it's known, not as a gate on whether the banner appears.
+  function gpBuildLockReminderHTML({ missingCount, tiebreakerMissing, minutesUntilLock }) {
+    if (!missingCount && !tiebreakerMissing) return "";
+
+    let timeStr = "";
+    if (minutesUntilLock != null) {
+      const hrs = Math.floor(minutesUntilLock / 60);
+      const mins = minutesUntilLock % 60;
+      timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+    }
+
+    const parts = [];
+    if (missingCount) {
+      parts.push(`${missingCount} game${missingCount !== 1 ? "s" : ""} you haven&#8217;t picked yet`);
+    }
+    if (tiebreakerMissing) {
+      parts.push(`the tiebreaker`);
+    }
+    const what = parts.join(" and ");
+    const lockNote = timeStr ? ` — earliest lock in ${esc(timeStr)}` : "";
+
     return `
 <div class="gpLockBanner">
-  <span class="gpLockBannerIcon">⏰</span>
-  <span>${missingCount} pick${missingCount !== 1 ? "s" : ""} still open — earliest lock in ${esc(timeStr)}</span>
+  <span class="gpLockBannerIcon">⚠️</span>
+  <span><b>IMPORTANT:</b> You still have ${what}${lockNote}.</span>
 </div>`;
   }
 
@@ -2701,13 +2826,18 @@ ${saveRow}`;
       const weeksLabel = totalWeeks ? `${weeksCount} of ${totalWeeks} weeks` : `${weeksCount} week${weeksCount !== 1 ? "s" : ""}`;
       const meta = `${esc(String(l.seasonYear || ""))} · ${weeksLabel}${l.archived ? " · Archived" : ""}`;
       const activePill = (l.active && !l.archived) ? `<span class="gpLeagueActivePill"><span class="gpLeagueActiveDot"></span>Active</span>` : "";
+      const isMember = !!l.isMember;
+      const cta = isMember
+        ? `<div class="gpLeagueCardCta gpLeagueCardCtaVisit">Visit League ›</div>`
+        : `<div class="gpLeagueCardCta gpLeagueCardCtaJoin">Join</div>`;
       return `
-<div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="selectLeague" data-leagueid="${esc(l.id)}">
+<div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="${isMember ? "selectLeague" : "openJoinOverlay"}" data-leagueid="${esc(l.id)}">
   <div class="gpLeagueCardIcon">🏈</div>
   <div class="gpLeagueCardInfo">
     <div class="gpLeagueCardName">${esc(l.name || "League")}${activePill}</div>
     <div class="gpLeagueCardMeta">${meta}</div>
   </div>
+  ${cta}
   ${isAdmin ? `<div class="gpLeagueCardGear" data-gpaction="editLeague" data-leagueid="${esc(l.id)}" title="League settings">⚙</div>` : ""}
 </div>`;
     }).join("");
@@ -2726,6 +2856,102 @@ ${saveRow}`;
   ${cards}
   ${createTile}
 </div>`;
+  }
+
+  // ─── Join League overlay — shown before a first-time visitor enters a
+  // league, so joining feels like a real decision rather than an
+  // accidental tap. Reuses the same bottom-sheet shell as the player
+  // picks overlay (gpPicksOverlayBackdrop/Sheet) for a consistent feel.
+  function gpBuildJoinLeagueOverlayHTML({ league, members }) {
+    const list = Array.isArray(members) ? members : [];
+    const weeksCount = Array.isArray(league?.weeks) ? league.weeks.length : 0;
+    const totalWeeks = Number(league?.totalWeeks) || 0;
+    const weeksLabel = totalWeeks ? `${weeksCount} of ${totalWeeks}` : String(weeksCount);
+    const formatLabel = league?.format === "h2h" ? "Head-to-Head" : "Points";
+
+    const memberRows = list.map(m => {
+      const { bg, color } = avatarStyle(String(m.name || "Someone"));
+      return `
+<div class="gpJoinMemberRow">
+  <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(m.name))}</div>
+  <div class="gpJoinMemberName">${esc(m.name)}</div>
+</div>`;
+    }).join("");
+
+    const membersHTML = list.length
+      ? `<div class="gpJoinMembersList">${memberRows}</div>`
+      : `<div class="gpJoinMembersEmpty">Nobody's joined yet — be the first! 🎉</div>`;
+
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpJoinOverlay" role="dialog" aria-modal="true" aria-label="Join ${esc(league?.name || "League")}">
+  <div class="gpPicksOverlaySheet" id="gpJoinOverlaySheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader">
+      <div class="gpOverlayTitle">
+        <div class="gpJoinHeaderIcon">🏈</div>
+        <div>
+          <div class="gpOverlayName">${esc(league?.name || "League")}</div>
+          <div class="gpOverlaySubtitle">${esc(String(league?.seasonYear || ""))} &middot; ${esc(formatLabel)}</div>
+        </div>
+      </div>
+      <button class="gpOverlayCloseBtn" id="gpJoinOverlayClose" aria-label="Close">✕</button>
+    </div>
+    <div class="gpOverlayBody">
+      <div class="gpJoinStatsRow">
+        <div class="gpJoinStatTile">
+          <div class="gpJoinStatNum">${esc(weeksLabel)}</div>
+          <div class="gpJoinStatLabel">Weeks</div>
+        </div>
+        <div class="gpJoinStatTile">
+          <div class="gpJoinStatNum">${list.length}</div>
+          <div class="gpJoinStatLabel">Player${list.length !== 1 ? "s" : ""} In</div>
+        </div>
+      </div>
+      <div class="gpJoinMembersLabel">Who&#8217;s already playing</div>
+      ${membersHTML}
+    </div>
+    <div class="gpJoinCtaRow">
+      <button class="gpJoinCtaBtn" type="button" data-gpaction="confirmJoinLeague" data-leagueid="${esc(league?.id || "")}">
+        Join League 🏆
+      </button>
+    </div>
+  </div>
+</div>`;
+  }
+
+  function gpShowJoinLeagueOverlay(league, members) {
+    const existing = document.getElementById("gpJoinOverlay");
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML("beforeend", gpBuildJoinLeagueOverlayHTML({ league, members }));
+
+    const backdrop = document.getElementById("gpJoinOverlay");
+    const sheet    = document.getElementById("gpJoinOverlaySheet");
+    const closeBtn = document.getElementById("gpJoinOverlayClose");
+    if (!backdrop) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    closeBtn?.addEventListener("click", dismiss);
+    backdrop.addEventListener("click", (e) => {
+      if (!sheet.contains(e.target)) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
+  function gpDismissJoinLeagueOverlay() {
+    const backdrop = document.getElementById("gpJoinOverlay");
+    if (backdrop) backdrop.remove();
   }
 
   // ─── League settings form (create or edit) ────────────────────────
@@ -2869,6 +3095,9 @@ ${saveRow}`;
     gpBuildLeagueAnnouncementHTML,
     gpApplyAdminSelection,
     gpShowPlayerPicksOverlay,
+    gpBuildJoinLeagueOverlayHTML,
+    gpShowJoinLeagueOverlay,
+    gpDismissJoinLeagueOverlay,
   };
 
 })();
