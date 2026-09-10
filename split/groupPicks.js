@@ -672,15 +672,12 @@
     const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
       ? Number(myPicksUserDoc.tiebreakerGuess) : null;
 
-    // ── live/final scores come straight off each game doc (populated by
-    //    the syncPickemScores Cloud Function) — no ESPN call needed here
-    //    anymore. Odds still come from ESPN directly, since the function
-    //    doesn't fetch those. ──
+    // ── live/final scores and odds both come straight off each game doc
+    //    now (populated by the syncPickemScores Cloud Function) — no
+    //    ESPN call needed in the render path at all anymore. ──
     if (games.length) {
       (ESPN().gpApplyStoredLiveState || (() => {}))(games);
-      try {
-        await (ESPN().gpHydrateOddsForGames || (async () => {}))(games);
-      } catch {}
+      (ESPN().gpApplyStoredOdds      || (() => {}))(games);
     }
 
     // ── expose current state for player picks overlay ──
