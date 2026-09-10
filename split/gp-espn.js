@@ -116,129 +116,35 @@
     }
   }
 
-  // --------------- live score hydration ---------------
-  function gpGetEventLiveInfoFromScoreboardEvent(ev) {
-    try {
-      const comp = ev?.competitions?.[0] || {};
-      const st = comp?.status?.type || {};
-      const state = String(st?.state || "").toLowerCase();
-      const detail = String(st?.shortDetail || st?.detail || "").trim();
-      const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-      const homeC = competitors.find(c => c?.homeAway === "home") || {};
-      const awayC = competitors.find(c => c?.homeAway === "away") || {};
-      const homeScore = (homeC?.score != null) ? String(homeC.score) : "";
-      const awayScore = (awayC?.score != null) ? String(awayC.score) : "";
-      return { state, detail, homeScore, awayScore };
-    } catch {
-      return null;
-    }
-  }
-
-  function gpYYYYMMDDFromStartTime(g) {
-    try {
-      const ms = g?.startTime?.toMillis ? g.startTime.toMillis() : 0;
-      if (!ms) return "";
-      const d = new Date(ms);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const da = String(d.getDate()).padStart(2, "0");
-      return `${y}${m}${da}`;
-    } catch {
-      return "";
-    }
-  }
-
-  // Persist final scores back to Firestore so the leaderboard can
-  // compute correctly for old weeks when ESPN no longer returns data.
-  async function gpPersistFinalScores(games, liveMap) {
-    try {
-      const toWrite = [];
-      for (const g of games) {
-        const eid  = String(g?.eventId || g?.id || "").trim();
-        const info = liveMap.get(eid);
-        if (!info || String(info.state || "").toLowerCase() !== "post") continue;
-        // Only write if not already stored
-        if (g.finalHomeScore != null && g.finalAwayScore != null) continue;
-        const homeScore = Number(info.homeScore);
-        const awayScore = Number(info.awayScore);
-        if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) continue;
-        const weekId = String(g?.weekId || "").trim();
-        if (!weekId || !eid) continue;
-        toWrite.push({ eid, weekId, homeScore, awayScore });
+  // --------------- live/final state (from Firestore) ---------------
+  // The syncPickemScores Cloud Function polls ESPN on its own 1-minute
+  // schedule and writes live/final scores straight onto each game doc
+  // (liveState/liveHomeScore/liveAwayScore/liveDetail while in progress,
+  // finalState/finalHomeScore/finalAwayScore once it ends) — reliably,
+  // regardless of whether anyone has the app open. gpGetSlateGames
+  // already reads the full game doc, so those fields are already sitting
+  // on each game object with zero extra network calls; this just
+  // reshapes them into the { state, detail, homeScore, awayScore } shape
+  // every render/grading helper already expects on g.__live. This
+  // replaces the old client-side ESPN poll (and its best-effort final-
+  // score writeback, which only worked when an admin's browser happened
+  // to be open right as a game ended).
+  function gpApplyStoredLiveState(games) {
+    for (const g of (Array.isArray(games) ? games : [])) {
+      if (!g) continue;
+      if (String(g.finalState || "").toLowerCase() === "post" && g.finalHomeScore != null && g.finalAwayScore != null) {
+        g.__live = { state: "post", detail: "", homeScore: g.finalHomeScore, awayScore: g.finalAwayScore };
+      } else if (g.liveState) {
+        g.__live = {
+          state: String(g.liveState || "").toLowerCase(),
+          detail: String(g.liveDetail || ""),
+          homeScore: g.liveHomeScore,
+          awayScore: g.liveAwayScore,
+        };
+      } else {
+        g.__live = null;
       }
-      if (!toWrite.length) return;
-
-      // Ensure firebase is ready
-      if (typeof window.GP_Data?.ensureFirebaseReadySafe === "function") {
-        await window.GP_Data.ensureFirebaseReadySafe();
-      }
-      const db = firebase.firestore();
-      const batch = db.batch();
-      for (const { eid, weekId, homeScore, awayScore } of toWrite) {
-        const ref = db.collection("pickSlates").doc(weekId)
-          .collection("games").doc(eid);
-        batch.set(ref, {
-          finalHomeScore: homeScore,
-          finalAwayScore: awayScore,
-          finalState:     "post",
-          finalizedAt:    firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-        // Also update in-memory game object so leaderboard can use it immediately
-        const gObj = games.find(g => String(g?.eventId || g?.id || "") === eid);
-        if (gObj) {
-          gObj.finalHomeScore = homeScore;
-          gObj.finalAwayScore = awayScore;
-          gObj.finalState     = "post";
-        }
-      }
-      await batch.commit();
-    } catch (err) {
-      console.warn("[GP] gpPersistFinalScores error (non-fatal):", err);
     }
-  }
-
-  async function gpHydrateLiveStateForGames(games) {
-    const list = Array.isArray(games) ? games : [];
-    if (!list.length) return;
-
-    const groups = new Map();
-    for (const g of list) {
-      const leagueKey = String(g?.leagueKey || "").trim();
-      const dateYYYYMMDD = gpYYYYMMDDFromStartTime(g) || String(g?.dateYYYYMMDD || "").trim();
-      const eventId = String(g?.eventId || g?.id || "").trim();
-      if (!leagueKey || !dateYYYYMMDD || !eventId) continue;
-      const k = `${leagueKey}__${dateYYYYMMDD}`;
-      if (!groups.has(k)) groups.set(k, { leagueKey, dateYYYYMMDD, ids: new Set() });
-      groups.get(k).ids.add(eventId);
-    }
-    if (!groups.size) return;
-
-    const liveMap = new Map();
-    for (const grp of groups.values()) {
-      const league = getLeagueByKeySafe(grp.leagueKey);
-      const url = (league && typeof league.endpoint === "function") ? league.endpoint(grp.dateYYYYMMDD) : "";
-      if (!url) continue;
-      try {
-        const r = await fetch(url, { cache: "no-store" });
-        if (!r.ok) continue;
-        const j = await r.json().catch(() => ({}));
-        const events = Array.isArray(j?.events) ? j.events : [];
-        for (const ev of events) {
-          const eid = String(ev?.id || "");
-          if (!eid || !grp.ids.has(eid)) continue;
-          const info = gpGetEventLiveInfoFromScoreboardEvent(ev);
-          if (info) liveMap.set(eid, info);
-        }
-      } catch {}
-    }
-
-    for (const g of list) {
-      const eid = String(g?.eventId || g?.id || "").trim();
-      g.__live = liveMap.get(eid) || null;
-    }
-
-    // Persist any newly-final scores back to Firestore
-    await gpPersistFinalScores(list, liveMap);
   }
 
   // --------------- odds helpers ---------------
@@ -458,9 +364,8 @@
     buildLeagueSelectHTMLSafe,
     buildCalendarButtonHTMLSafe,
     fetchEventsFor,
-    gpHydrateLiveStateForGames,
+    gpApplyStoredLiveState,
     gpHydrateOddsForGames,
-    gpGetEventLiveInfoFromScoreboardEvent,
     gpGetEventOddsFromScoreboardEvent
   };
 

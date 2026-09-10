@@ -246,13 +246,13 @@
 
       let allPicks = {}, slateDoc = {}, tiebreakers = {};
       try {
-        [, allPicks, slateDoc, tiebreakers] = await Promise.all([
-          (ESPN().gpHydrateLiveStateForGames || (async () => {}))(games),
+        [allPicks, slateDoc, tiebreakers] = await Promise.all([
           (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, wid),
           (Data().gpGetSlateDoc || (async () => ({})))(db, wid),
           (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, wid),
         ]);
       } catch {}
+      (ESPN().gpApplyStoredLiveState || (() => {}))(games);
 
       const lb = (Data().gpComputeWeeklyLeaderboard || (() => ({ rows: [], finalsCount: 0 })))(
         games, allPicks, { atsEventIds: slateDoc?.atsEventIds, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
@@ -672,14 +672,14 @@
     const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
       ? Number(myPicksUserDoc.tiebreakerGuess) : null;
 
-    // ── hydrate live scores + odds ── (independent — different fields
-    // on each game object, safe to run at the same time)
+    // ── live/final scores come straight off each game doc (populated by
+    //    the syncPickemScores Cloud Function) — no ESPN call needed here
+    //    anymore. Odds still come from ESPN directly, since the function
+    //    doesn't fetch those. ──
     if (games.length) {
+      (ESPN().gpApplyStoredLiveState || (() => {}))(games);
       try {
-        await Promise.all([
-          (ESPN().gpHydrateLiveStateForGames || (async () => {}))(games),
-          (ESPN().gpHydrateOddsForGames     || (async () => {}))(games),
-        ]);
+        await (ESPN().gpHydrateOddsForGames || (async () => {}))(games);
       } catch {}
     }
 
