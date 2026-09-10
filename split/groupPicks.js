@@ -694,6 +694,7 @@
       ? league.announcements
       : (league.announcement ? [league.announcement] : []);
     const announcementHTML = (Render().gpBuildLeagueAnnouncementsHTML || (() => ""))(announcementsList);
+    const notifOptInHTML = (Render().gpBuildNotifOptInHTML || (() => ""))();
 
     // ── lock reminder (mine only) — missing picks + tiebreaker ──
     const lockReminder = gpComputeLockReminder(
@@ -736,7 +737,7 @@
       });
     }
 
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${toggleHTML}${pagerHTML}${adminBuilderHTML}${cardsHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${toggleHTML}${pagerHTML}${adminBuilderHTML}${cardsHTML}</div>`;
     postRender();
   }
 
@@ -885,6 +886,44 @@
         btn.disabled = false;
         console.error("[GP] save error:", err);
         alert(`Couldn't save: ${String(err?.message || err)}`);
+      }
+      return;
+    }
+
+    // ── push notifications: dismiss the opt-in banner ──
+    if (action === "dismissNotifBanner") {
+      try { localStorage.setItem("theShopNotifBannerDismissed_v1", "1"); } catch {}
+      const banner = t.closest(".gpNotifBanner");
+      if (banner) banner.remove();
+      return;
+    }
+
+    // ── push notifications: enable ──
+    if (action === "enableNotifications") {
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Enabling…";
+      try {
+        const idObj3   = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
+        const playerId = idObj3.playerId || gpMem().picksPlayerId || "";
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db3 = firebase.firestore();
+        await (window.GP_Notif?.gpNotifEnable || (async () => { throw new Error("Notifications aren't available."); }))(db3, playerId);
+        const banner = t.closest(".gpNotifBanner");
+        if (banner) banner.remove();
+        // Immediately round-trip a real push through the Cloud Function so
+        // enabling notifications is self-verifying — if this fails, the
+        // player finds out now instead of the first time it actually matters.
+        try {
+          await firebase.functions().httpsCallable("sendTestPush")({ playerId });
+          alert("Notifications enabled! You should get a test notification any second.");
+        } catch (testErr) {
+          alert(`Notifications are enabled, but the test push didn't go through: ${String(testErr?.message || testErr)}`);
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        alert(String(err?.message || err));
       }
       return;
     }

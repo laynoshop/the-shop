@@ -1,10 +1,79 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 const db = getFirestore();
+
+// ─── push notifications ──────────────────────────────────────────────
+// Shared by every notification trigger (test-send now, the real
+// League-announcement/lock-reminder/week-published/final-score triggers
+// later): looks up each player's stored FCM tokens (players/{playerId}
+// .fcmTokens, written by gpNotifEnable in split/gp-notifications.js) and
+// sends one multicast push. Tokens FCM reports as no-longer-registered
+// (uninstalled app, revoked permission, etc.) are cleaned up from the
+// player doc so they stop being retried.
+async function sendPushToPlayerIds(playerIds, notification, data) {
+  const uniqueIds = [...new Set((playerIds || []).map(String).filter(Boolean))];
+  if (!uniqueIds.length) return { sent: 0, players: 0 };
+
+  const tokenOwner = new Map(); // token -> playerId
+  await Promise.all(uniqueIds.map(async (playerId) => {
+    const snap = await db.collection("players").doc(playerId).get();
+    const tokens = snap.exists ? snap.data()?.fcmTokens : null;
+    if (Array.isArray(tokens)) {
+      for (const t of tokens) if (t) tokenOwner.set(String(t), playerId);
+    }
+  }));
+
+  const tokens = [...tokenOwner.keys()];
+  if (!tokens.length) return { sent: 0, players: uniqueIds.length };
+
+  const response = await getMessaging().sendEachForMulticast({
+    tokens,
+    notification,
+    data: data || {},
+  });
+
+  const staleByPlayer = new Map(); // playerId -> tokens to drop
+  response.responses.forEach((r, i) => {
+    if (r.success) return;
+    const code = r.error?.code || "";
+    if (code !== "messaging/registration-token-not-registered" && code !== "messaging/invalid-registration-token") return;
+    const token = tokens[i];
+    const playerId = tokenOwner.get(token);
+    if (!playerId) return;
+    if (!staleByPlayer.has(playerId)) staleByPlayer.set(playerId, []);
+    staleByPlayer.get(playerId).push(token);
+  });
+  await Promise.all([...staleByPlayer.entries()].map(([playerId, staleTokens]) =>
+    db.collection("players").doc(playerId).update({
+      fcmTokens: FieldValue.arrayRemove(...staleTokens),
+    }).catch(() => {})
+  ));
+
+  return { sent: response.successCount, failed: response.failureCount, players: uniqueIds.length };
+}
+
+// Callable from the client (GP_Notif or a future "send yourself a test"
+// button) to verify the whole pipeline — token storage, this function,
+// and actual delivery to the device — before building the real triggers
+// on top of it.
+exports.sendTestPush = onCall(async (request) => {
+  const playerId = String(request.data?.playerId || "").trim();
+  if (!playerId) throw new HttpsError("invalid-argument", "playerId is required");
+  const result = await sendPushToPlayerIds(
+    [playerId],
+    { title: "🔔 Test notification", body: "If you see this, push notifications are working!" }
+  );
+  if (!result.sent) {
+    throw new HttpsError("failed-precondition", "No notification could be delivered — check that notifications were enabled on this device.");
+  }
+  return result;
+});
 
 // Same scoreboard endpoints gp-espn.js uses client-side — kept in sync
 // by hand since this runs in a separate Node runtime, not the browser.
