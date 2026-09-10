@@ -117,7 +117,7 @@
   }
 
   // --------------- live/final state (from Firestore) ---------------
-  // The syncPickemScores Cloud Function polls ESPN on its own 3-minute
+  // The syncPickemScores Cloud Function polls ESPN on its own 1-minute
   // schedule and writes live/final scores straight onto each game doc
   // (liveState/liveHomeScore/liveAwayScore/liveDetail while in progress,
   // finalState/finalHomeScore/finalAwayScore once it ends) — reliably,

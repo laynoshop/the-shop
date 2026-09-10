@@ -51,7 +51,7 @@ function getEventLiveInfo(ev) {
 // SDK used here bypasses those rules entirely, so this runs reliably on
 // its own schedule regardless of who is or isn't looking at the page.
 exports.syncPickemScores = onSchedule(
-  { schedule: "every 3 minutes", timeZone: "America/New_York" },
+  { schedule: "every 1 minutes", timeZone: "America/New_York" },
   async () => {
     const slatesSnap = await db.collection("pickSlates").where("published", "==", true).get();
     if (slatesSnap.empty) {
