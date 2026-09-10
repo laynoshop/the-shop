@@ -514,6 +514,9 @@
       el.innerHTML = `<div class="gpContainer"><div class="gpNotice">Failed to connect: ${String(err?.message || err)}</div></div>`;
       return;
     }
+    // No-op unless permission was already granted in an earlier session —
+    // covers a plain revisit, not just the moment notifications get enabled.
+    (window.GP_Notif?.gpNotifBindForegroundHandler || (() => {}))();
 
     // ── league settings form (create or edit) — can be entered either
     //    from the picker or from within an active league ──

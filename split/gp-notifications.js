@@ -100,7 +100,34 @@
       fcmTokenUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
+    gpNotifBindForegroundHandler();
+
     return token;
+  }
+
+  // A push that arrives while this tab is open and focused ("foreground")
+  // never reaches the service worker's onBackgroundMessage — FCM hands it
+  // straight to the page instead, and if nothing's listening here it just
+  // vanishes with no notification and no error. This is exactly why a
+  // test push right after tapping "Enable" (tab open, in the foreground)
+  // can silently go nowhere. Idempotent and safe to call on every page
+  // load once permission is already granted, not just right after
+  // enabling, so it's also listening on a plain revisit later.
+  let gpNotifForegroundBound = false;
+  function gpNotifBindForegroundHandler() {
+    if (gpNotifForegroundBound) return;
+    if (!gpNotifSupported() || gpNotifPermission() !== "granted") return;
+    try {
+      firebase.messaging().onMessage((payload) => {
+        const title = payload?.notification?.title || "The Shop";
+        const body  = payload?.notification?.body  || "";
+        const options = { body, icon: "/buckeye-O.png", badge: "/buckeye-O.png", data: payload?.data || {} };
+        navigator.serviceWorker.ready
+          .then((reg) => reg.showNotification(title, options))
+          .catch(() => { try { new Notification(title, options); } catch {} });
+      });
+      gpNotifForegroundBound = true;
+    } catch {}
   }
 
   window.GP_Notif = {
@@ -108,5 +135,6 @@
     gpNotifNeedsHomeScreenFirst,
     gpNotifPermission,
     gpNotifEnable,
+    gpNotifBindForegroundHandler,
   };
 })();
