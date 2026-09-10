@@ -981,6 +981,41 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpTiebreakerActual { font-size: 12px; font-weight: 800; color: rgba(120,220,160,0.85); }
 
 /* ══════════════════════════════════════════════
+   PUSH NOTIFICATION OPT-IN BANNER
+   ══════════════════════════════════════════════ */
+.gpNotifBanner {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px; padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255,190,40,0.14) 0%, rgba(20,16,8,0.6) 100%);
+  border: 1px solid rgba(255,200,60,0.35);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.gpNotifBannerIcon { font-size: 18px; flex-shrink: 0; }
+.gpNotifBannerBody {
+  flex: 1; min-width: 0;
+  font-size: 12.5px; font-weight: 700; line-height: 1.4;
+  color: rgba(255,240,210,0.9);
+}
+.gpNotifBannerBtn {
+  flex-shrink: 0;
+  background: rgba(255,200,60,0.9); color: #201400;
+  border: none; border-radius: 10px;
+  padding: 8px 14px; font-weight: 900; font-size: 13px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpNotifBannerBtn:active { transform: scale(0.97); }
+.gpNotifBannerDismiss {
+  flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.6); font-size: 12px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.gpNotifBannerDismiss:active { background: rgba(255,255,255,0.15); }
+
+/* ══════════════════════════════════════════════
    LEAGUE ANNOUNCEMENT BANNER — admin-authored, top of the week view
    ══════════════════════════════════════════════ */
 .gpAnnouncementBanner {
@@ -2743,6 +2778,41 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // ─── push notification opt-in banner ──────────────────────────────
+  // Reads live browser/permission state at render time (window.GP_Notif,
+  // from gp-notifications.js) rather than anything stored, so it always
+  // reflects reality — e.g. disappears the moment permission is granted
+  // without needing a page reload. Dismissing it is remembered in
+  // localStorage so it doesn't nag on every visit.
+  const GP_NOTIF_DISMISSED_KEY = "theShopNotifBannerDismissed_v1";
+  function gpNotifBannerDismissed() {
+    try { return localStorage.getItem(GP_NOTIF_DISMISSED_KEY) === "1"; } catch { return false; }
+  }
+  function gpBuildNotifOptInHTML() {
+    const Notif = window.GP_Notif;
+    if (!Notif || !Notif.gpNotifSupported || !Notif.gpNotifSupported()) return "";
+    if (gpNotifBannerDismissed()) return "";
+
+    const permission = Notif.gpNotifPermission();
+    if (permission === "granted" || permission === "denied") return "";
+
+    const needsHomeScreen = Notif.gpNotifNeedsHomeScreenFirst && Notif.gpNotifNeedsHomeScreenFirst();
+    const body = needsHomeScreen
+      ? "Add this app to your Home Screen (Share → Add to Home Screen) to get notified about picks locking, new weeks, and results."
+      : "Get notified when picks are locking soon, a new week opens, or results are in.";
+    const cta = needsHomeScreen
+      ? ""
+      : `<button type="button" class="gpNotifBannerBtn" data-gpaction="enableNotifications">Enable</button>`;
+
+    return `
+<div class="gpNotifBanner">
+  <div class="gpNotifBannerIcon">🔔</div>
+  <div class="gpNotifBannerBody">${esc(body)}</div>
+  ${cta}
+  <button type="button" class="gpNotifBannerDismiss" data-gpaction="dismissNotifBanner" aria-label="Dismiss">✕</button>
+</div>`;
+  }
+
   // Up to 3 announcements, stacked in the order the admin entered them.
   // Each one reuses the exact same banner as a single announcement, so
   // one, two, or three all look consistent — an empty/missing list just
@@ -3540,6 +3610,7 @@ ${saveRow}`;
     gpBuildLockReminderHTML,
     gpBuildLeagueAnnouncementHTML,
     gpBuildLeagueAnnouncementsHTML,
+    gpBuildNotifOptInHTML,
     gpApplyAdminSelection,
     gpShowPlayerPicksOverlay,
     gpBuildJoinLeagueOverlayHTML,

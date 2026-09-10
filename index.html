@@ -135,6 +135,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 
   <!-- =========================
        SPLIT ARCHITECTURE
@@ -154,6 +156,7 @@
 
   <!-- group picks: sub-modules load first, orchestrator last -->
   <script src="split/gp-identity.js" defer onerror="__splitFail('split/gp-identity.js')"></script>
+  <script src="split/gp-notifications.js" defer onerror="__splitFail('split/gp-notifications.js')"></script>
   <script src="split/gp-data.js" defer onerror="__splitFail('split/gp-data.js')"></script>
   <script src="split/gp-espn.js" defer onerror="__splitFail('split/gp-espn.js')"></script>
   <script src="split/gp-admin.js" defer onerror="__splitFail('split/gp-admin.js')"></script>
