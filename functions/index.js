@@ -19,16 +19,20 @@ const LEAGUE_ENDPOINTS = {
   pga:   (date) => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`,
 };
 
-// Mirrors gpGetEventLiveInfoFromScoreboardEvent in split/gp-espn.js.
+// Mirrors what gp-espn.js used to parse client-side from the same
+// ESPN scoreboard event shape.
 function getEventLiveInfo(ev) {
   try {
     const comp = ev?.competitions?.[0] || {};
-    const state = String(comp?.status?.type?.state || "").toLowerCase();
+    const statusType = comp?.status?.type || {};
+    const state = String(statusType?.state || "").toLowerCase();
+    const detail = String(statusType?.shortDetail || statusType?.detail || "").trim();
     const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
     const homeC = competitors.find((c) => c?.homeAway === "home") || {};
     const awayC = competitors.find((c) => c?.homeAway === "away") || {};
     return {
       state,
+      detail,
       homeScore: Number(homeC?.score),
       awayScore: Number(awayC?.score),
     };
@@ -39,10 +43,10 @@ function getEventLiveInfo(ev) {
 
 // Polls ESPN for every game in a published-but-not-fully-final Pick'em
 // week and writes scores straight into Firestore. This replaces the old
-// client-side path (gpPersistFinalScores in gp-espn.js), which only ever
-// ran if an admin happened to have the app open right after a game ended
-// — a non-admin viewer's browser couldn't write the game doc at all
-// (Firestore rules only allow admins to write pickSlates/*/games/*), and
+// client-side path, which only ever persisted a final score if an admin
+// happened to have the app open right after a game ended — a non-admin
+// viewer's browser couldn't write the game doc at all (Firestore rules
+// only allow admins to write pickSlates/*/games/*), and
 // nobody's browser wrote anything if the app just wasn't open. The Admin
 // SDK used here bypasses those rules entirely, so this runs reliably on
 // its own schedule regardless of who is or isn't looking at the page.
@@ -113,12 +117,12 @@ exports.syncPickemScores = onSchedule(
             finalizedAt: FieldValue.serverTimestamp(),
           }, { merge: true });
         } else {
-          // Not final yet — persist live state too. Nothing reads these
-          // fields client-side today, but they're the foundation for a
-          // follow-up that has the app read from Firestore here instead
-          // of every visitor's browser separately calling ESPN on load.
+          // Not final yet — persist live state too. The app reads this
+          // (gpApplyStoredLiveState in gp-espn.js) instead of calling
+          // ESPN itself on every render.
           batch.set(ref, {
             liveState: info.state,
+            liveDetail: info.detail || "",
             liveHomeScore: Number.isFinite(info.homeScore) ? info.homeScore : null,
             liveAwayScore: Number.isFinite(info.awayScore) ? info.awayScore : null,
             liveUpdatedAt: FieldValue.serverTimestamp(),
