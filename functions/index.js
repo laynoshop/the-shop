@@ -1,9 +1,10 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { logger } = require("firebase-functions");
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
-admin.initializeApp();
-const db = admin.firestore();
+initializeApp();
+const db = getFirestore();
 
 // Same scoreboard endpoints gp-espn.js uses client-side — kept in sync
 // by hand since this runs in a separate Node runtime, not the browser.
@@ -109,7 +110,7 @@ exports.syncPickemScores = onSchedule(
             finalHomeScore: info.homeScore,
             finalAwayScore: info.awayScore,
             finalState: "post",
-            finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
+            finalizedAt: FieldValue.serverTimestamp(),
           }, { merge: true });
         } else {
           // Not final yet — persist live state too. Nothing reads these
@@ -120,7 +121,7 @@ exports.syncPickemScores = onSchedule(
             liveState: info.state,
             liveHomeScore: Number.isFinite(info.homeScore) ? info.homeScore : null,
             liveAwayScore: Number.isFinite(info.awayScore) ? info.awayScore : null,
-            liveUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            liveUpdatedAt: FieldValue.serverTimestamp(),
           }, { merge: true });
         }
         writes++;
