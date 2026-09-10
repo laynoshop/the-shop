@@ -29,7 +29,7 @@
 (function () {
   "use strict";
 
-  const GP_VAPID_KEY = ""; // <-- paste your Web Push certificate key here
+  const GP_VAPID_KEY = "BBEzsluZgtd8-MM1I2O8DdYpY5AGZQ_hFmfdaN67dtVo1oXB0SDlEGn_2bl-1_4NJqDJIaj0Dd2woaA_bwHKEeM"; // <-- paste your Web Push certificate key here
 
   function gpNotifIsIOS() {
     return /iphone|ipad|ipod/i.test(String(navigator.userAgent || ""));
