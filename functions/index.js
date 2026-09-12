@@ -89,24 +89,29 @@ exports.sendTestPush = onCall(async (request) => {
 
 // ─── Trigger: a League Announcement was added or edited ───────────────
 // Announcements have no id/timestamp of their own (they're a plain array
-// of up to 3 { title, message } objects on the league doc, all resaved
-// together whenever League Settings is submitted), so there's no clean
-// "this one is new" signal beyond diffing the array by value: whichever
-// entry in the new list wasn't present in the old list — verbatim — is
-// treated as the one to announce. Reordering the same three entries with
-// no other change looks like no diff (every entry still matches one from
-// before) and correctly stays silent; clearing announcements entirely
-// also stays silent (nothing new to tell anyone about).
+// of up to 3 { title, message, expiresAt } objects on the league doc, all
+// resaved together whenever League Settings is submitted), so there's no
+// clean "this one is new" signal beyond diffing the array by value:
+// whichever entry in the new list wasn't present in the old list is
+// treated as the one to announce. Reordering the same entries with no
+// other change looks like no diff and correctly stays silent; clearing
+// announcements entirely also stays silent (nothing new to tell anyone
+// about).
+//
+// The diff key deliberately excludes expiresAt — an admin just renewing
+// an announcement's expiration date (same title/message, later date)
+// shouldn't re-blast the whole league with a duplicate notification.
 exports.onLeagueAnnouncementChanged = onDocumentUpdated("leagues/{leagueId}", async (event) => {
   const before = event.data?.before?.data() || {};
   const after  = event.data?.after?.data()  || {};
   const afterList = Array.isArray(after.announcements) ? after.announcements : [];
   if (!afterList.length) return;
 
+  const contentKey = (a) => JSON.stringify({ title: a?.title, message: a?.message });
   const beforeSet = new Set(
-    (Array.isArray(before.announcements) ? before.announcements : []).map((a) => JSON.stringify(a))
+    (Array.isArray(before.announcements) ? before.announcements : []).map(contentKey)
   );
-  const changed = afterList.find((a) => !beforeSet.has(JSON.stringify(a)));
+  const changed = afterList.find((a) => !beforeSet.has(contentKey(a)));
   if (!changed) return;
 
   const body = [changed.title, changed.message].filter(Boolean).join(" — ").slice(0, 180);

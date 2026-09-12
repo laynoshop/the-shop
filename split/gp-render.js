@@ -1304,6 +1304,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   border-bottom: 1px solid rgba(255,255,255,0.07);
 }
 .gpAnnouncementSlot:last-child { border-bottom: none; padding-bottom: 0; }
+.gpAnnouncementExpiryRow {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 10px;
+}
 .gpLeagueSettingsActions { display: flex; gap: 10px; margin-top: 4px; }
 
 /* Head-to-Head roster: registered-player checklist */
@@ -2878,13 +2882,26 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // An announcement with an expiresAt ("YYYY-MM-DD") past today no longer
+  // shows. Compared as calendar dates (not a timestamp) so it stays up
+  // through the entire selected day in the viewer's own local time.
+  // Missing expiresAt — every announcement saved before this field
+  // existed — never expires; it's grandfathered in, not backfilled.
+  function gpAnnouncementExpired(a) {
+    const exp = String(a?.expiresAt || "").trim();
+    if (!exp) return false;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    return exp < todayStr;
+  }
+
   // Up to 3 announcements, stacked in the order the admin entered them.
   // Each one reuses the exact same banner as a single announcement, so
   // one, two, or three all look consistent — an empty/missing list just
   // renders nothing, same as before.
   function gpBuildLeagueAnnouncementsHTML(announcements) {
     const list = Array.isArray(announcements) ? announcements : [];
-    return list.map(gpBuildLeagueAnnouncementHTML).filter(Boolean).join("");
+    return list.filter(a => !gpAnnouncementExpired(a)).map(gpBuildLeagueAnnouncementHTML).filter(Boolean).join("");
   }
 
   // Shows whenever this player has open, unlocked games without a pick,
@@ -3519,12 +3536,19 @@ ${saveRow}`;
       const a = existingAnnouncements[i] || {};
       const t = esc(String(a?.title ?? ""));
       const m = esc(String(a?.message ?? ""));
+      const exp = esc(String(a?.expiresAt ?? ""));
       return `
     <div class="gpAnnouncementSlot">
       <div class="gpLeagueSettingsLabel">Announcement ${i + 1}</div>
       <input type="text" id="gpLeagueAnnouncementTitle${i}" class="gpLeagueSettingsInput" value="${t}" placeholder="e.g. Playoffs start next week!" maxlength="60"/>
       <textarea id="gpLeagueAnnouncementMessage${i}" class="gpLeagueSettingsInput" rows="2" maxlength="280"
         placeholder="Optional message shown below the title" style="margin-top:8px">${m}</textarea>
+      <div class="gpAnnouncementExpiryRow">
+        <span class="gpAdminInlineLabel">Shows until</span>
+        <input type="date" id="gpLeagueAnnouncementExpires${i}" class="gpAdminDateInput" value="${exp}"/>
+        <button type="button" class="smallBtn" data-gpaction="setAnnouncementExpiry" data-slot="${i}" data-days="7">1 week</button>
+        <button type="button" class="smallBtn" data-gpaction="setAnnouncementExpiry" data-slot="${i}" data-days="30">1 month</button>
+      </div>
     </div>`;
     }).join("");
 
@@ -3601,7 +3625,7 @@ ${saveRow}`;
   </div>
   <div class="gpLeagueSettingsRow">
     <div class="gpLeagueSettingsLabel">League Announcements (up to 3)</div>
-    <div class="muted" style="font-size:12px;margin-bottom:6px">Shown stacked at the top of the week view for everyone in this league. Leave a slot's fields blank to remove it.</div>
+    <div class="muted" style="font-size:12px;margin-bottom:6px">Shown stacked at the top of the week view for everyone in this league. Leave a slot's fields blank to remove it. Any slot with a title or message needs an expiration date — it disappears automatically after that day.</div>
     ${announcementSlotsHTML}
   </div>
   ${isEdit ? `
