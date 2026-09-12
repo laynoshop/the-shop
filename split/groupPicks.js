@@ -378,7 +378,9 @@
   //   "heavy" — landing inside an actual league's week/season view,
   //             which fetches real games/picks data: selecting a
   //             league, or a refresh while already inside one. Plays
-  //             the 4s "one more second" blip.
+  //             the 2s "one more second" blip (only a floor — if the
+  //             real fetch takes longer, it just runs out the clock
+  //             against GP_RENDER_TIMEOUT_MS below instead of padding).
   //   falsy   — internal reload (save, week nav, admin actions) — no
   //             blip, renders straight through.
   // Either mode renders the real content into a detached scratch
@@ -399,7 +401,7 @@
   //        a. League picker OR league settings form OR week content
   // ───────────────────────────────────────────
   const GP_LOADING_PHASE1_MS = 5000; // "light" — league picker
-  const GP_LOADING_PHASE2_MS = 4000; // "heavy" — inside a league
+  const GP_LOADING_PHASE2_MS = 2000; // "heavy" — inside a league
   const GP_RENDER_TIMEOUT_MS = 15000;
 
   async function renderPicks(loadingMode, forceLeaguePicker) {

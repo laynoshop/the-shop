@@ -430,6 +430,51 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   color: rgba(255,255,255,0.28);
 }
 
+/* Pick tally — two squares (logo on top, big pick count below) shown at
+   the top of Everyone's Picks, before the roster list, so the group's
+   split is visible at a glance before scanning who picked what. */
+.gpPickTally {
+  display: flex; align-items: center; justify-content: center;
+  gap: 14px; padding: 14px 4px 12px;
+}
+.gpPickTallySquare {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  flex: 1; max-width: 130px;
+  padding: 14px 10px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.gpPickTallySquare.gpPickTallyLeading {
+  background: linear-gradient(160deg, rgba(255,190,40,0.14) 0%, rgba(255,255,255,0.03) 100%);
+  border-color: rgba(255,200,60,0.4);
+  box-shadow: 0 0 0 1px rgba(255,200,60,0.12), 0 8px 22px rgba(0,0,0,0.35);
+}
+.gpPickTallyLogo {
+  width: 48px; height: 48px; object-fit: contain;
+  border-radius: 12px; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1); padding: 4px;
+}
+.gpPickTallyLogoPlaceholder {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 900; letter-spacing: 0.3px;
+}
+.gpPickTallyCount {
+  font-size: 30px; font-weight: 950; line-height: 1;
+  color: rgba(255,255,255,0.55);
+  font-variant-numeric: tabular-nums;
+}
+.gpPickTallySquare.gpPickTallyLeading .gpPickTallyCount {
+  color: #fff; text-shadow: 0 0 16px rgba(255,200,60,0.4);
+}
+.gpPickTallyVs {
+  font-size: 10.5px; font-weight: 900; letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.28); flex-shrink: 0;
+}
+
 /* One player's pick/guess inside Everyone's Picks or Everyone's Predictions */
 .gpRosterRow {
   display: flex; align-items: center; gap: 10px;
@@ -1665,7 +1710,27 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
         if (!arr.length) {
           bodyEl.innerHTML = `<div class="muted" style="font-size:12px;padding:8px 0">No picks yet.</div>`;
         } else {
-          bodyEl.innerHTML = arr.map(p => {
+          // Tally squares (logo + big pick count) — the group's split at
+          // a glance before scanning who picked what below.
+          const awayCount = arr.filter(p => String(p?.side) === "away").length;
+          const homeCount = arr.filter(p => String(p?.side) === "home").length;
+          const awayLogo  = String(g?.awayLogo || g?.awayTeam?.logo || "").trim();
+          const homeLogo  = String(g?.homeLogo || g?.homeTeam?.logo || "").trim();
+          const tallySquare = (name, logo, count, leading) => `
+<div class="gpPickTallySquare${leading ? " gpPickTallyLeading" : ""}">
+  ${logo
+    ? `<img class="gpPickTallyLogo" src="${esc(logo)}" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'"/>`
+    : `<div class="gpPickTallyLogoPlaceholder">${esc(name.slice(0, 3).toUpperCase())}</div>`}
+  <div class="gpPickTallyCount">${count}</div>
+</div>`;
+          const tallyHTML = `
+<div class="gpPickTally">
+  ${tallySquare(awayName, awayLogo, awayCount, awayCount > 0 && awayCount >= homeCount)}
+  <div class="gpPickTallyVs">VS</div>
+  ${tallySquare(homeName, homeLogo, homeCount, homeCount > awayCount)}
+</div>`;
+
+          bodyEl.innerHTML = tallyHTML + arr.map(p => {
             const nm    = String(p?.name || "Someone");
             const side  = String(p?.side || "");
             const team  = side === "away" ? awayName : side === "home" ? homeName : side;
