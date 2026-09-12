@@ -1287,32 +1287,70 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
    LEAGUE SETTINGS FORM
    ══════════════════════════════════════════════ */
 .gpLeagueSettingsForm {
-  display: flex; flex-direction: column; gap: 12px;
-  padding: 16px; border-radius: 16px;
-  background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.09);
-}
-.gpAdminPanelTitle {
-  font-size: 12px; font-weight: 900; letter-spacing: 0.1em;
-  text-transform: uppercase; color: rgba(255,220,80,0.85);
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 18px; border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.14) 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 .gpLeagueSettingsRow { display: flex; flex-direction: column; gap: 6px; }
 .gpLeagueSettingsLabel { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.4); }
 .gpLeagueSettingsInput {
   width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px;
-  background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.12);
   color: inherit; font-weight: 700; font-size: 16px; outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.gpLeagueSettingsInput:focus {
+  border-color: rgba(255,200,60,0.55);
+  box-shadow: 0 0 0 3px rgba(255,200,60,0.14);
 }
 .gpLeagueSettingsCheckRow { display: flex; align-items: center; gap: 10px; }
+
+/* Each announcement slot is its own card — clearer than a bare divider
+   when the slot also carries a date field and two shortcut buttons. */
 .gpAnnouncementSlot {
-  padding: 10px 0 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px; border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
 }
-.gpAnnouncementSlot:last-child { border-bottom: none; padding-bottom: 0; }
+.gpAnnouncementSlotLabel {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em;
+  color: rgba(255,210,110,0.85);
+}
+/* Stacked (label+date on one line, the two shortcut buttons on the next)
+   instead of one wrapping row — on a narrow phone a single flex-wrap row
+   let "1 month" spill onto its own orphan line below a half-empty date
+   input, which is the "weirdly formatted" mess this replaces. */
 .gpAnnouncementExpiryRow {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin-top: 10px;
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 2px; padding-top: 12px;
+  border-top: 1px dashed rgba(255,255,255,0.1);
 }
+.gpAnnouncementExpiryField { display: flex; align-items: center; gap: 10px; }
+.gpAnnouncementExpiryField .gpAdminInlineLabel { white-space: nowrap; }
+.gpAnnouncementExpiryInput { flex: 1; min-width: 0; }
+.gpAnnouncementExpiryQuick { display: flex; gap: 8px; }
+.gpAnnouncementExpiryQuickBtn {
+  flex: 1; text-align: center;
+  background: rgba(90,170,255,0.12);
+  border: 1px solid rgba(90,170,255,0.35);
+  color: rgba(205,228,255,0.95);
+}
+.gpAnnouncementExpiryQuickBtn:active { background: rgba(90,170,255,0.24); }
+
 .gpLeagueSettingsActions { display: flex; gap: 10px; margin-top: 4px; }
+.gpLeagueSettingsSaveBtn {
+  flex: 1;
+  background: linear-gradient(135deg, rgba(255,195,50,0.95), rgba(255,140,20,0.95));
+  border: 1px solid rgba(255,195,70,0.6);
+  color: #241700;
+  font-weight: 900;
+  box-shadow: 0 6px 18px rgba(255,160,0,0.28);
+}
+.gpLeagueSettingsCancelBtn { flex: 1; }
 
 /* Head-to-Head roster: registered-player checklist */
 .gpH2HPlayerChecklist {
@@ -3549,15 +3587,19 @@ ${saveRow}`;
       const exp = esc(String(a?.expiresAt ?? ""));
       return `
     <div class="gpAnnouncementSlot">
-      <div class="gpLeagueSettingsLabel">Announcement ${i + 1}</div>
+      <div class="gpAnnouncementSlotLabel">📣 Announcement ${i + 1}</div>
       <input type="text" id="gpLeagueAnnouncementTitle${i}" class="gpLeagueSettingsInput" value="${t}" placeholder="e.g. Playoffs start next week!" maxlength="60"/>
       <textarea id="gpLeagueAnnouncementMessage${i}" class="gpLeagueSettingsInput" rows="2" maxlength="280"
-        placeholder="Optional message shown below the title" style="margin-top:8px">${m}</textarea>
+        placeholder="Optional message shown below the title">${m}</textarea>
       <div class="gpAnnouncementExpiryRow">
-        <span class="gpAdminInlineLabel">Shows until</span>
-        <input type="date" id="gpLeagueAnnouncementExpires${i}" class="gpAdminDateInput" value="${exp}"/>
-        <button type="button" class="smallBtn" data-gpaction="setAnnouncementExpiry" data-slot="${i}" data-days="7">1 week</button>
-        <button type="button" class="smallBtn" data-gpaction="setAnnouncementExpiry" data-slot="${i}" data-days="30">1 month</button>
+        <div class="gpAnnouncementExpiryField">
+          <span class="gpAdminInlineLabel">Shows until</span>
+          <input type="date" id="gpLeagueAnnouncementExpires${i}" class="gpAdminDateInput gpAnnouncementExpiryInput" value="${exp}"/>
+        </div>
+        <div class="gpAnnouncementExpiryQuick">
+          <button type="button" class="smallBtn gpAnnouncementExpiryQuickBtn" data-gpaction="setAnnouncementExpiry" data-slot="${i}" data-days="7">1 week</button>
+          <button type="button" class="smallBtn gpAnnouncementExpiryQuickBtn" data-gpaction="setAnnouncementExpiry" data-slot="${i}" data-days="30">1 month</button>
+        </div>
       </div>
     </div>`;
     }).join("");
@@ -3603,49 +3645,71 @@ ${saveRow}`;
 
     return `
 <div class="gpLeagueSettingsForm" data-leagueid="${esc(league?.id || "")}">
-  <div class="gpAdminPanelTitle">${isEdit ? "⚙ League Settings" : "⚙ Create League"}</div>
-  <div class="gpLeagueSettingsRow">
-    <div class="gpLeagueSettingsLabel">League Name</div>
-    <input type="text" id="gpLeagueName" class="gpLeagueSettingsInput" value="${name}" placeholder="e.g. Work League" maxlength="40"/>
+  <div class="gpAdminHead">
+    <div class="gpAdminHeadTitle">
+      <div class="gpAdminHeadIcon">⚙️</div>
+      <div>
+        <div class="gpAdminHeadLabel">${isEdit ? "Editing League" : "New League"}</div>
+        <div class="gpAdminHeadWeek">${isEdit ? "League Settings" : "Create League"}</div>
+      </div>
+    </div>
   </div>
-  ${membersSectionHTML}
-  <div class="gpLeagueSettingsRow">
-    <div class="gpLeagueSettingsLabel">Season Year</div>
-    <input type="number" id="gpLeagueYear" class="gpLeagueSettingsInput" value="${esc(String(year))}"/>
+
+  <div class="gpAdminBlock">
+    <div class="gpAdminBlockLabel">🏷️ League Info</div>
+    <div class="gpLeagueSettingsRow">
+      <div class="gpLeagueSettingsLabel">League Name</div>
+      <input type="text" id="gpLeagueName" class="gpLeagueSettingsInput" value="${name}" placeholder="e.g. Work League" maxlength="40"/>
+    </div>
+    ${membersSectionHTML}
   </div>
-  <div class="gpLeagueSettingsRow">
-    <div class="gpLeagueSettingsLabel">Number of Weeks</div>
-    <input type="number" id="gpLeagueTotalWeeks" class="gpLeagueSettingsInput" min="1" step="1"
-      value="${esc(String(totalWeeks))}" placeholder="e.g. 12 (leave blank for no fixed length)"/>
+
+  <div class="gpAdminBlock">
+    <div class="gpAdminBlockLabel">🗓️ Schedule</div>
+    <div class="gpLeagueSettingsRow">
+      <div class="gpLeagueSettingsLabel">Season Year</div>
+      <input type="number" id="gpLeagueYear" class="gpLeagueSettingsInput" value="${esc(String(year))}"/>
+    </div>
+    <div class="gpLeagueSettingsRow">
+      <div class="gpLeagueSettingsLabel">Number of Weeks</div>
+      <input type="number" id="gpLeagueTotalWeeks" class="gpLeagueSettingsInput" min="1" step="1"
+        value="${esc(String(totalWeeks))}" placeholder="e.g. 12 (leave blank for no fixed length)"/>
+    </div>
+    <div class="gpLeagueSettingsRow">
+      <div class="gpLeagueSettingsLabel">Format</div>
+      <select id="gpLeagueFormat" class="gpLeagueSettingsInput" data-gp-format-select="1">
+        <option value="points" ${!isH2H ? "selected" : ""}>Points (cumulative leaderboard)</option>
+        <option value="h2h" ${isH2H ? "selected" : ""}>Head-to-Head (weekly matchups)</option>
+      </select>
+    </div>
   </div>
-  <div class="gpLeagueSettingsRow">
-    <div class="gpLeagueSettingsLabel">Format</div>
-    <select id="gpLeagueFormat" class="gpLeagueSettingsInput" data-gp-format-select="1">
-      <option value="points" ${!isH2H ? "selected" : ""}>Points (cumulative leaderboard)</option>
-      <option value="h2h" ${isH2H ? "selected" : ""}>Head-to-Head (weekly matchups)</option>
-    </select>
-  </div>
-  <div class="gpLeagueSettingsRow" id="gpLeagueH2HRosterRow" ${isH2H ? "" : 'style="display:none"'}>
-    <div class="gpLeagueSettingsLabel">Head-to-Head Roster</div>
+
+  <div class="gpAdminBlock" id="gpLeagueH2HRosterRow" ${isH2H ? "" : 'style="display:none"'}>
+    <div class="gpAdminBlockLabel">🥊 Head-to-Head Roster</div>
     ${playerChecklistHTML}
-    <div class="muted" style="font-size:12px;margin-top:10px">Add anyone not listed above:</div>
+    <div class="muted" style="font-size:12px">Add anyone not listed above:</div>
     <textarea id="gpLeagueH2HRoster" class="gpLeagueSettingsInput" rows="3"
       placeholder="One player name per line (or comma-separated)&#10;e.g. Alice, Bob">${rosterText}</textarea>
-    <div class="muted" style="font-size:12px;margin-top:4px">The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
+    <div class="muted" style="font-size:12px">The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
   </div>
-  <div class="gpLeagueSettingsRow">
-    <div class="gpLeagueSettingsLabel">League Announcements (up to 3)</div>
-    <div class="muted" style="font-size:12px;margin-bottom:6px">Shown stacked at the top of the week view for everyone in this league. Leave a slot's fields blank to remove it. Any slot with a title or message needs an expiration date — it disappears automatically after that day.</div>
+
+  <div class="gpAdminBlock">
+    <div class="gpAdminBlockLabel">📣 League Announcements<span class="gpAdminBlockHint">up to 3</span></div>
+    <div class="muted" style="font-size:12px">Shown stacked at the top of the week view for everyone in this league. Leave a slot's fields blank to remove it. Any slot with a title or message needs an expiration date — it disappears automatically after that day.</div>
     ${announcementSlotsHTML}
   </div>
+
   ${isEdit ? `
-  <label class="gpLeagueSettingsCheckRow">
-    <input type="checkbox" id="gpLeagueArchived" ${archived ? "checked" : ""}/>
-    <span class="muted" style="font-weight:800">Archived (hidden from players)</span>
-  </label>` : ""}
+  <div class="gpAdminBlock">
+    <label class="gpLeagueSettingsCheckRow">
+      <input type="checkbox" id="gpLeagueArchived" ${archived ? "checked" : ""}/>
+      <span class="muted" style="font-weight:800">Archived (hidden from players)</span>
+    </label>
+  </div>` : ""}
+
   <div class="gpLeagueSettingsActions">
-    <button class="smallBtn" type="button" data-gpaction="submitLeagueSettings" data-leagueid="${esc(league?.id || "")}">${isEdit ? "Save Settings" : "Create League"}</button>
-    <button class="smallBtn" type="button" data-gpaction="cancelLeagueSettings">Cancel</button>
+    <button class="smallBtn gpLeagueSettingsSaveBtn" type="button" data-gpaction="submitLeagueSettings" data-leagueid="${esc(league?.id || "")}">${isEdit ? "Save Settings" : "Create League"}</button>
+    <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="cancelLeagueSettings">Cancel</button>
   </div>
 </div>`;
   }
