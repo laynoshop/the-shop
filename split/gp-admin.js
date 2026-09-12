@@ -153,16 +153,26 @@
   // nothing to say, then gets filtered out — blank slots never end up
   // stored, and the list compacts automatically (e.g. filling only
   // slots 1 and 3 still saves as a 2-item array).
-  function normalizeAnnouncement(title, message) {
+  //
+  // expiresAt ("YYYY-MM-DD") is required for any slot with a title or
+  // message going forward — the UI validates this before calling in, but
+  // it's re-checked here too since this is the actual write path. A slot
+  // saved before this field existed simply has no expiresAt and is left
+  // that way (never expires) rather than being forced to pick one now.
+  function normalizeAnnouncement(title, message, expiresAt) {
     const t = String(title || "").trim().slice(0, 60);
     const m = String(message || "").trim().slice(0, 280);
     if (!t && !m) return null;
-    return { title: t, message: m };
+    const exp = String(expiresAt || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(exp)) {
+      throw new Error("Every announcement needs an expiration date.");
+    }
+    return { title: t, message: m, expiresAt: exp };
   }
   const MAX_ANNOUNCEMENTS = 3;
   function normalizeAnnouncements(list) {
     return (Array.isArray(list) ? list : [])
-      .map(a => normalizeAnnouncement(a?.title, a?.message))
+      .map(a => normalizeAnnouncement(a?.title, a?.message, a?.expiresAt))
       .filter(Boolean)
       .slice(0, MAX_ANNOUNCEMENTS);
   }

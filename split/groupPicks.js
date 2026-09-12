@@ -1104,10 +1104,18 @@
       const extraNames = String(rosterEl?.value || "").split(/[\n,]/).map(s => s.trim()).filter(Boolean);
       const h2hRoster  = [...checkedPlayerNames, ...extraNames];
       const announcements = [0, 1, 2].map(i => ({
-        title:   String(document.getElementById(`gpLeagueAnnouncementTitle${i}`)?.value || "").trim(),
-        message: String(document.getElementById(`gpLeagueAnnouncementMessage${i}`)?.value || "").trim(),
+        title:     String(document.getElementById(`gpLeagueAnnouncementTitle${i}`)?.value || "").trim(),
+        message:   String(document.getElementById(`gpLeagueAnnouncementMessage${i}`)?.value || "").trim(),
+        expiresAt: String(document.getElementById(`gpLeagueAnnouncementExpires${i}`)?.value || "").trim(),
       }));
       if (!name) { alert("Give the league a name first."); return; }
+      for (let i = 0; i < announcements.length; i++) {
+        const a = announcements[i];
+        if ((a.title || a.message) && !a.expiresAt) {
+          alert(`Give "Announcement ${i + 1}" an expiration date — use the 1 week / 1 month buttons or pick one yourself.`);
+          return;
+        }
+      }
 
       btn.disabled = true; btn.textContent = "Saving…";
       try {
@@ -1144,6 +1152,7 @@
       } catch (err) {
         btn.disabled = false; btn.textContent = leagueId ? "Save Settings" : "Create League";
         console.error("[GP] submitLeagueSettings error:", err);
+        alert(err?.message || "Something went wrong saving league settings.");
       }
       return;
     }
@@ -1154,6 +1163,22 @@
       gpMem().gpAdminDateStart = range.start;
       gpMem().gpAdminDateEnd   = range.end;
       await renderPicks();
+      return;
+    }
+
+    // ── admin: "1 week" / "1 month" shortcut for an announcement's
+    //    expiration date — fills the sibling date input directly rather
+    //    than re-rendering, so it doesn't clobber unsaved typing in the
+    //    other announcement slots' title/message fields ──
+    if (action === "setAnnouncementExpiry") {
+      const slot = String(btn.getAttribute("data-slot") || "");
+      const days = Number(btn.getAttribute("data-days") || 0);
+      const input = document.getElementById(`gpLeagueAnnouncementExpires${slot}`);
+      if (input && days > 0) {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
       return;
     }
 
