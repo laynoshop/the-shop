@@ -159,7 +159,15 @@
   // it's re-checked here too since this is the actual write path. A slot
   // saved before this field existed simply has no expiresAt and is left
   // that way (never expires) rather than being forced to pick one now.
-  function normalizeAnnouncement(title, message, expiresAt) {
+  //
+  // postedAt (ms epoch, client clock — Firestore's serverTimestamp() sentinel
+  // isn't supported inside array elements) is stamped the first time a slot's
+  // title+message go from blank to non-blank, then carried forward unchanged
+  // on every later save as long as that same text is still there — so
+  // renewing the expiration date or tweaking an unrelated league setting
+  // doesn't make an old announcement look freshly posted. Only a real edit
+  // to the title or message resets it.
+  function normalizeAnnouncement(title, message, expiresAt, prev) {
     const t = String(title || "").trim().slice(0, 60);
     const m = String(message || "").trim().slice(0, 280);
     if (!t && !m) return null;
@@ -167,12 +175,15 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(exp)) {
       throw new Error("Every announcement needs an expiration date.");
     }
-    return { title: t, message: m, expiresAt: exp };
+    const unchanged = prev && String(prev.title || "").trim() === t && String(prev.message || "").trim() === m;
+    const postedAt = (unchanged && Number(prev.postedAt)) || Date.now();
+    return { title: t, message: m, expiresAt: exp, postedAt };
   }
   const MAX_ANNOUNCEMENTS = 3;
-  function normalizeAnnouncements(list) {
+  function normalizeAnnouncements(list, previousList) {
+    const prev = Array.isArray(previousList) ? previousList : [];
     return (Array.isArray(list) ? list : [])
-      .map(a => normalizeAnnouncement(a?.title, a?.message, a?.expiresAt))
+      .map((a, i) => normalizeAnnouncement(a?.title, a?.message, a?.expiresAt, prev[i]))
       .filter(Boolean)
       .slice(0, MAX_ANNOUNCEMENTS);
   }
@@ -209,7 +220,12 @@
     if (totalWeeks !== undefined) patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
     if (archived !== undefined)   patch.archived = !!archived;
     if (announcements !== undefined) {
-      patch.announcements = normalizeAnnouncements(announcements);
+      let prevAnnouncements = [];
+      try {
+        const snap = await leaguesRef(db, leagueId).get();
+        prevAnnouncements = Array.isArray(snap.data()?.announcements) ? snap.data().announcements : [];
+      } catch {}
+      patch.announcements = normalizeAnnouncements(announcements, prevAnnouncements);
     }
     if (format !== undefined) {
       const isH2H = format === "h2h";
