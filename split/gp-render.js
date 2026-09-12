@@ -430,17 +430,17 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   color: rgba(255,255,255,0.28);
 }
 
-/* Pick tally — two squares (logo on top, big pick count below) shown at
-   the top of Everyone's Picks, before the roster list, so the group's
-   split is visible at a glance before scanning who picked what. */
+/* Pick tally — two tiles (logo beside a big pick count) shown at the top
+   of Everyone's Picks, before the roster list, so the group's split is
+   visible at a glance before scanning who picked what. */
 .gpPickTally {
   display: flex; align-items: center; justify-content: center;
   gap: 14px; padding: 14px 4px 12px;
 }
 .gpPickTallySquare {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  flex: 1; max-width: 130px;
-  padding: 14px 10px 12px;
+  display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px;
+  flex: 1; max-width: 150px;
+  padding: 12px 16px;
   border-radius: 16px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.1);
