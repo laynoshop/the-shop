@@ -1072,13 +1072,17 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   box-shadow: 0 8px 26px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .gpAnnouncementIcon { font-size: 22px; line-height: 1.2; flex-shrink: 0; }
-.gpAnnouncementBody { min-width: 0; }
+.gpAnnouncementBody { min-width: 0; flex: 1; }
 .gpAnnouncementTitle {
   font-size: 15px; font-weight: 900; color: #fff; letter-spacing: 0.01em;
 }
 .gpAnnouncementMessage {
   margin-top: 4px; font-size: 13px; font-weight: 600; line-height: 1.45;
   color: rgba(255,255,255,0.82);
+}
+.gpAnnouncementPostedAt {
+  margin-top: 8px; font-size: 10.5px; font-weight: 700;
+  color: rgba(255,255,255,0.38); text-align: right;
 }
 
 /* ══════════════════════════════════════════════
@@ -1598,7 +1602,9 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // "9/6, 5:47pm" — when a pick/prediction was last saved, for the
   // Everyone's Picks / Everyone's Predictions rosters.
   function fmtSavedAt(ts) {
-    const ms = ts?.toMillis ? ts.toMillis() : (Number(ts?.seconds) ? Number(ts.seconds) * 1000 : 0);
+    const ms = ts?.toMillis ? ts.toMillis()
+      : Number.isFinite(ts) ? Number(ts)
+      : (Number(ts?.seconds) ? Number(ts.seconds) * 1000 : 0);
     if (!ms) return "";
     const d = new Date(ms);
     if (isNaN(d.getTime())) return "";
@@ -2837,12 +2843,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const title   = String(announcement?.title || "").trim();
     const message = String(announcement?.message || "").trim();
     if (!title && !message) return "";
+    // No postedAt on an announcement saved before this field existed —
+    // just omit the line rather than fabricate a posted time for it.
+    const postedStr = fmtSavedAt(announcement?.postedAt);
     return `
 <div class="gpAnnouncementBanner">
   <div class="gpAnnouncementIcon">📣</div>
   <div class="gpAnnouncementBody">
     ${title ? `<div class="gpAnnouncementTitle">${esc(title)}</div>` : ""}
     ${message ? `<div class="gpAnnouncementMessage">${esc(message)}</div>` : ""}
+    ${postedStr ? `<div class="gpAnnouncementPostedAt">${esc(postedStr)}</div>` : ""}
   </div>
 </div>`;
   }
