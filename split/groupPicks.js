@@ -217,7 +217,12 @@
   // fresh on every load.
   // ───────────────────────────────────────────
   function gpSeasonWeekCacheKey(weekId) {
-    return `theShopGpSeasonWeekCache_v1_${weekId}`;
+    // v2: earlier versions cached season rows computed without live odds
+    // applied (see gpApplyStoredOdds below), which could undercount the
+    // underdog bonus for any game whose favorite wasn't captured at
+    // add-time — bumped so those stale, wrong cached rows get dropped
+    // instead of lingering in players' browsers forever.
+    return `theShopGpSeasonWeekCache_v2_${weekId}`;
   }
   async function gpLoadSeasonLeaderboard(db, league) {
     const allWeeks = Array.isArray(league?.weeks) ? league.weeks : [];
@@ -253,6 +258,13 @@
         ]);
       } catch {}
       (ESPN().gpApplyStoredLiveState || (() => {}))(games);
+      // Without this, g.__odds is never set here, so gpComputeStraightFavSide
+      // (the underdog-bonus favorite detector) can only ever see a game's
+      // add-time-captured spreadFavoredSide/oddsDetails — blank forever for
+      // any game added before ESPN posted its line — silently undercounting
+      // underdog wins on the Season tab relative to the This Week tab, which
+      // already applies this and so can resolve the favorite from live odds.
+      (ESPN().gpApplyStoredOdds || (() => {}))(games);
 
       const lb = (Data().gpComputeWeeklyLeaderboard || (() => ({ rows: [], finalsCount: 0 })))(
         games, allPicks, { atsEventIds: slateDoc?.atsEventIds, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }

@@ -484,6 +484,16 @@
   // gpComputeStraightFavSide
   // Legacy straight-up "who's favored" detection, parsed from the odds text.
   // Only used in straight-up scoring mode for the underdog bonus.
+  //
+  // g.__odds (live odds, refreshed by syncPickemScores) is a legitimate
+  // fallback here, not a source of drift: the sync function skips any
+  // game once it's final (see syncPickemScores in functions/index.js),
+  // so a final game's live odds text is frozen right along with its
+  // score — it does not keep changing after the fact. It has to stay in
+  // this fallback chain because it's sometimes the *only* place a usable
+  // line exists: a game added before ESPN posted its spread gets stored
+  // with a blank spreadFavoredSide/oddsDetails forever (there's no
+  // re-capture step), and only the live-synced odds ever fill that gap.
   // ──────────────────────────────────────────────────────────────
   function gpComputeStraightFavSide(g) {
     // Prefer the clean structured field captured at add-time, when present.
