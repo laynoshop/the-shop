@@ -139,6 +139,11 @@
   gap: 14px;
   box-shadow: 0 8px 28px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
 }
+.gpAdminBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 .gpAdminHead {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; flex-wrap: wrap;
@@ -2984,6 +2989,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // Collapsed state persists per-browser (an admin who mostly just checks
+  // results doesn't want to re-collapse it every visit) — read here at
+  // render time, written by the toggle click handler in groupPicks.js.
+  // Key shared by name between the two files rather than an export; keep
+  // them in sync if this ever changes.
+  const GP_ADMIN_COLLAPSED_KEY = "theShopGpAdminCollapsed_v1";
+  function gpAdminPanelCollapsed() {
+    try { return localStorage.getItem(GP_ADMIN_COLLAPSED_KEY) === "1"; } catch { return false; }
+  }
+
   // ─── Admin builder  (rendered at TOP of page) ────────────────────
   function gpBuildAdminBuilderHTML({
     weekId, weekLabel, availableEvents, leagueKey, dateStart, dateEnd,
@@ -3167,6 +3182,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
     }).join("");
 
+    const collapsed = gpAdminPanelCollapsed();
+
     return `
 <div class="gpAdminPanel" data-gpadminpanel>
   <div class="gpAdminHead">
@@ -3180,9 +3197,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     <div class="gpAdminHeadActions">
       <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="editLeague" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
       <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
+      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="toggleAdminPanel" id="gpAdminToggleBtn">${collapsed ? "Show ▾" : "Hide ▴"}</button>
     </div>
   </div>
 
+  <div class="gpAdminBody" id="gpAdminBody" ${collapsed ? "hidden" : ""}>
   <div class="gpAdminBlock">
     <div class="gpAdminBlockLabel">🗓️ Load Games</div>
     <div class="gpAdminControls">
@@ -3223,6 +3242,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   ${atsHTML}
   ${tiebreakerHTML}
   <div class="gpAdminStatus" id="gpAdminStatus"></div>
+  </div>
 </div>`;
   }
 
