@@ -1169,6 +1169,20 @@
       return;
     }
 
+    // ── admin: collapse/expand the Admin Tools panel — persisted so an
+    //    admin who mostly just checks results doesn't have to re-collapse
+    //    it every visit. Toggles the DOM directly (no re-render) so it
+    //    doesn't disturb anything mid-edit in the panel above/below it.
+    if (action === "toggleAdminPanel") {
+      const body = document.getElementById("gpAdminBody");
+      if (!body) return;
+      const nowCollapsed = !body.hidden;
+      body.hidden = nowCollapsed;
+      btn.textContent = nowCollapsed ? "Show ▾" : "Hide ▴";
+      try { localStorage.setItem("theShopGpAdminCollapsed_v1", nowCollapsed ? "1" : "0"); } catch {}
+      return;
+    }
+
     // ── admin: quick-fill this week's date range (Thu–Mon) ──
     if (action === "adminQuickWeekRange") {
       const range = gpDefaultWeekRange();
