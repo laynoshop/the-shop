@@ -78,6 +78,23 @@
 
     return { details, overUnder, favoredTeam, spreadValue, spreadFavoredSide };
   }
+  // ESPN's power-rating win-probability model (FPI for football, BPI for
+  // basketball) — read from the same raw scoreboard event already being
+  // parsed for odds, at the moment the admin loads/adds the game, so it
+  // never needs the syncPickemScores Cloud Function or any other server
+  // deploy. Trade-off vs. a live sync: this is a one-time snapshot from
+  // whenever the game was added, not refreshed as ESPN's model updates
+  // closer to kickoff — same limitation the spread/oddsDetails capture
+  // already has here, and the same fix (a Cloud Function backfill) would
+  // apply to both if that's ever wanted later.
+  function buildPredictor(comp) {
+    const p = comp?.predictor;
+    if (!p) return { homePct: null, awayPct: null };
+    const homePct = Number(p?.homeTeam?.gameProjection);
+    const awayPct = Number(p?.awayTeam?.gameProjection);
+    if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return { homePct: null, awayPct: null };
+    return { homePct, awayPct };
+  }
   function kickoffMsFromEvent(ev) {
     const comp = ev?.competitions?.[0];
     const iso  = ev?.date || comp?.date || "";
@@ -98,13 +115,16 @@
     const homeTeam    = buildTeam(homeC);
     const awayTeam    = buildTeam(awayC);
     const odds        = buildOdds(comp, homeTeam, awayTeam);
+    const predictor   = buildPredictor(comp);
     return {
       id:                String(ev?.id || ""),
       homeTeam, awayTeam,
       kickoffMs:         kickoffMsFromEvent(ev),
       spreadValue:       odds.spreadValue,
       spreadFavoredSide: odds.spreadFavoredSide,
-      oddsDetails:       odds.details
+      oddsDetails:       odds.details,
+      fpiHomePct:        predictor.homePct,
+      fpiAwayPct:        predictor.awayPct
     };
   }
 
@@ -316,6 +336,7 @@
 
       const venueLine = buildVenueLine(comp);
       const odds      = buildOdds(comp, homeTeam, awayTeam);
+      const predictor = buildPredictor(comp);
 
       await slateRef.collection("games").doc(eventId).set({
         eventId,
@@ -333,6 +354,8 @@
         awayTeam,
         spreadValue:        odds.spreadValue,
         spreadFavoredSide:  String(odds.spreadFavoredSide || ""),
+        fpiHomePct:         predictor.homePct,
+        fpiAwayPct:         predictor.awayPct,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     }
