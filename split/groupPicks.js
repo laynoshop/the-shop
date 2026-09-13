@@ -1169,16 +1169,23 @@
       return;
     }
 
-    // ── admin: collapse/expand the Admin Tools panel — persisted so an
-    //    admin who mostly just checks results doesn't have to re-collapse
-    //    it every visit. Toggles the DOM directly (no re-render) so it
-    //    doesn't disturb anything mid-edit in the panel above/below it.
+    // ── admin: collapse/expand the Admin Tools panel down to just the
+    //    "Admin Tools" label + arrow — persisted so an admin who mostly
+    //    just checks results doesn't have to re-collapse it every visit.
+    //    Toggles the DOM directly (no re-render) so it doesn't disturb
+    //    anything mid-edit in the panel.
     if (action === "toggleAdminPanel") {
       const body = document.getElementById("gpAdminBody");
       if (!body) return;
       const nowCollapsed = !body.hidden;
       body.hidden = nowCollapsed;
-      btn.textContent = nowCollapsed ? "Show ▾" : "Hide ▴";
+      const week    = document.getElementById("gpAdminHeadWeek");
+      const actions = document.getElementById("gpAdminHeadActions");
+      const arrow   = document.getElementById("gpAdminToggleArrow");
+      if (week)    week.hidden    = nowCollapsed;
+      if (actions) actions.hidden = nowCollapsed;
+      if (arrow)   arrow.textContent = nowCollapsed ? "▸" : "▾";
+      btn.setAttribute("aria-label", (nowCollapsed ? "Expand" : "Collapse") + " admin tools");
       try { localStorage.setItem("theShopGpAdminCollapsed_v1", nowCollapsed ? "1" : "0"); } catch {}
       return;
     }
