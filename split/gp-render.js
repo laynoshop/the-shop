@@ -18,6 +18,15 @@
     style.id = "__gpRenderStyles";
     style.textContent = `
 
+/* Guarantee the native [hidden] attribute always actually hides —
+   without this, any element elsewhere in this file that sets its own
+   "display" (flex/grid/etc.) at the same specificity as the browser's
+   built-in [hidden] rule silently wins over it by source order, so
+   toggling .hidden in JS updates the attribute but nothing visually
+   changes. Bit us once already (the Admin Tools collapse toggle); this
+   is a blanket fix so it can't happen again anywhere in this file. */
+[hidden] { display: none !important; }
+
 /* ══════════════════════════════════════════════
    GP HEADER
    ══════════════════════════════════════════════ */
@@ -165,6 +174,16 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gpAdminHeadActions { display: flex; gap: 8px; flex-wrap: wrap; }
+.gpAdminCollapseBtn {
+  flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.8); font-size: 16px; line-height: 1;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform 100ms ease, background 100ms ease;
+}
+.gpAdminCollapseBtn:active { background: rgba(255,255,255,0.12); transform: scale(0.94); }
 
 .gpAdminBlock {
   display: flex; flex-direction: column; gap: 9px;
@@ -3191,14 +3210,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       <div class="gpAdminHeadIcon">⚙️</div>
       <div>
         <div class="gpAdminHeadLabel">Admin Tools</div>
-        <div class="gpAdminHeadWeek">${esc(weekLabel || weekId || "")}</div>
+        <div class="gpAdminHeadWeek" id="gpAdminHeadWeek" ${collapsed ? "hidden" : ""}>${esc(weekLabel || weekId || "")}</div>
       </div>
     </div>
-    <div class="gpAdminHeadActions">
+    <div class="gpAdminHeadActions" id="gpAdminHeadActions" ${collapsed ? "hidden" : ""}>
       <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="editLeague" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
       <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
-      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="toggleAdminPanel" id="gpAdminToggleBtn">${collapsed ? "Show ▾" : "Hide ▴"}</button>
     </div>
+    <button class="gpAdminCollapseBtn" type="button" data-gpaction="toggleAdminPanel" id="gpAdminToggleBtn" aria-label="${collapsed ? "Expand" : "Collapse"} admin tools">
+      <span id="gpAdminToggleArrow">${collapsed ? "▸" : "▾"}</span>
+    </button>
   </div>
 
   <div class="gpAdminBody" id="gpAdminBody" ${collapsed ? "hidden" : ""}>
