@@ -329,6 +329,19 @@
   text-align: right; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 100%; min-width: 0; flex-shrink: 1;
 }
+.gpPredictorRow {
+  padding: 0 12px 6px;
+  display: flex; justify-content: flex-end;
+}
+.gpPredictorBadge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.01em;
+  padding: 4px 10px; border-radius: 999px;
+  background: linear-gradient(135deg, rgba(90,170,255,0.16), rgba(90,170,255,0.05));
+  border: 1px solid rgba(90,170,255,0.35);
+  color: rgba(210,230,255,0.95);
+  white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
 .gpMatchup {
   display: flex; flex-direction: column;
   padding: 6px 12px 10px; gap: 6px;
@@ -1709,6 +1722,39 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return parts.join("  ·  ");
   }
 
+  // ESPN's power-rating win-probability model — FPI for football, BPI
+  // for basketball; branded differently per sport even though the
+  // underlying data shape (g.__predictor, hydrated from the same
+  // syncPickemScores sync as odds) is identical. A sport ESPN doesn't
+  // publish one for, or a game it hasn't posted one for yet, just gets
+  // nothing here — same graceful-absence behavior as safeOddsLine.
+  const GP_PREDICTOR_LABELS = {
+    nfl: "ESPN FPI", cfb: "ESPN FPI",
+    nba: "ESPN BPI", ncaam: "ESPN BPI",
+  };
+  function safePredictorLabel(g) {
+    const key = String(g?.leagueKey || "").toLowerCase();
+    return GP_PREDICTOR_LABELS[key] || "ESPN Predictor";
+  }
+  // gameProjection has been observed as both a 0-100 number and a 0-1
+  // fraction across ESPN payloads — normalize defensively either way.
+  function normalizePredictorPct(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return NaN;
+    return v > 0 && v <= 1 ? v * 100 : v;
+  }
+  function safePredictorLine(g, awayAbbrText, homeAbbrText) {
+    const p = g?.__predictor;
+    if (!p) return "";
+    const homePct = normalizePredictorPct(p.homePct);
+    const awayPct = normalizePredictorPct(p.awayPct);
+    if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return "";
+    const homeFavored = homePct >= awayPct;
+    const pct  = Math.round(homeFavored ? homePct : awayPct);
+    const abbr = homeFavored ? homeAbbrText : awayAbbrText;
+    return `${safePredictorLabel(g)}: ${abbr} ${pct}% to Win`;
+  }
+
   // ─── Spread chip (ATS weeks only) ─────────────────────────────────
   function spreadChipHTML(g, side) {
     const val     = Number(g?.spreadValue);
@@ -1921,7 +1967,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     // outright/straight-up games, green for the designated ATS game(s).
     const borderColor = isAts ? "#2ecc87" : "#d1263f";
 
-    const oddsLine   = safeOddsLine(g);
+    const oddsLine      = safeOddsLine(g);
+    const predictorLine = safePredictorLine(g, safeAbbr(away), safeAbbr(home));
     const venueLine  = String(g?.venueLine || "").trim();
     const statusHTML = buildStatusHTML(g);
     const kickoffTime = ms ? fmtTime(ms) : "";
@@ -1936,6 +1983,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       ${isAdmin ? `<button type="button" class="gpRemoveGameBtn" data-gpaction="adminRemoveGame" data-eid="${esc(eventId)}" data-weekid="${esc(weekId)}" title="Remove from week" aria-label="Remove game from week">✕</button>` : ""}
     </div>
   </div>
+  ${predictorLine ? `
+  <div class="gpPredictorRow">
+    <span class="gpPredictorBadge">📈 ${esc(predictorLine)}</span>
+  </div>` : ""}
   ${kickoffDate || kickoffTime ? `
   <div style="padding:4px 12px 0;display:flex;justify-content:space-between;gap:8px">
     <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35)">${esc(kickoffDate)}</div>
