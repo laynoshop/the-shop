@@ -689,14 +689,12 @@
     const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
       ? Number(myPicksUserDoc.tiebreakerGuess) : null;
 
-    // ── live/final scores, odds, and the win-probability predictor
-    //    (FPI/BPI, when ESPN publishes one) all come straight off each
-    //    game doc now (populated by the syncPickemScores Cloud
-    //    Function) — no ESPN call needed in the render path at all. ──
+    // ── live/final scores and odds both come straight off each game doc
+    //    now (populated by the syncPickemScores Cloud Function) — no
+    //    ESPN call needed in the render path at all anymore. ──
     if (games.length) {
       (ESPN().gpApplyStoredLiveState || (() => {}))(games);
       (ESPN().gpApplyStoredOdds      || (() => {}))(games);
-      (ESPN().gpApplyStoredPredictor || (() => {}))(games);
     }
 
     // ── expose current state for player picks overlay ──

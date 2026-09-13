@@ -164,23 +164,6 @@
     }
   }
 
-  // --------------- win-probability predictor (FPI/BPI, from Firestore) ---------------
-  // Same idea again: syncPickemScores writes liveFpiHomePct/liveFpiAwayPct
-  // from the same ESPN scoreboard call, when ESPN publishes one for that
-  // sport/game — a zero-network-call reshape into g.__predictor for
-  // safePredictorLine (gp-render.js). Missing entirely (most non-football/
-  // basketball games, or any game with no model yet) just means no badge.
-  function gpApplyStoredPredictor(games) {
-    for (const g of (Array.isArray(games) ? games : [])) {
-      if (!g) continue;
-      const homePct = Number(g.liveFpiHomePct);
-      const awayPct = Number(g.liveFpiAwayPct);
-      g.__predictor = (Number.isFinite(homePct) && Number.isFinite(awayPct))
-        ? { homePct, awayPct }
-        : null;
-    }
-  }
-
   // --------------- expose on window ---------------
   window.GP_ESPN = {
     __getLeaguesFullList,
@@ -189,8 +172,7 @@
     buildCalendarButtonHTMLSafe,
     fetchEventsFor,
     gpApplyStoredLiveState,
-    gpApplyStoredOdds,
-    gpApplyStoredPredictor
+    gpApplyStoredOdds
   };
 
 })();

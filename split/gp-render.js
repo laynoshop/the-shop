@@ -1724,10 +1724,13 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
   // ESPN's power-rating win-probability model — FPI for football, BPI
   // for basketball; branded differently per sport even though the
-  // underlying data shape (g.__predictor, hydrated from the same
-  // syncPickemScores sync as odds) is identical. A sport ESPN doesn't
-  // publish one for, or a game it hasn't posted one for yet, just gets
-  // nothing here — same graceful-absence behavior as safeOddsLine.
+  // underlying data shape is identical. Captured client-side, once, at
+  // the moment the admin adds the game (gpAdminAddSelectedGamesToWeek /
+  // gp-admin.js) — a static snapshot, same as spreadValue/oddsDetails,
+  // not refreshed as ESPN's model shifts closer to kickoff. A sport
+  // ESPN doesn't publish one for, or a game added before ESPN posted
+  // one, just gets nothing here — same graceful-absence behavior as
+  // safeOddsLine.
   const GP_PREDICTOR_LABELS = {
     nfl: "ESPN FPI", cfb: "ESPN FPI",
     nba: "ESPN BPI", ncaam: "ESPN BPI",
@@ -1744,10 +1747,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return v > 0 && v <= 1 ? v * 100 : v;
   }
   function safePredictorLine(g, awayAbbrText, homeAbbrText) {
-    const p = g?.__predictor;
-    if (!p) return "";
-    const homePct = normalizePredictorPct(p.homePct);
-    const awayPct = normalizePredictorPct(p.awayPct);
+    const homePct = normalizePredictorPct(g?.fpiHomePct);
+    const awayPct = normalizePredictorPct(g?.fpiAwayPct);
     if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return "";
     const homeFavored = homePct >= awayPct;
     const pct  = Math.round(homeFavored ? homePct : awayPct);
