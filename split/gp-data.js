@@ -484,6 +484,19 @@
   // gpComputeStraightFavSide
   // Legacy straight-up "who's favored" detection, parsed from the odds text.
   // Only used in straight-up scoring mode for the underdog bonus.
+  //
+  // Deliberately never reads g.__odds — that's the *live* odds text,
+  // refreshed roughly every minute by the syncPickemScores Cloud
+  // Function, and it can start blank (line not posted yet when the
+  // game was added) and get filled in later, or keep moving right up
+  // to kickoff. Basing the underdog bonus on it meant an already-final,
+  // already-graded win could silently flip from a favorite win (1pt) to
+  // an underdog win (2pt) — same result, different odds text — hours or
+  // days after the fact, with no game state change to explain it. Only
+  // the frozen, captured-once-when-the-game-was-added fields (the
+  // structured spreadFavoredSide, or this text fallback for games added
+  // before that field existed) are safe for grading: they can't move
+  // after the game locks, so the same input always grades the same way.
   // ──────────────────────────────────────────────────────────────
   function gpComputeStraightFavSide(g) {
     // Prefer the clean structured field captured at add-time, when present.
@@ -492,7 +505,7 @@
 
     let favSide = "";
     const oddsDetails = String(
-      g?.__odds?.details || g?.oddsDetails || g?.odds?.details || ""
+      g?.oddsDetails || g?.odds?.details || ""
     ).trim();
     const oddsLower = oddsDetails.toLowerCase();
     const awayName  = String(g?.awayTeam?.name || g?.awayName || "").trim();
