@@ -153,6 +153,12 @@ window.replaceMichiganText = replaceMichiganText;
     const golfDoor = document.querySelector('.doorBtn[data-go="golf"]');
     if (golfDoor) golfDoor.style.display = isAdmin ? "" : "none";
 
+    // =========================
+    // DISNEY: admin only (temporary, until the family pin is set up)
+    // =========================
+    const disneyDoor = document.querySelector('.doorBtn[data-go="disney"]');
+    if (disneyDoor) disneyDoor.style.display = isAdmin ? "" : "none";
+
     updateRivalryBanner();
 
     if (!showEntryScreen._bound) {
@@ -212,6 +218,8 @@ window.replaceMichiganText = replaceMichiganText;
     if (role === "admin") {
       baseTabs.push({ key: "stocks", label: "&#x1F4C8;<br/>Stocks" });
       baseTabs.push({ key: "shop",   label: "Shop" });
+      // Disney: admin only (temporary, until the family pin is set up)
+      baseTabs.push({ key: "disney", label: "&#x1F3F0;<br/>Disney" });
     }
 
     tabs.innerHTML = baseTabs
@@ -265,7 +273,7 @@ window.replaceMichiganText = replaceMichiganText;
     const role = getRole();
 
     // Block admin-only tabs for guests
-    if ((tab === "shop" || tab === "stocks") && role !== "admin") tab = "scores";
+    if ((tab === "shop" || tab === "stocks" || tab === "disney") && role !== "admin") tab = "scores";
 
     currentTab = tab;
     window.__activeTab = tab;
@@ -297,6 +305,10 @@ window.replaceMichiganText = replaceMichiganText;
     // STOCKS TAB ROUTE
     // =========================
     else if (tab === "stocks")     safe("renderStocks");
+    // =========================
+    // DISNEY TAB ROUTE (admin only, for now)
+    // =========================
+    else if (tab === "disney")     safe("renderDisney");
     else safe("loadScores", true);
 
     updateRivalryBanner();
