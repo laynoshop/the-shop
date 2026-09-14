@@ -761,10 +761,19 @@
 
     // Flag every row in a genuine points+wins tie (more than one player)
     // so the UI can show players exactly when the tiebreaker decided
-    // their order — visible proof it's actually being factored in. Also
-    // credit a tiebreakerWon to whichever single player in that tied
-    // group has the best (strictly better than everyone else's) guess —
-    // this is what the season standings count up as "tiebreakers won".
+    // their rank within the week — visible proof it's actually being
+    // factored in.
+    //
+    // tiebreakerWon is a separate, unconditional weekly mini-contest —
+    // exactly one winner per week (closest to the combined score without
+    // going over; a tie in the guess itself produces no winner), scored
+    // across every player who made a guess that week regardless of
+    // whether they were tied with anyone in points/wins. Scoping this to
+    // "best guess within each tied group" (the old behavior) could crown
+    // more than one "tiebreaker winner" in the same week whenever more
+    // than one tie existed in the standings — this is what season
+    // standings count up as "tiebreakers won", where only one person is
+    // meant to win it per week.
     if (tiebreakerActual != null) {
       const groups = new Map();
       for (const r of rows) {
@@ -773,16 +782,15 @@
         groups.get(gk).push(r);
       }
       for (const groupRows of groups.values()) {
-        const used = groupRows.length > 1;
-        for (const r of groupRows) r.tiebreakerUsed = used;
-        if (!used) continue;
-        const scored = groupRows
-          .map(r => ({ r, d: tiebreakerDiff(r) }))
-          .filter(x => Number.isFinite(x.d))
-          .sort((a, b) => a.d - b.d);
-        if (scored.length && (scored.length === 1 || scored[0].d < scored[1].d)) {
-          scored[0].r.tiebreakerWon = true;
-        }
+        if (groupRows.length > 1) for (const r of groupRows) r.tiebreakerUsed = true;
+      }
+
+      const scored = rows
+        .map(r => ({ r, d: tiebreakerDiff(r) }))
+        .filter(x => Number.isFinite(x.d))
+        .sort((a, b) => a.d - b.d);
+      if (scored.length && (scored.length === 1 || scored[0].d < scored[1].d)) {
+        scored[0].r.tiebreakerWon = true;
       }
     }
 
