@@ -286,6 +286,21 @@
   // ============================================================
   // PARK LIST + SELECTION
   // ============================================================
+  // Ordering: Magic Kingdom first, then the rest of Walt Disney World
+  // (Florida), then Disneyland Resort (California), then everything
+  // international (Paris, Hong Kong, Shanghai, Tokyo). Matched by resort
+  // name from the API rather than hardcoded park IDs, so it keeps working
+  // if the API adds/renames parks.
+  function _parkTier(p) {
+    const resort = (p.resort || "").toLowerCase();
+    const name = (p.name || "").toLowerCase();
+    if (name.includes("magic kingdom")) return 0;
+    if (/paris|hong ?kong|shanghai|tokyo/.test(resort)) return 3;
+    if (resort.includes("walt disney world")) return 1;
+    if (resort.includes("disneyland")) return 2;
+    return 3;
+  }
+
   function _loadDisneyParks() {
     safeFetch("https://api.themeparks.wiki/v1/destinations", 10000)
       .then(r => r.json())
@@ -295,9 +310,10 @@
         dests.forEach(d => {
           if (!/disney/i.test(d?.name || "")) return;
           (d.parks || []).forEach(p => {
-            if (p?.id && p?.name) parks.push({ id: p.id, name: p.name });
+            if (p?.id && p?.name) parks.push({ id: p.id, name: p.name, resort: d.name || "" });
           });
         });
+        parks.sort((a, b) => _parkTier(a) - _parkTier(b));
         __disneyParks = parks;
         const picker = document.getElementById("disney-park-picker");
         if (!picker) return;
