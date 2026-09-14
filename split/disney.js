@@ -548,7 +548,10 @@
         __disneyCharCache = list;
         _showRandomCachedCharacter();
       })
-      .catch(() => setText("disney-char-loading", "⚠️ Character API unavailable. Try again!"));
+      .catch((err) => {
+        console.error("[Disney] character load failed:", err);
+        setText("disney-char-loading", "⚠️ Character API unavailable. Try again!");
+      });
   };
 
   function _showRandomCachedCharacter() {
