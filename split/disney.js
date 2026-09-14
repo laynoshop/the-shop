@@ -81,6 +81,7 @@
   background: #181229; border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
 }
+.disney-parks-card { gap: 16px; }
 .disney-card-header { display: flex; align-items: center; gap: 7px; }
 .disney-card-icon { font-size: 16px; }
 .disney-card-title { font-size: 13px; font-weight: 800; color: #fff; flex: 1; font-family: 'Fredoka', sans-serif; }
@@ -103,6 +104,11 @@
   box-shadow: 0 3px 10px rgba(123,63,228,.45);
 }
 
+/* PARK CONTENT WRAPPER (hours + carousel + dots + settings) */
+#disney-park-content {
+  display: flex; flex-direction: column; gap: 16px;
+}
+
 /* HOURS */
 .disney-hours-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -113,7 +119,7 @@
 .disney-hours-value { font-size: 14px; font-weight: 800; color: #fff; font-family: 'Fredoka', sans-serif; }
 
 /* CAROUSEL */
-.disney-rides-carousel-wrap { display: flex; align-items: center; gap: 6px; }
+.disney-rides-carousel-wrap { display: flex; align-items: center; gap: 10px; }
 .disney-carousel-arrow {
   flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; border: none;
   background: rgba(255,255,255,0.08); color: #fff; font-size: 21px; cursor: pointer;
@@ -526,32 +532,40 @@
   // ============================================================
   // RANDOM DISNEY CHARACTER
   // ============================================================
+  let __disneyCharCache = null; // one page's worth of characters, fetched once and reused
+
   window.__disneyLoadCharacter = function () {
+    if (__disneyCharCache && __disneyCharCache.length) {
+      _showRandomCachedCharacter();
+      return;
+    }
     showLoading("disney-char-loading", "disney-char-content");
-    safeFetch("https://api.disneyapi.dev/character?page=1&pageSize=1", 9000)
-      .then(r => r.json())
-      .then(meta => {
-        const totalPages = meta?.info?.totalPages || 1;
-        const randPage = Math.floor(Math.random() * totalPages) + 1;
-        return safeFetch(`https://api.disneyapi.dev/character?page=${randPage}&pageSize=1`, 9000);
-      })
-      .then(r => r.json())
+    safeFetch("https://api.disneyapi.dev/character", 9000)
+      .then(r => { if (!r.ok) throw new Error("status " + r.status); return r.json(); })
       .then(data => {
-        const c = data?.data?.[0];
-        if (!c) throw new Error("no character");
-        const img = document.getElementById("disney-char-img");
-        if (img) {
-          img.src = c.imageUrl || "";
-          img.alt = c.name || "Disney character";
-          img.style.display = c.imageUrl ? "" : "none";
-          img.onerror = () => { img.style.display = "none"; };
-        }
-        setText("disney-char-name", c.name || "Mystery Character");
-        const credits = [...(c.films || []), ...(c.tvShows || [])].slice(0, 4);
-        setText("disney-char-films", credits.length ? `Known from: ${credits.join(", ")}` : "A true Disney classic ✨");
-        showContent("disney-char-loading", "disney-char-content");
+        const list = Array.isArray(data?.data) ? data.data : [];
+        if (!list.length) throw new Error("empty character list");
+        __disneyCharCache = list;
+        _showRandomCachedCharacter();
       })
       .catch(() => setText("disney-char-loading", "⚠️ Character API unavailable. Try again!"));
   };
+
+  function _showRandomCachedCharacter() {
+    const list = __disneyCharCache;
+    const c = list[Math.floor(Math.random() * list.length)];
+    if (!c) { setText("disney-char-loading", "⚠️ Character API unavailable. Try again!"); return; }
+    const img = document.getElementById("disney-char-img");
+    if (img) {
+      img.src = c.imageUrl || "";
+      img.alt = c.name || "Disney character";
+      img.style.display = c.imageUrl ? "" : "none";
+      img.onerror = () => { img.style.display = "none"; };
+    }
+    setText("disney-char-name", c.name || "Mystery Character");
+    const credits = [...(c.films || []), ...(c.tvShows || [])].slice(0, 4);
+    setText("disney-char-films", credits.length ? `Known from: ${credits.join(", ")}` : "A true Disney classic ✨");
+    showContent("disney-char-loading", "disney-char-content");
+  }
 
 })();
