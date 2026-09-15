@@ -101,19 +101,33 @@
     `;
   }
 
+  // Throws on any real failure (bad league/config, network/CORS error,
+  // non-ok HTTP status, unparsable JSON) instead of swallowing it into an
+  // empty array — a genuinely empty ESPN response for the requested
+  // dates and a silent fetch failure used to look identical to whoever
+  // called this (the admin's "Load Games" picker just showed "Loaded 0
+  // games" either way), which made a real outage indistinguishable from
+  // "no games that day." Callers that want the old forgiving behavior
+  // can still catch and treat any error as empty.
   async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
     const league = getLeagueByKeySafe(leagueKey);
-    if (!league) return [];
+    if (!league) throw new Error(`Unknown league "${leagueKey}".`);
     const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
-    if (!url) return [];
+    if (!url) throw new Error(`League "${leagueKey}" has no scoreboard endpoint configured.`);
+    let r;
     try {
-      const r = await fetch(url, { cache: "no-store" });
-      if (!r.ok) return [];
-      const j = await r.json().catch(() => ({}));
-      return Array.isArray(j?.events) ? j.events : [];
-    } catch {
-      return [];
+      r = await fetch(url, { cache: "no-store" });
+    } catch (err) {
+      throw new Error(`Network request to ESPN failed (${err?.message || "unknown error"}) — could be a connectivity issue or ESPN blocking the request.`);
     }
+    if (!r.ok) throw new Error(`ESPN returned HTTP ${r.status} for ${league.name || leagueKey}.`);
+    let j;
+    try {
+      j = await r.json();
+    } catch {
+      throw new Error("ESPN's response wasn't valid JSON.");
+    }
+    return Array.isArray(j?.events) ? j.events : [];
   }
 
   // --------------- live/final state (from Firestore) ---------------

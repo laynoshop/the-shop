@@ -750,7 +750,8 @@
       adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
         weekId: selectedId, weekLabel, availableEvents: avail,
         leagueKey, dateStart, dateEnd, isAdmin,
-        games, atsEventIds, tiebreakerEventId, pickLeagueId
+        games, atsEventIds, tiebreakerEventId, pickLeagueId,
+        loadStatus: mem.gpAdminLoadStatus || ""
       });
     }
 
@@ -1320,6 +1321,16 @@
     }
 
     // ── admin: load games (supports a multi-day date range) ──
+    // The status message is stashed on mem (gpAdminLoadStatus) and read
+    // back by gpBuildAdminBuilderHTML, not just written to the DOM here
+    // directly — the renderPicks() call below fully rebuilds this panel
+    // from scratch right after, which would otherwise wipe out whatever
+    // this handler just wrote to #gpAdminStatus before anyone could see
+    // it. Distinguishing a real fetch failure (fetchEventsFor now throws
+    // instead of swallowing errors into an empty array) from a
+    // genuinely empty result matters here: "Loaded 0 games" for a date
+    // range that obviously has games is a very different problem than a
+    // clear error saying ESPN's request failed.
     if (action === "adminLoadGames") {
       const mem2       = gpMem();
       const leagueKey  = mem2.gpAdminLeagueKey || getSavedLeagueKeySafe();
@@ -1329,10 +1340,10 @@
       try {
         const events = await (ESPN().fetchEventsFor || (async () => []))(leagueKey, dateRange);
         mem2.gpAvailableEvents = Array.isArray(events) ? events : [];
-        if (statusEl) statusEl.textContent = `Loaded ${mem2.gpAvailableEvents.length} games.`;
+        mem2.gpAdminLoadStatus = `Loaded ${mem2.gpAvailableEvents.length} game(s) for ${dateRange}.`;
       } catch (err) {
         mem2.gpAvailableEvents = [];
-        if (statusEl) statusEl.textContent = "Error loading games.";
+        mem2.gpAdminLoadStatus = `Error loading games: ${err?.message || "unknown error"}`;
         console.error("[GP] adminLoadGames error:", err);
       }
       await renderPicks();
