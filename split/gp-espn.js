@@ -101,17 +101,29 @@
     `;
   }
 
+  // Splits a "YYYYMMDD-YYYYMMDD" range into each individual YYYYMMDD day;
+  // a plain single date passes through as a one-item array unchanged.
+  function expandDateRange(dateYYYYMMDD) {
+    const s = String(dateYYYYMMDD || "").trim();
+    const m = s.match(/^(\d{8})-(\d{8})$/);
+    if (!m) return [s];
+    const parseYmd = (ymd) => new Date(Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8)));
+    const fmtYmd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const start = parseYmd(m[1]);
+    const end = parseYmd(m[2]);
+    const days = [];
+    for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) days.push(fmtYmd(d));
+    return days.length ? days : [s];
+  }
+
   // Throws on any real failure (bad league/config, network/CORS error,
   // non-ok HTTP status, unparsable JSON) instead of swallowing it into an
-  // empty array — a genuinely empty ESPN response for the requested
-  // dates and a silent fetch failure used to look identical to whoever
-  // called this (the admin's "Load Games" picker just showed "Loaded 0
-  // games" either way), which made a real outage indistinguishable from
-  // "no games that day." Callers that want the old forgiving behavior
-  // can still catch and treat any error as empty.
-  async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
-    const league = getLeagueByKeySafe(leagueKey);
-    if (!league) throw new Error(`Unknown league "${leagueKey}".`);
+  // empty array — a genuinely empty ESPN response for the requested date
+  // and a silent fetch failure used to look identical to whoever called
+  // this (the admin's "Load Games" picker just showed "Loaded 0 games"
+  // either way), which made a real outage indistinguishable from "no
+  // games that day."
+  async function fetchEventsForOneDay(leagueKey, league, dateYYYYMMDD) {
     const url = (typeof league.endpoint === "function") ? league.endpoint(dateYYYYMMDD) : "";
     if (!url) throw new Error(`League "${leagueKey}" has no scoreboard endpoint configured.`);
     let r;
@@ -120,7 +132,7 @@
     } catch (err) {
       throw new Error(`Network request to ESPN failed (${err?.message || "unknown error"}) — could be a connectivity issue or ESPN blocking the request.`);
     }
-    if (!r.ok) throw new Error(`ESPN returned HTTP ${r.status} for ${league.name || leagueKey}.`);
+    if (!r.ok) throw new Error(`ESPN returned HTTP ${r.status} for ${league.name || leagueKey} (${dateYYYYMMDD}).`);
     let j;
     try {
       j = await r.json();
@@ -128,6 +140,33 @@
       throw new Error("ESPN's response wasn't valid JSON.");
     }
     return Array.isArray(j?.events) ? j.events : [];
+  }
+
+  // A multi-day admin date range used to be sent to ESPN as one request
+  // with a hyphenated "YYYYMMDD-YYYYMMDD" dates param — that range
+  // syntax turns out not to be reliably accepted by every sport's
+  // scoreboard endpoint (confirmed: college football returns HTTP 400
+  // for it), while a single YYYYMMDD day is the exact request shape
+  // already proven to work everywhere else in this app (scores-data.js,
+  // functions/index.js). So a range is expanded into one request per
+  // day here instead, run in parallel, merged and de-duplicated by
+  // event id (adjacent days can occasionally report the same late-night
+  // game twice).
+  async function fetchEventsFor(leagueKey, dateYYYYMMDD) {
+    const league = getLeagueByKeySafe(leagueKey);
+    if (!league) throw new Error(`Unknown league "${leagueKey}".`);
+    const days = expandDateRange(dateYYYYMMDD);
+    const perDay = await Promise.all(days.map((d) => fetchEventsForOneDay(leagueKey, league, d)));
+    const seen = new Set();
+    const merged = [];
+    for (const events of perDay) {
+      for (const ev of events) {
+        const id = String(ev?.id || "");
+        if (id) { if (seen.has(id)) continue; seen.add(id); }
+        merged.push(ev);
+      }
+    }
+    return merged;
   }
 
   // --------------- live/final state (from Firestore) ---------------
