@@ -284,6 +284,7 @@
   font-size: 12px; font-weight: 700; color: rgba(255,220,100,0.7);
   min-height: 18px;
 }
+.gpAdminStatusError { color: rgba(255,110,110,0.9); }
 
 /* ══════════════════════════════════════════════
    SCORE CARD  (matches scores-render.js exactly)
@@ -3073,7 +3074,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // ─── Admin builder  (rendered at TOP of page) ────────────────────
   function gpBuildAdminBuilderHTML({
     weekId, weekLabel, availableEvents, leagueKey, dateStart, dateEnd,
-    games, atsEventIds, tiebreakerEventId, pickLeagueId
+    games, atsEventIds, tiebreakerEventId, pickLeagueId, loadStatus
   }) {
     function kickoffMs(ev) {
       const comp = ev?.competitions?.[0];
@@ -3314,7 +3315,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   </div>` : ""}
   ${atsHTML}
   ${tiebreakerHTML}
-  <div class="gpAdminStatus" id="gpAdminStatus"></div>
+  <div class="gpAdminStatus${loadStatus && /^error/i.test(loadStatus) ? " gpAdminStatusError" : ""}" id="gpAdminStatus">${loadStatus ? esc(loadStatus) : ""}</div>
   </div>
 </div>`;
   }
