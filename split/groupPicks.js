@@ -1288,7 +1288,11 @@
     // way only when nothing's on file for this exact name+code yet
     // (brand-new player, or one from before this lookup existed at all;
     // either way gpRegisterPlayer's merge write backfills codeHash onto
-    // them below so their *next* login takes the fast path).
+    // them below so their *next* login takes the fast path). A derived
+    // id that doesn't exist yet is a genuinely new registration, so it's
+    // also checked against every OTHER player's name (case-insensitive)
+    // to stop two different codes claiming the same display name — one
+    // login for a name is what keeps leaderboards/rosters unambiguous.
     if (action === "playerContinue") {
       const nameEl = document.getElementById("gpIdName");
       const codeEl = document.getElementById("gpIdCode");
@@ -1308,7 +1312,19 @@
         const db2 = firebase.firestore();
         const codeHash = await (ID().gpComputeCodeHash || (async () => ""))(nm, cd);
         pid = (await (Data().gpFindPlayerIdByCodeHash || (async () => null))(db2, codeHash)) || "";
-        if (!pid) pid = await (ID().gpComputePlayerId || (async () => ""))(nm, cd);
+        if (!pid) {
+          const candidatePid = await (ID().gpComputePlayerId || (async () => ""))(nm, cd);
+          const existingDoc = await (Data().gpGetPlayerDoc || (async () => null))(db2, candidatePid);
+          if (!existingDoc) {
+            const nameTaken = await (Data().gpFindPlayerIdByName || (async () => null))(db2, nm);
+            if (nameTaken) {
+              (ID().gpSetIdentityError || (() => {}))(`"${nm}" is already taken by another player. If that's you, use your existing code — otherwise pick a different name.`);
+              btn.disabled = false; btn.textContent = "Continue";
+              return;
+            }
+          }
+          pid = candidatePid;
+        }
         await (Data().gpRegisterPlayer || (async () => {}))(db2, pid, nm, codeHash);
         const playerDoc = await (Data().gpGetPlayerDoc || (async () => null))(db2, pid);
         mustChangeCode = !!playerDoc?.mustChangeCode;

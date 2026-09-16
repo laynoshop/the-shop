@@ -121,6 +121,7 @@
     if (!pid || !nm) return;
     const patch = {
       name: nm,
+      nameLower: nm.toLowerCase(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     if (codeHash) patch.codeHash = String(codeHash);
@@ -157,6 +158,26 @@
       return String(snap.docs[0].id);
     } catch (err) {
       console.error("[GP] gpFindPlayerIdByCodeHash failed:", err);
+      return null;
+    }
+  }
+  // Finds an existing player registered under this display name
+  // (case-insensitive), regardless of their code — used to block a brand
+  // new registration from taking a name that's already someone else's,
+  // which is otherwise possible today since two different codes hash to
+  // two different playerIds even when typed under the identical name.
+  // Callers only need to run this for a genuinely new playerId (see
+  // playerContinue in groupPicks.js) — an existing player re-deriving
+  // their own same name+code is not a conflict with themselves.
+  async function gpFindPlayerIdByName(db, name) {
+    const nameLower = String(name || "").trim().toLowerCase();
+    if (!nameLower) return null;
+    try {
+      const snap = await db.collection("players").where("nameLower", "==", nameLower).limit(1).get();
+      if (snap.empty) return null;
+      return String(snap.docs[0].id);
+    } catch (err) {
+      console.error("[GP] gpFindPlayerIdByName failed:", err);
       return null;
     }
   }
@@ -1035,6 +1056,7 @@
     gpRegisterPlayer,
     gpGetPlayerDoc,
     gpFindPlayerIdByCodeHash,
+    gpFindPlayerIdByName,
     gpSetPlayerCode,
     gpListRegisteredPlayers,
     gpJoinLeague,
