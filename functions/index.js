@@ -216,37 +216,6 @@ function getEventOdds(ev) {
   }
 }
 
-// ESPN's power-rating win-probability model (FPI for football, BPI for
-// basketball, branded differently per sport but shaped the same way in
-// the API: competitions[0].predictor.{homeTeam,awayTeam}.gameProjection).
-// Same scoreboard event already fetched for odds/live state — no extra
-// HTTP call. Absent entirely for sports/games ESPN doesn't publish one
-// for (or hasn't computed yet, e.g. very early season); callers just get
-// null and render nothing, same as odds.
-//
-// gameProjection comes back as null (not just missing) for a game ESPN
-// hasn't modeled yet, and Number(null) is 0 in JavaScript — NOT NaN —
-// so a naive Number() coercion turned "no data" into a bogus, confident-
-// looking "0% to win" for both teams. Checked explicitly for null/
-// undefined/"" before coercing, so an absent projection stays absent.
-function getEventPredictor(ev) {
-  try {
-    const comp = ev?.competitions?.[0] || null;
-    const p = comp?.predictor;
-    if (!p) return null;
-    const rawHome = p?.homeTeam?.gameProjection;
-    const rawAway = p?.awayTeam?.gameProjection;
-    if (rawHome === null || rawHome === undefined || rawHome === "") return null;
-    if (rawAway === null || rawAway === undefined || rawAway === "") return null;
-    const homePct = Number(rawHome);
-    const awayPct = Number(rawAway);
-    if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return null;
-    return { homePct, awayPct };
-  } catch {
-    return null;
-  }
-}
-
 // Polls ESPN for every not-yet-final game in a published Pick'em week
 // and writes scores + odds straight into Firestore. This replaces the
 // old client-side path, which only ever persisted a final score if an
@@ -329,28 +298,13 @@ exports.syncPickemScores = onSchedule(
           if (!ev) continue;
           const info = getEventLiveInfo(ev);
           const odds = getEventOdds(ev);
-          const predictor = getEventPredictor(ev);
-          if (!info && !odds && !predictor) continue;
+          if (!info && !odds) continue;
 
           const update = {};
           if (odds) {
             update.liveOddsDetails = odds.details || "";
             update.liveOddsOverUnder = odds.overUnder || "";
             update.liveOddsUpdatedAt = FieldValue.serverTimestamp();
-          }
-          if (predictor) {
-            update.liveFpiHomePct = predictor.homePct;
-            update.liveFpiAwayPct = predictor.awayPct;
-            update.liveFpiUpdatedAt = FieldValue.serverTimestamp();
-          } else {
-            // Self-heal: the very first version of this sync mistakenly
-            // wrote 0/0 for games ESPN hadn't modeled yet (Number(null)
-            // is 0, not NaN — see getEventPredictor). Clearing these
-            // every run a real projection isn't available means any
-            // already-written bad 0/0 gets removed instead of lingering
-            // forever, without needing a one-off data migration.
-            update.liveFpiHomePct = FieldValue.delete();
-            update.liveFpiAwayPct = FieldValue.delete();
           }
           if (info) {
             if (info.state === "post" && Number.isFinite(info.homeScore) && Number.isFinite(info.awayScore)) {
