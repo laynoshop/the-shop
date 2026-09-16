@@ -78,30 +78,6 @@
 
     return { details, overUnder, favoredTeam, spreadValue, spreadFavoredSide };
   }
-  // ESPN's power-rating win-probability model (FPI for football, BPI for
-  // basketball) — read from the same raw scoreboard event already being
-  // parsed for odds, at the moment the admin loads/adds the game. Kept
-  // as a fallback for the brief window before a game's first live sync
-  // (see syncPickemScores in functions/index.js, which now does the same
-  // extraction and keeps it fresh going forward).
-  //
-  // gameProjection comes back as null for a game ESPN hasn't modeled yet,
-  // and Number(null) is 0 in JavaScript — not NaN — so a naive Number()
-  // coercion turned "no data" into a bogus "0% to win" for both teams.
-  // Checked explicitly before coercing, so an absent projection stays
-  // absent instead of silently becoming a fake number.
-  function buildPredictor(comp) {
-    const p = comp?.predictor;
-    if (!p) return { homePct: null, awayPct: null };
-    const rawHome = p?.homeTeam?.gameProjection;
-    const rawAway = p?.awayTeam?.gameProjection;
-    if (rawHome === null || rawHome === undefined || rawHome === "") return { homePct: null, awayPct: null };
-    if (rawAway === null || rawAway === undefined || rawAway === "") return { homePct: null, awayPct: null };
-    const homePct = Number(rawHome);
-    const awayPct = Number(rawAway);
-    if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return { homePct: null, awayPct: null };
-    return { homePct, awayPct };
-  }
   function kickoffMsFromEvent(ev) {
     const comp = ev?.competitions?.[0];
     const iso  = ev?.date || comp?.date || "";
@@ -122,16 +98,13 @@
     const homeTeam    = buildTeam(homeC);
     const awayTeam    = buildTeam(awayC);
     const odds        = buildOdds(comp, homeTeam, awayTeam);
-    const predictor   = buildPredictor(comp);
     return {
       id:                String(ev?.id || ""),
       homeTeam, awayTeam,
       kickoffMs:         kickoffMsFromEvent(ev),
       spreadValue:       odds.spreadValue,
       spreadFavoredSide: odds.spreadFavoredSide,
-      oddsDetails:       odds.details,
-      fpiHomePct:        predictor.homePct,
-      fpiAwayPct:        predictor.awayPct
+      oddsDetails:       odds.details
     };
   }
 
@@ -343,7 +316,6 @@
 
       const venueLine = buildVenueLine(comp);
       const odds      = buildOdds(comp, homeTeam, awayTeam);
-      const predictor = buildPredictor(comp);
 
       await slateRef.collection("games").doc(eventId).set({
         eventId,
@@ -361,8 +333,6 @@
         awayTeam,
         spreadValue:        odds.spreadValue,
         spreadFavoredSide:  String(odds.spreadFavoredSide || ""),
-        fpiHomePct:         predictor.homePct,
-        fpiAwayPct:         predictor.awayPct,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     }
