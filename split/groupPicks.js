@@ -1268,7 +1268,27 @@
       return;
     }
 
+    // ── identity: show the "set your code" screen (forced after a reset, or voluntary) ──
+    function gpShowChangeCodeGate({ forced, name } = {}) {
+      const el = document.getElementById("content");
+      if (!el) return;
+      const gateHTML = (ID().gpBuildChangeCodeGateHTML || (() => ""))({ forced, name });
+      const hdr = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin: getRole() === "admin", playerName: name });
+      el.innerHTML = `${hdr}<div class="gpContainer">${gateHTML}</div>`;
+      postRender();
+      setTimeout(() => { try { document.getElementById("gpNewCode")?.focus(); } catch {} }, 0);
+    }
+
     // ── identity: continue ──
+    // Resolves playerId by looking up the typed name+code's hash against
+    // the player registry FIRST (an ordinary return visit, or a temp
+    // code an admin just issued via gpAdminResetPlayerCode both take
+    // this path, landing back on that EXISTING player — same picks,
+    // same history) — falling back to deriving it directly the original
+    // way only when nothing's on file for this exact name+code yet
+    // (brand-new player, or one from before this lookup existed at all;
+    // either way gpRegisterPlayer's merge write backfills codeHash onto
+    // them below so their *next* login takes the fast path).
     if (action === "playerContinue") {
       const nameEl = document.getElementById("gpIdName");
       const codeEl = document.getElementById("gpIdCode");
@@ -1280,14 +1300,32 @@
         (ID().gpSetIdentityError || (() => {}))("Name (2+ chars) and code (3+ chars) required.");
         return;
       }
-      const pid = await (ID().gpComputePlayerId || (async () => ""))(nm, cd);
-      (ID().gpSetIdentity || (() => {}))({ name: nm, code: cd, remember: rem, playerId: pid });
+      btn.disabled = true; btn.textContent = "Continuing…";
+      let pid = "";
+      let mustChangeCode = false;
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
-        await (Data().gpRegisterPlayer || (async () => {}))(firebase.firestore(), pid, nm);
+        const db2 = firebase.firestore();
+        const codeHash = await (ID().gpComputeCodeHash || (async () => ""))(nm, cd);
+        pid = (await (Data().gpFindPlayerIdByCodeHash || (async () => null))(db2, codeHash)) || "";
+        if (!pid) pid = await (ID().gpComputePlayerId || (async () => ""))(nm, cd);
+        await (Data().gpRegisterPlayer || (async () => {}))(db2, pid, nm, codeHash);
+        const playerDoc = await (Data().gpGetPlayerDoc || (async () => null))(db2, pid);
+        mustChangeCode = !!playerDoc?.mustChangeCode;
       } catch (err) {
-        console.error("[GP] gpRegisterPlayer failed:", err);
+        console.error("[GP] playerContinue identity resolution failed:", err);
+        (ID().gpSetIdentityError || (() => {}))("Something went wrong — try again.");
+        btn.disabled = false; btn.textContent = "Continue";
+        return;
       }
+
+      (ID().gpSetIdentity || (() => {}))({ name: nm, code: cd, remember: rem, playerId: pid });
+
+      if (mustChangeCode) {
+        gpShowChangeCodeGate({ forced: true, name: nm });
+        return;
+      }
+
       // Logging in is a fresh entry into the app, same as switching to
       // the tab: show the light blip and land on the league picker
       // rather than jumping straight back into whatever league was
@@ -1301,6 +1339,71 @@
       (ID().gpClearIdentity || (() => {}))();
       gpPendingClear();
       await renderPicks();
+      return;
+    }
+
+    // ── identity: open the "change my code" screen voluntarily ──
+    if (action === "openChangeCode") {
+      const idObj = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
+      gpShowChangeCodeGate({ forced: false, name: idObj.name || "" });
+      return;
+    }
+
+    // ── identity: save a new code (forced after a reset, or voluntary) ──
+    if (action === "changeCodeSubmit") {
+      const forced   = btn.getAttribute("data-forced") === "1";
+      const nm       = String(btn.getAttribute("data-name") || "").trim();
+      const newCodeEl = document.getElementById("gpNewCode");
+      const newCode  = String(newCodeEl?.value || "").trim();
+      if (newCode.length < 3) {
+        (ID().gpSetNewCodeError || (() => {}))("Code needs to be at least 3 characters.");
+        return;
+      }
+      btn.disabled = true; btn.textContent = "Saving…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const idObj = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
+        const pid = idObj.playerId;
+        if (!pid) throw new Error("Missing player id — try logging in again.");
+        const newHash = await (ID().gpComputeCodeHash || (async () => ""))(nm || idObj.name, newCode);
+        await (Data().gpSetPlayerCode || (async () => {}))(db2, pid, newHash, false);
+        (ID().gpSetIdentity || (() => {}))({ name: nm || idObj.name, code: newCode, remember: idObj.remember, playerId: pid });
+      } catch (err) {
+        console.error("[GP] changeCodeSubmit failed:", err);
+        (ID().gpSetNewCodeError || (() => {}))(err?.message || "Something went wrong — try again.");
+        btn.disabled = false; btn.textContent = "Save";
+        return;
+      }
+      if (forced) await renderPicks("light", true);
+      else await renderPicks();
+      return;
+    }
+
+    // ── identity: cancel a voluntary code change ──
+    if (action === "changeCodeCancel") {
+      await renderPicks();
+      return;
+    }
+
+    // ── admin: reset a locked-out player's code to a temp one ──
+    if (action === "adminResetPlayerCode") {
+      const pid = String(btn.getAttribute("data-playerid") || "").trim();
+      const nm  = String(btn.getAttribute("data-name") || "").trim();
+      if (!pid || !nm) return;
+      if (!confirm(`Reset ${nm}'s code?\n\nThey'll need the temporary code (shown next) plus their exact display name to log back in, and will be asked to set their own permanent code right after.`)) return;
+      const origLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = "Resetting…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const tempCode = await (Admin().gpAdminResetPlayerCode || (async () => ""))(db2, pid, nm);
+        alert(`${nm}'s temporary code:\n\n${tempCode}\n\nGive them this code and their exact display name ("${nm}") to log back in — they'll be asked to set their own permanent code right after.`);
+      } catch (err) {
+        console.error("[GP] adminResetPlayerCode failed:", err);
+        alert(err?.message || "Something went wrong resetting the code.");
+      }
+      btn.disabled = false; btn.textContent = origLabel;
       return;
     }
 

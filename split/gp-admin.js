@@ -440,6 +440,37 @@
     });
   }
 
+  // --------------- admin: reset a locked-out player's code ---------------
+  // Generates a random temp code, hashes it (salted with the player's own
+  // name — see gp-identity.js's gpComputeCodeHash), and overwrites it onto
+  // their EXISTING players/{playerId} doc. Crucially this never touches
+  // playerId itself, so the player's picks/league membership/history stay
+  // exactly where they are — only the credential needed to get back into
+  // that identity changes. mustChangeCode (set true here) forces them
+  // through the "set your own code" screen on next login instead of
+  // silently reusing this temp one forever.
+  const GP_TEMP_CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L — easy to read aloud
+  function gpAdminGenerateTempCode(length = 6) {
+    let out = "";
+    for (let i = 0; i < length; i++) {
+      out += GP_TEMP_CODE_CHARS[Math.floor(Math.random() * GP_TEMP_CODE_CHARS.length)];
+    }
+    return out;
+  }
+  async function gpAdminResetPlayerCode(db, playerId, name) {
+    const pid = String(playerId || "").trim();
+    if (!pid) throw new Error("Missing player.");
+    const computeCodeHash = window.GP_Identity?.gpComputeCodeHash;
+    const setPlayerCode   = window.GP_Data?.gpSetPlayerCode;
+    if (typeof computeCodeHash !== "function" || typeof setPlayerCode !== "function") {
+      throw new Error("Required module not loaded — refresh and try again.");
+    }
+    const tempCode = gpAdminGenerateTempCode();
+    const codeHash = await computeCodeHash(name, tempCode);
+    await setPlayerCode(db, pid, codeHash, true);
+    return tempCode;
+  }
+
   // --------------- expose on window ---------------
   window.GP_Admin = {
     gpCreateLeague,
@@ -447,6 +478,7 @@
     gpAdminCreateNewWeekInLeague,
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,
+    gpAdminResetPlayerCode,
     gpAdminPublishWeek,
     gpAdminSetAtsGames,
     gpAdminSetTiebreaker,

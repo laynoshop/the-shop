@@ -108,20 +108,72 @@
   // name+code identity screen (see gp-identity.js's playerContinue),
   // keyed by their computed playerId. Lets admins build an H2H roster
   // by picking from known players instead of retyping names by hand.
-  // Not an accounts system — anyone can still enter any name+code, this
-  // just remembers the names that have actually been used before.
-  async function gpRegisterPlayer(db, playerId, name) {
+  // Not an accounts system in the traditional sense — anyone can still
+  // enter any name+code — but codeHash (see gp-identity.js's
+  // gpComputeCodeHash) turns this into enough of one to support a real
+  // password reset: it's what gpFindPlayerIdByCodeHash looks up against,
+  // and what an admin overwrites on gpAdminResetPlayerCode, without
+  // touching playerId — so a reset preserves the player's picks/history
+  // instead of starting them over as a new, unrelated identity.
+  async function gpRegisterPlayer(db, playerId, name, codeHash) {
     const pid = String(playerId || "").trim();
     const nm  = String(name || "").trim().slice(0, 20);
     if (!pid || !nm) return;
+    const patch = {
+      name: nm,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (codeHash) patch.codeHash = String(codeHash);
     try {
-      await db.collection("players").doc(pid).set({
-        name: nm,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      await db.collection("players").doc(pid).set(patch, { merge: true });
     } catch (err) {
       console.error("[GP] gpRegisterPlayer failed:", err);
     }
+  }
+  async function gpGetPlayerDoc(db, playerId) {
+    const pid = String(playerId || "").trim();
+    if (!pid) return null;
+    try {
+      const snap = await db.collection("players").doc(pid).get();
+      return snap.exists ? { playerId: pid, ...(snap.data() || {}) } : null;
+    } catch (err) {
+      console.error("[GP] gpGetPlayerDoc failed:", err);
+      return null;
+    }
+  }
+  // Finds the one existing player whose stored codeHash matches — the
+  // fast path a returning player's login takes so they land back on
+  // their EXISTING playerId (and all its history) instead of a fresh
+  // one, whether that's an ordinary return visit or a post-reset login
+  // with a temp code. Returns null on no match, which callers treat as
+  // "fall back to deriving playerId directly" (brand-new player, or an
+  // existing one from before codeHash existed at all).
+  async function gpFindPlayerIdByCodeHash(db, codeHash) {
+    const ch = String(codeHash || "").trim();
+    if (!ch) return null;
+    try {
+      const snap = await db.collection("players").where("codeHash", "==", ch).get();
+      if (snap.empty) return null;
+      return String(snap.docs[0].id);
+    } catch (err) {
+      console.error("[GP] gpFindPlayerIdByCodeHash failed:", err);
+      return null;
+    }
+  }
+  // Sets/overwrites a player's code hash — the actual "reset" or
+  // "change" write, same call either way. mustChangeCode forces the new
+  // (admin-issued temp, or self-chosen) code through the change-code
+  // screen once more before the player can do anything else; pass false
+  // once they've set one of their own.
+  async function gpSetPlayerCode(db, playerId, codeHash, mustChangeCode) {
+    const pid = String(playerId || "").trim();
+    const ch  = String(codeHash || "").trim();
+    if (!pid || !ch) return;
+    await db.collection("players").doc(pid).set({
+      codeHash: ch,
+      mustChangeCode: !!mustChangeCode,
+      codeUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
   }
   async function gpListRegisteredPlayers(db) {
     try {
@@ -981,6 +1033,9 @@
     gpListLeagues,
     gpIsLeagueActive,
     gpRegisterPlayer,
+    gpGetPlayerDoc,
+    gpFindPlayerIdByCodeHash,
+    gpSetPlayerCode,
     gpListRegisteredPlayers,
     gpJoinLeague,
     gpGetLeagueMembers,

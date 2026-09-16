@@ -3429,6 +3429,7 @@ ${saveRow}`;
   <div class="gpHeaderActions">
     ${showLeaguesBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="showLeaguePicker">Leagues</button>` : ""}
     <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="name">Logout</button>
+    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="openChangeCode">Change Code</button>
     ${showSaveBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="savePicks" disabled>Save</button>` : ""}
     <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="refresh">↺</button>
   </div>
@@ -3666,6 +3667,7 @@ ${saveRow}`;
       <div class="gpJoinMemberRow">
         <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(m.name))}</div>
         <div class="gpJoinMemberName">${esc(m.name)}</div>
+        <button class="smallBtn" type="button" data-gpaction="adminResetPlayerCode" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Reset Code</button>
       </div>`;
     }).join("");
     const membersSectionHTML = isEdit ? `
