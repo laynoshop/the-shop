@@ -1725,13 +1725,15 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
   // ESPN's power-rating win-probability model — FPI for football, BPI
   // for basketball; branded differently per sport even though the
-  // underlying data shape is identical. Captured client-side, once, at
-  // the moment the admin adds the game (gpAdminAddSelectedGamesToWeek /
-  // gp-admin.js) — a static snapshot, same as spreadValue/oddsDetails,
-  // not refreshed as ESPN's model shifts closer to kickoff. A sport
-  // ESPN doesn't publish one for, or a game added before ESPN posted
-  // one, just gets nothing here — same graceful-absence behavior as
-  // safeOddsLine.
+  // underlying data shape is identical. Prefers the live-synced value
+  // (g.__predictor, hydrated by gpApplyStoredPredictor from
+  // liveFpiHomePct/liveFpiAwayPct — syncPickemScores refreshes this
+  // every run, same as odds), falling back to the static gp-admin.js
+  // snapshot (fpiHomePct/fpiAwayPct, captured once client-side when the
+  // game was added) for the brief window before a game's first sync, or
+  // for an older game added before the live sync existed. A sport ESPN
+  // doesn't publish one for, or a game with neither value yet, just
+  // gets nothing here — same graceful-absence behavior as safeOddsLine.
   const GP_PREDICTOR_LABELS = {
     nfl: "ESPN FPI", cfb: "ESPN FPI",
     nba: "ESPN BPI", ncaam: "ESPN BPI",
@@ -1748,8 +1750,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return v > 0 && v <= 1 ? v * 100 : v;
   }
   function safePredictorLine(g, awayAbbrText, homeAbbrText) {
-    const homePct = normalizePredictorPct(g?.fpiHomePct);
-    const awayPct = normalizePredictorPct(g?.fpiAwayPct);
+    const homePct = normalizePredictorPct(g?.__predictor?.homePct ?? g?.fpiHomePct);
+    const awayPct = normalizePredictorPct(g?.__predictor?.awayPct ?? g?.fpiAwayPct);
     if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return "";
     const homeFavored = homePct >= awayPct;
     const pct  = Math.round(homeFavored ? homePct : awayPct);
