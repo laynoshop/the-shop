@@ -109,27 +109,45 @@
     m.picksPlayerId = "";
   }
 
-  // --------------- compute player ID (SHA-256) ---------------
-  async function gpComputePlayerId(name, code) {
-    const nm = gpNormalizeName(name);
-    const cd = gpNormalizeCode(code);
-    const raw = `picks:v1:${nm.toLowerCase()}|${cd}`;
-
+  // --------------- shared SHA-256 (with a non-crypto fallback) ---------------
+  async function gpHashString(raw) {
     try {
       if (window.crypto && crypto.subtle && typeof TextEncoder !== "undefined") {
         const bytes = new TextEncoder().encode(raw);
         const hash = await crypto.subtle.digest("SHA-256", bytes);
         const arr = Array.from(new Uint8Array(hash));
-        const hex = arr.slice(0, 16).map(b => b.toString(16).padStart(2, "0")).join("");
-        return `p_${hex}`;
+        return arr.slice(0, 16).map(b => b.toString(16).padStart(2, "0")).join("");
       }
     } catch {}
 
-    // Fallback: djb2
+    // Fallback: djb2 — only reached on very old browsers without SubtleCrypto.
     let h = 5381;
     for (let i = 0; i < raw.length; i++) h = ((h << 5) + h) ^ raw.charCodeAt(i);
-    const hex = (h >>> 0).toString(16).padStart(8, "0");
-    return `p_${hex}_${raw.length}`;
+    return `${(h >>> 0).toString(16).padStart(8, "0")}_${raw.length}`;
+  }
+
+  // --------------- compute player ID (SHA-256 of name+code) ---------------
+  async function gpComputePlayerId(name, code) {
+    const nm = gpNormalizeName(name);
+    const cd = gpNormalizeCode(code);
+    const hex = await gpHashString(`picks:v1:${nm.toLowerCase()}|${cd}`);
+    return `p_${hex}`;
+  }
+
+  // --------------- compute a code hash (SHA-256 of the code alone) ---------------
+  // Stored on the player's registry doc (players/{playerId}.codeHash) so a
+  // returning player can be *found* by name+code instead of the playerId
+  // always having to be re-derived from them — which is what makes a real
+  // password reset possible: an admin can overwrite this hash on an
+  // existing player's doc without touching their playerId, so the
+  // player's picks/history stay exactly where they are. Salted with the
+  // name so two different people who happen to type the identical code
+  // don't hash to the same value.
+  async function gpComputeCodeHash(name, code) {
+    const nm = gpNormalizeName(name);
+    const cd = gpNormalizeCode(code);
+    const hex = await gpHashString(`picks:code:v1:${nm.toLowerCase()}|${cd}`);
+    return `c_${hex}`;
   }
 
   // --------------- validation ---------------
@@ -240,6 +258,79 @@
     if (el) el.textContent = String(msg || "");
   }
 
+  // --------------- change-code gate HTML ---------------
+  // Two entry points share this screen: forced (the player just logged in
+  // with an admin-issued temp code and must set their own before they can
+  // do anything else) and voluntary (a "Change Code" button while already
+  // logged in, no admin involved). Only the copy differs.
+  function gpBuildChangeCodeGateHTML({ forced, name } = {}) {
+    const nm = gpNormalizeName(name || "");
+    const title = forced ? "Set your own code" : "Change your code";
+    const blurb = forced
+      ? "You logged in with a temporary code — set a permanent one only you know."
+      : "Pick a new code. You'll use it (with your name) to log in from any device.";
+    return `
+      <div class="game" style="
+        margin-top:12px;
+        padding:14px;
+        border-radius:22px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+      ">
+        <div class="gameHeader">
+          <div class="statusPill status-other">${forced ? "TEMPORARY CODE" : "CHANGE CODE"}</div>
+        </div>
+
+        <div class="gameMetaTopLine" style="margin-top:10px; font-weight:950;">
+          ${esc(title)}
+        </div>
+
+        <div class="muted" style="margin-top:8px; font-weight:800;">
+          ${esc(blurb)}
+        </div>
+
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+          <div>
+            <div class="muted" style="font-weight:900; margin-bottom:6px;">New Code</div>
+            <input
+              id="gpNewCode"
+              type="password"
+              inputmode="text"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              placeholder="Make something you'll remember"
+              style="
+                width:100%;
+                box-sizing:border-box;
+                padding:14px 14px;
+                border-radius:16px;
+                background:rgba(0,0,0,0.18);
+                border:1px solid rgba(255,255,255,0.12);
+                color:inherit;
+                font-weight:850;
+                font-size:16px;
+                outline:none;
+              "
+            />
+          </div>
+
+          <div style="display:flex; gap:10px; margin-top:6px;">
+            <button class="smallBtn" type="button" data-gpaction="changeCodeSubmit" data-forced="${forced ? "1" : "0"}" data-name="${esc(nm)}" style="flex:0 0 auto;">Save</button>
+            ${forced ? "" : `<button class="smallBtn" type="button" data-gpaction="changeCodeCancel" style="flex:0 0 auto;">Cancel</button>`}
+          </div>
+
+          <div id="gpNewCodeErr" class="muted" style="margin-top:4px; font-weight:900;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function gpSetNewCodeError(msg) {
+    const el = document.getElementById("gpNewCodeErr");
+    if (el) el.textContent = String(msg || "");
+  }
+
   // --------------- expose on window ---------------
   window.GP_Identity = {
     gpMem,
@@ -250,9 +341,12 @@
     gpSetIdentity,
     gpClearIdentity,
     gpComputePlayerId,
+    gpComputeCodeHash,
     gpIsIdentityValid,
     gpBuildIdentityGateHTML,
-    gpSetIdentityError
+    gpSetIdentityError,
+    gpBuildChangeCodeGateHTML,
+    gpSetNewCodeError
   };
 
 })();
