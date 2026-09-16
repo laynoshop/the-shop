@@ -80,18 +80,25 @@
   }
   // ESPN's power-rating win-probability model (FPI for football, BPI for
   // basketball) — read from the same raw scoreboard event already being
-  // parsed for odds, at the moment the admin loads/adds the game, so it
-  // never needs the syncPickemScores Cloud Function or any other server
-  // deploy. Trade-off vs. a live sync: this is a one-time snapshot from
-  // whenever the game was added, not refreshed as ESPN's model updates
-  // closer to kickoff — same limitation the spread/oddsDetails capture
-  // already has here, and the same fix (a Cloud Function backfill) would
-  // apply to both if that's ever wanted later.
+  // parsed for odds, at the moment the admin loads/adds the game. Kept
+  // as a fallback for the brief window before a game's first live sync
+  // (see syncPickemScores in functions/index.js, which now does the same
+  // extraction and keeps it fresh going forward).
+  //
+  // gameProjection comes back as null for a game ESPN hasn't modeled yet,
+  // and Number(null) is 0 in JavaScript — not NaN — so a naive Number()
+  // coercion turned "no data" into a bogus "0% to win" for both teams.
+  // Checked explicitly before coercing, so an absent projection stays
+  // absent instead of silently becoming a fake number.
   function buildPredictor(comp) {
     const p = comp?.predictor;
     if (!p) return { homePct: null, awayPct: null };
-    const homePct = Number(p?.homeTeam?.gameProjection);
-    const awayPct = Number(p?.awayTeam?.gameProjection);
+    const rawHome = p?.homeTeam?.gameProjection;
+    const rawAway = p?.awayTeam?.gameProjection;
+    if (rawHome === null || rawHome === undefined || rawHome === "") return { homePct: null, awayPct: null };
+    if (rawAway === null || rawAway === undefined || rawAway === "") return { homePct: null, awayPct: null };
+    const homePct = Number(rawHome);
+    const awayPct = Number(rawAway);
     if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return { homePct: null, awayPct: null };
     return { homePct, awayPct };
   }

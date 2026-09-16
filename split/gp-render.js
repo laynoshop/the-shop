@@ -1753,6 +1753,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const homePct = normalizePredictorPct(g?.__predictor?.homePct ?? g?.fpiHomePct);
     const awayPct = normalizePredictorPct(g?.__predictor?.awayPct ?? g?.fpiAwayPct);
     if (!Number.isFinite(homePct) || !Number.isFinite(awayPct)) return "";
+    // Both sides landing on exactly 0 is never a real ESPN result (the
+    // two sides' probabilities can't both be zero) — it's the fingerprint
+    // of a null gameProjection once having been coerced through Number()
+    // and stored as a bogus 0/0 before this was fixed at the source.
+    // Catching it here means an already-stored bad value self-heals in
+    // the UI immediately, without needing to wait for a fresh sync or a
+    // one-off data migration for the static (gp-admin.js) snapshot.
+    if (homePct === 0 && awayPct === 0) return "";
     const homeFavored = homePct >= awayPct;
     const pct  = Math.round(homeFavored ? homePct : awayPct);
     const abbr = homeFavored ? homeAbbrText : awayAbbrText;
