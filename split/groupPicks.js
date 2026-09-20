@@ -1472,9 +1472,20 @@
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const mem2 = gpMem();
-        const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
+        // This button lives on the League Settings screen for a specific
+        // league (gpLeagueEditingId) — that's not necessarily the same
+        // league as "currently selected" elsewhere in the app (e.g. Edit
+        // tapped straight from a league card in the picker, without ever
+        // entering that league first, leaves pickLeagueId pointing at
+        // nothing or the wrong league entirely).
+        const editLeagueId = mem2.gpLeagueEditingId || mem2.pickLeagueId || gpGetSelectedLeagueId();
         let league = null;
-        try { league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId); } catch {}
+        try { league = await (Data().gpGetLeague || (async () => null))(db2, editLeagueId); } catch {}
+        if (!league || !Array.isArray(league.weeks) || !league.weeks.length) {
+          alert("Couldn't load this league's weeks — try again.");
+          btn.disabled = false; btn.textContent = origLabel;
+          return;
+        }
         const { name: fixedName, weeksTouched, perWeek } = await (Admin().gpAdminSyncPlayerName || (async () => ({})))(db2, league, pid);
         const breakdown = Array.isArray(perWeek) && perWeek.length ? `\n\n${perWeek.join("\n")}` : "";
         alert(`Synced — "${fixedName}" is now correct across ${weeksTouched} past week${weeksTouched === 1 ? "" : "s"}. Refresh to see it reflected in standings.${breakdown}`);
@@ -1521,9 +1532,18 @@
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const mem2 = gpMem();
-        const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
+        // Same league-resolution fix as adminSyncPlayerName above — this
+        // overlay is scoped to the League Settings screen's own league
+        // (gpLeagueEditingId), not whatever's "currently selected"
+        // elsewhere in the app.
+        const editLeagueId = mem2.gpLeagueEditingId || mem2.pickLeagueId || gpGetSelectedLeagueId();
         let league = null;
-        try { league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId); } catch {}
+        try { league = await (Data().gpGetLeague || (async () => null))(db2, editLeagueId); } catch {}
+        if (!league || !Array.isArray(league.weeks) || !league.weeks.length) {
+          alert("Couldn't load this league's weeks — try again.");
+          btn.disabled = false;
+          return;
+        }
         const { name: fixedName, weeksMerged } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid);
         (Render().gpDismissPlayerManageOverlay || (() => {}))();
         alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.`);

@@ -520,6 +520,8 @@
     const intoPid = String(intoPlayerId || "").trim();
     if (!fromPid || !intoPid) throw new Error("Missing player.");
     if (fromPid === intoPid) throw new Error("Can't merge a player into themselves.");
+    const leagueId = String(league?.id || "").trim();
+    if (!leagueId) throw new Error("Missing league.");
     const getPlayerDoc    = window.GP_Data?.gpGetPlayerDoc;
     const mergePlayerInto = window.GP_Data?.gpMergePlayerInto;
     if (typeof getPlayerDoc !== "function" || typeof mergePlayerInto !== "function") {
@@ -530,10 +532,30 @@
     if (!canonicalName) throw new Error(`Target player not found (id: ${intoPid}).`);
     const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
     const { weeksMerged } = await mergePlayerInto(db, weekIds, fromPid, intoPid, canonicalName);
+
+    // Whichever side the admin picked as "from" vs "into," the surviving
+    // id must come out of this a real member — never neither. Dropping
+    // fromPid's membership without first guaranteeing intoPid has one
+    // (e.g. because the admin merged the officially-joined id into an
+    // unjoined duplicate) would otherwise leave BOTH unjoined: the real
+    // regression this once caused.
+    const membersRef = db.collection("leagues").doc(leagueId).collection("members");
     try {
-      await db.collection("leagues").doc(String(league?.id || "")).collection("members").doc(fromPid).delete();
+      const [fromMemberSnap, intoMemberSnap] = await Promise.all([
+        membersRef.doc(fromPid).get(),
+        membersRef.doc(intoPid).get(),
+      ]);
+      if (!intoMemberSnap.exists) {
+        const fromMemberData = fromMemberSnap.exists ? (fromMemberSnap.data() || {}) : {};
+        await membersRef.doc(intoPid).set({
+          uid: intoPid,
+          name: canonicalName,
+          joinedAt: fromMemberData.joinedAt || firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+      await membersRef.doc(fromPid).delete();
     } catch (err) {
-      console.error("[GP] gpAdminMergeDuplicatePlayer: failed to drop old member doc:", err);
+      console.error("[GP] gpAdminMergeDuplicatePlayer: failed to reconcile league membership:", err);
     }
     return { name: canonicalName, weeksMerged };
   }
