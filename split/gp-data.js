@@ -478,15 +478,18 @@
     const intoPid = String(intoPlayerId || "").trim();
     const nm = String(canonicalName || "").trim().slice(0, 20);
     const ids = (Array.isArray(weekIds) ? weekIds : []).map(String).filter(Boolean);
-    if (!fromPid || !intoPid || fromPid === intoPid || !ids.length) return { weeksMerged: 0 };
+    if (!fromPid || !intoPid || fromPid === intoPid || !ids.length) return { weeksMerged: 0, details: [] };
 
     let weeksMerged = 0;
+    const details = [];
     for (const wid of ids) {
       const fromRef = db.collection("pickSlates").doc(wid).collection("picks").doc(fromPid);
       const intoRef = db.collection("pickSlates").doc(wid).collection("picks").doc(intoPid);
+      let fromExisted = null;
       try {
         const fromSnap = await fromRef.get();
-        if (!fromSnap.exists) continue;
+        fromExisted = fromSnap.exists;
+        if (!fromSnap.exists) { details.push({ weekId: wid, existed: false, merged: false }); continue; }
         const intoSnap = await intoRef.get();
         const fromData = fromSnap.data() || {};
         const intoData = intoSnap.exists ? (intoSnap.data() || {}) : {};
@@ -515,11 +518,18 @@
         if (writes.length) await Promise.all(writes);
         await fromRef.delete();
         weeksMerged++;
+        details.push({ weekId: wid, existed: true, merged: true, gamesMoved: fromGamesSnap.docs.length });
       } catch (err) {
+        // Previously only logged to console — invisible on a phone, so a
+        // real failure (e.g. a Firestore rule rejecting a cross-player
+        // write) looked identical to "nothing to merge here" from the
+        // caller's side. Surfaced in details now so it shows up in the
+        // confirmation alert instead of vanishing silently.
         console.error(`[GP] gpMergePlayerInto failed for week ${wid}:`, err);
+        details.push({ weekId: wid, existed: fromExisted, merged: false, error: String(err?.message || err) });
       }
     }
-    return { weeksMerged };
+    return { weeksMerged, details };
   }
 
   // ─── everyone's picks cache ─────────────────────────────────────────

@@ -538,8 +538,16 @@
     const intoDoc = await getPlayerDoc(db, intoPid);
     const canonicalName = String(intoDoc?.name || "").trim() || String(intoNameHint || "").trim();
     if (!canonicalName) throw new Error(`Target player not found (id: ${intoPid}).`);
-    const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
-    const { weeksMerged } = await mergePlayerInto(db, weekIds, fromPid, intoPid, canonicalName);
+    const weeks = Array.isArray(league?.weeks) ? league.weeks : [];
+    const weekIds = weeks.map(w => String(w?.id || "")).filter(Boolean);
+    const { weeksMerged, details } = await mergePlayerInto(db, weekIds, fromPid, intoPid, canonicalName);
+    const labelByWeekId = new Map(weeks.map(w => [String(w?.id || ""), String(w?.label || w?.id || "")]));
+    const perWeek = (details || []).map(d => {
+      const label = labelByWeekId.get(d.weekId) || d.weekId;
+      if (d.error) return `${label}: error — ${d.error}`;
+      if (!d.existed) return `${label}: no picks for "from" id`;
+      return `${label}: moved ${d.gamesMoved ?? 0} game pick(s)`;
+    });
 
     // Backfill players/{intoPid} if it was ever missing/nameless, so the
     // survivor is left in a normal, fully-registered state instead of
@@ -578,7 +586,7 @@
     } catch (err) {
       console.error("[GP] gpAdminMergeDuplicatePlayer: failed to reconcile league membership:", err);
     }
-    return { name: canonicalName, weeksMerged };
+    return { name: canonicalName, weeksMerged, perWeek, fromPid, intoPid };
   }
 
   // --------------- expose on window ---------------
