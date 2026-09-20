@@ -3674,6 +3674,7 @@ ${saveRow}`;
         <div class="gpJoinMemberName">${esc(m.name)}</div>
         <button class="smallBtn" type="button" data-gpaction="adminResetPlayerCode" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Reset Code</button>
         <button class="smallBtn" type="button" data-gpaction="adminSyncPlayerName" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Fix Name</button>
+        <button class="smallBtn" type="button" data-gpaction="adminMergePlayer" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Merge Into…</button>
       </div>`;
     }).join("");
     const membersSectionHTML = isEdit ? `

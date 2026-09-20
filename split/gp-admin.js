@@ -489,10 +489,53 @@
     }
     const playerDoc = await getPlayerDoc(db, pid);
     const correctName = String(playerDoc?.name || "").trim();
-    if (!correctName) throw new Error("Player not found.");
+    // Surfaces the exact id looked up — a "not found" here means this
+    // specific playerId has no players/{id} doc at all, which usually
+    // means it's a stray/duplicate id (e.g. a second login that derived
+    // a different id for the same person) rather than a typo.
+    if (!correctName) throw new Error(`Player not found (id: ${pid}).`);
+    const weeks = Array.isArray(league?.weeks) ? league.weeks : [];
+    const weekIds = weeks.map(w => String(w?.id || "")).filter(Boolean);
+    const { weeksTouched, details } = await renamePlayerAcrossWeeks(db, weekIds, pid, correctName);
+    const labelByWeekId = new Map(weeks.map(w => [String(w?.id || ""), String(w?.label || w?.id || "")]));
+    const perWeek = (details || []).map(d => {
+      const label = labelByWeekId.get(d.weekId) || d.weekId;
+      if (d.error) return `${label}: error — ${d.error}`;
+      if (!d.existed) return `${label}: no picks on file`;
+      return d.touched ? `${label}: fixed` : `${label}: already correct`;
+    });
+    return { name: correctName, weeksTouched, perWeek };
+  }
+
+  // --------------- admin: merge a duplicate player into another ---------------
+  // For when the same real person ends up with two different playerIds
+  // (e.g. a login after a code reset that, for whatever reason, derived
+  // a fresh id instead of finding the original one) — gpAdminSyncPlayerName
+  // can't fix this, since it only corrects a *name*, and standings group
+  // by playerId, not name. This moves fromPlayerId's picks onto
+  // intoPlayerId (see gpMergePlayerInto) and drops fromPlayerId from this
+  // league's membership so it stops appearing as a second entry.
+  async function gpAdminMergeDuplicatePlayer(db, league, fromPlayerId, intoPlayerId) {
+    const fromPid = String(fromPlayerId || "").trim();
+    const intoPid = String(intoPlayerId || "").trim();
+    if (!fromPid || !intoPid) throw new Error("Missing player.");
+    if (fromPid === intoPid) throw new Error("Can't merge a player into themselves.");
+    const getPlayerDoc    = window.GP_Data?.gpGetPlayerDoc;
+    const mergePlayerInto = window.GP_Data?.gpMergePlayerInto;
+    if (typeof getPlayerDoc !== "function" || typeof mergePlayerInto !== "function") {
+      throw new Error("Required module not loaded — refresh and try again.");
+    }
+    const intoDoc = await getPlayerDoc(db, intoPid);
+    const canonicalName = String(intoDoc?.name || "").trim();
+    if (!canonicalName) throw new Error(`Target player not found (id: ${intoPid}).`);
     const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
-    const { weeksTouched } = await renamePlayerAcrossWeeks(db, weekIds, pid, correctName);
-    return { name: correctName, weeksTouched };
+    const { weeksMerged } = await mergePlayerInto(db, weekIds, fromPid, intoPid, canonicalName);
+    try {
+      await db.collection("leagues").doc(String(league?.id || "")).collection("members").doc(fromPid).delete();
+    } catch (err) {
+      console.error("[GP] gpAdminMergeDuplicatePlayer: failed to drop old member doc:", err);
+    }
+    return { name: canonicalName, weeksMerged };
   }
 
   // --------------- expose on window ---------------
@@ -504,6 +547,7 @@
     gpAdminRemoveGameFromWeek,
     gpAdminResetPlayerCode,
     gpAdminSyncPlayerName,
+    gpAdminMergeDuplicatePlayer,
     gpAdminPublishWeek,
     gpAdminSetAtsGames,
     gpAdminSetTiebreaker,
