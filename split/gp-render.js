@@ -3777,10 +3777,18 @@ ${saveRow}`;
     const membersList = Array.isArray(leagueMembers) ? leagueMembers : [];
     const membersRowsHTML = membersList.map(m => {
       const { bg, color } = avatarStyle(String(m.name || "Someone"));
+      // Has picks on file in this league but never actually went through
+      // gpJoinLeague (see gpGetAllPickedPlayersForWeeks) — most often a
+      // stray duplicate id from a bad login. Flagged so it doesn't read
+      // as an ordinary member and an admin knows to look at merging it.
+      const notJoinedBadge = m.notJoined
+        ? `<span class="muted" style="font-size:10.5px; font-weight:800; flex:0 0 auto; margin-right:4px;" title="Has picks on file but never joined this league — likely a stray duplicate">not joined</span>`
+        : "";
       return `
       <div class="gpJoinMemberRow">
         <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(m.name))}</div>
         <div class="gpJoinMemberName">${esc(m.name)}</div>
+        ${notJoinedBadge}
         <button class="gpMemberManageBtn" type="button" data-gpaction="openPlayerManage" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" aria-label="Manage ${esc(m.name)}" title="Manage player">⚙️</button>
       </div>`;
     }).join("");
