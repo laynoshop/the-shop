@@ -417,6 +417,47 @@
     return result;
   }
 
+  // ─── repair a player's stored name across past weeks ─────────────────
+  // gpSaveMyPicksBatch stamps whatever name was known at save time onto
+  // every pick doc (parent + each game); a player whose saves ever went
+  // out under a wrong name (see the getPicksDisplayName "Anon" bug) is
+  // stuck showing that wrong name in every already-final week's stats
+  // forever, since nothing else ever re-touches those old docs. This
+  // walks every given week's slate, re-stamping `name` on that player's
+  // parent pick doc and every one of their game docs to match their
+  // current correct name — a one-time repair an admin runs from League
+  // Settings, not something that happens automatically on login/save.
+  async function gpRenamePlayerAcrossWeeks(db, weekIds, playerId, newName) {
+    const pid = String(playerId || "").trim();
+    const nm  = String(newName || "").trim().slice(0, 20);
+    const ids = (Array.isArray(weekIds) ? weekIds : []).map(String).filter(Boolean);
+    if (!pid || !nm || !ids.length) return { weeksTouched: 0 };
+
+    let weeksTouched = 0;
+    for (const wid of ids) {
+      const picksUserRef = db.collection("pickSlates").doc(wid).collection("picks").doc(pid);
+      try {
+        const snap = await picksUserRef.get();
+        if (!snap.exists) continue;
+        let touched = false;
+        if (String(snap.data()?.name || "") !== nm) {
+          await picksUserRef.set({ name: nm }, { merge: true });
+          touched = true;
+        }
+        const gamesSnap = await picksUserRef.collection("games").get();
+        const writes = [];
+        gamesSnap.forEach(doc => {
+          if (String(doc.data()?.name || "") !== nm) writes.push(doc.ref.set({ name: nm }, { merge: true }));
+        });
+        if (writes.length) { await Promise.all(writes); touched = true; }
+        if (touched) weeksTouched++;
+      } catch (err) {
+        console.error(`[GP] gpRenamePlayerAcrossWeeks failed for week ${wid}:`, err);
+      }
+    }
+    return { weeksTouched };
+  }
+
   // ─── everyone's picks cache ─────────────────────────────────────────
   function gpGetAllPicksCacheBucket(weekId) {
     window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
@@ -1047,20 +1088,32 @@
   // but never made a single pick (that week, or ever) silently vanishes
   // from standings instead of showing up with a 0-0 record. This adds
   // exactly those missing rows back in from the league's actual
-  // membership list (gpGetLeagueMembers), matched case-insensitively by
-  // display name since a never-picked member has no pick doc to key off.
+  // membership list (gpGetLeagueMembers).
+  //
+  // Dedup checks playerId FIRST, not just name: a row's `key` is the
+  // player's real uid whenever their picks carried one (see
+  // gpComputeWeeklyLeaderboard), so a player whose historical picks are
+  // stuck under a stale/wrong stored name (e.g. the getPicksDisplayName
+  // "Anon" bug) already has a real row here under their playerId — name
+  // alone would miss that and add a second, hollow zero row for the same
+  // person under their current correct name.
   function gpFillMissingLeagueMembers(rows, leagueMembers) {
     const list = Array.isArray(rows) ? rows.slice() : [];
     const members = Array.isArray(leagueMembers) ? leagueMembers : [];
-    const known = new Set(list.map(r => String(r?.name || "").trim().toLowerCase()));
+    const knownIds   = new Set(list.map(r => String(r?.key || "")).filter(k => k && !k.startsWith("name:")));
+    const knownNames = new Set(list.map(r => String(r?.name || "").trim().toLowerCase()));
     const added = [];
     for (const m of members) {
-      const nm = String(m?.name || "").trim();
+      const pid = String(m?.playerId || "").trim();
+      const nm  = String(m?.name || "").trim();
       const nmLower = nm.toLowerCase();
-      if (!nm || known.has(nmLower)) continue;
-      known.add(nmLower);
+      if (!nm) continue;
+      if (pid && knownIds.has(pid)) continue;
+      if (knownNames.has(nmLower)) continue;
+      knownNames.add(nmLower);
+      if (pid) knownIds.add(pid);
       added.push({
-        key: m.playerId || `name:${nmLower}`,
+        key: pid || `name:${nmLower}`,
         name: nm,
         points: 0, wins: 0, losses: 0, ties: 0, picks: 0,
         dogWins: 0, favWins: 0, weeksPlayed: 0,
@@ -1093,6 +1146,7 @@
     gpGetMyPicksUserDoc,
     gpGetAllPicksForSlate,
     gpSaveMyPicksBatch,
+    gpRenamePlayerAcrossWeeks,
     gpGetAllPicksCacheBucket,
     gpBustAllPicksCache,
     gpEnsureAllPicksForWeek,

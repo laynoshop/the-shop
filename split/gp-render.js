@@ -3673,6 +3673,7 @@ ${saveRow}`;
         <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(m.name))}</div>
         <div class="gpJoinMemberName">${esc(m.name)}</div>
         <button class="smallBtn" type="button" data-gpaction="adminResetPlayerCode" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Reset Code</button>
+        <button class="smallBtn" type="button" data-gpaction="adminSyncPlayerName" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Fix Name</button>
       </div>`;
     }).join("");
     const membersSectionHTML = isEdit ? `
