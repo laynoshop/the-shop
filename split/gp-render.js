@@ -73,15 +73,69 @@
   letter-spacing: 0.005em; text-align: left;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Five equal-width buttons truncating their own labels ("Leag…",
+   "Chan…") was the old approach — replaced with a fixed hierarchy: a
+   ⋮ menu (Leagues/Change Code/Logout, all secondary and infrequent)
+   on the left, Refresh + Save — the two things actually touched every
+   visit — full-width and legible on the right. */
 .gpHeaderActions {
-  display: flex; align-items: stretch; gap: 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
 }
-.gpHeaderActions .gpHeaderBtn {
-  flex: 1 1 0;
-  text-align: center;
-  padding: 10px 6px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.gpHeaderActionsRight {
+  display: flex; align-items: center; gap: 8px;
 }
+.gpHeaderIconBtn {
+  flex: 0 0 auto;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.92);
+  font-size: 18px; line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.gpHeaderIconBtn:active { background: rgba(255,255,255,0.16); transform: scale(0.96); }
+.gpHeaderSaveBtn {
+  flex: 0 0 auto;
+  padding: 10px 24px;
+  border-radius: 12px;
+  font-size: 14.5px; font-weight: 800; letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, #d81f1f, #970d0d);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 6px 16px rgba(187,0,0,0.35);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.gpHeaderSaveBtn:active { transform: scale(0.97); }
+.gpHeaderSaveBtn:disabled {
+  color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+  box-shadow: none;
+  cursor: default;
+}
+
+/* ── Header ⋮ menu overlay (Leagues / Change Code / Logout) ── */
+.gpMenuRow {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%;
+  padding: 14px 6px;
+  background: none; border: none;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.92);
+  font: inherit;
+  font-size: 15px; font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.gpMenuRow:last-child { border-bottom: none; }
+.gpMenuRow:active { background: rgba(255,255,255,0.05); }
+.gpMenuRowIcon { font-size: 19px; flex: 0 0 auto; width: 24px; text-align: center; }
+.gpMenuRowLogout { color: #ff9d9d; }
 
 /* ══════════════════════════════════════════════
    LOADING BLIP — shown while a full render is in flight
@@ -3453,11 +3507,11 @@ ${saveRow}`;
     </div>
   </div>
   <div class="gpHeaderActions">
-    ${showLeaguesBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="showLeaguePicker">Leagues</button>` : ""}
-    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="name">Logout</button>
-    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="openChangeCode">Change Code</button>
-    ${showSaveBtn ? `<button class="smallBtn gpHeaderBtn" type="button" data-gpaction="savePicks" disabled>Save</button>` : ""}
-    <button class="smallBtn gpHeaderBtn" type="button" data-gpaction="refresh">↺</button>
+    <button class="gpHeaderIconBtn" type="button" data-gpaction="openHeaderMenu" data-show-leagues="${showLeaguesBtn ? "1" : "0"}" aria-label="Menu">⋮</button>
+    <div class="gpHeaderActionsRight">
+      <button class="gpHeaderIconBtn" type="button" data-gpaction="refresh" aria-label="Refresh">↺</button>
+      ${showSaveBtn ? `<button class="gpHeaderSaveBtn" type="button" data-gpaction="savePicks" disabled>Save</button>` : ""}
+    </div>
   </div>
 </div>`;
   }
@@ -3732,6 +3786,72 @@ ${saveRow}`;
     if (backdrop) backdrop.remove();
   }
 
+  // ─── Header ⋮ menu overlay ──────────────────────────────────────────
+  // Leagues / Change Code / Logout — every header action besides Save
+  // and Refresh (the two things touched on nearly every visit) moved
+  // here so the header itself never has more than three buttons on it.
+  function gpBuildHeaderMenuOverlayHTML({ showLeaguesBtn }) {
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpHeaderMenuOverlay" role="dialog" aria-modal="true" aria-label="Menu">
+  <div class="gpPicksOverlaySheet" id="gpHeaderMenuOverlaySheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader">
+      <div class="gpOverlayTitle"><div class="gpOverlayName">Menu</div></div>
+      <button class="gpOverlayCloseBtn" id="gpHeaderMenuOverlayClose" aria-label="Close">✕</button>
+    </div>
+    <div class="gpOverlayBody">
+      ${showLeaguesBtn ? `
+      <button class="gpMenuRow" type="button" data-gpaction="showLeaguePicker">
+        <span class="gpMenuRowIcon">🏆</span><span>Leagues</span>
+      </button>` : ""}
+      <button class="gpMenuRow" type="button" data-gpaction="openChangeCode">
+        <span class="gpMenuRowIcon">🔑</span><span>Change Code</span>
+      </button>
+      <button class="gpMenuRow gpMenuRowLogout" type="button" data-gpaction="name">
+        <span class="gpMenuRowIcon">🚪</span><span>Logout</span>
+      </button>
+    </div>
+  </div>
+</div>`;
+  }
+
+  function gpShowHeaderMenuOverlay(showLeaguesBtn) {
+    const existing = document.getElementById("gpHeaderMenuOverlay");
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML("beforeend", gpBuildHeaderMenuOverlayHTML({ showLeaguesBtn }));
+
+    const backdrop = document.getElementById("gpHeaderMenuOverlay");
+    const sheet    = document.getElementById("gpHeaderMenuOverlaySheet");
+    const closeBtn = document.getElementById("gpHeaderMenuOverlayClose");
+    if (!backdrop) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    closeBtn?.addEventListener("click", dismiss);
+    backdrop.addEventListener("click", (e) => {
+      // Outside the sheet, or a menu row that's about to navigate away —
+      // either way the menu shouldn't linger behind whatever comes next.
+      if (!sheet.contains(e.target) || e.target.closest(".gpMenuRow")) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
+  function gpDismissHeaderMenuOverlay() {
+    const backdrop = document.getElementById("gpHeaderMenuOverlay");
+    if (backdrop) backdrop.remove();
+  }
+
   // ─── League settings form (create or edit) ────────────────────────
   function gpBuildLeagueSettingsHTML({ mode, league, registeredPlayers, leagueMembers }) {
     const isEdit = mode === "edit" && league;
@@ -3969,6 +4089,8 @@ ${saveRow}`;
     gpDismissJoinLeagueOverlay,
     gpShowPlayerManageOverlay,
     gpDismissPlayerManageOverlay,
+    gpShowHeaderMenuOverlay,
+    gpDismissHeaderMenuOverlay,
     gpEarliestKickoffMs,
   };
 
