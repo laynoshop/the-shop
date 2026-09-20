@@ -2537,7 +2537,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // ─── Leaderboard ─────────────────────────────────────────────────
   function buildLeaderboardHTML(weekLabel, leaderboard, opts) {
     const { rows, finalsCount } = leaderboard || {};
-    const list  = Array.isArray(rows) ? rows : [];
+    const rawList = Array.isArray(rows) ? rows : [];
 
     // A week can have both straight-up games and one ATS game at once,
     // so the legend always covers every point source rather than
@@ -2572,6 +2572,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   ${scoringFooter}
 </div>`;
     }
+
+    // Once at least one game's gone final, backfill any league member who
+    // never made a single pick this week — otherwise they'd just silently
+    // vanish from the standings instead of showing up with a 0-0 week.
+    const list = (window.GP_Data?.gpFillMissingLeagueMembers || ((r) => r))(rawList, opts?.leagueMembers);
 
     // ── No picks at all ──
     if (!list.length) {
