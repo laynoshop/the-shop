@@ -598,6 +598,10 @@
   // can reach a player even when they were never formally "joined".
   // Cheap: reads only the parent picks/{playerId} docs per week, same as
   // gpGetAllTiebreakersForSlate — no games subcollection fan-out.
+  // weeksPicked lets admin tools tell two same-named identities apart at
+  // a glance — e.g. a duplicate that's really just an empty membership
+  // record (0 weeks) vs. the one actually holding a season's worth of
+  // real picks — since a join date alone doesn't reveal which is which.
   async function gpGetAllPickedPlayersForWeeks(db, weekIds) {
     const ids = (Array.isArray(weekIds) ? weekIds : []).map(String).filter(Boolean);
     const byId = new Map();
@@ -606,13 +610,17 @@
         const snap = await db.collection("pickSlates").doc(wid).collection("picks").get();
         snap.forEach(d => {
           const nm = String(d.data()?.name || "").trim();
-          if (nm) byId.set(d.id, nm);
+          if (!nm) return;
+          const entry = byId.get(d.id) || { name: nm, weeksPicked: 0 };
+          entry.name = nm;
+          entry.weeksPicked += 1;
+          byId.set(d.id, entry);
         });
       } catch (err) {
         console.error(`[GP] gpGetAllPickedPlayersForWeeks failed for week ${wid}:`, err);
       }
     }));
-    return [...byId.entries()].map(([playerId, name]) => ({ playerId, name }));
+    return [...byId.entries()].map(([playerId, { name, weeksPicked }]) => ({ playerId, name, weeksPicked }));
   }
 
   function gpGetTiebreakersCacheBucket(weekId) {

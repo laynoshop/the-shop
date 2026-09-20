@@ -569,10 +569,18 @@
         try {
           const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
           const picked = await (Data().gpGetAllPickedPlayersForWeeks || (async () => []))(db, weekIds);
+          const pickedById = new Map(picked.map(p => [String(p.playerId), p.weeksPicked]));
+          // weeksPicked is attached to EVERY member, joined or not — two
+          // same-named identities (a real duplicate, or a stale
+          // membership record left behind from one) are otherwise
+          // indistinguishable in this list beyond a join date, which
+          // doesn't say anything about which one actually holds real
+          // picks — this does.
+          leagueMembers = leagueMembers.map(m => ({ ...m, weeksPicked: pickedById.get(String(m?.playerId || "")) || 0 }));
           const knownIds = new Set(leagueMembers.map(m => String(m?.playerId || "")));
           const extra = picked
             .filter(p => !knownIds.has(p.playerId))
-            .map(p => ({ playerId: p.playerId, name: p.name, joinedAt: null, notJoined: true }));
+            .map(p => ({ playerId: p.playerId, name: p.name, joinedAt: null, notJoined: true, weeksPicked: p.weeksPicked }));
           if (extra.length) {
             leagueMembers = [...leagueMembers, ...extra].sort((a, b) => String(a.name).localeCompare(String(b.name)));
           }

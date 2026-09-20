@@ -3655,11 +3655,19 @@ ${saveRow}`;
       ? others.map(m => {
           const { bg: b2, color: c2 } = avatarStyle(String(m.name || "Someone"));
           const joined = fmtSavedAt(m.joinedAt);
+          const weeksPicked = Number(m.weeksPicked || 0);
+          // The number that actually matters here: a join date alone
+          // can't tell two same-named rows apart, but "0 weeks" instantly
+          // flags an empty membership record vs. the one holding real
+          // picks — pick that one as "into" by mistake and the merge
+          // silently moves nothing.
+          const weeksLabel = `<div class="muted" style="font-size:11px; font-weight:900; flex:0 0 auto;">${weeksPicked} week${weeksPicked === 1 ? "" : "s"} picked</div>`;
           return `
       <button class="gpJoinMemberRow gpMergeTargetRow" type="button" data-gpaction="adminMergePlayerPick" data-playerid="${esc(playerId)}" data-name="${esc(nm)}" data-intoid="${esc(m.playerId)}" data-intoname="${esc(m.name)}">
         <div class="gpJoinMemberAvatar" style="background:${b2};color:${c2}">${esc(initials(m.name))}</div>
         <div class="gpJoinMemberName">${esc(m.name)}</div>
-        ${joined ? `<div class="muted" style="font-size:11px; flex:0 0 auto;">joined ${esc(joined)}</div>` : ""}
+        ${weeksLabel}
+        ${joined ? `<div class="muted" style="font-size:10px; flex:0 0 auto;">joined ${esc(joined)}</div>` : ""}
       </button>`;
         }).join("")
       : `<div class="gpJoinMembersEmpty">No other players to merge into.</div>`;
@@ -3775,6 +3783,15 @@ ${saveRow}`;
     // Who has actually joined this league — admin-only visibility, using
     // the same avatar/name row styling as the player-facing Join overlay.
     const membersList = Array.isArray(leagueMembers) ? leagueMembers : [];
+    // A name shared by more than one row is exactly the ambiguous case
+    // (a real duplicate, or a stale empty membership record left behind
+    // from one) where "how many weeks does this ID actually have picks
+    // for" is the one thing that actually disambiguates them.
+    const nameCounts = new Map();
+    membersList.forEach(m => {
+      const key = String(m.name || "").trim().toLowerCase();
+      nameCounts.set(key, (nameCounts.get(key) || 0) + 1);
+    });
     const membersRowsHTML = membersList.map(m => {
       const { bg, color } = avatarStyle(String(m.name || "Someone"));
       // Has picks on file in this league but never actually went through
@@ -3784,10 +3801,15 @@ ${saveRow}`;
       const notJoinedBadge = m.notJoined
         ? `<span class="muted" style="font-size:10.5px; font-weight:800; flex:0 0 auto; margin-right:4px;" title="Has picks on file but never joined this league — likely a stray duplicate">not joined</span>`
         : "";
+      const isDuplicateName = nameCounts.get(String(m.name || "").trim().toLowerCase()) > 1;
+      const weeksBadge = isDuplicateName
+        ? `<span class="muted" style="font-size:10.5px; font-weight:800; flex:0 0 auto; margin-right:4px;" title="How many weeks this specific id has picks on file for">${Number(m.weeksPicked || 0)}wk</span>`
+        : "";
       return `
       <div class="gpJoinMemberRow">
         <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(m.name))}</div>
         <div class="gpJoinMemberName">${esc(m.name)}</div>
+        ${weeksBadge}
         ${notJoinedBadge}
         <button class="gpMemberManageBtn" type="button" data-gpaction="openPlayerManage" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" aria-label="Manage ${esc(m.name)}" title="Manage player">⚙️</button>
       </div>`;
