@@ -222,7 +222,11 @@
     // underdog bonus for any game whose favorite wasn't captured at
     // add-time — bumped so those stale, wrong cached rows get dropped
     // instead of lingering in players' browsers forever.
-    return `theShopGpSeasonWeekCache_v2_${weekId}`;
+    // v3: earlier versions could cache a player's name wrong forever (see
+    // gpSaveMyPicksBatch's old "Anon" bug) — bumped again so every
+    // browser drops its frozen cache and re-fetches from Firestore,
+    // picking up whatever gpRenamePlayerAcrossWeeks corrects there.
+    return `theShopGpSeasonWeekCache_v3_${weekId}`;
   }
   async function gpLoadSeasonLeaderboard(db, league) {
     const allWeeks = Array.isArray(league?.weeks) ? league.weeks : [];
@@ -1425,6 +1429,34 @@
       } catch (err) {
         console.error("[GP] adminResetPlayerCode failed:", err);
         alert(err?.message || "Something went wrong resetting the code.");
+      }
+      btn.disabled = false; btn.textContent = origLabel;
+      return;
+    }
+
+    // ── admin: re-stamp a player's stored name across past weeks ──
+    // Fixes a player who got saved under a wrong name (see gp-data.js's
+    // gpSaveMyPicksBatch/gpRenamePlayerAcrossWeeks) — their stats are
+    // still there, just filed under the old name in already-final weeks.
+    if (action === "adminSyncPlayerName") {
+      const pid = String(btn.getAttribute("data-playerid") || "").trim();
+      const nm  = String(btn.getAttribute("data-name") || "").trim();
+      if (!pid || !nm) return;
+      if (!confirm(`Re-sync ${nm}'s name across every past week in this league?\n\nThis fixes their old stats if they were ever saved under a different/wrong name.`)) return;
+      const origLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = "Syncing…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const mem2 = gpMem();
+        const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
+        let league = null;
+        try { league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId); } catch {}
+        const { name: fixedName, weeksTouched } = await (Admin().gpAdminSyncPlayerName || (async () => ({})))(db2, league, pid);
+        alert(`Synced — "${fixedName}" is now correct across ${weeksTouched} past week${weeksTouched === 1 ? "" : "s"}. Refresh to see it reflected in standings.`);
+      } catch (err) {
+        console.error("[GP] adminSyncPlayerName failed:", err);
+        alert(err?.message || "Something went wrong syncing the name.");
       }
       btn.disabled = false; btn.textContent = origLabel;
       return;

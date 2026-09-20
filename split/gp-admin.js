@@ -471,6 +471,30 @@
     return tempCode;
   }
 
+  // --------------- admin: sync a player's stored name across past weeks ---------------
+  // A save always stamps whatever name was known at the time onto that
+  // week's pick docs, so a player who was ever saved under a wrong name
+  // (see gp-data.js's gpSaveMyPicksBatch/gpRenamePlayerAcrossWeeks) is
+  // stuck showing it in every already-final week's stats — nothing else
+  // ever re-touches those old docs. This re-stamps every one of their
+  // past pick docs in the given league to match their current, correct
+  // name (players/{playerId}.name — kept up to date on every login).
+  async function gpAdminSyncPlayerName(db, league, playerId) {
+    const pid = String(playerId || "").trim();
+    if (!pid) throw new Error("Missing player.");
+    const getPlayerDoc         = window.GP_Data?.gpGetPlayerDoc;
+    const renamePlayerAcrossWeeks = window.GP_Data?.gpRenamePlayerAcrossWeeks;
+    if (typeof getPlayerDoc !== "function" || typeof renamePlayerAcrossWeeks !== "function") {
+      throw new Error("Required module not loaded — refresh and try again.");
+    }
+    const playerDoc = await getPlayerDoc(db, pid);
+    const correctName = String(playerDoc?.name || "").trim();
+    if (!correctName) throw new Error("Player not found.");
+    const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
+    const { weeksTouched } = await renamePlayerAcrossWeeks(db, weekIds, pid, correctName);
+    return { name: correctName, weeksTouched };
+  }
+
   // --------------- expose on window ---------------
   window.GP_Admin = {
     gpCreateLeague,
@@ -479,6 +503,7 @@
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,
     gpAdminResetPlayerCode,
+    gpAdminSyncPlayerName,
     gpAdminPublishWeek,
     gpAdminSetAtsGames,
     gpAdminSetTiebreaker,
