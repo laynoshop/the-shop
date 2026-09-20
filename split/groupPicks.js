@@ -1552,9 +1552,10 @@
           btn.disabled = false;
           return;
         }
-        const { name: fixedName, weeksMerged } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid, intoName);
+        const { name: fixedName, weeksMerged, perWeek } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid, intoName);
         (Render().gpDismissPlayerManageOverlay || (() => {}))();
-        alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.`);
+        const breakdown = Array.isArray(perWeek) && perWeek.length ? `\n\n${perWeek.join("\n")}` : "";
+        alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.${breakdown}\n\nfrom: ${fromPid}\ninto: ${intoPid}`);
         await renderPicks();
         return;
       } catch (err) {
