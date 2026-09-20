@@ -587,6 +587,34 @@
     return out;
   }
 
+  // ─── every player who's ever saved a pick, across a set of weeks ─────
+  // League membership (gpGetLeagueMembers) and actually having picks on
+  // file (pickSlates/{weekId}/picks) are two separate things that can
+  // drift apart — e.g. a duplicate playerId created by a bad login never
+  // went through gpJoinLeague, so it has real stats (and shows up in
+  // standings) but is invisible in League Settings' Joined Players list,
+  // which only reads league membership. This derives the roster from the
+  // picks themselves instead, so admin tools (Manage Player, Merge Into)
+  // can reach a player even when they were never formally "joined".
+  // Cheap: reads only the parent picks/{playerId} docs per week, same as
+  // gpGetAllTiebreakersForSlate — no games subcollection fan-out.
+  async function gpGetAllPickedPlayersForWeeks(db, weekIds) {
+    const ids = (Array.isArray(weekIds) ? weekIds : []).map(String).filter(Boolean);
+    const byId = new Map();
+    await Promise.all(ids.map(async (wid) => {
+      try {
+        const snap = await db.collection("pickSlates").doc(wid).collection("picks").get();
+        snap.forEach(d => {
+          const nm = String(d.data()?.name || "").trim();
+          if (nm) byId.set(d.id, nm);
+        });
+      } catch (err) {
+        console.error(`[GP] gpGetAllPickedPlayersForWeeks failed for week ${wid}:`, err);
+      }
+    }));
+    return [...byId.entries()].map(([playerId, name]) => ({ playerId, name }));
+  }
+
   function gpGetTiebreakersCacheBucket(weekId) {
     window.__GP_TIEBREAKERS_CACHE = window.__GP_TIEBREAKERS_CACHE || {};
     const k = String(weekId || "");
@@ -1216,6 +1244,7 @@
     gpBustAllPicksCache,
     gpEnsureAllPicksForWeek,
     gpGetAllTiebreakersForSlate,
+    gpGetAllPickedPlayersForWeeks,
     gpEnsureTiebreakersForWeek,
     gpBustTiebreakersCache,
     gpComputeWeeklyLeaderboard,

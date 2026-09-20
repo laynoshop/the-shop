@@ -559,6 +559,25 @@
           isEdit ? (Data().gpGetLeagueMembers || (async () => []))(db, mem.gpLeagueEditingId) : Promise.resolve([]),
         ]);
       } catch {}
+      // League membership and actually having picks on file can drift
+      // apart (e.g. a duplicate playerId from a bad login never went
+      // through gpJoinLeague) — union in anyone with picks in any of
+      // this league's weeks so they're still reachable from League
+      // Settings' admin tools (Manage Player, Merge Into) even though
+      // they were never formally "joined".
+      if (isEdit) {
+        try {
+          const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
+          const picked = await (Data().gpGetAllPickedPlayersForWeeks || (async () => []))(db, weekIds);
+          const knownIds = new Set(leagueMembers.map(m => String(m?.playerId || "")));
+          const extra = picked
+            .filter(p => !knownIds.has(p.playerId))
+            .map(p => ({ playerId: p.playerId, name: p.name, joinedAt: null, notJoined: true }));
+          if (extra.length) {
+            leagueMembers = [...leagueMembers, ...extra].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+          }
+        } catch {}
+      }
       // Stashed so the Manage Player overlay (opened from a ⚙️ tap) can
       // reuse this same member list — it needs every OTHER member as
       // merge-target candidates without a re-fetch.
