@@ -559,6 +559,10 @@
           isEdit ? (Data().gpGetLeagueMembers || (async () => []))(db, mem.gpLeagueEditingId) : Promise.resolve([]),
         ]);
       } catch {}
+      // Stashed so the Manage Player overlay (opened from a ⚙️ tap) can
+      // reuse this same member list — it needs every OTHER member as
+      // merge-target candidates without a re-fetch.
+      mem.gpLeagueSettingsMembersCache = leagueMembers;
       const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
         leagueName: league?.name || "", isAdmin, showLeaguesBtn: !!gpGetSelectedLeagueId(), playerName: name
       });
@@ -1463,45 +1467,54 @@
       return;
     }
 
-    // ── admin: merge a duplicate player into another ──
+    // ── admin: open the Manage Player overlay from a Joined Players row ──
+    // Every per-player admin action (Reset Code, Fix Name, Merge Into…)
+    // used to be its own button on the row, which left no room for the
+    // player's own name once a league had more than a couple members.
+    if (action === "openPlayerManage") {
+      const pid = String(btn.getAttribute("data-playerid") || "").trim();
+      const nm  = String(btn.getAttribute("data-name") || "").trim();
+      if (!pid || !nm) return;
+      const membersList = gpMem().gpLeagueSettingsMembersCache || [];
+      const otherMembers = membersList.filter(m => String(m?.playerId || "") !== pid);
+      (Render().gpShowPlayerManageOverlay || (() => {}))(pid, nm, otherMembers);
+      return;
+    }
+
+    // ── admin: merge a duplicate player into another (tap a specific
+    //    row from the Manage Player overlay's candidate list) ──
     // For when the same real person somehow ended up with two different
     // logins/playerIds (e.g. a reset-code login that derived a fresh id
     // instead of finding the original) — "Fix Name" only corrects a
     // stored name and can't combine two different ids' stats, since
-    // standings group by playerId.
-    if (action === "adminMergePlayer") {
-      const fromPid  = String(btn.getAttribute("data-playerid") || "").trim();
-      const fromName = String(btn.getAttribute("data-name") || "").trim();
-      if (!fromPid || !fromName) return;
-      const targetNameRaw = prompt(`Merge "${fromName}" into which OTHER player's name?\n\nType that player's name exactly as it appears in this league. This moves all of "${fromName}"'s picks/points onto them and removes "${fromName}" as a separate entry — use this when the same person accidentally ended up with two logins.`);
-      if (targetNameRaw == null) return;
-      const targetName = targetNameRaw.trim();
-      if (!targetName) return;
-      if (targetName.toLowerCase() === fromName.toLowerCase()) {
-        alert("Pick a different player to merge into.");
-        return;
-      }
-      if (!confirm(`Merge "${fromName}" into "${targetName}"?\n\nThis cannot be undone — "${fromName}" will be removed as a separate player and all their picks will count under "${targetName}" instead.`)) return;
-      const origLabel = btn.textContent;
-      btn.disabled = true; btn.textContent = "Merging…";
+    // standings group by playerId. Tapping a specific row (rather than
+    // typing a name back in) is what makes this work even when the
+    // duplicate shares the exact same display name as its target.
+    if (action === "adminMergePlayerPick") {
+      const fromPid    = String(btn.getAttribute("data-playerid") || "").trim();
+      const fromName   = String(btn.getAttribute("data-name")     || "").trim();
+      const intoPid    = String(btn.getAttribute("data-intoid")   || "").trim();
+      const intoName   = String(btn.getAttribute("data-intoname") || "").trim();
+      if (!fromPid || !intoPid) return;
+      if (!confirm(`Merge "${fromName}" into "${intoName}"?\n\nThis cannot be undone — "${fromName}" will be removed as a separate player and all their picks will count under "${intoName}" instead.`)) return;
+      btn.disabled = true;
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
-        const intoPid = await (Data().gpFindPlayerIdByName || (async () => null))(db2, targetName);
-        if (!intoPid) { alert(`Couldn't find a player named "${targetName}".`); btn.disabled = false; btn.textContent = origLabel; return; }
         const mem2 = gpMem();
         const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
         let league = null;
         try { league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId); } catch {}
         const { name: fixedName, weeksMerged } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid);
+        (Render().gpDismissPlayerManageOverlay || (() => {}))();
         alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.`);
         await renderPicks();
         return;
       } catch (err) {
-        console.error("[GP] adminMergePlayer failed:", err);
+        console.error("[GP] adminMergePlayerPick failed:", err);
         alert(err?.message || "Something went wrong merging the player.");
       }
-      btn.disabled = false; btn.textContent = origLabel;
+      btn.disabled = false;
       return;
     }
 

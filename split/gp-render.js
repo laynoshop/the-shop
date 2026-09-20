@@ -1598,6 +1598,27 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpJoinMemberName {
   font-size: 13.5px; font-weight: 800; color: rgba(255,255,255,0.85);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1 1 auto; min-width: 0;
+}
+.gpMemberManageBtn {
+  flex: 0 0 auto;
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+}
+.gpMergeTargetRow {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.gpMergeTargetRow:hover {
+  background: rgba(255,255,255,0.07);
 }
 .gpJoinMembersEmpty {
   padding: 22px 14px; text-align: center; border-radius: 14px;
@@ -3615,6 +3636,94 @@ ${saveRow}`;
     if (backdrop) backdrop.remove();
   }
 
+  // ─── Manage Player overlay ──────────────────────────────────────────
+  // Joined Players rows used to carry three buttons apiece (Reset Code,
+  // Fix Name, Merge Into…), which left no room for the player's own name
+  // once a league had more than a couple members. This tucks all three
+  // behind a single ⚙️ per row.
+  //
+  // Merge Into used to be a typed-name prompt — broken by construction
+  // for the exact case it exists to fix: two rows sharing the identical
+  // display name (a duplicate player) can't be told apart by typing that
+  // name back in. Tapping a specific row here is unambiguous regardless
+  // of name collisions.
+  function gpBuildPlayerManageOverlayHTML({ playerId, name, otherMembers }) {
+    const nm = String(name || "Someone");
+    const { bg, color } = avatarStyle(nm);
+    const others = Array.isArray(otherMembers) ? otherMembers : [];
+    const mergeRowsHTML = others.length
+      ? others.map(m => {
+          const { bg: b2, color: c2 } = avatarStyle(String(m.name || "Someone"));
+          const joined = fmtSavedAt(m.joinedAt);
+          return `
+      <button class="gpJoinMemberRow gpMergeTargetRow" type="button" data-gpaction="adminMergePlayerPick" data-playerid="${esc(playerId)}" data-name="${esc(nm)}" data-intoid="${esc(m.playerId)}" data-intoname="${esc(m.name)}">
+        <div class="gpJoinMemberAvatar" style="background:${b2};color:${c2}">${esc(initials(m.name))}</div>
+        <div class="gpJoinMemberName">${esc(m.name)}</div>
+        ${joined ? `<div class="muted" style="font-size:11px; flex:0 0 auto;">joined ${esc(joined)}</div>` : ""}
+      </button>`;
+        }).join("")
+      : `<div class="gpJoinMembersEmpty">No other players to merge into.</div>`;
+
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpPlayerManageOverlay" role="dialog" aria-modal="true" aria-label="Manage ${esc(nm)}">
+  <div class="gpPicksOverlaySheet" id="gpPlayerManageOverlaySheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader">
+      <div class="gpOverlayTitle">
+        <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
+        <div>
+          <div class="gpOverlayName">${esc(nm)}</div>
+          <div class="gpOverlaySubtitle">Manage player</div>
+        </div>
+      </div>
+      <button class="gpOverlayCloseBtn" id="gpPlayerManageOverlayClose" aria-label="Close">✕</button>
+    </div>
+    <div class="gpOverlayBody">
+      <button class="smallBtn" type="button" style="width:100%; margin-bottom:8px;" data-gpaction="adminResetPlayerCode" data-playerid="${esc(playerId)}" data-name="${esc(nm)}">Reset Code</button>
+      <button class="smallBtn" type="button" style="width:100%; margin-bottom:18px;" data-gpaction="adminSyncPlayerName" data-playerid="${esc(playerId)}" data-name="${esc(nm)}">Fix Name</button>
+
+      <div class="gpJoinMembersLabel">Merge &#8220;${esc(nm)}&#8221; into&hellip;</div>
+      <div class="gpJoinMembersList">${mergeRowsHTML}</div>
+    </div>
+  </div>
+</div>`;
+  }
+
+  function gpShowPlayerManageOverlay(playerId, name, otherMembers) {
+    const existing = document.getElementById("gpPlayerManageOverlay");
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML("beforeend", gpBuildPlayerManageOverlayHTML({ playerId, name, otherMembers }));
+
+    const backdrop = document.getElementById("gpPlayerManageOverlay");
+    const sheet    = document.getElementById("gpPlayerManageOverlaySheet");
+    const closeBtn = document.getElementById("gpPlayerManageOverlayClose");
+    if (!backdrop) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    closeBtn?.addEventListener("click", dismiss);
+    backdrop.addEventListener("click", (e) => {
+      if (!sheet.contains(e.target)) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
+  function gpDismissPlayerManageOverlay() {
+    const backdrop = document.getElementById("gpPlayerManageOverlay");
+    if (backdrop) backdrop.remove();
+  }
+
   // ─── League settings form (create or edit) ────────────────────────
   function gpBuildLeagueSettingsHTML({ mode, league, registeredPlayers, leagueMembers }) {
     const isEdit = mode === "edit" && league;
@@ -3672,9 +3781,7 @@ ${saveRow}`;
       <div class="gpJoinMemberRow">
         <div class="gpJoinMemberAvatar" style="background:${bg};color:${color}">${esc(initials(m.name))}</div>
         <div class="gpJoinMemberName">${esc(m.name)}</div>
-        <button class="smallBtn" type="button" data-gpaction="adminResetPlayerCode" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Reset Code</button>
-        <button class="smallBtn" type="button" data-gpaction="adminSyncPlayerName" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Fix Name</button>
-        <button class="smallBtn" type="button" data-gpaction="adminMergePlayer" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" style="flex:0 0 auto;">Merge Into…</button>
+        <button class="gpMemberManageBtn" type="button" data-gpaction="openPlayerManage" data-playerid="${esc(m.playerId)}" data-name="${esc(m.name)}" aria-label="Manage ${esc(m.name)}" title="Manage player">⚙️</button>
       </div>`;
     }).join("");
     const membersSectionHTML = isEdit ? `
@@ -3830,6 +3937,8 @@ ${saveRow}`;
     gpBuildJoinLeagueOverlayHTML,
     gpShowJoinLeagueOverlay,
     gpDismissJoinLeagueOverlay,
+    gpShowPlayerManageOverlay,
+    gpDismissPlayerManageOverlay,
     gpEarliestKickoffMs,
   };
 
