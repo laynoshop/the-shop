@@ -1452,11 +1452,54 @@
         const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
         let league = null;
         try { league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId); } catch {}
-        const { name: fixedName, weeksTouched } = await (Admin().gpAdminSyncPlayerName || (async () => ({})))(db2, league, pid);
-        alert(`Synced — "${fixedName}" is now correct across ${weeksTouched} past week${weeksTouched === 1 ? "" : "s"}. Refresh to see it reflected in standings.`);
+        const { name: fixedName, weeksTouched, perWeek } = await (Admin().gpAdminSyncPlayerName || (async () => ({})))(db2, league, pid);
+        const breakdown = Array.isArray(perWeek) && perWeek.length ? `\n\n${perWeek.join("\n")}` : "";
+        alert(`Synced — "${fixedName}" is now correct across ${weeksTouched} past week${weeksTouched === 1 ? "" : "s"}. Refresh to see it reflected in standings.${breakdown}`);
       } catch (err) {
         console.error("[GP] adminSyncPlayerName failed:", err);
         alert(err?.message || "Something went wrong syncing the name.");
+      }
+      btn.disabled = false; btn.textContent = origLabel;
+      return;
+    }
+
+    // ── admin: merge a duplicate player into another ──
+    // For when the same real person somehow ended up with two different
+    // logins/playerIds (e.g. a reset-code login that derived a fresh id
+    // instead of finding the original) — "Fix Name" only corrects a
+    // stored name and can't combine two different ids' stats, since
+    // standings group by playerId.
+    if (action === "adminMergePlayer") {
+      const fromPid  = String(btn.getAttribute("data-playerid") || "").trim();
+      const fromName = String(btn.getAttribute("data-name") || "").trim();
+      if (!fromPid || !fromName) return;
+      const targetNameRaw = prompt(`Merge "${fromName}" into which OTHER player's name?\n\nType that player's name exactly as it appears in this league. This moves all of "${fromName}"'s picks/points onto them and removes "${fromName}" as a separate entry — use this when the same person accidentally ended up with two logins.`);
+      if (targetNameRaw == null) return;
+      const targetName = targetNameRaw.trim();
+      if (!targetName) return;
+      if (targetName.toLowerCase() === fromName.toLowerCase()) {
+        alert("Pick a different player to merge into.");
+        return;
+      }
+      if (!confirm(`Merge "${fromName}" into "${targetName}"?\n\nThis cannot be undone — "${fromName}" will be removed as a separate player and all their picks will count under "${targetName}" instead.`)) return;
+      const origLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = "Merging…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const intoPid = await (Data().gpFindPlayerIdByName || (async () => null))(db2, targetName);
+        if (!intoPid) { alert(`Couldn't find a player named "${targetName}".`); btn.disabled = false; btn.textContent = origLabel; return; }
+        const mem2 = gpMem();
+        const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
+        let league = null;
+        try { league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId); } catch {}
+        const { name: fixedName, weeksMerged } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid);
+        alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.`);
+        await renderPicks();
+        return;
+      } catch (err) {
+        console.error("[GP] adminMergePlayer failed:", err);
+        alert(err?.message || "Something went wrong merging the player.");
       }
       btn.disabled = false; btn.textContent = origLabel;
       return;

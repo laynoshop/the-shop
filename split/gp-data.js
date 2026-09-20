@@ -431,14 +431,15 @@
     const pid = String(playerId || "").trim();
     const nm  = String(newName || "").trim().slice(0, 20);
     const ids = (Array.isArray(weekIds) ? weekIds : []).map(String).filter(Boolean);
-    if (!pid || !nm || !ids.length) return { weeksTouched: 0 };
+    if (!pid || !nm || !ids.length) return { weeksTouched: 0, details: [] };
 
     let weeksTouched = 0;
+    const details = [];
     for (const wid of ids) {
       const picksUserRef = db.collection("pickSlates").doc(wid).collection("picks").doc(pid);
       try {
         const snap = await picksUserRef.get();
-        if (!snap.exists) continue;
+        if (!snap.exists) { details.push({ weekId: wid, existed: false, touched: false }); continue; }
         let touched = false;
         if (String(snap.data()?.name || "") !== nm) {
           await picksUserRef.set({ name: nm }, { merge: true });
@@ -451,11 +452,74 @@
         });
         if (writes.length) { await Promise.all(writes); touched = true; }
         if (touched) weeksTouched++;
+        details.push({ weekId: wid, existed: true, touched });
       } catch (err) {
         console.error(`[GP] gpRenamePlayerAcrossWeeks failed for week ${wid}:`, err);
+        details.push({ weekId: wid, existed: null, touched: false, error: String(err?.message || err) });
       }
     }
-    return { weeksTouched };
+    return { weeksTouched, details };
+  }
+
+  // ─── merge one player's picks into another's ─────────────────────────
+  // Renaming alone (gpRenamePlayerAcrossWeeks) only fixes a wrong stored
+  // *name* — it can't fix two genuinely different playerIds that both
+  // belong to the same real person (e.g. a login that, for whatever
+  // reason, derived a fresh id instead of reusing the original one after
+  // a code reset), because standings group by uid, not name. This moves
+  // `fromPlayerId`'s picks onto `intoPlayerId` week by week: any game
+  // `intoPlayerId` doesn't already have a pick for gets `fromPlayerId`'s
+  // copied over (re-stamped with the correct name/uid); anything
+  // `intoPlayerId` already has is left alone (treated as the more
+  // authoritative copy); `fromPlayerId`'s docs are then deleted so they
+  // stop appearing as a second row. Irreversible — the caller confirms.
+  async function gpMergePlayerInto(db, weekIds, fromPlayerId, intoPlayerId, canonicalName) {
+    const fromPid = String(fromPlayerId || "").trim();
+    const intoPid = String(intoPlayerId || "").trim();
+    const nm = String(canonicalName || "").trim().slice(0, 20);
+    const ids = (Array.isArray(weekIds) ? weekIds : []).map(String).filter(Boolean);
+    if (!fromPid || !intoPid || fromPid === intoPid || !ids.length) return { weeksMerged: 0 };
+
+    let weeksMerged = 0;
+    for (const wid of ids) {
+      const fromRef = db.collection("pickSlates").doc(wid).collection("picks").doc(fromPid);
+      const intoRef = db.collection("pickSlates").doc(wid).collection("picks").doc(intoPid);
+      try {
+        const fromSnap = await fromRef.get();
+        if (!fromSnap.exists) continue;
+        const intoSnap = await intoRef.get();
+        const fromData = fromSnap.data() || {};
+        const intoData = intoSnap.exists ? (intoSnap.data() || {}) : {};
+
+        const parentPatch = { uid: intoPid, name: nm || intoData.name || fromData.name || "Someone" };
+        if (intoData.tiebreakerGuess == null && fromData.tiebreakerGuess != null) {
+          parentPatch.tiebreakerGuess = fromData.tiebreakerGuess;
+          parentPatch.tiebreakerUpdatedAt = fromData.tiebreakerUpdatedAt || firebase.firestore.FieldValue.serverTimestamp();
+        }
+        await intoRef.set(parentPatch, { merge: true });
+
+        const fromGamesSnap = await fromRef.collection("games").get();
+        const writes = [];
+        for (const doc of fromGamesSnap.docs) {
+          const intoGameRef = intoRef.collection("games").doc(doc.id);
+          const intoGameSnap = await intoGameRef.get();
+          if (!intoGameSnap.exists) {
+            const fd = doc.data() || {};
+            writes.push(intoGameRef.set({
+              uid: intoPid, name: nm || fd.name || "Someone", side: fd.side || "",
+              updatedAt: fd.updatedAt || firebase.firestore.FieldValue.serverTimestamp(),
+            }, { merge: true }));
+          }
+          writes.push(doc.ref.delete());
+        }
+        if (writes.length) await Promise.all(writes);
+        await fromRef.delete();
+        weeksMerged++;
+      } catch (err) {
+        console.error(`[GP] gpMergePlayerInto failed for week ${wid}:`, err);
+      }
+    }
+    return { weeksMerged };
   }
 
   // ─── everyone's picks cache ─────────────────────────────────────────
@@ -1147,6 +1211,7 @@
     gpGetAllPicksForSlate,
     gpSaveMyPicksBatch,
     gpRenamePlayerAcrossWeeks,
+    gpMergePlayerInto,
     gpGetAllPicksCacheBucket,
     gpBustAllPicksCache,
     gpEnsureAllPicksForWeek,
