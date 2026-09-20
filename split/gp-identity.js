@@ -175,11 +175,11 @@
         </div>
 
         <div class="gameMetaTopLine" style="margin-top:10px; font-weight:950;">
-          Enter your name and a code
+          Enter your name and a password
         </div>
 
         <div class="muted" style="margin-top:8px; font-weight:800;">
-          Use the same name + code on any phone to be the same player.
+          Use the same name + password on any phone to be the same player.
         </div>
 
         <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
@@ -210,7 +210,7 @@
           </div>
 
           <div>
-            <div class="muted" style="font-weight:900; margin-bottom:6px;">Player Code</div>
+            <div class="muted" style="font-weight:900; margin-bottom:6px;">Password</div>
             <input
               id="gpIdCode"
               type="password"
@@ -265,10 +265,10 @@
   // logged in, no admin involved). Only the copy differs.
   function gpBuildChangeCodeGateHTML({ forced, name } = {}) {
     const nm = gpNormalizeName(name || "");
-    const title = forced ? "Set your own code" : "Change your code";
+    const title = forced ? "Set your own password" : "Change your password";
     const blurb = forced
-      ? "You logged in with a temporary code — set a permanent one only you know."
-      : "Pick a new code. You'll use it (with your name) to log in from any device.";
+      ? "You logged in with a temporary password — set a permanent one only you know."
+      : "Pick a new password. You'll use it (with your name) to log in from any device.";
     return `
       <div class="game" style="
         margin-top:12px;
@@ -278,7 +278,7 @@
         border:1px solid rgba(255,255,255,0.08);
       ">
         <div class="gameHeader">
-          <div class="statusPill status-other">${forced ? "TEMPORARY CODE" : "CHANGE CODE"}</div>
+          <div class="statusPill status-other">${forced ? "TEMPORARY PASSWORD" : "CHANGE PASSWORD"}</div>
         </div>
 
         <div class="gameMetaTopLine" style="margin-top:10px; font-weight:950;">
@@ -291,7 +291,7 @@
 
         <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
           <div>
-            <div class="muted" style="font-weight:900; margin-bottom:6px;">New Code</div>
+            <div class="muted" style="font-weight:900; margin-bottom:6px;">New Password</div>
             <input
               id="gpNewCode"
               type="password"
@@ -300,6 +300,31 @@
               autocapitalize="none"
               spellcheck="false"
               placeholder="Make something you'll remember"
+              style="
+                width:100%;
+                box-sizing:border-box;
+                padding:14px 14px;
+                border-radius:16px;
+                background:rgba(0,0,0,0.18);
+                border:1px solid rgba(255,255,255,0.12);
+                color:inherit;
+                font-weight:850;
+                font-size:16px;
+                outline:none;
+              "
+            />
+          </div>
+
+          <div>
+            <div class="muted" style="font-weight:900; margin-bottom:6px;">Confirm New Password</div>
+            <input
+              id="gpNewCodeConfirm"
+              type="password"
+              inputmode="text"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              placeholder="Type it again"
               style="
                 width:100%;
                 box-sizing:border-box;

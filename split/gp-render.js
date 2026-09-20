@@ -3741,7 +3741,7 @@ ${saveRow}`;
       <button class="gpOverlayCloseBtn" id="gpPlayerManageOverlayClose" aria-label="Close">✕</button>
     </div>
     <div class="gpOverlayBody">
-      <button class="smallBtn" type="button" style="width:100%; margin-bottom:8px;" data-gpaction="adminResetPlayerCode" data-playerid="${esc(playerId)}" data-name="${esc(nm)}">Reset Code</button>
+      <button class="smallBtn" type="button" style="width:100%; margin-bottom:8px;" data-gpaction="adminResetPlayerCode" data-playerid="${esc(playerId)}" data-name="${esc(nm)}">Reset Password</button>
       <button class="smallBtn" type="button" style="width:100%; margin-bottom:18px;" data-gpaction="adminSyncPlayerName" data-playerid="${esc(playerId)}" data-name="${esc(nm)}">Fix Name</button>
 
       <div class="gpJoinMembersLabel">Merge &#8220;${esc(nm)}&#8221; into&hellip;</div>
@@ -3805,7 +3805,7 @@ ${saveRow}`;
         <span class="gpMenuRowIcon">🏆</span><span>Leagues</span>
       </button>` : ""}
       <button class="gpMenuRow" type="button" data-gpaction="openChangeCode">
-        <span class="gpMenuRowIcon">🔑</span><span>Change Code</span>
+        <span class="gpMenuRowIcon">🔑</span><span>Change Password</span>
       </button>
       <button class="gpMenuRow gpMenuRowLogout" type="button" data-gpaction="name">
         <span class="gpMenuRowIcon">🚪</span><span>Logout</span>
