@@ -163,91 +163,56 @@
     const rem = (rememberChecked !== false);
 
     return `
-      <div class="game" style="
-        margin-top:12px;
-        padding:14px;
-        border-radius:22px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.08);
-      ">
-        <div class="gameHeader">
-          <div class="statusPill status-other">PICKS IDENTITY</div>
-        </div>
+      <div class="gpAuthWrap">
+        <div class="gpAuthCard">
+          <div class="gpAuthIconBadge">🏈</div>
+          <div class="gpAuthEyebrow">Pick&#8217;em Login</div>
+          <div class="gpAuthTitle">Enter your name and password</div>
+          <div class="gpAuthBlurb">Use the same name and password on any phone to be the same player.</div>
 
-        <div class="gameMetaTopLine" style="margin-top:10px; font-weight:950;">
-          Enter your name and a password
-        </div>
+          <div class="gpAuthFields">
+            <div class="gpAuthField">
+              <div class="gpAuthLabel">Display Name</div>
+              <input
+                id="gpIdName"
+                class="gpAuthInput"
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                autocapitalize="words"
+                spellcheck="false"
+                value="${esc(nm)}"
+                placeholder="Example: Victor"
+              />
+            </div>
 
-        <div class="muted" style="margin-top:8px; font-weight:800;">
-          Use the same name + password on any phone to be the same player.
-        </div>
-
-        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          <div>
-            <div class="muted" style="font-weight:900; margin-bottom:6px;">Display Name</div>
-            <input
-              id="gpIdName"
-              type="text"
-              inputmode="text"
-              autocomplete="off"
-              autocapitalize="words"
-              spellcheck="false"
-              value="${esc(nm)}"
-              placeholder="Example: Victor"
-              style="
-                width:100%;
-                box-sizing:border-box;
-                padding:14px 14px;
-                border-radius:16px;
-                background:rgba(0,0,0,0.18);
-                border:1px solid rgba(255,255,255,0.12);
-                color:inherit;
-                font-weight:850;
-                font-size:16px;
-                outline:none;
-              "
-            />
-          </div>
-
-          <div>
-            <div class="muted" style="font-weight:900; margin-bottom:6px;">Password</div>
-            <input
-              id="gpIdCode"
-              type="password"
-              inputmode="text"
-              autocomplete="off"
-              autocapitalize="none"
-              spellcheck="false"
-              placeholder="Make something you'll remember"
-              style="
-                width:100%;
-                box-sizing:border-box;
-                padding:14px 14px;
-                border-radius:16px;
-                background:rgba(0,0,0,0.18);
-                border:1px solid rgba(255,255,255,0.12);
-                color:inherit;
-                font-weight:850;
-                font-size:16px;
-                outline:none;
-              "
-            />
-            <div class="muted" style="margin-top:6px; font-weight:800;">
-              Tip: &ldquo;buckeyes27&rdquo; / &ldquo;1-more-sec&rdquo; / etc.
+            <div class="gpAuthField">
+              <div class="gpAuthLabel">Password</div>
+              <input
+                id="gpIdCode"
+                class="gpAuthInput"
+                type="password"
+                inputmode="text"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
+                placeholder="Make something you'll remember"
+              />
+              <div class="gpAuthHelp">Tip: &ldquo;buckeyes27&rdquo; / &ldquo;1-more-sec&rdquo; / etc.</div>
             </div>
           </div>
 
-          <label style="display:flex; align-items:center; gap:10px; margin-top:2px;">
+          <label class="gpAuthRememberRow">
             <input id="gpIdRemember" type="checkbox" ${rem ? "checked" : ""} />
-            <span class="muted" style="font-weight:900;">Remember on this device</span>
+            <span>Remember on this device</span>
           </label>
 
-          <div style="display:flex; gap:10px; margin-top:6px;">
-            <button class="smallBtn" type="button" data-gpaction="playerContinue" style="flex:0 0 auto;">Continue</button>
-            <button class="smallBtn" type="button" data-gpaction="playerClear" style="flex:0 0 auto;">Clear</button>
+          <div class="gpAuthActions">
+            <button class="gpAuthPrimaryBtn" type="button" data-gpaction="playerContinue">Continue</button>
+            <button class="gpAuthGhostBtn" type="button" data-gpaction="playerClear">Clear</button>
           </div>
 
-          <div id="gpIdErr" class="muted" style="margin-top:4px; font-weight:900;"></div>
+          <div id="gpIdErr" class="gpAuthError"></div>
         </div>
       </div>
     `;
@@ -265,87 +230,55 @@
   // logged in, no admin involved). Only the copy differs.
   function gpBuildChangeCodeGateHTML({ forced, name } = {}) {
     const nm = gpNormalizeName(name || "");
-    const title = forced ? "Set your own password" : "Change your password";
+    const title = forced ? "Set a new password" : "Change your password";
     const blurb = forced
       ? "You logged in with a temporary password — set a permanent one only you know."
       : "Pick a new password. You'll use it (with your name) to log in from any device.";
     return `
-      <div class="game" style="
-        margin-top:12px;
-        padding:14px;
-        border-radius:22px;
-        background:rgba(255,255,255,0.06);
-        border:1px solid rgba(255,255,255,0.08);
-      ">
-        <div class="gameHeader">
-          <div class="statusPill status-other">${forced ? "TEMPORARY PASSWORD" : "CHANGE PASSWORD"}</div>
-        </div>
+      <div class="gpAuthWrap">
+        <div class="gpAuthCard">
+          <div class="gpAuthIconBadge">🔒</div>
+          <div class="gpAuthEyebrow">${forced ? "Temporary Password" : "Account Security"}</div>
+          <div class="gpAuthTitle">${esc(title)}</div>
+          <div class="gpAuthBlurb">${esc(blurb)}</div>
 
-        <div class="gameMetaTopLine" style="margin-top:10px; font-weight:950;">
-          ${esc(title)}
-        </div>
+          <div class="gpAuthFields">
+            <div class="gpAuthField">
+              <div class="gpAuthLabel">New Password</div>
+              <input
+                id="gpNewCode"
+                class="gpAuthInput"
+                type="password"
+                inputmode="text"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
+                placeholder="Make something you'll remember"
+              />
+            </div>
 
-        <div class="muted" style="margin-top:8px; font-weight:800;">
-          ${esc(blurb)}
-        </div>
-
-        <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          <div>
-            <div class="muted" style="font-weight:900; margin-bottom:6px;">New Password</div>
-            <input
-              id="gpNewCode"
-              type="password"
-              inputmode="text"
-              autocomplete="off"
-              autocapitalize="none"
-              spellcheck="false"
-              placeholder="Make something you'll remember"
-              style="
-                width:100%;
-                box-sizing:border-box;
-                padding:14px 14px;
-                border-radius:16px;
-                background:rgba(0,0,0,0.18);
-                border:1px solid rgba(255,255,255,0.12);
-                color:inherit;
-                font-weight:850;
-                font-size:16px;
-                outline:none;
-              "
-            />
+            <div class="gpAuthField">
+              <div class="gpAuthLabel">Confirm New Password</div>
+              <input
+                id="gpNewCodeConfirm"
+                class="gpAuthInput"
+                type="password"
+                inputmode="text"
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
+                placeholder="Type it again"
+              />
+              <div id="gpNewCodeMatchHint" class="gpAuthMatchHint"></div>
+            </div>
           </div>
 
-          <div>
-            <div class="muted" style="font-weight:900; margin-bottom:6px;">Confirm New Password</div>
-            <input
-              id="gpNewCodeConfirm"
-              type="password"
-              inputmode="text"
-              autocomplete="off"
-              autocapitalize="none"
-              spellcheck="false"
-              placeholder="Type it again"
-              style="
-                width:100%;
-                box-sizing:border-box;
-                padding:14px 14px;
-                border-radius:16px;
-                background:rgba(0,0,0,0.18);
-                border:1px solid rgba(255,255,255,0.12);
-                color:inherit;
-                font-weight:850;
-                font-size:16px;
-                outline:none;
-              "
-            />
+          <div class="gpAuthActions">
+            <button class="gpAuthPrimaryBtn" type="button" data-gpaction="changeCodeSubmit" data-forced="${forced ? "1" : "0"}" data-name="${esc(nm)}">Save Password</button>
+            ${forced ? "" : `<button class="gpAuthGhostBtn" type="button" data-gpaction="changeCodeCancel">Cancel</button>`}
           </div>
 
-          <div style="display:flex; gap:10px; margin-top:6px;">
-            <button class="smallBtn" type="button" data-gpaction="changeCodeSubmit" data-forced="${forced ? "1" : "0"}" data-name="${esc(nm)}" style="flex:0 0 auto;">Save</button>
-            ${forced ? "" : `<button class="smallBtn" type="button" data-gpaction="changeCodeCancel" style="flex:0 0 auto;">Cancel</button>`}
-          </div>
-
-          <div id="gpNewCodeErr" class="muted" style="margin-top:4px; font-weight:900;"></div>
+          <div id="gpNewCodeErr" class="gpAuthError"></div>
         </div>
       </div>
     `;

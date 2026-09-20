@@ -1339,7 +1339,33 @@
       const hdr = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin: getRole() === "admin", playerName: name });
       el.innerHTML = `${hdr}<div class="gpContainer">${gateHTML}</div>`;
       postRender();
+      gpWireChangeCodeMatchHint();
       setTimeout(() => { try { document.getElementById("gpNewCode")?.focus(); } catch {} }, 0);
+    }
+
+    // Live "do these two fields match yet" feedback — purely cosmetic,
+    // the real check still happens in changeCodeSubmit before anything
+    // gets hashed or saved.
+    function gpWireChangeCodeMatchHint() {
+      const newEl     = document.getElementById("gpNewCode");
+      const confirmEl = document.getElementById("gpNewCodeConfirm");
+      const hintEl    = document.getElementById("gpNewCodeMatchHint");
+      if (!newEl || !confirmEl || !hintEl) return;
+      function update() {
+        confirmEl.classList.remove("gpAuthInputMatch", "gpAuthInputMismatch");
+        if (!confirmEl.value) { hintEl.textContent = ""; hintEl.className = "gpAuthMatchHint"; return; }
+        if (newEl.value === confirmEl.value) {
+          hintEl.textContent = "✓ Passwords match";
+          hintEl.className = "gpAuthMatchHint ok";
+          confirmEl.classList.add("gpAuthInputMatch");
+        } else {
+          hintEl.textContent = "Passwords don't match yet";
+          hintEl.className = "gpAuthMatchHint bad";
+          confirmEl.classList.add("gpAuthInputMismatch");
+        }
+      }
+      newEl.addEventListener("input", update);
+      confirmEl.addEventListener("input", update);
     }
 
     // ── identity: continue ──
