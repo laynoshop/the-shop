@@ -1080,6 +1080,15 @@
       return;
     }
 
+    // ── header: open the ⋮ menu (Leagues / Change Code / Logout) ──
+    // These moved off the header itself, which had no room left for
+    // five buttons without truncating every label.
+    if (action === "openHeaderMenu") {
+      const showLeaguesBtn = btn.getAttribute("data-show-leagues") === "1";
+      (Render().gpShowHeaderMenuOverlay || (() => {}))(showLeaguesBtn);
+      return;
+    }
+
     // ── leagues: show the "Join League" overlay for a league the
     //    player hasn't joined yet (uses the picker's already-fetched
     //    league + member data, no extra round trip) ──
