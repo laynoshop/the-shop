@@ -138,6 +138,145 @@
 .gpMenuRowLogout { color: #ff9d9d; }
 
 /* ══════════════════════════════════════════════
+   GP AUTH CARD — login + change-password screens
+   Shared component so "enter your name/password" and "set a new
+   password" read as one designed moment instead of two different
+   generic score-card layouts repurposed for credential entry.
+   ══════════════════════════════════════════════ */
+.gpAuthWrap {
+  display: flex; justify-content: center;
+  padding-top: 14px;
+}
+.gpAuthCard {
+  width: 100%; max-width: 420px;
+  position: relative;
+  padding: 30px 22px 26px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.gpAuthCard::before {
+  content: "";
+  position: absolute;
+  top: -70px; left: 50%;
+  width: 240px; height: 240px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(216,31,31,0.32), transparent 70%);
+  pointer-events: none;
+}
+.gpAuthIconBadge {
+  position: relative;
+  width: 56px; height: 56px;
+  margin: 0 auto 16px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #d81f1f, #8f0c0c);
+  box-shadow: 0 10px 24px rgba(187,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.25);
+  font-size: 26px;
+}
+.gpAuthEyebrow {
+  position: relative;
+  text-align: center;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 6px;
+}
+.gpAuthTitle {
+  position: relative;
+  text-align: center;
+  font-size: 21px; font-weight: 900; color: #fff;
+  letter-spacing: -0.01em; line-height: 1.25;
+  margin-bottom: 8px;
+}
+.gpAuthBlurb {
+  position: relative;
+  text-align: center;
+  font-size: 13.5px; font-weight: 600; line-height: 1.5;
+  color: rgba(255,255,255,0.6);
+  max-width: 320px; margin: 0 auto 22px;
+}
+.gpAuthFields { position: relative; display: flex; flex-direction: column; gap: 14px; }
+.gpAuthField { text-align: left; }
+.gpAuthLabel {
+  font-size: 11.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 7px;
+}
+.gpAuthInput {
+  width: 100%; box-sizing: border-box;
+  padding: 15px 16px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.28);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  color: #fff; font-weight: 700; font-size: 16px;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.gpAuthInput::placeholder { color: rgba(255,255,255,0.32); font-weight: 600; }
+.gpAuthInput:focus { border-color: rgba(216,31,31,0.65); background: rgba(0,0,0,0.36); }
+.gpAuthInput.gpAuthInputMatch { border-color: rgba(90,200,120,0.6); }
+.gpAuthInput.gpAuthInputMismatch { border-color: rgba(226,80,80,0.65); }
+.gpAuthMatchHint {
+  margin-top: 7px;
+  font-size: 12.5px; font-weight: 800;
+  min-height: 15px;
+}
+.gpAuthMatchHint.ok { color: #6fd08a; }
+.gpAuthMatchHint.bad { color: #ff8f8f; }
+.gpAuthHelp {
+  margin-top: 6px;
+  font-size: 12px; font-weight: 700;
+  color: rgba(255,255,255,0.4);
+}
+.gpAuthRememberRow {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 16px;
+}
+.gpAuthRememberRow input[type="checkbox"] { width: 18px; height: 18px; accent-color: #d81f1f; }
+.gpAuthRememberRow span { font-size: 13.5px; font-weight: 700; color: rgba(255,255,255,0.65); }
+.gpAuthActions {
+  position: relative;
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 22px;
+}
+.gpAuthPrimaryBtn {
+  width: 100%;
+  padding: 15px;
+  border-radius: 14px;
+  font-size: 15.5px; font-weight: 800; letter-spacing: 0.01em;
+  color: #fff;
+  background: linear-gradient(135deg, #d81f1f, #970d0d);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 10px 22px rgba(187,0,0,0.35);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.gpAuthPrimaryBtn:active { transform: scale(0.98); }
+.gpAuthPrimaryBtn:disabled { opacity: 0.45; box-shadow: none; cursor: default; }
+.gpAuthGhostBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  font-size: 14px; font-weight: 700;
+  color: rgba(255,255,255,0.55);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.gpAuthGhostBtn:active { color: rgba(255,255,255,0.85); }
+.gpAuthError {
+  position: relative;
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px; font-weight: 800;
+  color: #ff8f8f;
+  min-height: 16px;
+}
+
+/* ══════════════════════════════════════════════
    LOADING BLIP — shown while a full render is in flight
    (initial load, identity/login, or a slow reload)
    ══════════════════════════════════════════════ */
