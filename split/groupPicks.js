@@ -281,7 +281,14 @@
     if (isH2H) {
       return (Data().gpComputeH2HSeasonStandings || (() => ({ rows: [], weeksCount: 0 })))(results, league?.h2hSchedule);
     }
-    return (Data().gpComputeSeasonLeaderboard || (() => ({ rows: [], weeksCount: 0 })))(results);
+    const seasonLB = (Data().gpComputeSeasonLeaderboard || (() => ({ rows: [], weeksCount: 0 })))(results);
+    // Backfill any league member who never made a single pick all season —
+    // otherwise they'd just silently vanish from standings instead of
+    // showing up with a 0-0 record.
+    let members = [];
+    try { members = await (Data().gpGetLeagueMembers || (async () => []))(db, league?.id); } catch {}
+    seasonLB.rows = (Data().gpFillMissingLeagueMembers || ((r) => r))(seasonLB.rows, members);
+    return seasonLB;
   }
 
   // ───────────────────────────────────────────
@@ -863,7 +870,7 @@
         // the way a single atomic batch used to — this call reports
         // exactly which writes succeeded and which didn't, and why.
         const result = await (Data().gpSaveMyPicksBatch || (async () => ({ parent: null, games: {} })))(
-          db2, slateId, playerId, pending, tbPending
+          db2, slateId, playerId, pending, tbPending, idObj2.name
         );
 
         const rejectedGames = [];

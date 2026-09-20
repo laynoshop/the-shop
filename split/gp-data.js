@@ -29,8 +29,6 @@
     try { localStorage.setItem(key, String(val)); } catch {}
   }
 
-  const PICKS_NAME_KEY   = "theShopPicksName_v1";
-
   // ─── Firebase ready ───────────────────────────────────────────────
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") {
@@ -76,15 +74,6 @@
       await waitForAuthOnce();
     }
     if (!auth.currentUser) throw new Error("Auth not ready (anonymous user missing).");
-  }
-
-  // ─── display name helper ─────────────────────────────────────────
-  function getPicksDisplayName() {
-    const existingChat = (safeGetLS("theShopChatName_v1") || "").trim();
-    if (existingChat) return existingChat.slice(0, 20);
-    let name = (safeGetLS(PICKS_NAME_KEY) || "").trim();
-    if (!name) name = "Anon";
-    return String(name).trim().slice(0, 20);
   }
 
   // ─── leagues (pick'em groups) ────────────────────────────────────────
@@ -373,7 +362,7 @@
   // what happens to the others, and the return value reports exactly
   // which ones failed and why so the UI (and the next bug report) can be
   // specific instead of guessing.
-  async function gpSaveMyPicksBatch(db, slateId, playerId, pendingMap, tiebreakerGuess) {
+  async function gpSaveMyPicksBatch(db, slateId, playerId, pendingMap, tiebreakerGuess, playerName) {
     const keys = Object.keys(pendingMap || {});
     const hasTiebreaker = Number.isFinite(tiebreakerGuess);
     const result = { parent: null, games: {} };
@@ -381,7 +370,13 @@
 
     const picksUserRef = db.collection("pickSlates").doc(slateId)
       .collection("picks").doc(playerId);
-    const name = String(getPicksDisplayName() || "Someone").trim().slice(0, 20);
+    // Deliberately NOT getPicksDisplayName() — that helper is keyed off
+    // theShopChatName_v1 first (the unrelated Shop chat feature's display
+    // name, defaulting to "Anon"), which silently overwrote every pick's
+    // stored name for anyone who'd never set a chat name, even though
+    // their Pick'em identity (shown in the header) was correct the whole
+    // time. The caller already knows their real Pick'em name — use it.
+    const name = String(playerName || "Someone").trim().slice(0, 20);
 
     const userDoc = {
       uid: String(playerId || ""),
@@ -1046,10 +1041,41 @@
     return { rows, weeksCount: weeks.length };
   }
 
+  // ─── backfill league members who never picked ───────────────────────
+  // gpComputeWeeklyLeaderboard / gpComputeSeasonLeaderboard only ever see
+  // players who logged at least one pick, so anyone who joined a league
+  // but never made a single pick (that week, or ever) silently vanishes
+  // from standings instead of showing up with a 0-0 record. This adds
+  // exactly those missing rows back in from the league's actual
+  // membership list (gpGetLeagueMembers), matched case-insensitively by
+  // display name since a never-picked member has no pick doc to key off.
+  function gpFillMissingLeagueMembers(rows, leagueMembers) {
+    const list = Array.isArray(rows) ? rows.slice() : [];
+    const members = Array.isArray(leagueMembers) ? leagueMembers : [];
+    const known = new Set(list.map(r => String(r?.name || "").trim().toLowerCase()));
+    const added = [];
+    for (const m of members) {
+      const nm = String(m?.name || "").trim();
+      const nmLower = nm.toLowerCase();
+      if (!nm || known.has(nmLower)) continue;
+      known.add(nmLower);
+      added.push({
+        key: m.playerId || `name:${nmLower}`,
+        name: nm,
+        points: 0, wins: 0, losses: 0, ties: 0, picks: 0,
+        dogWins: 0, favWins: 0, weeksPlayed: 0,
+        owWins: 0, owLosses: 0, owTies: 0,
+        atsWins: 0, atsLosses: 0, atsPushes: 0, tbWins: 0,
+      });
+    }
+    if (!added.length) return list;
+    added.sort((a, b) => a.name.localeCompare(b.name));
+    return [...list, ...added].sort((a, b) => Number(b.points || 0) - Number(a.points || 0));
+  }
+
   // ─── expose on window ──────────────────────────────────────────────────
   window.GP_Data = {
     ensureFirebaseReadySafe,
-    getPicksDisplayName,
     gpGetLeague,
     gpListLeagues,
     gpIsLeagueActive,
@@ -1075,6 +1101,7 @@
     gpBustTiebreakersCache,
     gpComputeWeeklyLeaderboard,
     gpComputeSeasonLeaderboard,
+    gpFillMissingLeagueMembers,
     gpGradeAtsForGame,
     gpGetGameWinningSide,
     gpComputeTiebreakerActual,
