@@ -515,7 +515,7 @@
   // by playerId, not name. This moves fromPlayerId's picks onto
   // intoPlayerId (see gpMergePlayerInto) and drops fromPlayerId from this
   // league's membership so it stops appearing as a second entry.
-  async function gpAdminMergeDuplicatePlayer(db, league, fromPlayerId, intoPlayerId) {
+  async function gpAdminMergeDuplicatePlayer(db, league, fromPlayerId, intoPlayerId, intoNameHint) {
     const fromPid = String(fromPlayerId || "").trim();
     const intoPid = String(intoPlayerId || "").trim();
     if (!fromPid || !intoPid) throw new Error("Missing player.");
@@ -527,11 +527,32 @@
     if (typeof getPlayerDoc !== "function" || typeof mergePlayerInto !== "function") {
       throw new Error("Required module not loaded — refresh and try again.");
     }
+    // Normally the target's players/{id} doc is the source of truth for
+    // their name — but a player can have real picks on file with no
+    // players doc at all (e.g. gpRegisterPlayer's write silently failed
+    // at some point — it only logs, never surfaces, so play continued
+    // uninterrupted). That's exactly the case this tool exists to clean
+    // up, so it can't require the very doc that's missing: fall back to
+    // whatever name the UI is already showing for that row (it read it
+    // from league membership or the picks themselves either way).
     const intoDoc = await getPlayerDoc(db, intoPid);
-    const canonicalName = String(intoDoc?.name || "").trim();
+    const canonicalName = String(intoDoc?.name || "").trim() || String(intoNameHint || "").trim();
     if (!canonicalName) throw new Error(`Target player not found (id: ${intoPid}).`);
     const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
     const { weeksMerged } = await mergePlayerInto(db, weekIds, fromPid, intoPid, canonicalName);
+
+    // Backfill players/{intoPid} if it was ever missing/nameless, so the
+    // survivor is left in a normal, fully-registered state instead of
+    // carrying the same gap forward into every future admin action.
+    try {
+      await db.collection("players").doc(intoPid).set({
+        name: canonicalName,
+        nameLower: canonicalName.toLowerCase(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } catch (err) {
+      console.error("[GP] gpAdminMergeDuplicatePlayer: failed to backfill players doc:", err);
+    }
 
     // Whichever side the admin picked as "from" vs "into," the surviving
     // id must come out of this a real member — never neither. Dropping
