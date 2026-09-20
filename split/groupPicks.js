@@ -1544,7 +1544,7 @@
           btn.disabled = false;
           return;
         }
-        const { name: fixedName, weeksMerged } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid);
+        const { name: fixedName, weeksMerged } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid, intoName);
         (Render().gpDismissPlayerManageOverlay || (() => {}))();
         alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.`);
         await renderPicks();
