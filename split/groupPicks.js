@@ -1364,7 +1364,7 @@
       const cd     = String(codeEl?.value || "").trim();
       const rem    = !!remEl?.checked;
       if (!(ID().gpIsIdentityValid || (() => false))({ name: nm, code: cd })) {
-        (ID().gpSetIdentityError || (() => {}))("Name (2+ chars) and code (3+ chars) required.");
+        (ID().gpSetIdentityError || (() => {}))("Name (2+ chars) and password (3+ chars) required.");
         return;
       }
       btn.disabled = true; btn.textContent = "Continuing…";
@@ -1428,14 +1428,20 @@
       return;
     }
 
-    // ── identity: save a new code (forced after a reset, or voluntary) ──
+    // ── identity: save a new password (forced after a reset, or voluntary) ──
     if (action === "changeCodeSubmit") {
       const forced   = btn.getAttribute("data-forced") === "1";
       const nm       = String(btn.getAttribute("data-name") || "").trim();
       const newCodeEl = document.getElementById("gpNewCode");
+      const confirmEl = document.getElementById("gpNewCodeConfirm");
       const newCode  = String(newCodeEl?.value || "").trim();
+      const confirmCode = String(confirmEl?.value || "").trim();
       if (newCode.length < 3) {
-        (ID().gpSetNewCodeError || (() => {}))("Code needs to be at least 3 characters.");
+        (ID().gpSetNewCodeError || (() => {}))("Password needs to be at least 3 characters.");
+        return;
+      }
+      if (newCode !== confirmCode) {
+        (ID().gpSetNewCodeError || (() => {}))("Passwords don't match — check both fields and try again.");
         return;
       }
       btn.disabled = true; btn.textContent = "Saving…";
@@ -1459,28 +1465,28 @@
       return;
     }
 
-    // ── identity: cancel a voluntary code change ──
+    // ── identity: cancel a voluntary password change ──
     if (action === "changeCodeCancel") {
       await renderPicks();
       return;
     }
 
-    // ── admin: reset a locked-out player's code to a temp one ──
+    // ── admin: reset a locked-out player's password to a temp one ──
     if (action === "adminResetPlayerCode") {
       const pid = String(btn.getAttribute("data-playerid") || "").trim();
       const nm  = String(btn.getAttribute("data-name") || "").trim();
       if (!pid || !nm) return;
-      if (!confirm(`Reset ${nm}'s code?\n\nThey'll need the temporary code (shown next) plus their exact display name to log back in, and will be asked to set their own permanent code right after.`)) return;
+      if (!confirm(`Reset ${nm}'s password?\n\nThey'll need the temporary password (shown next) plus their exact display name to log back in, and will be asked to set their own permanent password right after.`)) return;
       const origLabel = btn.textContent;
       btn.disabled = true; btn.textContent = "Resetting…";
       try {
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const tempCode = await (Admin().gpAdminResetPlayerCode || (async () => ""))(db2, pid, nm);
-        alert(`${nm}'s temporary code:\n\n${tempCode}\n\nGive them this code and their exact display name ("${nm}") to log back in — they'll be asked to set their own permanent code right after.`);
+        alert(`${nm}'s temporary password:\n\n${tempCode}\n\nGive them this password and their exact display name ("${nm}") to log back in — they'll be asked to set their own permanent password right after.`);
       } catch (err) {
         console.error("[GP] adminResetPlayerCode failed:", err);
-        alert(err?.message || "Something went wrong resetting the code.");
+        alert(err?.message || "Something went wrong resetting the password.");
       }
       btn.disabled = false; btn.textContent = origLabel;
       return;
