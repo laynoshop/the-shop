@@ -226,7 +226,19 @@
     // gpSaveMyPicksBatch's old "Anon" bug) — bumped again so every
     // browser drops its frozen cache and re-fetches from Firestore,
     // picking up whatever gpRenamePlayerAcrossWeeks corrects there.
-    return `theShopGpSeasonWeekCache_v3_${weekId}`;
+    // v4: a merge (gpAdminMergeDuplicatePlayer) done before
+    // gpBustSeasonWeekCache existed left a stale pre-merge blob cached —
+    // one more bump so it's dropped without needing every browser to
+    // manually clear site data; gpBustSeasonWeekCache handles it from here.
+    return `theShopGpSeasonWeekCache_v4_${weekId}`;
+  }
+  // A fully-final week's cache is meant to live forever — its result
+  // "can never change again" — except an admin editing history (Fix
+  // Name, Merge Into) is exactly the case that breaks that assumption.
+  // Call this for every week a rewrite touched so the next season load
+  // re-fetches instead of serving what's now a stale cached blob.
+  function gpBustSeasonWeekCache(weekId) {
+    try { localStorage.removeItem(gpSeasonWeekCacheKey(weekId)); } catch {}
   }
   async function gpLoadSeasonLeaderboard(db, league) {
     const allWeeks = Array.isArray(league?.weeks) ? league.weeks : [];
@@ -1495,6 +1507,11 @@
           return;
         }
         const { name: fixedName, weeksTouched, perWeek } = await (Admin().gpAdminSyncPlayerName || (async () => ({})))(db2, league, pid);
+        // A fully-final week's season cache is meant to be permanent — an
+        // admin rewrite like this is exactly the case that breaks that,
+        // so every week just touched needs its cached blob dropped or
+        // the season view keeps serving what it had before the fix.
+        league.weeks.forEach(w => gpBustSeasonWeekCache(String(w?.id || "")));
         const breakdown = Array.isArray(perWeek) && perWeek.length ? `\n\n${perWeek.join("\n")}` : "";
         alert(`Synced — "${fixedName}" is now correct across ${weeksTouched} past week${weeksTouched === 1 ? "" : "s"}. Refresh to see it reflected in standings.${breakdown}`);
       } catch (err) {
@@ -1554,6 +1571,9 @@
         }
         const { name: fixedName, weeksMerged, perWeek } = await (Admin().gpAdminMergeDuplicatePlayer || (async () => ({})))(db2, league, fromPid, intoPid, intoName);
         (Render().gpDismissPlayerManageOverlay || (() => {}))();
+        // Same reasoning as adminSyncPlayerName above — a merge rewrites
+        // history in an already-"permanently" cached final week.
+        league.weeks.forEach(w => gpBustSeasonWeekCache(String(w?.id || "")));
         const breakdown = Array.isArray(perWeek) && perWeek.length ? `\n\n${perWeek.join("\n")}` : "";
         alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.${breakdown}\n\nfrom: ${fromPid}\ninto: ${intoPid}`);
         await renderPicks();
