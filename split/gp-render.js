@@ -2258,10 +2258,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     </div>
   </td>
   <td class="gpStPts">${esc(String(pts))}</td>
-  ${showTbWins ? `<td class="gpStTbWins">${Number(u?.tbWins ?? 0)}</td>` : ""}
   <td>${esc(owRecord)}</td>
-  <td class="gpStDogs">${dogs}</td>
   <td>${esc(atsRecord)}</td>
+  <td class="gpStDogs">${dogs}</td>
+  ${showTbWins ? `<td class="gpStTbWins">${Number(u?.tbWins ?? 0)}</td>` : ""}
 </tr>`;
     }).join("");
 
@@ -2272,18 +2272,18 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       <col style="width:8%"/>
       <col style="width:29%"/>
       <col style="width:10%"/>
-      <col style="width:9%"/>
+      <col style="width:14%"/>
       <col style="width:14%"/>
       <col style="width:9%"/>
-      <col style="width:14%"/>
+      <col style="width:9%"/>
     </colgroup>` : `
     <colgroup>
       <col style="width:9%"/>
       <col style="width:38%"/>
       <col style="width:13%"/>
       <col style="width:16%"/>
-      <col style="width:10%"/>
       <col style="width:14%"/>
+      <col style="width:10%"/>
     </colgroup>`;
 
     return `
@@ -2296,10 +2296,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
         <th class="gpStRank">#</th>
         <th class="gpStName">Player</th>
         <th>Pts</th>
-        ${showTbWins ? `<th>🎯</th>` : ""}
         <th>OW</th>
-        <th>🐶</th>
         <th>ATS</th>
+        <th>🐶</th>
+        ${showTbWins ? `<th>🎯</th>` : ""}
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -2312,7 +2312,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const season = !!opts?.season;
     return `
 <div class="gpColumnLegend">
-  <b>Pts</b> total points &middot; ${season ? `🎯 tiebreakers won this season &middot; ` : ""}<b>OW</b> Outright Winner record (W-L-T) &middot; 🐶 correct underdog picks &middot; <b>ATS</b> Against-the-Spread record (W-L-P)
+  <b>Pts</b> total points &middot; <b>OW</b> Outright Winner record (W-L-T) &middot; <b>ATS</b> Against-the-Spread record (W-L-P) &middot; 🐶 correct underdog picks${season ? ` &middot; 🎯 tiebreakers won this season` : ""}
   ${season ? "" : `<br/>Ties in points/record are broken by the tiebreaker: closest guess to the actual combined score <b>without going over</b> wins.`}
 </div>`;
   }

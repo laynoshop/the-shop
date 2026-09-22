@@ -4,6 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#bb0000" />
+  <!-- iOS only reliably honors manifest.json's "display": "standalone"
+       for Add to Home Screen when these are also present — without
+       them, a home-screen shortcut can still open inside regular
+       Safari, which iOS clears localStorage on much sooner than a true
+       standalone app (see gpRememberDefault in gp-identity.js — the
+       Pick'em identity itself is stored with no expiry; this is what
+       actually determines how long that storage survives on iOS). -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="The Shop" />
   <title>The Shop</title>
 
   <link rel="manifest" href="manifest.json">
