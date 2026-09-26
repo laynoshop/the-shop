@@ -773,11 +773,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpWinProbAway { height: 100%; transition: width 600ms cubic-bezier(0.4,0,0.2,1); }
 .gpWinProbHome { height: 100%; flex: 1; transition: width 600ms cubic-bezier(0.4,0,0.2,1); }
 
-/* Save row */
+/* Save row — reuses .gpHeaderSaveBtn so the bottom Save button looks
+   and behaves identically to the header's (same red-gradient CTA,
+   same disabled state, same [data-gpaction="savePicks"] toggle via
+   syncSaveBtnState). Stacked instead of side-by-side with the caption
+   so the button can stay full-width like its header counterpart. */
 .gpSaveRow {
   padding: 12px 14px 4px;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
 }
+.gpSaveRow > span { text-align: center; }
 
 /* ══════════════════════════════════════════════
    LEADERBOARD  — redesigned
@@ -3610,7 +3615,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
 
     const saveRow = `
 <div class="gpSaveRow">
-  <button class="smallBtn" type="button" data-gpaction="savePicks" disabled>Save</button>
+  <button class="gpHeaderSaveBtn" type="button" data-gpaction="savePicks" disabled>Save</button>
   <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.4)">Saves your pending picks</span>
 </div>`;
 
