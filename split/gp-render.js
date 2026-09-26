@@ -483,15 +483,36 @@
    SCORE CARD  (matches scores-render.js exactly)
    ══════════════════════════════════════════════ */
 .gpScoreCard {
-  position: relative; display: flex; flex-direction: column; gap: 0;
+  position: relative; display: flex; flex-direction: row; align-items: stretch; gap: 0;
   background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px; border-left: 4px solid #555; overflow: hidden;
+  border-radius: 14px; overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 .gpScoreCard.gpCardLive { background: rgba(200,0,0,0.07); }
+/* Type bar — thick enough to carry a rotated label ("OUTRIGHT WINNER" /
+   "AGAINST THE SPREAD") instead of the old 4px color-only sliver, so the
+   pick type stays legible card-by-card while scrolling a long section
+   without widening the card itself — gpCardBody's own paddings/font
+   sizes were trimmed slightly to give this room without wrapping. */
+.gpCardTypeBar {
+  flex: 0 0 24px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.gpCardTypeBarLabel {
+  display: inline-block; white-space: nowrap;
+  transform: rotate(-90deg);
+  font-size: 10px; font-weight: 900; letter-spacing: 0.09em;
+  text-transform: uppercase; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+.gpCardBody {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column;
+}
 .gpCardHeader {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 8px 12px 6px;
+  gap: 8px; padding: 8px 10px 6px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 .gpStatusLive {
@@ -525,7 +546,7 @@
 }
 .gpMatchup {
   display: flex; flex-direction: column;
-  padding: 6px 12px 10px; gap: 6px;
+  padding: 6px 10px 10px; gap: 6px;
 }
 
 /* Team pick buttons — the subtle border on every option is a "tap to
@@ -534,8 +555,8 @@
    the pick was right, or red if it was wrong. A push (ATS) or tie
    (straight) is neither, so it stays neutral gray permanently. */
 .gpTeamPickBtn {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 10px; min-height: 44px; border-radius: 10px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; min-height: 44px; border-radius: 10px;
   background: rgba(255,255,255,0.02);
   border: 1.5px solid rgba(255,255,255,0.10);
   width: 100%; box-sizing: border-box;
@@ -566,13 +587,13 @@
 .gpTeamPickBtn:disabled { cursor: default; pointer-events: none; }
 
 .gpTeamLogo {
-  width: 40px; height: 40px; object-fit: contain;
+  width: 36px; height: 36px; object-fit: contain;
   border-radius: 10px; background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.10); padding: 3px;
   flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
 }
 .gpTeamLogoPlaceholder {
-  width: 40px; height: 40px; display: inline-flex;
+  width: 36px; height: 36px; display: inline-flex;
   align-items: center; justify-content: center; border-radius: 10px;
   background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
   color: rgba(255,255,255,0.7); font-size: 11px; font-weight: 800;
@@ -580,7 +601,7 @@
 }
 .gpTeamInfo { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .gpTeamName {
-  font-size: 16px; font-weight: 800; color: #eee;
+  font-size: 15px; font-weight: 800; color: #eee;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   line-height: 1.15; letter-spacing: 0.1px;
 }
@@ -590,8 +611,8 @@
   line-height: 1.2;
 }
 .gpScore {
-  font-size: 26px; font-weight: 900; color: rgba(255,255,255,0.88);
-  min-width: 38px; text-align: right; flex-shrink: 0;
+  font-size: 24px; font-weight: 900; color: rgba(255,255,255,0.88);
+  min-width: 34px; text-align: right; flex-shrink: 0;
   font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
   line-height: 1; text-shadow: 0 0 10px rgba(255,200,0,0.2);
 }
@@ -599,7 +620,7 @@
 .gpScore.gpLoser  { color: rgba(255,255,255,0.3); text-shadow: none; }
 
 .gpVenueLine {
-  padding: 0 12px 8px; font-size: 11px;
+  padding: 0 10px 8px; font-size: 11px;
   color: rgba(255,255,255,0.28); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
 }
@@ -608,7 +629,7 @@
 /* Pick badge strip at bottom of card */
 .gpPickStrip {
   display: flex; flex-direction: column; align-items: stretch;
-  gap: 6px; padding: 7px 12px 9px;
+  gap: 6px; padding: 7px 10px 9px;
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .gpYouPicked {
@@ -2132,9 +2153,13 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     let cardCls = "gpScoreCard";
     if (isLive) cardCls += " gpCardLive";
 
-    // Left border edge is a type indicator, not a sport color: red for
+    // Left bar is a type indicator, not a sport color: red for
     // outright/straight-up games, green for the designated ATS game(s).
+    // Thick enough to carry its own rotated label so the pick type stays
+    // legible card-by-card scrolling through a long section, not just
+    // from the section header at the top.
     const borderColor = isAts ? "#2ecc87" : "#d1263f";
+    const typeLabel    = isAts ? "Against the Spread" : "Outright Winner";
 
     const oddsLine   = safeOddsLine(g);
     const venueLine  = String(g?.venueLine || "").trim();
@@ -2143,7 +2168,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const kickoffDate = ms ? fmtDate(ms) : "";
 
     return `
-<div class="${cardCls}" style="border-left-color:${esc(borderColor)}">
+<div class="${cardCls}">
+  <div class="gpCardTypeBar" style="background:${esc(borderColor)}">
+    <span class="gpCardTypeBarLabel">${esc(typeLabel)}</span>
+  </div>
+  <div class="gpCardBody">
   <div class="gpCardHeader">
     ${statusHTML}
     <div class="gpCardHeaderRight">
@@ -2152,7 +2181,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     </div>
   </div>
   ${kickoffDate || kickoffTime ? `
-  <div style="padding:4px 12px 0;display:flex;justify-content:space-between;gap:8px">
+  <div style="padding:4px 10px 0;display:flex;justify-content:space-between;gap:8px">
     <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35)">${esc(kickoffDate)}</div>
     <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35)">${esc(kickoffTime)}</div>
   </div>` : ""}
@@ -2198,6 +2227,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       </div>
     </details>` : `
     <div class="gpEveryoneLocked">🔒 Picks reveal when the game locks in</div>`}
+  </div>
   </div>
 </div>`;
   }
