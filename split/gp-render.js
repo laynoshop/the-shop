@@ -968,43 +968,57 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 /* League picker card — top-3 season standings, shown underneath the
    countdown row (or on its own once the countdown drops off once the
    week's underway) so the reminder of where things stand doesn't
-   disappear along with it. Rank chip on the left, avatar+name in the
-   middle, points on the right — same left-to-right order the countdown
-   above it reads in. */
+   disappear along with it. Rank chip on the left, name in the middle,
+   points on the right — same left-to-right order the countdown above
+   it reads in. Each row is its own gold/silver/bronze-tinted pill
+   rather than a bare line, to match the weight of the rank chip. */
 .gpLeagueCardTop3 {
-  margin-top: 12px; padding-top: 12px;
+  margin-top: 14px; padding-top: 14px;
   border-top: 1px solid rgba(255,255,255,0.08);
 }
 .gpLeagueCardTop3Label {
-  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
-  color: rgba(255,255,255,0.4);
-  margin-bottom: 9px; text-align: center;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 10px; text-align: center;
 }
 .gpLeagueCardTop3Row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 5px 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.gpLeagueCardTop3Row:last-child { margin-bottom: 0; }
+.gpLeagueCardTop3Row.gpRank1 {
+  background: linear-gradient(90deg, rgba(255,224,138,0.14), rgba(255,224,138,0.03));
+  border-color: rgba(255,224,138,0.25);
+}
+.gpLeagueCardTop3Row.gpRank2 {
+  background: linear-gradient(90deg, rgba(232,232,236,0.11), rgba(232,232,236,0.02));
+  border-color: rgba(232,232,236,0.2);
+}
+.gpLeagueCardTop3Row.gpRank3 {
+  background: linear-gradient(90deg, rgba(224,168,120,0.12), rgba(224,168,120,0.02));
+  border-color: rgba(224,168,120,0.22);
 }
 .gpLeagueCardTop3Rank {
-  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 900;
+  font-size: 14px; font-weight: 900;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
 .gpLeagueCardTop3Rank.gpRank1 { background: linear-gradient(135deg,#ffe08a,#c9931c); color: #3a2600; }
 .gpLeagueCardTop3Rank.gpRank2 { background: linear-gradient(135deg,#e8e8ec,#a3a3ac); color: #262629; }
 .gpLeagueCardTop3Rank.gpRank3 { background: linear-gradient(135deg,#e0a878,#9c5f2e); color: #2e1600; }
-.gpLeagueCardTop3Avatar {
-  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10.5px; font-weight: 900; letter-spacing: -0.2px; text-transform: uppercase;
-}
 .gpLeagueCardTop3Name {
   flex: 1 1 auto; min-width: 0;
-  font-size: 13.5px; font-weight: 800; color: rgba(255,255,255,0.92);
+  font-size: 16px; font-weight: 800; color: rgba(255,255,255,0.94);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gpLeagueCardTop3Pts {
   flex-shrink: 0;
-  font-size: 13px; font-weight: 900; color: rgba(255,255,255,0.55);
+  font-size: 15px; font-weight: 900; color: rgba(255,255,255,0.6);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3787,11 +3801,9 @@ ${saveRow}`;
       const top3 = Array.isArray(l.top3) ? l.top3 : [];
       const top3RowsHTML = top3.map(r => {
         const nm = String(r?.name || "Someone");
-        const { bg, color } = avatarStyle(nm);
         return `
-      <div class="gpLeagueCardTop3Row">
+      <div class="gpLeagueCardTop3Row gpRank${r.rank}">
         <div class="gpLeagueCardTop3Rank gpRank${r.rank}">${r.rank}</div>
-        <div class="gpLeagueCardTop3Avatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
         <div class="gpLeagueCardTop3Name">${esc(nm)}</div>
         <div class="gpLeagueCardTop3Pts">${esc(String(r.points))} pts</div>
       </div>`;
