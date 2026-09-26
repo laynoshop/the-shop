@@ -653,6 +653,27 @@
           };
         });
       } catch {}
+      // Top-3 season standings for the picker card — only for leagues
+      // already joined (no reason to compute this for one you'd still
+      // have to tap "Join" first) and only the cumulative-points format
+      // (H2H's win-loss record doesn't reduce to a single "points"
+      // number the same way). Published-and-final weeks hit
+      // gpLoadSeasonLeaderboard's own localStorage cache, so on repeat
+      // picker visits this only does real work for whichever week is
+      // still in progress — which is also exactly what keeps these
+      // numbers updating through the week instead of freezing at load.
+      try {
+        const seasonResults = await Promise.all(leagues.map(l =>
+          (l.isMember && l.format !== "h2h") ? gpLoadSeasonLeaderboard(db, l).catch(() => null) : Promise.resolve(null)
+        ));
+        leagues = leagues.map((l, i) => {
+          const rows = seasonResults[i]?.rows;
+          const top3 = Array.isArray(rows)
+            ? rows.slice(0, 3).map((r, idx) => ({ rank: idx + 1, name: r.name, points: Number(r.points || 0) }))
+            : [];
+          return { ...l, top3 };
+        });
+      } catch {}
       // Stashed so the Join League overlay (opened from a card tap) can
       // reuse this same data instead of re-fetching it.
       mem.gpLeaguePickerLeagues = leagues;

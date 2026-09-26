@@ -965,6 +965,49 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   text-align: center; display: block;
 }
 
+/* League picker card — top-3 season standings, shown underneath the
+   countdown row (or on its own once the countdown drops off once the
+   week's underway) so the reminder of where things stand doesn't
+   disappear along with it. Rank chip on the left, avatar+name in the
+   middle, points on the right — same left-to-right order the countdown
+   above it reads in. */
+.gpLeagueCardTop3 {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.gpLeagueCardTop3Label {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 9px; text-align: center;
+}
+.gpLeagueCardTop3Row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 0;
+}
+.gpLeagueCardTop3Rank {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 900;
+}
+.gpLeagueCardTop3Rank.gpRank1 { background: linear-gradient(135deg,#ffe08a,#c9931c); color: #3a2600; }
+.gpLeagueCardTop3Rank.gpRank2 { background: linear-gradient(135deg,#e8e8ec,#a3a3ac); color: #262629; }
+.gpLeagueCardTop3Rank.gpRank3 { background: linear-gradient(135deg,#e0a878,#9c5f2e); color: #2e1600; }
+.gpLeagueCardTop3Avatar {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 900; letter-spacing: -0.2px; text-transform: uppercase;
+}
+.gpLeagueCardTop3Name {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 13.5px; font-weight: 800; color: rgba(255,255,255,0.92);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gpLeagueCardTop3Pts {
+  flex-shrink: 0;
+  font-size: 13px; font-weight: 900; color: rgba(255,255,255,0.55);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Podium — top 3 */
 .gpLeaderPodium {
   display: flex;
@@ -3737,6 +3780,28 @@ ${saveRow}`;
         : "";
       const countdownRowHTML = countdownHTML ? `<div class="gpLeagueCardCountdownRow">${countdownHTML}</div>` : "";
 
+      // Top-3 season standings — independent of the countdown above it,
+      // so it keeps showing (and, since groupPicks.js only caches
+      // already-final weeks, keeps updating) after the countdown itself
+      // drops off once the week is underway.
+      const top3 = Array.isArray(l.top3) ? l.top3 : [];
+      const top3RowsHTML = top3.map(r => {
+        const nm = String(r?.name || "Someone");
+        const { bg, color } = avatarStyle(nm);
+        return `
+      <div class="gpLeagueCardTop3Row">
+        <div class="gpLeagueCardTop3Rank gpRank${r.rank}">${r.rank}</div>
+        <div class="gpLeagueCardTop3Avatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
+        <div class="gpLeagueCardTop3Name">${esc(nm)}</div>
+        <div class="gpLeagueCardTop3Pts">${esc(String(r.points))} pts</div>
+      </div>`;
+      }).join("");
+      const top3HTML = top3RowsHTML ? `
+  <div class="gpLeagueCardTop3">
+    <div class="gpLeagueCardTop3Label">🏆 Season Standings</div>
+    ${top3RowsHTML}
+  </div>` : "";
+
       return `
 <div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="${isMember ? "selectLeague" : "openJoinOverlay"}" data-leagueid="${esc(l.id)}">
   <div class="gpLeagueCardMain">
@@ -3749,6 +3814,7 @@ ${saveRow}`;
     ${isAdmin ? `<div class="gpLeagueCardGear" data-gpaction="editLeague" data-leagueid="${esc(l.id)}" title="League settings">⚙</div>` : ""}
   </div>
   ${countdownRowHTML}
+  ${top3HTML}
 </div>`;
     }).join("");
 
