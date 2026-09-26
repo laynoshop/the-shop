@@ -170,49 +170,53 @@
           <div class="gpAuthTitle">Enter your name and password</div>
           <div class="gpAuthBlurb">Use the same name and password on any phone to be the same player.</div>
 
-          <div class="gpAuthFields">
-            <div class="gpAuthField">
-              <div class="gpAuthLabel">Display Name</div>
-              <input
-                id="gpIdName"
-                class="gpAuthInput"
-                type="text"
-                inputmode="text"
-                autocomplete="off"
-                autocapitalize="words"
-                spellcheck="false"
-                value="${esc(nm)}"
-                placeholder="Example: Victor"
-              />
+          <form autocomplete="on" onsubmit="return false;">
+            <div class="gpAuthFields">
+              <div class="gpAuthField">
+                <div class="gpAuthLabel">Display Name</div>
+                <input
+                  id="gpIdName"
+                  name="username"
+                  class="gpAuthInput"
+                  type="text"
+                  inputmode="text"
+                  autocomplete="username"
+                  autocapitalize="words"
+                  spellcheck="false"
+                  value="${esc(nm)}"
+                  placeholder="Example: Victor"
+                />
+              </div>
+
+              <div class="gpAuthField">
+                <div class="gpAuthLabel">Password</div>
+                <input
+                  id="gpIdCode"
+                  name="password"
+                  class="gpAuthInput"
+                  type="password"
+                  inputmode="text"
+                  autocomplete="current-password"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  placeholder="Make something you'll remember"
+                />
+                <div class="gpAuthHelp">Tip: &ldquo;buckeyes27&rdquo; / &ldquo;1-more-sec&rdquo; / etc.</div>
+              </div>
             </div>
 
-            <div class="gpAuthField">
-              <div class="gpAuthLabel">Password</div>
-              <input
-                id="gpIdCode"
-                class="gpAuthInput"
-                type="password"
-                inputmode="text"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-                placeholder="Make something you'll remember"
-              />
-              <div class="gpAuthHelp">Tip: &ldquo;buckeyes27&rdquo; / &ldquo;1-more-sec&rdquo; / etc.</div>
+            <label class="gpAuthRememberRow">
+              <input id="gpIdRemember" type="checkbox" ${rem ? "checked" : ""} />
+              <span>Remember on this device</span>
+            </label>
+
+            <div class="gpAuthActions">
+              <button class="gpAuthPrimaryBtn" type="button" data-gpaction="playerContinue">Continue</button>
+              <button class="gpAuthGhostBtn" type="button" data-gpaction="playerClear">Clear</button>
             </div>
-          </div>
 
-          <label class="gpAuthRememberRow">
-            <input id="gpIdRemember" type="checkbox" ${rem ? "checked" : ""} />
-            <span>Remember on this device</span>
-          </label>
-
-          <div class="gpAuthActions">
-            <button class="gpAuthPrimaryBtn" type="button" data-gpaction="playerContinue">Continue</button>
-            <button class="gpAuthGhostBtn" type="button" data-gpaction="playerClear">Clear</button>
-          </div>
-
-          <div id="gpIdErr" class="gpAuthError"></div>
+            <div id="gpIdErr" class="gpAuthError"></div>
+          </form>
         </div>
       </div>
     `;
@@ -242,43 +246,48 @@
           <div class="gpAuthTitle">${esc(title)}</div>
           <div class="gpAuthBlurb">${esc(blurb)}</div>
 
-          <div class="gpAuthFields">
-            <div class="gpAuthField">
-              <div class="gpAuthLabel">New Password</div>
-              <input
-                id="gpNewCode"
-                class="gpAuthInput"
-                type="password"
-                inputmode="text"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-                placeholder="Make something you'll remember"
-              />
+          <form autocomplete="on" onsubmit="return false;">
+            <input type="text" name="username" autocomplete="username" value="${esc(nm)}" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" tabindex="-1" aria-hidden="true" />
+            <div class="gpAuthFields">
+              <div class="gpAuthField">
+                <div class="gpAuthLabel">New Password</div>
+                <input
+                  id="gpNewCode"
+                  name="new-password"
+                  class="gpAuthInput"
+                  type="password"
+                  inputmode="text"
+                  autocomplete="new-password"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  placeholder="Make something you'll remember"
+                />
+              </div>
+
+              <div class="gpAuthField">
+                <div class="gpAuthLabel">Confirm New Password</div>
+                <input
+                  id="gpNewCodeConfirm"
+                  name="new-password-confirm"
+                  class="gpAuthInput"
+                  type="password"
+                  inputmode="text"
+                  autocomplete="new-password"
+                  autocapitalize="none"
+                  spellcheck="false"
+                  placeholder="Type it again"
+                />
+                <div id="gpNewCodeMatchHint" class="gpAuthMatchHint"></div>
+              </div>
             </div>
 
-            <div class="gpAuthField">
-              <div class="gpAuthLabel">Confirm New Password</div>
-              <input
-                id="gpNewCodeConfirm"
-                class="gpAuthInput"
-                type="password"
-                inputmode="text"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-                placeholder="Type it again"
-              />
-              <div id="gpNewCodeMatchHint" class="gpAuthMatchHint"></div>
+            <div class="gpAuthActions">
+              <button class="gpAuthPrimaryBtn" type="button" data-gpaction="changeCodeSubmit" data-forced="${forced ? "1" : "0"}" data-name="${esc(nm)}">Save Password</button>
+              ${forced ? "" : `<button class="gpAuthGhostBtn" type="button" data-gpaction="changeCodeCancel">Cancel</button>`}
             </div>
-          </div>
 
-          <div class="gpAuthActions">
-            <button class="gpAuthPrimaryBtn" type="button" data-gpaction="changeCodeSubmit" data-forced="${forced ? "1" : "0"}" data-name="${esc(nm)}">Save Password</button>
-            ${forced ? "" : `<button class="gpAuthGhostBtn" type="button" data-gpaction="changeCodeCancel">Cancel</button>`}
-          </div>
-
-          <div id="gpNewCodeErr" class="gpAuthError"></div>
+            <div id="gpNewCodeErr" class="gpAuthError"></div>
+          </form>
         </div>
       </div>
     `;
