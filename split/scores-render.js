@@ -764,6 +764,10 @@
     "sec network":  { file: "assets/networks/sec-network.webp", bare: true },
     "btn":               { file: "assets/networks/btn.png" },
     "big ten network":   { file: "assets/networks/btn.png" },
+    "cw":                { file: "assets/networks/cw.webp" },
+    "the cw":            { file: "assets/networks/cw.webp" },
+    "cbssn":                    { file: "assets/networks/cbssn.webp" },
+    "cbs sports network":       { file: "assets/networks/cbssn.webp" },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
