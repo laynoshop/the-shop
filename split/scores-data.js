@@ -163,22 +163,17 @@
   }
 
   // ─── CFB matchup filter (ranked / toss-up / close game) ───────────────────
-  // Independent toggle chips — any combination can be active at once, and
-  // an event matches if it satisfies ANY active flag (an empty set means
-  // no filter, i.e. show everything). Thresholds mirror the Pick'em admin
-  // picker's own "Ranked matchup" / "Toss-up" / "Close matchup" badges
-  // (gp-admin.js's pickRank/buildOdds) so a game gets the same label
-  // everywhere in the app.
+  // Single-select, same idea as picking one league pill — only one of
+  // these (or "All") is active at a time. Thresholds mirror the Pick'em
+  // admin picker's own "Ranked matchup" / "Toss-up" / "Close matchup"
+  // badges (gp-admin.js's pickRank/buildOdds) so a game gets the same
+  // label everywhere in the app.
   function matchupFilterKey(leagueKey) { return `scoresMatchupFilter_${leagueKey}`; }
-  function getSavedMatchupFilters(leagueKey) {
-    try {
-      const raw = localStorage.getItem(matchupFilterKey(leagueKey));
-      const arr = raw ? JSON.parse(raw) : [];
-      return new Set(Array.isArray(arr) ? arr : []);
-    } catch { return new Set(); }
+  function getSavedMatchupFilter(leagueKey) {
+    try { return localStorage.getItem(matchupFilterKey(leagueKey)) || ""; } catch { return ""; }
   }
-  function setSavedMatchupFilters(leagueKey, flagsSet) {
-    try { localStorage.setItem(matchupFilterKey(leagueKey), JSON.stringify(Array.from(flagsSet || []))); } catch {}
+  function setSavedMatchupFilter(leagueKey, key) {
+    try { localStorage.setItem(matchupFilterKey(leagueKey), key || ""); } catch {}
   }
 
   function getCuratedRank(competitor) {
@@ -207,65 +202,77 @@
     const isClose = hasSpread && !isTossup && spreadValue <= 5;
     return { isRanked, isTossup, isClose, spreadValue };
   }
-  function filterEventsByMatchupFlags(events, activeFlags) {
-    if (!activeFlags || !activeFlags.size) return events;
+  function filterEventsByMatchupFilter(events, filterKey) {
+    if (!filterKey) return events;
     return (events || []).filter(ev => {
       const c = classifyCfbMatchup(ev);
-      return (activeFlags.has("ranked") && c.isRanked)
-          || (activeFlags.has("tossup") && c.isTossup)
-          || (activeFlags.has("close") && c.isClose);
+      if (filterKey === "ranked") return c.isRanked;
+      if (filterKey === "tossup") return c.isTossup;
+      if (filterKey === "close")  return c.isClose;
+      return true;
     });
   }
 
   // ─── CFB conference filter (Big Ten / SEC / ACC / Big 12 only) ────────────
-  // Scoped to just these four by request — matched by substring against
-  // whatever conference text ESPN's summary endpoint returns for a team
-  // (full name or short name both work), rather than a numeric conference
-  // id, since that id's mapping isn't something we can verify offline.
+  // Scoped to just these four by request. Matched against a static roster
+  // of each conference's current members (same "exact identity match"
+  // approach already used above for FAVORITES/SHOP_TEAMS) rather than
+  // ESPN's per-team conference text or numeric group id — neither of
+  // those is something we can verify against a live response from here,
+  // and a wrong guess silently drops every game in the conference.
   const CFB_CONFERENCES = [
-    { key: "big-ten", label: "Big Ten", aliases: ["big ten"] },
-    { key: "sec",     label: "SEC",     aliases: ["southeastern conference", "southeastern", "sec"] },
-    { key: "acc",     label: "ACC",     aliases: ["atlantic coast", "acc"] },
-    { key: "big-12",  label: "Big 12",  aliases: ["big 12", "big xii"] },
+    { key: "big-ten", label: "Big Ten" },
+    { key: "sec",     label: "SEC" },
+    { key: "acc",     label: "ACC" },
+    { key: "big-12",  label: "Big 12" },
   ];
+  const CFB_CONFERENCE_TEAMS = {
+    "big-ten": [
+      "Illinois Fighting Illini", "Indiana Hoosiers", "Iowa Hawkeyes", "Maryland Terrapins",
+      "Michigan Wolverines", "Michigan State Spartans", "Minnesota Golden Gophers", "Nebraska Cornhuskers",
+      "Northwestern Wildcats", "Ohio State Buckeyes", "Oregon Ducks", "Penn State Nittany Lions",
+      "Purdue Boilermakers", "Rutgers Scarlet Knights", "UCLA Bruins", "USC Trojans",
+      "Washington Huskies", "Wisconsin Badgers",
+    ],
+    "sec": [
+      "Alabama Crimson Tide", "Arkansas Razorbacks", "Auburn Tigers", "Florida Gators",
+      "Georgia Bulldogs", "Kentucky Wildcats", "LSU Tigers", "Mississippi State Bulldogs",
+      "Missouri Tigers", "Ole Miss Rebels", "Mississippi Rebels", "Oklahoma Sooners",
+      "South Carolina Gamecocks", "Tennessee Volunteers", "Texas Longhorns", "Texas A&M Aggies",
+      "Vanderbilt Commodores",
+    ],
+    "acc": [
+      "Boston College Eagles", "California Golden Bears", "Clemson Tigers", "Duke Blue Devils",
+      "Florida State Seminoles", "Georgia Tech Yellow Jackets", "Louisville Cardinals", "Miami Hurricanes",
+      "NC State Wolfpack", "North Carolina Tar Heels", "Pittsburgh Panthers", "SMU Mustangs",
+      "Stanford Cardinal", "Syracuse Orange", "Virginia Cavaliers", "Virginia Tech Hokies",
+      "Wake Forest Demon Deacons",
+    ],
+    "big-12": [
+      "Arizona Wildcats", "Arizona State Sun Devils", "Baylor Bears", "BYU Cougars",
+      "Cincinnati Bearcats", "Colorado Buffaloes", "Houston Cougars", "Iowa State Cyclones",
+      "Kansas Jayhawks", "Kansas State Wildcats", "Oklahoma State Cowboys", "TCU Horned Frogs",
+      "Texas Tech Red Raiders", "UCF Knights", "Utah Utes", "West Virginia Mountaineers",
+    ],
+  };
+  const CFB_CONFERENCE_TEAMS_NORM = Object.fromEntries(
+    Object.entries(CFB_CONFERENCE_TEAMS).map(([key, teams]) => [key, teams.map(norm)])
+  );
   function cfbConferenceLabel(key) {
     return CFB_CONFERENCES.find(c => c.key === key)?.label || "";
   }
-  function cfbConfTextMatches(confText, cfbConfKey) {
-    const entry = CFB_CONFERENCES.find(c => c.key === cfbConfKey);
-    if (!entry) return true;
-    const t = norm(confText);
-    if (!t) return false;
-    return entry.aliases.some(a => t.includes(a));
+  function isTeamInCfbConference(team, cfbConfKey) {
+    const roster = CFB_CONFERENCE_TEAMS_NORM[cfbConfKey];
+    if (!roster) return false;
+    const identities = getTeamIdentityStrings(team);
+    return identities.some(id => roster.includes(id));
   }
-  function filterEventsByCfbConference(events, cfbConfKey, teamIdToConf) {
+  function filterEventsByCfbConference(events, cfbConfKey) {
     if (!cfbConfKey) return events;
-    const map = teamIdToConf || {};
     return (events || []).filter(ev => {
       const competitors = ev?.competitions?.[0]?.competitors || [];
-      return competitors.some(c => {
-        const id = String(c?.team?.id || "");
-        const confText = map[id] || getConferenceNameFromCompetitor(c) || "";
-        return cfbConfTextMatches(confText, cfbConfKey);
-      });
+      return competitors.some(c => isTeamInCfbConference(c?.team, cfbConfKey));
     });
-  }
-
-  // Full-slate conference map cache — separate from confCache above (which
-  // only samples the first handful of events, enough for the meta line
-  // under already-visible cards). Filtering needs every event's conference
-  // resolved, so this is built on demand the first time the user actually
-  // taps a conference pill, then reused for the rest of that day.
-  function cfbConfFullCacheKey(date) { return `scoresConfFullCache_cfb_${date}`; }
-  function loadCfbConfFullCache(date) {
-    try {
-      const raw = localStorage.getItem(cfbConfFullCacheKey(date));
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch { return null; }
-  }
-  function saveCfbConfFullCache(date, teamIdToConf) {
-    try { localStorage.setItem(cfbConfFullCacheKey(date), JSON.stringify({ teamIdToConf, ts: Date.now() })); } catch {}
   }
 
   // ─── Date helpers ──────────────────────────────────────────────────────────
@@ -630,10 +637,9 @@
     escapeHtml, applyOddsToDom, buildOddsLine, hydrateAllOdds,
     buildConferenceSelectHTML, buildLeagueSelectHTML, buildCalendarButtonHTML,
     norm,
-    getSavedMatchupFilters, setSavedMatchupFilters,
-    classifyCfbMatchup, filterEventsByMatchupFlags,
+    getSavedMatchupFilter, setSavedMatchupFilter,
+    classifyCfbMatchup, filterEventsByMatchupFilter,
     CFB_CONFERENCES, cfbConferenceLabel, filterEventsByCfbConference,
-    loadCfbConfFullCache, saveCfbConfFullCache,
   };
 
 })();
