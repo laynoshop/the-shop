@@ -191,9 +191,11 @@
   background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);
   color: rgba(255,255,255,0.55); flex-shrink: 0; white-space: nowrap;
 }
-.broadcastChip.broadcastChipLogo { padding: 3px 7px; }
-.broadcastLogoImg { height: 13px; width: auto; max-width: 40px; display: block; }
-.broadcastLogoFallback { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
+.broadcastChip.broadcastChipLogo {
+  background: #fff; border-color: rgba(0,0,0,0.06); padding: 3px 8px;
+}
+.broadcastLogoImg { height: 13px; width: auto; max-width: 90px; display: block; }
+.broadcastLogoFallback { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #222; }
 .cardHeaderRight {
   display: flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 70%;
   flex-wrap: wrap; justify-content: flex-end;
@@ -729,35 +731,24 @@
 
   // ── Broadcast network logo (falls back to the plain text chip) ──
   // ESPN's scoreboard/summary responses only give us the network's name
-  // (e.g. "FOX"), never a logo URL, so this maps the common ones to
-  // ESPN's own network-logo CDN. These slugs haven't been verified
-  // against a live response — if a guess is wrong the image 404s and
-  // the onerror handler swaps back to today's text chip automatically,
-  // so a bad guess never breaks the card, it just stays text.
-  const NETWORK_LOGO_SLUGS = {
-    "espn": "espn", "espn2": "espn2", "espnu": "espnu", "espnews": "espnews",
-    "espn+": "espnplus", "espn plus": "espnplus",
-    "abc": "abc",
-    "fox": "fox", "fs1": "fs1", "fox sports 1": "fs1", "fs2": "fs2", "fox sports 2": "fs2",
-    "cbs": "cbs", "cbssn": "cbssn", "cbs sports network": "cbssn",
-    "nbc": "nbc", "peacock": "peacock",
-    "tbs": "tbs", "tnt": "tnt", "trutv": "trutv",
-    "the cw": "cw", "cw": "cw",
-    "paramount+": "paramount", "paramount plus": "paramount",
-    "prime video": "amazon", "amazon prime video": "amazon", "amazon": "amazon",
-    "accn": "accn", "acc network": "accn",
-    "secn": "secn", "sec network": "secn",
-    "btn": "btn", "big ten network": "btn",
-    "nfln": "nflnetwork", "nfl network": "nflnetwork",
+  // (e.g. "FOX"), never a logo image — and there's no reliable public CDN
+  // path for network logos to guess at (tried that; every guess 404'd).
+  // So these are real logo files hosted locally in assets/networks/, added
+  // as they're supplied. Anything not in this map keeps the plain text
+  // chip exactly as before — no guessing, no broken images.
+  const NETWORK_LOGO_FILES = {
+    "espn":  "assets/networks/espn.webp",
+    "espn2": "assets/networks/espn2.webp",
+    "abc":   "assets/networks/abc.webp",
+    "cbs":   "assets/networks/cbs.webp",
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
     if (!nm) return "";
-    const slug = NETWORK_LOGO_SLUGS[SD.norm(nm)];
-    if (!slug) return `<div class="broadcastChip">${SD.escapeHtml(nm)}</div>`;
-    const logoUrl = `https://a.espncdn.com/i/networks/500/${slug}.png`;
+    const file = NETWORK_LOGO_FILES[SD.norm(nm)];
+    if (!file) return `<div class="broadcastChip">${SD.escapeHtml(nm)}</div>`;
     return `<div class="broadcastChip broadcastChipLogo">
-      <img src="${SD.escapeHtml(logoUrl)}" alt="${SD.escapeHtml(nm)}" class="broadcastLogoImg" loading="lazy"
+      <img src="${SD.escapeHtml(file)}" alt="${SD.escapeHtml(nm)}" class="broadcastLogoImg" loading="lazy"
         onerror="this.style.display='none';this.nextElementSibling.style.display='inline';" />
       <span class="broadcastLogoFallback" style="display:none">${SD.escapeHtml(nm)}</span>
     </div>`;
