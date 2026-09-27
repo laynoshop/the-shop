@@ -768,6 +768,8 @@
     "the cw":            { file: "assets/networks/cw.webp" },
     "cbssn":                    { file: "assets/networks/cbssn.webp" },
     "cbs sports network":       { file: "assets/networks/cbssn.webp" },
+    "accn":            { file: "assets/networks/accn.webp" },
+    "acc network":     { file: "assets/networks/accn.webp" },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
