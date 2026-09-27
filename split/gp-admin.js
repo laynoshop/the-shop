@@ -266,6 +266,53 @@
     return true;
   }
 
+  // --------------- permanently delete a league and everything in it ---------------
+  // Unlike archiving (a soft toggle players stop seeing), this actually
+  // removes the league doc, its members subcollection, and every week
+  // it ever had — each week's pickSlates doc, its games subcollection,
+  // and every player's picks (and their games subcollection) under it.
+  // No admin SDK here (client-side Firestore only), so each subcollection
+  // has to be fetched and deleted explicitly rather than via a single
+  // recursive-delete call.
+  async function gpDeleteLeague(db, leagueId) {
+    const lid = String(leagueId || "").trim();
+    if (!lid) return;
+    const leagueRef = leaguesRef(db, lid);
+
+    let weekIds = [];
+    try {
+      const snap = await leagueRef.get();
+      const weeks = Array.isArray(snap.data()?.weeks) ? snap.data().weeks : [];
+      weekIds = weeks.map(w => String(w?.id || w || "")).filter(Boolean);
+    } catch {}
+
+    for (const wid of weekIds) {
+      const slateRef = db.collection("pickSlates").doc(wid);
+      try {
+        const gamesSnap = await slateRef.collection("games").get();
+        await Promise.all(gamesSnap.docs.map(d => d.ref.delete()));
+      } catch {}
+      try {
+        const picksSnap = await slateRef.collection("picks").get();
+        await Promise.all(picksSnap.docs.map(async (pdoc) => {
+          try {
+            const gamesSnap = await pdoc.ref.collection("games").get();
+            await Promise.all(gamesSnap.docs.map(g => g.ref.delete()));
+          } catch {}
+          try { await pdoc.ref.delete(); } catch {}
+        }));
+      } catch {}
+      try { await slateRef.delete(); } catch {}
+    }
+
+    try {
+      const membersSnap = await leagueRef.collection("members").get();
+      await Promise.all(membersSnap.docs.map(d => d.ref.delete()));
+    } catch {}
+
+    await leagueRef.delete();
+  }
+
   // --------------- create a new week inside a league ---------------
   async function gpAdminCreateNewWeekInLeague(db, uid, leagueId) {
     const leagueRef = leaguesRef(db, leagueId);
@@ -611,6 +658,7 @@
   window.GP_Admin = {
     gpCreateLeague,
     gpUpdateLeagueSettings,
+    gpDeleteLeague,
     gpAdminCreateNewWeekInLeague,
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,
