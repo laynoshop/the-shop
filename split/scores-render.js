@@ -780,6 +780,9 @@
     "usa net":         { file: "assets/networks/usa.webp" },
     "espnu":           { file: "assets/networks/espnu.webp" },
     "espn unlimited":  { file: "assets/networks/espn.webp" },
+    "nfln":            { file: "assets/networks/nfl-network.webp" },
+    "nfl network":     { file: "assets/networks/nfl-network.webp" },
+    "nfl net":         { file: "assets/networks/nfl-network.webp" },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
