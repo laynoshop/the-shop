@@ -889,6 +889,70 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
   text-transform: uppercase; color: rgba(255,255,255,0.35);
 }
+.gpH2HMatchupRowClickable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.gpH2HMatchupRowClickable:active { background: rgba(255,255,255,0.04); }
+
+/* Head-to-Head matchup detail overlay — bottom sheet, game-by-game
+   pick comparison between the two named players in a matchup. */
+.gpH2HDetailSheet { max-height: 88vh; display: flex; flex-direction: column; }
+.gpH2HDetailHeaderRow {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+}
+.gpH2HDetailSide { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.gpH2HDetailSideRight { flex-direction: row-reverse; text-align: right; }
+.gpH2HDetailAvatar {
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 900; letter-spacing: -0.3px; text-transform: uppercase;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+.gpH2HDetailName {
+  font-size: 13.5px; font-weight: 800; color: rgba(255,255,255,0.85);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpH2HDetailPts { font-size: 18px; font-weight: 900; color: #ffd76a; flex-shrink: 0; }
+.gpH2HDetailVsLabel {
+  font-size: 10px; font-weight: 900; letter-spacing: 0.08em;
+  text-transform: uppercase; color: rgba(255,255,255,0.3); flex-shrink: 0;
+}
+.gpH2HDetailWeekLabel {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  color: rgba(255,255,255,0.35); text-align: center; margin-bottom: 10px;
+}
+.gpH2HDetailGames {
+  display: flex; flex-direction: column; gap: 8px;
+  overflow-y: auto; padding-bottom: 12px;
+}
+.gpH2HDetailGameRow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 8px; border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.gpH2HDetailPickCell { flex: 0 0 auto; width: 76px; display: flex; justify-content: center; }
+.gpH2HDetailGameInfo {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.gpH2HDetailTeams {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.6);
+}
+.gpH2HDetailScore { font-size: 12px; font-weight: 900; color: rgba(255,255,255,0.85); }
+.gpH2HDetailAt { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.3); }
+.gpH2HPickChip {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 8px; border-radius: 10px; width: 100%;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+}
+.gpH2HPickChip.gpH2HPickNone { color: rgba(255,255,255,0.25); font-size: 16px; font-weight: 900; }
+.gpH2HPickAbbr { font-size: 11px; font-weight: 900; letter-spacing: 0.02em; color: rgba(255,255,255,0.8); }
+.gpH2HPickChip.gpH2HPickWin { background: rgba(50,200,100,0.14); border-color: rgba(50,200,100,0.35); }
+.gpH2HPickChip.gpH2HPickWin .gpH2HPickAbbr { color: #5ddb8a; }
+.gpH2HPickChip.gpH2HPickLoss { background: rgba(220,60,60,0.1); border-color: rgba(220,60,60,0.26); }
+.gpH2HPickChip.gpH2HPickLoss .gpH2HPickAbbr { color: #e05555; }
+.gpH2HPickChip.gpH2HPickTie { background: rgba(255,200,80,0.1); border-color: rgba(255,200,80,0.26); }
+.gpH2HPickChip.gpH2HPickTie .gpH2HPickAbbr { color: rgba(255,210,100,0.9); }
 
 /* Header bar */
 .gpLeaderHeader {
@@ -1690,20 +1754,32 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpLeagueDeleteBtn:active { background: rgba(216,31,31,0.26); }
 
-/* Head-to-Head roster: registered-player checklist */
-.gpH2HPlayerChecklist {
-  display: flex; flex-direction: column; gap: 2px;
-  max-height: 220px; overflow-y: auto;
+/* Head-to-Head season: Start Season button + manual schedule editor */
+.gpH2HStartSeasonBtn {
+  width: 100%; margin-top: 8px;
+  background: linear-gradient(135deg, rgba(255,195,50,0.95), rgba(255,140,20,0.95));
+  border: 1px solid rgba(255,195,70,0.6);
+  color: #241700; font-weight: 900;
+}
+.gpH2HStartSeasonBtn:disabled { opacity: 0.4; }
+.gpH2HEditSchedule {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 10px; max-height: 360px; overflow-y: auto;
+  padding: 2px 2px 2px 0;
+}
+.gpH2HEditRound {
   border-radius: 12px; background: rgba(0,0,0,0.14);
   border: 1px solid rgba(255,255,255,0.1);
-  padding: 4px 6px;
+  padding: 8px 10px;
 }
-.gpH2HPlayerCheckRow {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 8px; border-radius: 8px;
-  font-size: 14px; font-weight: 700;
+.gpH2HEditRoundLabel {
+  font-size: 10.5px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em;
+  color: rgba(255,210,110,0.85); margin-bottom: 6px;
 }
-.gpH2HPlayerCheckRow:active { background: rgba(255,255,255,0.05); }
+.gpH2HEditRow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.gpH2HEditRow:last-child { margin-bottom: 0; }
+.gpH2HEditSelect { flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; }
+.gpH2HEditVs { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.35); flex-shrink: 0; }
 
 /* ══════════════════════════════════════════════
    PLAYER PICKS OVERLAY
@@ -2784,7 +2860,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       const { bg: bgA, color: colorA } = avatarStyle(nameA);
       const { bg: bgB, color: colorB } = avatarStyle(nameB);
       return `
-<div class="gpH2HMatchupRow">
+<div class="gpH2HMatchupRow gpH2HMatchupRowClickable" data-gpaction="openH2HMatchup"
+  data-namea="${esc(nameA)}" data-nameb="${esc(nameB)}" data-ptsa="${esc(String(ptsA))}" data-ptsb="${esc(String(ptsB))}">
   <div class="gpH2HSide${aWin ? " gpH2HWinner" : ""}">
     <div class="gpH2HAvatar" style="background:${bgA};color:${colorA}">${esc(initials(nameA))}</div>
     <div class="gpH2HName">${esc(nameA)}${aWin ? " 🏆" : ""}</div>
@@ -2809,6 +2886,145 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   </div>
   <div class="gpH2HMatchupsList">${rows}</div>
 </div>`;
+  }
+
+  // ─── Head-to-Head matchup detail — one game per row, both players'
+  // picks side by side with the game itself in the middle. `allPicks` is
+  // gpGetAllPicksForSlate's shape ({ [eventId]: [{name, side, ...}] }),
+  // matched to each named player the same case-insensitive way the rest
+  // of H2H matches names. `games` is this week's already-loaded game
+  // list (window.__gpCurrentGames) — no extra Firestore round trip.
+  function gpBuildH2HMatchupDetailHTML({ nameA, nameB, ptsA, ptsB, weekLabel, games, allPicks, atsEventIds }) {
+    const GP_Data = window.GP_Data || {};
+    const atsSet = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
+    const { bg: bgA, color: colorA } = avatarStyle(nameA);
+    const { bg: bgB, color: colorB } = avatarStyle(nameB);
+
+    function findPick(eventId, playerName) {
+      const arr = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
+      const key = String(playerName || "").trim().toLowerCase();
+      const row = arr.find(p => String(p?.name || "").trim().toLowerCase() === key);
+      return row ? String(row.side || "") : "";
+    }
+    function resultFor(g, side, isAts) {
+      if (!side) return "";
+      const isFinalG = String(g?.__live?.state || "").toLowerCase() === "post";
+      if (!isFinalG) return "";
+      if (isAts) {
+        const grade = typeof GP_Data.gpGradeAtsForGame === "function" ? GP_Data.gpGradeAtsForGame(g) : { ok: false };
+        if (!grade.ok) return "";
+        if (grade.pushed) return "tie";
+        return side === grade.coverSide ? "win" : "loss";
+      }
+      const winningSide = typeof GP_Data.gpGetGameWinningSide === "function" ? GP_Data.gpGetGameWinningSide(g) : "";
+      if (!winningSide) return "tie";
+      return side === winningSide ? "win" : "loss";
+    }
+    function pickChipHTML(g, side, result) {
+      if (!side) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
+      const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "", logo: g?.awayLogo || "" };
+      const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
+      const t = side === "away" ? away : home;
+      const cls = result === "win" ? " gpH2HPickWin" : result === "loss" ? " gpH2HPickLoss" : result === "tie" ? " gpH2HPickTie" : "";
+      return `
+      <div class="gpH2HPickChip${cls}">
+        ${logoImg(t?.logo || g?.[side + "Logo"], safeAbbr(t))}
+        <span class="gpH2HPickAbbr">${esc(safeAbbr(t))}</span>
+      </div>`;
+    }
+
+    const sorted = [...(Array.isArray(games) ? games : [])].sort((a, b) => startMs(a) - startMs(b));
+    const rowsHTML = sorted.map(g => {
+      const eventId = String(g?.eventId || g?.id || "");
+      if (!eventId) return "";
+      const isAts = atsSet.has(eventId);
+      const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "" };
+      const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "" };
+      const sideA = findPick(eventId, nameA);
+      const sideB = findPick(eventId, nameB);
+      const resA = resultFor(g, sideA, isAts);
+      const resB = resultFor(g, sideB, isAts);
+      const live = g?.__live || null;
+      const liveState = String(live?.state || "").toLowerCase();
+      const showScores = (liveState === "in" || liveState === "post") &&
+                          live?.awayScore != null && live?.awayScore !== "" &&
+                          live?.homeScore != null && live?.homeScore !== "";
+      return `
+<div class="gpH2HDetailGameRow">
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA)}</div>
+  <div class="gpH2HDetailGameInfo">
+    ${buildStatusHTML(g)}
+    <div class="gpH2HDetailTeams">
+      <span>${esc(safeAbbr(away))}</span>
+      ${showScores ? `<span class="gpH2HDetailScore">${esc(String(live.awayScore))}&ndash;${esc(String(live.homeScore))}</span>` : `<span class="gpH2HDetailAt">@</span>`}
+      <span>${esc(safeAbbr(home))}</span>
+    </div>
+  </div>
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB)}</div>
+</div>`;
+    }).join("");
+
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpH2HDetailOverlay" role="dialog" aria-modal="true" aria-label="${esc(nameA)} vs ${esc(nameB)}">
+  <div class="gpPicksOverlaySheet gpH2HDetailSheet" id="gpH2HDetailSheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader">
+      <div class="gpH2HDetailHeaderRow">
+        <div class="gpH2HDetailSide">
+          <div class="gpH2HDetailAvatar" style="background:${bgA};color:${colorA}">${esc(initials(nameA))}</div>
+          <div class="gpH2HDetailName">${esc(nameA)}</div>
+          <div class="gpH2HDetailPts">${esc(String(ptsA ?? 0))}</div>
+        </div>
+        <div class="gpH2HDetailVsLabel">VS</div>
+        <div class="gpH2HDetailSide gpH2HDetailSideRight">
+          <div class="gpH2HDetailPts">${esc(String(ptsB ?? 0))}</div>
+          <div class="gpH2HDetailName">${esc(nameB)}</div>
+          <div class="gpH2HDetailAvatar" style="background:${bgB};color:${colorB}">${esc(initials(nameB))}</div>
+        </div>
+      </div>
+      <button class="gpOverlayCloseBtn" id="gpH2HDetailClose" aria-label="Close">✕</button>
+    </div>
+    <div class="gpOverlayBody">
+      ${weekLabel ? `<div class="gpH2HDetailWeekLabel">${esc(weekLabel)}</div>` : ""}
+      <div class="gpH2HDetailGames">${rowsHTML || `<div class="gpEmpty">No games this week.</div>`}</div>
+    </div>
+  </div>
+</div>`;
+  }
+
+  function gpShowH2HMatchupOverlay(opts) {
+    const existing = document.getElementById("gpH2HDetailOverlay");
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML("beforeend", gpBuildH2HMatchupDetailHTML(opts));
+
+    const backdrop = document.getElementById("gpH2HDetailOverlay");
+    const sheet    = document.getElementById("gpH2HDetailSheet");
+    const closeBtn = document.getElementById("gpH2HDetailClose");
+    if (!backdrop) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    closeBtn?.addEventListener("click", dismiss);
+    backdrop.addEventListener("click", (e) => {
+      if (!sheet.contains(e.target)) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
+  function gpDismissH2HMatchupOverlay() {
+    const backdrop = document.getElementById("gpH2HDetailOverlay");
+    if (backdrop) backdrop.remove();
   }
 
   // ─── Pre-lock progress (leaderboard before any game has gone final) ──
@@ -4202,7 +4418,7 @@ ${archivedSectionHTML}`;
   }
 
   // ─── League settings form (create or edit) ────────────────────────
-  function gpBuildLeagueSettingsHTML({ mode, league, registeredPlayers, leagueMembers }) {
+  function gpBuildLeagueSettingsHTML({ mode, league, leagueMembers }) {
     const isEdit = mode === "edit" && league;
     const name    = esc(String(league?.name ?? ""));
     const year    = Number(league?.seasonYear) || new Date().getFullYear();
@@ -4237,17 +4453,6 @@ ${archivedSectionHTML}`;
       </div>
     </div>`;
     }).join("");
-
-    // Registered players (anyone who's ever completed the name+code screen)
-    // get a checkbox each; the roster's chosen names not found in that
-    // list (someone who hasn't logged in yet) fall through to the
-    // free-text "add anyone else" box below instead.
-    const registered = Array.isArray(registeredPlayers) ? registeredPlayers : [];
-    const rosterNames = Array.isArray(league?.h2hRoster) ? league.h2hRoster : [];
-    const registeredNameSet = new Set(registered.map(p => String(p.name).toLowerCase()));
-    const selectedSet = new Set(rosterNames.map(n => String(n).toLowerCase()));
-    const extraNames = rosterNames.filter(n => !registeredNameSet.has(String(n).toLowerCase()));
-    const rosterText = esc(extraNames.join("\n"));
 
     // Who has actually joined this league — admin-only visibility, using
     // the same avatar/name row styling as the player-facing Join overlay.
@@ -4291,14 +4496,69 @@ ${archivedSectionHTML}`;
       : `<div class="gpJoinMembersEmpty">Nobody's joined this league yet.</div>`}
   </div>` : "";
 
-    const playerChecklistHTML = registered.length ? `
-    <div class="gpH2HPlayerChecklist">
-      ${registered.map(p => `
-      <label class="gpH2HPlayerCheckRow">
-        <input type="checkbox" data-gp-h2h-player="1" value="${esc(p.name)}" ${selectedSet.has(String(p.name).toLowerCase()) ? "checked" : ""}/>
-        <span>${esc(p.name)}</span>
-      </label>`).join("")}
-    </div>` : `<div class="muted" style="font-size:12px">No registered players yet — they'll show up here once someone logs in on the entry page.</div>`;
+    // ── Head-to-Head: "Start Season" (pre-season) or a manual schedule
+    //    editor (post-season) — roster comes from whoever has actually
+    //    joined (membersList, real Join League flow), not admin-typed
+    //    names. See gpAdminStartH2HSeason/gpAdminSetH2HSchedule.
+    const seasonStarted = !!league?.seasonStarted;
+    const h2hRoster   = Array.isArray(league?.h2hRoster) ? league.h2hRoster : [];
+    const h2hSchedule = Array.isArray(league?.h2hSchedule) ? league.h2hSchedule : [];
+    let h2hSeasonBodyHTML = "";
+    if (!isEdit) {
+      h2hSeasonBodyHTML = `<div class="muted" style="font-size:12px">Create the league first — players join it exactly like a points league. Once enough have joined, come back here to start the season.</div>`;
+    } else if (!seasonStarted) {
+      const joinedCount = membersList.length;
+      h2hSeasonBodyHTML = `
+    <div class="muted" style="font-size:12px">${joinedCount} player${joinedCount === 1 ? "" : "s"} joined so far. Starting the season snapshots this list and generates a round-robin schedule — one matchup per player per round.</div>
+    <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="startH2HSeason" data-leagueid="${esc(league?.id || "")}" ${joinedCount < 2 ? "disabled" : ""}>🏁 Start Season</button>
+    ${joinedCount < 2 ? `<div class="muted" style="font-size:11px">Need at least 2 joined players first.</div>` : ""}`;
+    } else {
+      // Option pool for every dropdown: the frozen roster plus anyone
+      // who's joined since (in case a late joiner needs manually slotting
+      // into a round) — deduped case-insensitively.
+      const poolSeen = new Set();
+      const pool = [];
+      for (const n of [...h2hRoster, ...membersList.map(m => m.name)]) {
+        const nm = String(n || "").trim();
+        const key = nm.toLowerCase();
+        if (!nm || poolSeen.has(key)) continue;
+        poolSeen.add(key);
+        pool.push(nm);
+      }
+      const optionsHTML = (selected) => {
+        const selKey = String(selected || "").trim().toLowerCase();
+        return `<option value="" ${selKey ? "" : "selected"}>— BYE —</option>` +
+          pool.map(n => `<option value="${esc(n)}" ${n.toLowerCase() === selKey ? "selected" : ""}>${esc(n)}</option>`).join("");
+      };
+      const roundsHTML = h2hSchedule.map((round, ri) => {
+        const pairs = Array.isArray(round?.pairs) ? round.pairs : [];
+        const pairRowsHTML = pairs.map((p, pi) => {
+          const a = p?.players ? p.players[0] : (p?.bye || "");
+          const b = p?.players ? p.players[1] : "";
+          return `
+        <div class="gpH2HEditRow" data-round="${ri}" data-pair="${pi}">
+          <select class="gpLeagueSettingsInput gpH2HEditSelect" data-gp-h2h-slot="a">${optionsHTML(a)}</select>
+          <span class="gpH2HEditVs">vs</span>
+          <select class="gpLeagueSettingsInput gpH2HEditSelect" data-gp-h2h-slot="b">${optionsHTML(b)}</select>
+        </div>`;
+        }).join("");
+        return `
+      <div class="gpH2HEditRound">
+        <div class="gpH2HEditRoundLabel">Round ${ri + 1}</div>
+        ${pairRowsHTML}
+      </div>`;
+      }).join("");
+      h2hSeasonBodyHTML = `
+    <div class="muted" style="font-size:12px">Season started with ${h2hRoster.length} player${h2hRoster.length === 1 ? "" : "s"}. Reassign any matchup below (or set a side to "— BYE —") and save.</div>
+    <div class="gpH2HEditSchedule" id="gpH2HEditSchedule" data-leagueid="${esc(league?.id || "")}">
+      ${roundsHTML || `<div class="muted" style="font-size:12px">No rounds yet.</div>`}
+    </div>
+    <div class="gpLeagueSettingsActions">
+      <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="saveH2HSchedule" data-leagueid="${esc(league?.id || "")}">💾 Save Schedule</button>
+      <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="startH2HSeason" data-leagueid="${esc(league?.id || "")}">🔄 Regenerate From Joined Players</button>
+    </div>
+    <div class="muted" style="font-size:11px">Regenerating replaces the whole schedule above with a fresh round-robin from everyone currently joined — any manual edits here are lost.</div>`;
+    }
 
     return `
 <div class="gpLeagueSettingsForm" data-leagueid="${esc(league?.id || "")}">
@@ -4342,12 +4602,8 @@ ${archivedSectionHTML}`;
   </div>
 
   <div class="gpAdminBlock" id="gpLeagueH2HRosterRow" ${isH2H ? "" : 'style="display:none"'}>
-    <div class="gpAdminBlockLabel">🥊 Head-to-Head Roster</div>
-    ${playerChecklistHTML}
-    <div class="muted" style="font-size:12px">Add anyone not listed above:</div>
-    <textarea id="gpLeagueH2HRoster" class="gpLeagueSettingsInput" rows="3"
-      placeholder="One player name per line (or comma-separated)&#10;e.g. Alice, Bob">${rosterText}</textarea>
-    <div class="muted" style="font-size:12px">The season schedule is auto-generated (round robin) and only reshuffles if you change this roster.</div>
+    <div class="gpAdminBlockLabel">🥊 Head-to-Head Season</div>
+    ${h2hSeasonBodyHTML}
   </div>
 
   <div class="gpAdminBlock">
@@ -4432,6 +4688,9 @@ ${archivedSectionHTML}`;
     buildSeasonLeaderboardHTML,
     gpBuildH2HMatchupsHTML,
     gpBuildH2HSeasonStandingsHTML,
+    gpBuildH2HMatchupDetailHTML,
+    gpShowH2HMatchupOverlay,
+    gpDismissH2HMatchupOverlay,
     gpBuildViewToggleHTML,
     gpBuildTiebreakerCardHTML,
     gpBuildLockReminderHTML,
