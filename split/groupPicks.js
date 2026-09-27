@@ -1087,7 +1087,7 @@
       const leagueName = String(btn.getAttribute("data-leaguename") || "our league").trim();
       const url = window.location.origin + window.location.pathname;
       const title = "Join my Pick’em League!";
-      const text = `Welcome to The Shop! 🏈 I'm inviting you to join our "${leagueName}" Pick’em League. Tap the link below, enter 2026 as the Scarlet Key, head to the Pick’em page, and follow the steps from there to join the league. Let's go! 🏆`;
+      const text = `Welcome to The Shop! 🏈 I'm inviting you to join our "${leagueName}" Pick’em League. Tap the link above, enter 2026 as the Scarlet Key, head to the Pick’em page, and follow the steps from there to join the league. Let's go! 🏆`;
 
       if (navigator.share) {
         try {
