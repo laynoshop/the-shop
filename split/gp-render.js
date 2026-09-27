@@ -4078,12 +4078,18 @@ ${saveRow}`;
       const meta = `${esc(String(l.seasonYear || ""))} · ${weeksLabel}${l.archived ? " · Archived" : ""}`;
       const activePill = (l.active && !l.archived) ? `<span class="gpLeagueActivePill"><span class="gpLeagueActiveDot"></span>Active</span>` : "";
       const isMember = !!l.isMember;
+      // Only a non-member who could plausibly still join sees the Join
+      // CTA — once a league's season is underway it's only still in
+      // this list at all for an admin (see groupPicks.js's picker
+      // filter), and prompting them to "Join" a league already several
+      // weeks deep doesn't make sense.
+      const canJoin = !isMember && !l.seasonUnderway;
       const cta = isMember
         ? `<div class="gpLeagueCardCtaGroup">
     <div class="gpLeagueCardCta gpLeagueCardCtaVisit">Visit League ›</div>
     <div class="gpLeagueCardCtaInvite" data-gpaction="inviteToLeague" data-leagueid="${esc(l.id)}" data-leaguename="${esc(l.name || "")}" title="Invite someone to this league">📤 Invite</div>
   </div>`
-        : `<div class="gpLeagueCardCta gpLeagueCardCtaJoin">Join</div>`;
+        : (canJoin ? `<div class="gpLeagueCardCta gpLeagueCardCtaJoin">Join</div>` : "");
 
       // Countdown to the current week's first kickoff — groupPicks.js
       // stashes this on the league object before handing it here (a
@@ -4117,7 +4123,7 @@ ${saveRow}`;
   </div>` : "";
 
       return `
-<div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="${isMember ? "selectLeague" : "openJoinOverlay"}" data-leagueid="${esc(l.id)}">
+<div class="gpLeagueCard${l.archived ? " gpLeagueArchived" : ""}" data-gpaction="${canJoin ? "openJoinOverlay" : "selectLeague"}" data-leagueid="${esc(l.id)}">
   <div class="gpLeagueCardMain">
     <div class="gpLeagueCardIcon">🏈</div>
     <div class="gpLeagueCardInfo">
