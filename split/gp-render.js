@@ -852,42 +852,44 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpH2HMatchupRow {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 0;
+  padding: 14px 4px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 .gpH2HMatchupRow:last-child { border-bottom: none; }
-.gpH2HSide {
-  flex: 1; min-width: 0;
-  display: flex; align-items: center; gap: 8px;
-}
-.gpH2HSideRight { flex-direction: row-reverse; text-align: right; }
-.gpH2HAvatar {
-  width: 34px; height: 34px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 900; letter-spacing: -0.3px;
-  text-transform: uppercase; flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.12);
-}
 .gpH2HName {
-  font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.75);
+  flex: 1 1 0; min-width: 0;
+  font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.75);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.gpH2HNameLeft { text-align: left; }
+.gpH2HNameRight { text-align: right; }
+.gpH2HName.gpH2HWinner { color: #fff; }
+.gpH2HScoreCluster {
+  flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+  padding: 7px 14px; border-radius: 999px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
 .gpH2HPts {
-  font-size: 16px; font-weight: 900; color: rgba(255,255,255,0.6);
+  font-size: 21px; font-weight: 900; letter-spacing: -0.01em;
+  color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums;
+  min-width: 20px; text-align: center;
+}
+.gpH2HPts.gpH2HPtsWin {
+  color: #ffd76a;
+  text-shadow: 0 0 14px rgba(255,215,100,0.55);
+}
+.gpH2HVs {
+  font-size: 9.5px; font-weight: 900; letter-spacing: 0.1em;
+  text-transform: uppercase; color: rgba(255,255,255,0.3);
   flex-shrink: 0;
 }
-.gpH2HSide.gpH2HWinner .gpH2HName { color: #fff; }
-.gpH2HSide.gpH2HWinner .gpH2HPts { color: #ffd76a; }
-.gpH2HVs {
-  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
-  text-transform: uppercase; color: rgba(255,255,255,0.3);
-  flex-shrink: 0; padding: 0 2px;
-}
-.gpH2HByeRow { justify-content: flex-start; }
+.gpH2HByeRow { justify-content: space-between; }
 .gpH2HByeLabel {
-  margin-left: auto;
   font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
   text-transform: uppercase; color: rgba(255,255,255,0.35);
+  flex-shrink: 0;
 }
 .gpH2HMatchupRowClickable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .gpH2HMatchupRowClickable:active { background: rgba(255,255,255,0.04); }
@@ -2846,33 +2848,25 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const rows = list.map(m => {
       if (m.bye) {
         const nm = String(m.bye || "Someone");
-        const { bg, color } = avatarStyle(nm);
         return `
 <div class="gpH2HMatchupRow gpH2HByeRow">
-  <div class="gpH2HAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
-  <div class="gpH2HName">${esc(nm)}</div>
+  <div class="gpH2HName gpH2HNameLeft">${esc(nm)}</div>
   <div class="gpH2HByeLabel">BYE</div>
 </div>`;
       }
       const [nameA, nameB] = m.players;
       const [ptsA, ptsB] = m.points;
       const aWin = m.winner === "a", bWin = m.winner === "b", tie = m.winner === "tie";
-      const { bg: bgA, color: colorA } = avatarStyle(nameA);
-      const { bg: bgB, color: colorB } = avatarStyle(nameB);
       return `
 <div class="gpH2HMatchupRow gpH2HMatchupRowClickable" data-gpaction="openH2HMatchup"
   data-namea="${esc(nameA)}" data-nameb="${esc(nameB)}" data-ptsa="${esc(String(ptsA))}" data-ptsb="${esc(String(ptsB))}">
-  <div class="gpH2HSide${aWin ? " gpH2HWinner" : ""}">
-    <div class="gpH2HAvatar" style="background:${bgA};color:${colorA}">${esc(initials(nameA))}</div>
-    <div class="gpH2HName">${esc(nameA)}${aWin ? " 🏆" : ""}</div>
-    <div class="gpH2HPts">${esc(String(ptsA))}</div>
+  <div class="gpH2HName gpH2HNameLeft${aWin ? " gpH2HWinner" : ""}">${esc(nameA)}${aWin ? " 🏆" : ""}</div>
+  <div class="gpH2HScoreCluster">
+    <span class="gpH2HPts${aWin ? " gpH2HPtsWin" : ""}">${esc(String(ptsA))}</span>
+    <span class="gpH2HVs">${tie ? "TIE" : "vs"}</span>
+    <span class="gpH2HPts${bWin ? " gpH2HPtsWin" : ""}">${esc(String(ptsB))}</span>
   </div>
-  <div class="gpH2HVs">${tie ? "TIE" : "vs"}</div>
-  <div class="gpH2HSide gpH2HSideRight${bWin ? " gpH2HWinner" : ""}">
-    <div class="gpH2HPts">${esc(String(ptsB))}</div>
-    <div class="gpH2HName">${bWin ? "🏆 " : ""}${esc(nameB)}</div>
-    <div class="gpH2HAvatar" style="background:${bgB};color:${colorB}">${esc(initials(nameB))}</div>
-  </div>
+  <div class="gpH2HName gpH2HNameRight${bWin ? " gpH2HWinner" : ""}">${bWin ? "🏆 " : ""}${esc(nameB)}</div>
 </div>`;
     }).join("");
 
@@ -3167,6 +3161,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   ${scoringFooter}
 </div>`;
     }
+
+    // H2H leagues get their own "real leaderboard" — the weekly
+    // Head-to-Head Matchups card — once any game's gone final, so the
+    // cumulative-points table below (which isn't meaningful head-to-head)
+    // just doesn't render for them from that point on. The pre-lock
+    // progress view above still shows for every format, since "who's
+    // picked so far" is useful regardless of how scoring works.
+    if (opts?.h2hFormat) return "";
 
     // Once at least one game's gone final, backfill any league member who
     // never made a single pick this week — otherwise they'd just silently
@@ -3915,7 +3917,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
         ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds: [...atsIdSet], tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
-      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks });
+      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks, h2hFormat });
 
       if (h2hFormat && typeof GP_Data.gpGetH2HRoundForWeek === "function" && typeof GP_Data.gpComputeH2HWeekResults === "function") {
         const round = GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex);
