@@ -544,6 +544,16 @@
   text-align: right; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 100%; min-width: 0; flex-shrink: 1;
 }
+.gpBroadcastChip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 5px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);
+  color: rgba(255,255,255,0.55); flex-shrink: 0; white-space: nowrap;
+}
+.gpBroadcastChip.gpBroadcastChipLogo { padding: 3px 7px; }
+.gpBroadcastLogoImg { height: 13px; width: auto; max-width: 40px; display: block; }
+.gpBroadcastLogoFallback { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
 .gpMatchup {
   display: flex; flex-direction: column;
   padding: 6px 10px 10px; gap: 6px;
@@ -2007,6 +2017,41 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     return parts.join("  ·  ");
   }
 
+  // ─── Broadcast network logo (falls back to plain text) ─────────────
+  // Mirrors scores-render.js's version — kept a separate copy since these
+  // are independent modules, but same slugs/behavior: try ESPN's own
+  // network-logo CDN, and if the image 404s (an unverified slug guess),
+  // the onerror handler swaps back to the plain text chip automatically.
+  const GP_NETWORK_LOGO_SLUGS = {
+    "espn": "espn", "espn2": "espn2", "espnu": "espnu", "espnews": "espnews",
+    "espn+": "espnplus", "espn plus": "espnplus",
+    "abc": "abc",
+    "fox": "fox", "fs1": "fs1", "fox sports 1": "fs1", "fs2": "fs2", "fox sports 2": "fs2",
+    "cbs": "cbs", "cbssn": "cbssn", "cbs sports network": "cbssn",
+    "nbc": "nbc", "peacock": "peacock",
+    "tbs": "tbs", "tnt": "tnt", "trutv": "trutv",
+    "the cw": "cw", "cw": "cw",
+    "paramount+": "paramount", "paramount plus": "paramount",
+    "prime video": "amazon", "amazon prime video": "amazon", "amazon": "amazon",
+    "accn": "accn", "acc network": "accn",
+    "secn": "secn", "sec network": "secn",
+    "btn": "btn", "big ten network": "btn",
+    "nfln": "nflnetwork", "nfl network": "nflnetwork",
+  };
+  function gpNorm(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+  function buildBroadcastChipHTML(name) {
+    const nm = String(name || "").trim();
+    if (!nm) return "";
+    const slug = GP_NETWORK_LOGO_SLUGS[gpNorm(nm)];
+    if (!slug) return `<div class="gpBroadcastChip">${esc(nm)}</div>`;
+    const logoUrl = `https://a.espncdn.com/i/networks/500/${slug}.png`;
+    return `<div class="gpBroadcastChip gpBroadcastChipLogo">
+      <img src="${esc(logoUrl)}" alt="${esc(nm)}" class="gpBroadcastLogoImg" loading="lazy"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='inline';" />
+      <span class="gpBroadcastLogoFallback" style="display:none">${esc(nm)}</span>
+    </div>`;
+  }
+
   // ─── Spread chip (ATS weeks only) ─────────────────────────────────
   function spreadChipHTML(g, side) {
     const val     = Number(g?.spreadValue);
@@ -2238,6 +2283,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   <div class="gpCardHeader">
     ${statusHTML}
     <div class="gpCardHeaderRight">
+      ${buildBroadcastChipHTML(g?.broadcastName)}
       ${oddsLine ? `<div class="gpOddsLine">${esc(oddsLine)}</div>` : ""}
       ${isAdmin ? `<button type="button" class="gpRemoveGameBtn" data-gpaction="adminRemoveGame" data-eid="${esc(eventId)}" data-weekid="${esc(weekId)}" title="Remove from week" aria-label="Remove game from week">✕</button>` : ""}
     </div>
