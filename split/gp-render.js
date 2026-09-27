@@ -948,6 +948,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
 }
 .gpH2HPickChip.gpH2HPickNone { color: rgba(255,255,255,0.25); font-size: 16px; font-weight: 900; }
+.gpH2HPickChip.gpH2HPickHidden { color: rgba(255,255,255,0.3); font-size: 15px; }
 .gpH2HPickAbbr { font-size: 11px; font-weight: 900; letter-spacing: 0.02em; color: rgba(255,255,255,0.8); }
 .gpH2HPickChip.gpH2HPickWin { background: rgba(50,200,100,0.14); border-color: rgba(50,200,100,0.35); }
 .gpH2HPickChip.gpH2HPickWin .gpH2HPickAbbr { color: #5ddb8a; }
@@ -2914,7 +2915,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       if (!winningSide) return "tie";
       return side === winningSide ? "win" : "loss";
     }
-    function pickChipHTML(g, side, result) {
+    function pickChipHTML(g, side, result, locked) {
+      if (!locked) return `<div class="gpH2HPickChip gpH2HPickHidden">🔒</div>`;
       if (!side) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
       const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "", logo: g?.awayLogo || "" };
       const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
@@ -2934,6 +2936,12 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       const isAts = atsSet.has(eventId);
       const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "" };
       const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "" };
+      // Same "picks reveal once this game locks" rule the rest of the
+      // page uses — each game locks independently, so an early game
+      // going final doesn't reveal picks for a later game that hasn't
+      // even started yet.
+      const gameMs = startMs(g);
+      const locked = gameMs > 0 && Date.now() >= gameMs;
       const sideA = findPick(eventId, nameA);
       const sideB = findPick(eventId, nameB);
       const resA = resultFor(g, sideA, isAts);
@@ -2945,7 +2953,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
                           live?.homeScore != null && live?.homeScore !== "";
       return `
 <div class="gpH2HDetailGameRow">
-  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA)}</div>
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked)}</div>
   <div class="gpH2HDetailGameInfo">
     ${buildStatusHTML(g)}
     <div class="gpH2HDetailTeams">
@@ -2954,7 +2962,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       <span>${esc(safeAbbr(home))}</span>
     </div>
   </div>
-  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB)}</div>
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB, locked)}</div>
 </div>`;
     }).join("");
 
@@ -3149,11 +3157,12 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
         targetMs: gpEarliestKickoffMs(opts?.games),
         liveLabel: "🏈 Games underway"
       });
+      const preLockTitle = opts?.h2hFormat ? "🎯 Pick Progress" : "🏆 Leaderboard";
       return `
 <div class="gpLeaderCard">
   <div class="gpLeaderHeader">
     <div class="gpLeaderHeaderLeft">
-      <div class="gpLeaderTitle">🏆 Leaderboard</div>
+      <div class="gpLeaderTitle">${preLockTitle}</div>
     </div>
     ${countdownHTML}
   </div>
