@@ -563,13 +563,9 @@
       if (isEdit) {
         try { league = await (Data().gpGetLeague || (async () => null))(db, mem.gpLeagueEditingId); } catch {}
       }
-      let registeredPlayers = [];
       let leagueMembers = [];
       try {
-        [registeredPlayers, leagueMembers] = await Promise.all([
-          (Data().gpListRegisteredPlayers || (async () => []))(db),
-          isEdit ? (Data().gpGetLeagueMembers || (async () => []))(db, mem.gpLeagueEditingId) : Promise.resolve([]),
-        ]);
+        leagueMembers = isEdit ? await (Data().gpGetLeagueMembers || (async () => []))(db, mem.gpLeagueEditingId) : [];
       } catch {}
       // League membership and actually having picks on file can drift
       // apart (e.g. a duplicate playerId from a bad login never went
@@ -606,7 +602,7 @@
         leagueName: league?.name || "", isAdmin, showLeaguesBtn: !!gpGetSelectedLeagueId(), playerName: name
       });
       const formHTML = (Render().gpBuildLeagueSettingsHTML || (() => ""))({
-        mode: isEdit ? "edit" : "create", league, registeredPlayers, leagueMembers
+        mode: isEdit ? "edit" : "create", league, leagueMembers
       });
       el.innerHTML = `${headerHTML}<div class="gpContainer">${formHTML}</div>`;
       postRender();
@@ -778,6 +774,7 @@
     window.__gpCurrentAtsEventIds       = atsEventIds;
     window.__gpCurrentTiebreakerEventId = tiebreakerEventId;
     window.__gpCurrentTiebreakers       = tiebreakers;
+    window.__gpCurrentWeekLabel         = weekLabel;
 
     // ── league announcements (admin-authored, top of the page) —
     //    a league saved before multi-announcement support only has the
@@ -1191,15 +1188,10 @@
       const totalWeeksEl = document.getElementById("gpLeagueTotalWeeks");
       const archivedEl   = document.getElementById("gpLeagueArchived");
       const formatEl     = document.getElementById("gpLeagueFormat");
-      const rosterEl     = document.getElementById("gpLeagueH2HRoster");
-      const checkedPlayerNames = Array.from(document.querySelectorAll('[data-gp-h2h-player="1"]:checked'))
-        .map(el => String(el.value || "").trim()).filter(Boolean);
       const name       = String(nameEl?.value || "").trim();
       const year       = Number(yearEl?.value || "");
       const totalWeeks = String(totalWeeksEl?.value || "").trim();
       const format     = String(formatEl?.value || "points").trim();
-      const extraNames = String(rosterEl?.value || "").split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-      const h2hRoster  = [...checkedPlayerNames, ...extraNames];
       const announcements = [0, 1, 2].map(i => ({
         title:     String(document.getElementById(`gpLeagueAnnouncementTitle${i}`)?.value || "").trim(),
         message:   String(document.getElementById(`gpLeagueAnnouncementMessage${i}`)?.value || "").trim(),
@@ -1224,11 +1216,11 @@
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
             name, seasonYear: year, totalWeeks,
             archived: archivedEl ? !!archivedEl.checked : undefined,
-            format, h2hRoster, announcements
+            format, announcements
           });
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
-            name, seasonYear: year, totalWeeks, format, h2hRoster, announcements
+            name, seasonYear: year, totalWeeks, format, announcements
           });
           // The admin creating a league is almost always a player in it
           // too — auto-join them so they don't hit their own "Join"
@@ -1251,6 +1243,104 @@
         console.error("[GP] submitLeagueSettings error:", err);
         alert(err?.message || "Something went wrong saving league settings.");
       }
+      return;
+    }
+
+    // ── H2H: snapshot whoever's joined + generate a fresh round-robin.
+    //    Doubles as "Regenerate" once a season's already started (the
+    //    button's own label changes; here we just detect the editor's
+    //    presence to know whether to warn about discarding manual edits).
+    if (action === "startH2HSeason") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      const isRegenerate = !!document.getElementById("gpH2HEditSchedule");
+      if (isRegenerate && !confirm("Regenerate the schedule from everyone currently joined?\n\nThis replaces the entire schedule — any manual matchup edits above will be lost.")) return;
+
+      const originalLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = "Starting…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        await (Admin().gpAdminStartH2HSeason || (async () => {}))(db2, uid, leagueId);
+        await renderPicks();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = originalLabel;
+        console.error("[GP] startH2HSeason error:", err);
+        alert(err?.message || "Something went wrong starting the season.");
+      }
+      return;
+    }
+
+    // ── H2H: save the manually-edited schedule — reads every round's
+    //    pair dropdowns straight out of the DOM and overwrites
+    //    h2hSchedule wholesale via gpAdminSetH2HSchedule. ──
+    if (action === "saveH2HSchedule") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      const container = document.getElementById("gpH2HEditSchedule");
+      if (!container) return;
+
+      const rounds = [];
+      let hasDuplicate = false;
+      Array.from(container.querySelectorAll(".gpH2HEditRound")).forEach(roundEl => {
+        const pairs = [];
+        const seenThisRound = new Set();
+        Array.from(roundEl.querySelectorAll(".gpH2HEditRow")).forEach(rowEl => {
+          const selects = rowEl.querySelectorAll("select[data-gp-h2h-slot]");
+          const a = String(selects[0]?.value || "").trim();
+          const b = String(selects[1]?.value || "").trim();
+          [a, b].filter(Boolean).forEach(nm => {
+            const key = nm.toLowerCase();
+            if (seenThisRound.has(key)) hasDuplicate = true;
+            seenThisRound.add(key);
+          });
+          if (a && b)       pairs.push({ players: [a, b] });
+          else if (a && !b) pairs.push({ bye: a });
+          else if (b && !a) pairs.push({ bye: b });
+        });
+        rounds.push({ pairs });
+      });
+
+      if (hasDuplicate) {
+        alert("Someone's assigned to two matchups in the same round — fix that before saving.");
+        return;
+      }
+
+      const originalLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = "Saving…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        await (Admin().gpAdminSetH2HSchedule || (async () => {}))(db2, uid, leagueId, rounds);
+        await renderPicks();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = originalLabel;
+        console.error("[GP] saveH2HSchedule error:", err);
+        alert(err?.message || "Something went wrong saving the schedule.");
+      }
+      return;
+    }
+
+    // ── H2H: open a matchup's game-by-game pick comparison. Everything
+    //    it needs (this week's games/picks/ATS ids) is already sitting in
+    //    the window.__gpCurrent* globals the main render pass just set —
+    //    no extra Firestore round trip for what's just a detail view of
+    //    data already on screen. ──
+    if (action === "openH2HMatchup") {
+      const nameA = String(btn.getAttribute("data-namea") || "");
+      const nameB = String(btn.getAttribute("data-nameb") || "");
+      if (!nameA || !nameB) return;
+      const ptsA = String(btn.getAttribute("data-ptsa") || "0");
+      const ptsB = String(btn.getAttribute("data-ptsb") || "0");
+      (Render().gpShowH2HMatchupOverlay || (() => {}))({
+        nameA, nameB, ptsA, ptsB,
+        weekLabel: window.__gpCurrentWeekLabel || "",
+        games: window.__gpCurrentGames || [],
+        allPicks: window.__gpCurrentAllPicks || {},
+        atsEventIds: window.__gpCurrentAtsEventIds || [],
+      });
       return;
     }
 

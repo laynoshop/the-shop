@@ -185,22 +185,6 @@
       codeUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   }
-  async function gpListRegisteredPlayers(db) {
-    try {
-      const snap = await db.collection("players").get();
-      const out = [];
-      snap.forEach(doc => {
-        const nm = String(doc.data()?.name || "").trim();
-        if (nm) out.push({ playerId: doc.id, name: nm });
-      });
-      out.sort((a, b) => a.name.localeCompare(b.name));
-      return out;
-    } catch (err) {
-      console.error("[GP] gpListRegisteredPlayers failed:", err);
-      return [];
-    }
-  }
-
   // ─── league membership ───────────────────────────────────────────
   // A lightweight "who's actually playing this league" roster, separate
   // from the player registry above (that's everyone who's ever logged
@@ -1247,7 +1231,6 @@
     gpFindPlayerIdByCodeHash,
     gpFindPlayerIdByName,
     gpSetPlayerCode,
-    gpListRegisteredPlayers,
     gpJoinLeague,
     gpGetLeagueMembers,
     gpGetSlateDoc,

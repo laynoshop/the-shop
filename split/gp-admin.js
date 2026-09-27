@@ -141,28 +141,6 @@
     return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
   }
 
-  // Head-to-Head is an opt-in league format (see gp-data.js's
-  // gpGenerateH2HSchedule): the admin supplies a roster of player names
-  // — matched case-insensitively the same way the points leaderboard
-  // matches unregistered players — and the app auto-generates a
-  // round-robin schedule from it. `roster` can be the array itself or
-  // raw textarea input (one name per line, or comma-separated).
-  function normalizeH2HRoster(roster) {
-    const raw = Array.isArray(roster) ? roster : String(roster || "").split(/[\n,]/);
-    const seen = new Set();
-    const out = [];
-    for (const entry of raw) {
-      const name = String(entry || "").trim().slice(0, 40);
-      if (!name) continue;
-      const key = name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(name);
-      if (out.length >= 24) break;
-    }
-    return out;
-  }
-
   // League Announcements — up to 3 short admin-authored notices shown
   // stacked at the top of the week view for every player in the league.
   // Each slot normalizes to null (not an empty object) when there's
@@ -204,10 +182,9 @@
       .slice(0, MAX_ANNOUNCEMENTS);
   }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, h2hRoster, announcements }) {
+  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, announcements }) {
     const ref = db.collection("leagues").doc();
     const isH2H = format === "h2h";
-    const roster = isH2H ? normalizeH2HRoster(h2hRoster) : [];
     await ref.set({
       name:         String(name || "New League").trim().slice(0, 40),
       seasonYear:   Number(seasonYear) || currentYear(),
@@ -217,8 +194,14 @@
       activeWeekId: "",
       weeks:        [],
       format:       isH2H ? "h2h" : "points",
-      h2hRoster:    roster,
-      h2hSchedule:  isH2H ? ((window.GP_Data?.gpGenerateH2HSchedule || (() => []))(roster)) : [],
+      // H2H roster/schedule are no longer admin-typed at create time — an
+      // H2H league starts with nobody in the schedule until people join
+      // (same "Join League" flow as a points league) and the admin taps
+      // "Start Season" (see gpAdminStartH2HSeason below), which is the
+      // only thing that ever writes h2hRoster/h2hSchedule.
+      h2hRoster:    [],
+      h2hSchedule:  [],
+      seasonStarted: false,
       announcements: normalizeAnnouncements(announcements),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
@@ -226,7 +209,7 @@
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, h2hRoster, announcements }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, announcements }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
@@ -243,26 +226,60 @@
       } catch {}
       patch.announcements = normalizeAnnouncements(announcements, prevAnnouncements);
     }
+    // Format can still be switched here, but — unlike the old flow — this
+    // never touches h2hRoster/h2hSchedule/seasonStarted. Those are only
+    // ever written by gpAdminStartH2HSeason/gpAdminSetH2HSchedule, so an
+    // unrelated settings save (renaming the league, editing an
+    // announcement) can never accidentally wipe or reshuffle an
+    // in-progress H2H season.
     if (format !== undefined) {
-      const isH2H = format === "h2h";
-      patch.format = isH2H ? "h2h" : "points";
-      if (isH2H) {
-        // Only regenerate the schedule when the roster actually changed —
-        // re-saving other settings shouldn't reshuffle anyone's matchups.
-        const roster = normalizeH2HRoster(h2hRoster);
-        let prevRoster = [];
-        try {
-          const snap = await leaguesRef(db, leagueId).get();
-          prevRoster = Array.isArray(snap.data()?.h2hRoster) ? snap.data().h2hRoster : [];
-        } catch {}
-        const rosterChanged = JSON.stringify(roster) !== JSON.stringify(prevRoster);
-        patch.h2hRoster = roster;
-        if (rosterChanged) {
-          patch.h2hSchedule = (window.GP_Data?.gpGenerateH2HSchedule || (() => []))(roster);
-        }
-      }
+      patch.format = format === "h2h" ? "h2h" : "points";
     }
     await leaguesRef(db, leagueId).set(patch, { merge: true });
+    return true;
+  }
+
+  // --------------- H2H: start the season from actual joined members ---------------
+  // Snapshots whoever has joined this league (leagues/{id}/members — the
+  // same real "Join League" flow a points league uses, not an admin-typed
+  // list) as the roster, generates a fresh round-robin from it, and marks
+  // the season started. Safe to call again later (e.g. to fold in a late
+  // joiner) — it always regenerates from the current member list, so
+  // re-running it after any manual schedule edits (gpAdminSetH2HSchedule)
+  // discards those edits; the UI should warn about that before calling in
+  // that case, this function itself just does the regenerate.
+  async function gpAdminStartH2HSeason(db, uid, leagueId) {
+    const leagueRef = leaguesRef(db, leagueId);
+    const membersSnap = await leagueRef.collection("members").get();
+    const roster = membersSnap.docs
+      .map(d => String(d.data()?.name || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    if (roster.length < 2) {
+      throw new Error("Need at least 2 joined players before starting the season.");
+    }
+    const schedule = (window.GP_Data?.gpGenerateH2HSchedule || (() => []))(roster);
+    await leagueRef.set({
+      h2hRoster: roster,
+      h2hSchedule: schedule,
+      seasonStarted: true,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
+    }, { merge: true });
+    return { roster, schedule };
+  }
+
+  // --------------- H2H: overwrite the schedule wholesale ---------------
+  // Backs the admin's manual schedule editor — every round's pairs come
+  // from the UI (whatever the admin assigned), not regenerated, so this
+  // is how an admin can tweak individual matchups without touching who's
+  // on the roster. `schedule` must already be in gpGenerateH2HSchedule's
+  // own output shape ([{ pairs: [...] }, ...]).
+  async function gpAdminSetH2HSchedule(db, uid, leagueId, schedule) {
+    const rounds = Array.isArray(schedule) ? schedule : [];
+    await leaguesRef(db, leagueId).set({
+      h2hSchedule: rounds,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
+    }, { merge: true });
     return true;
   }
 
@@ -659,6 +676,8 @@
     gpCreateLeague,
     gpUpdateLeagueSettings,
     gpDeleteLeague,
+    gpAdminStartH2HSeason,
+    gpAdminSetH2HSchedule,
     gpAdminCreateNewWeekInLeague,
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,
