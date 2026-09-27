@@ -762,6 +762,8 @@
     "peacock":      { file: "assets/networks/peacock.webp" },
     "secn":         { file: "assets/networks/sec-network.webp", bare: true },
     "sec network":  { file: "assets/networks/sec-network.webp", bare: true },
+    "btn":               { file: "assets/networks/btn.png" },
+    "big ten network":   { file: "assets/networks/btn.png" },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
