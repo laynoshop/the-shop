@@ -644,13 +644,23 @@
     return subset;
   }
 
-  function bindCfbFilterBar(events, dateStr) {
+  function bindCfbFilterBar(league, events, dateStr) {
     const matchupRow = document.getElementById("cfbMatchupRow");
     const confRow     = document.getElementById("cfbConfRow");
     if (!matchupRow || !confRow) return;
 
+    // renderScoreCards(..., isRefresh=false) rebuilds the card DOM from
+    // scratch, which wipes anything that was filled in after the initial
+    // render (odds line, resolved conference/record meta) — both are
+    // hydrated asynchronously and don't come back on their own, so redo
+    // them here for whatever subset is now showing. hydrateAllOdds/
+    // hydrateConferenceMeta are already cache-backed, so this is cheap
+    // after the first filter tap.
     function rerender() {
-      renderScoreCards(cfbFilteredEvents(events), "cfb", dateStr, false);
+      const subset = cfbFilteredEvents(events);
+      renderScoreCards(subset, "cfb", dateStr, false);
+      SD.hydrateAllOdds(league, "cfb", dateStr, subset).catch(() => {});
+      hydrateConferenceMeta(league, "cfb", dateStr, subset).catch(() => {});
     }
 
     matchupRow.addEventListener("click", e => {
@@ -1378,7 +1388,7 @@
       hydrateConferenceMeta(league, leagueKey, dateStr, events).catch(() => {});
       filteredEvents = cfbFilteredEvents(events);
       renderCfbFilterBar();
-      bindCfbFilterBar(events, dateStr);
+      bindCfbFilterBar(league, events, dateStr);
     }
 
     renderScoreCards(filteredEvents, leagueKey, dateStr, false);
