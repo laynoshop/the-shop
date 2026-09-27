@@ -608,77 +608,57 @@
   }
 
   // ─── CFB matchup + conference filter bar ───────────────────────────────
-  // Ranked / Toss-Up / Close Game are independent toggle chips (any
-  // combination, OR'd together — empty selection means "show everything").
-  // The conference row is a single-select limited to the four the user
-  // actually cares about; matching against the real conference text is
-  // handled in scores-data.js (SD.filterEventsByCfbConference) since it
-  // needs a full-slate team→conference map that isn't in the initial
-  // scoreboard payload and has to be fetched on demand.
+  // Both rows are single-select, same as picking one league pill — Ranked /
+  // Toss-Up / Close Game / All in one row, Big Ten / SEC / ACC / Big 12 /
+  // All in the other. Both filters run synchronously off the scoreboard
+  // payload already fetched (rank/spread are on the event itself; the
+  // conference match is a static team roster in scores-data.js), so
+  // there's no loading state or extra network round trip either way.
   function renderCfbFilterBar() {
     const el = document.getElementById("cfbFilterBar");
     if (!el) return;
-    const flags   = SD.getSavedMatchupFilters("cfb");
-    const confKey = SD.getSavedConferenceFilter("cfb");
+    const matchupKey = SD.getSavedMatchupFilter("cfb");
+    const confKey    = SD.getSavedConferenceFilter("cfb");
     const matchupChip = (key, label) =>
-      `<button class="cfbFilterChip${flags.has(key) ? " active" : ""}" data-matchup="${key}" type="button">${label}</button>`;
+      `<button class="cfbFilterChip${matchupKey === key ? " active" : ""}" data-matchup="${key}" type="button">${label}</button>`;
     const confChip = (key, label) =>
       `<button class="cfbFilterChip cfbConfChip${confKey === key ? " active" : ""}" data-conf="${key}" type="button">${SD.escapeHtml(label)}</button>`;
     el.innerHTML = `
 <div class="cfbFilterBar">
   <div class="cfbFilterRow" id="cfbMatchupRow">
+    ${matchupChip("", "All Games")}
     ${matchupChip("ranked", "🏅 Ranked")}
     ${matchupChip("tossup", "🎯 Toss-Up")}
     ${matchupChip("close", "🔥 Close Game")}
   </div>
   <div class="cfbFilterRow" id="cfbConfRow">
-    ${confChip("", "All")}
+    ${confChip("", "All Conf")}
     ${(SD.CFB_CONFERENCES || []).map(c => confChip(c.key, c.label)).join("")}
   </div>
 </div>`;
   }
 
-  function bindCfbFilterBar(league, events, dateStr) {
+  function cfbFilteredEvents(events) {
+    let subset = SD.filterEventsByMatchupFilter(events, SD.getSavedMatchupFilter("cfb"));
+    subset = SD.filterEventsByCfbConference(subset, SD.getSavedConferenceFilter("cfb"));
+    return subset;
+  }
+
+  function bindCfbFilterBar(events, dateStr) {
     const matchupRow = document.getElementById("cfbMatchupRow");
     const confRow     = document.getElementById("cfbConfRow");
     if (!matchupRow || !confRow) return;
 
-    // Cached for the lifetime of this render pass once built — every
-    // conference pill after the first reuses it, no repeat fetching.
-    let cfbConfMap = null;
-
-    async function rerender() {
-      let subset = SD.filterEventsByMatchupFlags(events, SD.getSavedMatchupFilters("cfb"));
-      const confKey = SD.getSavedConferenceFilter("cfb");
-      if (confKey) {
-        if (!cfbConfMap) {
-          const cached = SD.loadCfbConfFullCache(dateStr);
-          if (cached?.teamIdToConf) {
-            cfbConfMap = cached.teamIdToConf;
-          } else {
-            const container = document.getElementById("scoresContainer");
-            if (container) container.innerHTML = `<div class="emptyState">Finding ${SD.escapeHtml(SD.cfbConferenceLabel(confKey))} games&hellip;</div>`;
-            const ids = events.map(ev => String(ev?.id || "")).filter(Boolean);
-            const maps = await Promise.all(ids.map(id => SD.fetchConferenceMapFromSummary(league, id).catch(() => ({}))));
-            const built = {};
-            for (const m of maps) Object.assign(built, m);
-            SD.saveCfbConfFullCache(dateStr, built);
-            cfbConfMap = built;
-          }
-        }
-        subset = SD.filterEventsByCfbConference(subset, confKey, cfbConfMap);
-      }
-      renderScoreCards(subset, "cfb", dateStr, false);
+    function rerender() {
+      renderScoreCards(cfbFilteredEvents(events), "cfb", dateStr, false);
     }
 
     matchupRow.addEventListener("click", e => {
       const chip = e.target.closest("[data-matchup]");
       if (!chip) return;
-      const flags = SD.getSavedMatchupFilters("cfb");
-      const key = chip.dataset.matchup;
-      if (flags.has(key)) flags.delete(key); else flags.add(key);
-      SD.setSavedMatchupFilters("cfb", flags);
-      chip.classList.toggle("active", flags.has(key));
+      const key = chip.dataset.matchup || "";
+      SD.setSavedMatchupFilter("cfb", key);
+      matchupRow.querySelectorAll("[data-matchup]").forEach(b => b.classList.toggle("active", b === chip));
       rerender();
     });
 
@@ -687,14 +667,9 @@
       if (!chip) return;
       const key = chip.dataset.conf || "";
       SD.setSavedConferenceFilter("cfb", key);
-      confRow.querySelectorAll(".cfbConfChip").forEach(b => b.classList.toggle("active", b === chip));
+      confRow.querySelectorAll("[data-conf]").forEach(b => b.classList.toggle("active", b === chip));
       rerender();
     });
-
-    // A conference filter saved from a previous visit isn't reflected in
-    // the fast synchronous render loadScores already did (that one only
-    // applies the matchup flags), so bring it in now.
-    if (SD.getSavedConferenceFilter("cfb")) rerender();
   }
 
   // ─── Live ticker ───────────────────────────────────────────────────
@@ -1401,9 +1376,9 @@
     // CFB — ranked/toss-up/close-game + Big Ten/SEC/ACC/Big 12 filter bar
     if (isCfb) {
       hydrateConferenceMeta(league, leagueKey, dateStr, events).catch(() => {});
-      filteredEvents = SD.filterEventsByMatchupFlags(events, SD.getSavedMatchupFilters("cfb"));
+      filteredEvents = cfbFilteredEvents(events);
       renderCfbFilterBar();
-      bindCfbFilterBar(league, events, dateStr);
+      bindCfbFilterBar(events, dateStr);
     }
 
     renderScoreCards(filteredEvents, leagueKey, dateStr, false);
