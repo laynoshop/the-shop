@@ -755,7 +755,7 @@
     "espn2":        { file: "assets/networks/espn2.webp" },
     "abc":          { file: "assets/networks/abc.webp", bare: true },
     "cbs":          { file: "assets/networks/cbs.webp" },
-    "fox":          { file: "assets/networks/fox.webp", bare: true },
+    "fox":          { file: "assets/networks/fox.png", bare: true },
     "fs1":          { file: "assets/networks/fs1.webp", bare: true },
     "fox sports 1": { file: "assets/networks/fs1.webp", bare: true },
     "nbc":          { file: "assets/networks/nbc.webp" },
