@@ -770,6 +770,14 @@
     "cbs sports network":       { file: "assets/networks/cbssn.webp" },
     "accn":            { file: "assets/networks/accn.webp" },
     "acc network":     { file: "assets/networks/accn.webp" },
+    "tnt":             { file: "assets/networks/tnt.webp" },
+    "apple tv":        { file: "assets/networks/apple-tv.webp" },
+    "apple tv+":       { file: "assets/networks/apple-tv.webp" },
+    "espn+":           { file: "assets/networks/espn-plus.webp" },
+    "espn plus":       { file: "assets/networks/espn-plus.webp" },
+    "usa":             { file: "assets/networks/usa.webp" },
+    "usa network":     { file: "assets/networks/usa.webp" },
+    "espnu":           { file: "assets/networks/espnu.webp" },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
