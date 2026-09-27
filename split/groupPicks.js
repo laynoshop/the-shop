@@ -630,15 +630,25 @@
         const weekMeta = weeks.find(w => String(w?.id) === weekId) || null;
         return { weekId, weekLabel: String(weekMeta?.label || "") };
       });
+      // Week 1's id per league, used below to hide a league from anyone
+      // who hasn't joined it once its season has actually kicked off —
+      // a brand-new visitor shouldn't stumble onto a league that's
+      // already several weeks deep.
+      const firstWeekIdOf = leagues.map(l => {
+        const weeks = Array.isArray(l.weeks) ? l.weeks : [];
+        return weeks.length ? String(weeks[0]?.id || "") : "";
+      });
       try {
-        const [activeFlags, memberLists, weekGamesLists] = await Promise.all([
+        const [activeFlags, memberLists, weekGamesLists, firstWeekGamesLists] = await Promise.all([
           Promise.all(leagues.map(l => isActiveFn(db, l).catch(() => false))),
           Promise.all(leagues.map(l => membersFn(db, l.id).catch(() => []))),
           Promise.all(currentWeekOf.map(w => w.weekId ? gamesFn(db, w.weekId).catch(() => []) : Promise.resolve([]))),
+          Promise.all(firstWeekIdOf.map(id => id ? gamesFn(db, id).catch(() => []) : Promise.resolve([]))),
         ]);
         const earliestKickoffMsFn = Render().gpEarliestKickoffMs || (() => null);
         leagues = leagues.map((l, i) => {
           const members = memberLists[i] || [];
+          const firstKickoffMs = earliestKickoffMsFn(firstWeekGamesLists[i]);
           return {
             ...l,
             active: activeFlags[i],
@@ -646,8 +656,13 @@
             isMember: members.some(m => m.playerId === playerId),
             currentWeekLabel: currentWeekOf[i].weekLabel,
             currentWeekFirstKickoffMs: earliestKickoffMsFn(weekGamesLists[i]),
+            seasonUnderway: firstKickoffMs != null && Date.now() >= firstKickoffMs,
           };
         });
+        // Hide leagues whose season has already started from anyone who
+        // hasn't joined yet — admins still see everything so they can
+        // keep managing every league.
+        leagues = leagues.filter(l => isAdmin || l.isMember || !l.seasonUnderway);
       } catch {}
       // Top-3 season standings for the picker card — only for leagues
       // already joined (no reason to compute this for one you'd still
