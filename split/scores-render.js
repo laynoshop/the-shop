@@ -67,6 +67,35 @@
   box-shadow: 0 0 14px rgba(200,154,0,0.45);
 }
 
+/* ── CFB matchup + conference filter bar ── */
+.cfbFilterBar { padding: 6px 12px 4px; display: flex; flex-direction: column; gap: 6px; }
+.cfbFilterRow {
+  display: flex; gap: 6px; overflow-x: auto;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.cfbFilterRow::-webkit-scrollbar { display: none; }
+.cfbFilterChip {
+  flex-shrink: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.03em;
+  padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.045); color: rgba(255,255,255,0.55); cursor: pointer;
+  white-space: nowrap; -webkit-tap-highlight-color: transparent; min-height: 28px;
+  display: flex; align-items: center;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 100ms ease;
+}
+.cfbFilterChip:active { transform: scale(0.96); }
+.cfbFilterChip.active {
+  background: linear-gradient(135deg, #d81f1f, #970d0d);
+  border-color: rgba(255,255,255,0.22);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(216,31,31,0.5);
+}
+.cfbFilterChip.cfbConfChip.active {
+  background: linear-gradient(135deg, #ffe08a, #c9931c);
+  border-color: rgba(255,224,138,0.4);
+  color: #3a2600;
+  box-shadow: 0 0 12px rgba(201,147,28,0.45);
+}
+
 /* ── Date navigator ── */
 .scoresDateNav { display: flex; align-items: center; justify-content: center; gap: 0; padding: 10px 16px 6px; }
 .scoresDateNavBtn {
@@ -576,6 +605,96 @@
       if (e.target === picker) return;
       if (picker) picker.showPicker ? picker.showPicker() : picker.click();
     });
+  }
+
+  // ─── CFB matchup + conference filter bar ───────────────────────────────
+  // Ranked / Toss-Up / Close Game are independent toggle chips (any
+  // combination, OR'd together — empty selection means "show everything").
+  // The conference row is a single-select limited to the four the user
+  // actually cares about; matching against the real conference text is
+  // handled in scores-data.js (SD.filterEventsByCfbConference) since it
+  // needs a full-slate team→conference map that isn't in the initial
+  // scoreboard payload and has to be fetched on demand.
+  function renderCfbFilterBar() {
+    const el = document.getElementById("cfbFilterBar");
+    if (!el) return;
+    const flags   = SD.getSavedMatchupFilters("cfb");
+    const confKey = SD.getSavedConferenceFilter("cfb");
+    const matchupChip = (key, label) =>
+      `<button class="cfbFilterChip${flags.has(key) ? " active" : ""}" data-matchup="${key}" type="button">${label}</button>`;
+    const confChip = (key, label) =>
+      `<button class="cfbFilterChip cfbConfChip${confKey === key ? " active" : ""}" data-conf="${key}" type="button">${SD.escapeHtml(label)}</button>`;
+    el.innerHTML = `
+<div class="cfbFilterBar">
+  <div class="cfbFilterRow" id="cfbMatchupRow">
+    ${matchupChip("ranked", "🏅 Ranked")}
+    ${matchupChip("tossup", "🎯 Toss-Up")}
+    ${matchupChip("close", "🔥 Close Game")}
+  </div>
+  <div class="cfbFilterRow" id="cfbConfRow">
+    ${confChip("", "All")}
+    ${(SD.CFB_CONFERENCES || []).map(c => confChip(c.key, c.label)).join("")}
+  </div>
+</div>`;
+  }
+
+  function bindCfbFilterBar(league, events, dateStr) {
+    const matchupRow = document.getElementById("cfbMatchupRow");
+    const confRow     = document.getElementById("cfbConfRow");
+    if (!matchupRow || !confRow) return;
+
+    // Cached for the lifetime of this render pass once built — every
+    // conference pill after the first reuses it, no repeat fetching.
+    let cfbConfMap = null;
+
+    async function rerender() {
+      let subset = SD.filterEventsByMatchupFlags(events, SD.getSavedMatchupFilters("cfb"));
+      const confKey = SD.getSavedConferenceFilter("cfb");
+      if (confKey) {
+        if (!cfbConfMap) {
+          const cached = SD.loadCfbConfFullCache(dateStr);
+          if (cached?.teamIdToConf) {
+            cfbConfMap = cached.teamIdToConf;
+          } else {
+            const container = document.getElementById("scoresContainer");
+            if (container) container.innerHTML = `<div class="emptyState">Finding ${SD.escapeHtml(SD.cfbConferenceLabel(confKey))} games&hellip;</div>`;
+            const ids = events.map(ev => String(ev?.id || "")).filter(Boolean);
+            const maps = await Promise.all(ids.map(id => SD.fetchConferenceMapFromSummary(league, id).catch(() => ({}))));
+            const built = {};
+            for (const m of maps) Object.assign(built, m);
+            SD.saveCfbConfFullCache(dateStr, built);
+            cfbConfMap = built;
+          }
+        }
+        subset = SD.filterEventsByCfbConference(subset, confKey, cfbConfMap);
+      }
+      renderScoreCards(subset, "cfb", dateStr, false);
+    }
+
+    matchupRow.addEventListener("click", e => {
+      const chip = e.target.closest("[data-matchup]");
+      if (!chip) return;
+      const flags = SD.getSavedMatchupFilters("cfb");
+      const key = chip.dataset.matchup;
+      if (flags.has(key)) flags.delete(key); else flags.add(key);
+      SD.setSavedMatchupFilters("cfb", flags);
+      chip.classList.toggle("active", flags.has(key));
+      rerender();
+    });
+
+    confRow.addEventListener("click", e => {
+      const chip = e.target.closest("[data-conf]");
+      if (!chip) return;
+      const key = chip.dataset.conf || "";
+      SD.setSavedConferenceFilter("cfb", key);
+      confRow.querySelectorAll(".cfbConfChip").forEach(b => b.classList.toggle("active", b === chip));
+      rerender();
+    });
+
+    // A conference filter saved from a previous visit isn't reflected in
+    // the fast synchronous render loadScores already did (that one only
+    // applies the matchup flags), so bring it in now.
+    if (SD.getSavedConferenceFilter("cfb")) rerender();
   }
 
   // ─── Live ticker ───────────────────────────────────────────────────
@@ -1217,10 +1336,12 @@
     if (!content) return;
 
     const isShop = leagueKey === "shop";
+    const isCfb  = leagueKey === "cfb";
 
     content.innerHTML =
       buildHeaderHTML(leagueKey, color) +
       (isShop ? "" : buildDateNavHTML(dateStr)) +
+      (isCfb ? `<div id="cfbFilterBar"></div>` : "") +
       `<div id="scoresContainer" class="scoresContainer"></div>`;
 
     restoreLeagueRowScroll();
@@ -1256,9 +1377,10 @@
       return;
     }
 
-    // Conference filter (college leagues)
+    // Conference filter (college leagues, other than CFB — it has its own
+    // dedicated filter bar below with a fixed conference list)
     let filteredEvents = events;
-    if (isCollege) {
+    if (isCollege && !isCfb) {
       const savedConf = SD.getSavedConferenceFilter(leagueKey);
       const confNorm  = SD.norm(savedConf);
       if (confNorm) {
@@ -1274,6 +1396,14 @@
           renderScoreCards(re, leagueKey, dateStr, false);
         }
       }).catch(() => {});
+    }
+
+    // CFB — ranked/toss-up/close-game + Big Ten/SEC/ACC/Big 12 filter bar
+    if (isCfb) {
+      hydrateConferenceMeta(league, leagueKey, dateStr, events).catch(() => {});
+      filteredEvents = SD.filterEventsByMatchupFlags(events, SD.getSavedMatchupFilters("cfb"));
+      renderCfbFilterBar();
+      bindCfbFilterBar(league, events, dateStr);
     }
 
     renderScoreCards(filteredEvents, leagueKey, dateStr, false);

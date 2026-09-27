@@ -48,28 +48,31 @@
     shop:  "#c89a00",
   };
 
+  // Order here drives the pill row (after the always-first Shop pill):
+  // CFB, NFL, NHL, MLB take the front seats per the user's preference,
+  // everything else just flows after in its old relative order.
   const LEAGUES = [
-    { key: "ncaam", name: "Men's College Basketball",
-      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`,
-      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=${eventId}` },
     { key: "cfb", name: "College Football",
       endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${date}`,
       summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=${eventId}` },
-    { key: "nba", name: "NBA",
-      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`,
-      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${eventId}` },
-    { key: "nhl", name: "NHL",
-      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`,
-      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${eventId}` },
-    { key: "mls", name: "MLS (Soccer)",
-      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${date}`,
-      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=${eventId}` },
     { key: "nfl", name: "NFL",
       endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date}`,
       summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${eventId}` },
+    { key: "nhl", name: "NHL",
+      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${eventId}` },
     { key: "mlb", name: "MLB",
       endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${date}`,
       summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=${eventId}` },
+    { key: "ncaam", name: "Men's College Basketball",
+      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${date}&groups=50&limit=200`,
+      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=${eventId}` },
+    { key: "nba", name: "NBA",
+      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${eventId}` },
+    { key: "mls", name: "MLS (Soccer)",
+      endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard?dates=${date}`,
+      summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=${eventId}` },
     { key: "pga", name: "Golf (PGA)",
       endpoint: (date) => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`,
       summaryEndpoint: (eventId) => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/summary?event=${eventId}` },
@@ -110,7 +113,7 @@
   const DATE_KEY   = "scoresDate";
 
   function getSavedLeagueKey() {
-    try { return localStorage.getItem(LEAGUE_KEY) || "nba"; } catch { return "nba"; }
+    try { return localStorage.getItem(LEAGUE_KEY) || "shop"; } catch { return "shop"; }
   }
   function setSavedLeagueKey(k) {
     try { localStorage.setItem(LEAGUE_KEY, k); } catch {}
@@ -127,6 +130,14 @@
   // because setSavedDateYYYYMMDD updates localStorage as the user browses.
   (function resetDateOnLoad() {
     try { localStorage.setItem(DATE_KEY, todayYYYYMMDD()); } catch {}
+  })();
+
+  // Same idea for the league pill: always land on Shop on a fresh page
+  // load, no matter what was selected last time. In-session pill taps
+  // still work normally because setSavedLeagueKey updates localStorage
+  // as the user browses leagues.
+  (function resetLeagueOnLoad() {
+    try { localStorage.setItem(LEAGUE_KEY, "shop"); } catch {}
   })();
 
   // ─── Conference filter storage ─────────────────────────────────────────────
@@ -149,6 +160,112 @@
   }
   function saveConfCache(leagueKey, date, teamIdToConf) {
     try { localStorage.setItem(confCacheKey(leagueKey, date), JSON.stringify({ teamIdToConf, ts: Date.now() })); } catch {}
+  }
+
+  // ─── CFB matchup filter (ranked / toss-up / close game) ───────────────────
+  // Independent toggle chips — any combination can be active at once, and
+  // an event matches if it satisfies ANY active flag (an empty set means
+  // no filter, i.e. show everything). Thresholds mirror the Pick'em admin
+  // picker's own "Ranked matchup" / "Toss-up" / "Close matchup" badges
+  // (gp-admin.js's pickRank/buildOdds) so a game gets the same label
+  // everywhere in the app.
+  function matchupFilterKey(leagueKey) { return `scoresMatchupFilter_${leagueKey}`; }
+  function getSavedMatchupFilters(leagueKey) {
+    try {
+      const raw = localStorage.getItem(matchupFilterKey(leagueKey));
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch { return new Set(); }
+  }
+  function setSavedMatchupFilters(leagueKey, flagsSet) {
+    try { localStorage.setItem(matchupFilterKey(leagueKey), JSON.stringify(Array.from(flagsSet || []))); } catch {}
+  }
+
+  function getCuratedRank(competitor) {
+    const r = competitor?.curatedRank?.current ?? competitor?.rank ?? competitor?.team?.rank ?? "";
+    const n = Number(r);
+    // ESPN uses 99 (and sometimes 0) as an "unranked" sentinel rather than
+    // omitting the field, so only 1-25 (the actual AP/Coaches Top 25) counts.
+    return Number.isFinite(n) && n >= 1 && n <= 25 ? n : null;
+  }
+  function getMatchupSpreadValue(comp) {
+    const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
+    if (!o) return null;
+    const spreadRaw = Number(o?.spread);
+    if (Number.isFinite(spreadRaw) && spreadRaw !== 0) return Math.abs(spreadRaw);
+    const details = String(o?.details || "");
+    const m = details.match(/-\s*(\d+(\.\d+)?)/);
+    return m ? Number(m[1]) : null;
+  }
+  function classifyCfbMatchup(event) {
+    const comp = event?.competitions?.[0] || {};
+    const competitors = comp?.competitors || [];
+    const isRanked = competitors.some(c => getCuratedRank(c) != null);
+    const spreadValue = getMatchupSpreadValue(comp);
+    const hasSpread = spreadValue != null;
+    const isTossup = hasSpread && spreadValue <= 3;
+    const isClose = hasSpread && !isTossup && spreadValue <= 5;
+    return { isRanked, isTossup, isClose, spreadValue };
+  }
+  function filterEventsByMatchupFlags(events, activeFlags) {
+    if (!activeFlags || !activeFlags.size) return events;
+    return (events || []).filter(ev => {
+      const c = classifyCfbMatchup(ev);
+      return (activeFlags.has("ranked") && c.isRanked)
+          || (activeFlags.has("tossup") && c.isTossup)
+          || (activeFlags.has("close") && c.isClose);
+    });
+  }
+
+  // ─── CFB conference filter (Big Ten / SEC / ACC / Big 12 only) ────────────
+  // Scoped to just these four by request — matched by substring against
+  // whatever conference text ESPN's summary endpoint returns for a team
+  // (full name or short name both work), rather than a numeric conference
+  // id, since that id's mapping isn't something we can verify offline.
+  const CFB_CONFERENCES = [
+    { key: "big-ten", label: "Big Ten", aliases: ["big ten"] },
+    { key: "sec",     label: "SEC",     aliases: ["southeastern conference", "southeastern", "sec"] },
+    { key: "acc",     label: "ACC",     aliases: ["atlantic coast", "acc"] },
+    { key: "big-12",  label: "Big 12",  aliases: ["big 12", "big xii"] },
+  ];
+  function cfbConferenceLabel(key) {
+    return CFB_CONFERENCES.find(c => c.key === key)?.label || "";
+  }
+  function cfbConfTextMatches(confText, cfbConfKey) {
+    const entry = CFB_CONFERENCES.find(c => c.key === cfbConfKey);
+    if (!entry) return true;
+    const t = norm(confText);
+    if (!t) return false;
+    return entry.aliases.some(a => t.includes(a));
+  }
+  function filterEventsByCfbConference(events, cfbConfKey, teamIdToConf) {
+    if (!cfbConfKey) return events;
+    const map = teamIdToConf || {};
+    return (events || []).filter(ev => {
+      const competitors = ev?.competitions?.[0]?.competitors || [];
+      return competitors.some(c => {
+        const id = String(c?.team?.id || "");
+        const confText = map[id] || getConferenceNameFromCompetitor(c) || "";
+        return cfbConfTextMatches(confText, cfbConfKey);
+      });
+    });
+  }
+
+  // Full-slate conference map cache — separate from confCache above (which
+  // only samples the first handful of events, enough for the meta line
+  // under already-visible cards). Filtering needs every event's conference
+  // resolved, so this is built on demand the first time the user actually
+  // taps a conference pill, then reused for the rest of that day.
+  function cfbConfFullCacheKey(date) { return `scoresConfFullCache_cfb_${date}`; }
+  function loadCfbConfFullCache(date) {
+    try {
+      const raw = localStorage.getItem(cfbConfFullCacheKey(date));
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch { return null; }
+  }
+  function saveCfbConfFullCache(date, teamIdToConf) {
+    try { localStorage.setItem(cfbConfFullCacheKey(date), JSON.stringify({ teamIdToConf, ts: Date.now() })); } catch {}
   }
 
   // ─── Date helpers ──────────────────────────────────────────────────────────
@@ -513,6 +630,10 @@
     escapeHtml, applyOddsToDom, buildOddsLine, hydrateAllOdds,
     buildConferenceSelectHTML, buildLeagueSelectHTML, buildCalendarButtonHTML,
     norm,
+    getSavedMatchupFilters, setSavedMatchupFilters,
+    classifyCfbMatchup, filterEventsByMatchupFlags,
+    CFB_CONFERENCES, cfbConferenceLabel, filterEventsByCfbConference,
+    loadCfbConfFullCache, saveCfbConfFullCache,
   };
 
 })();
