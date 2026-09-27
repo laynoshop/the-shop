@@ -194,6 +194,11 @@
 .broadcastChip.broadcastChipLogo {
   background: #fff; border-color: rgba(0,0,0,0.06); padding: 3px 8px;
 }
+.broadcastChip.broadcastChipBare {
+  background: transparent; border: none; padding: 0;
+}
+.broadcastChip.broadcastChipBare .broadcastLogoImg { border-radius: 3px; }
+.broadcastChip.broadcastChipBare .broadcastLogoFallback { color: rgba(255,255,255,0.55); }
 .broadcastLogoImg { height: 13px; width: auto; max-width: 90px; display: block; }
 .broadcastLogoFallback { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #222; }
 .cardHeaderRight {
@@ -736,19 +741,36 @@
   // So these are real logo files hosted locally in assets/networks/, added
   // as they're supplied. Anything not in this map keeps the plain text
   // chip exactly as before — no guessing, no broken images.
+  //
+  // `bare: true` marks a logo file that's already a self-contained badge
+  // (its own solid/opaque background fill, like FS1's navy rectangle or
+  // ABC's dark circle) — those render directly with no extra chip
+  // background, since wrapping them in the white pill below would just
+  // add a mismatched white margin around an already-finished graphic.
+  // Everything else is ink-only on a transparent background (a plain
+  // wordmark), which needs the white chip for contrast against this
+  // app's dark cards — most visibly CBS/NBC/Peacock, whose ink is black.
   const NETWORK_LOGO_FILES = {
-    "espn":  "assets/networks/espn.webp",
-    "espn2": "assets/networks/espn2.webp",
-    "abc":   "assets/networks/abc.webp",
-    "cbs":   "assets/networks/cbs.webp",
+    "espn":         { file: "assets/networks/espn.webp" },
+    "espn2":        { file: "assets/networks/espn2.webp" },
+    "abc":          { file: "assets/networks/abc.webp", bare: true },
+    "cbs":          { file: "assets/networks/cbs.webp" },
+    "fox":          { file: "assets/networks/fox.webp", bare: true },
+    "fs1":          { file: "assets/networks/fs1.webp", bare: true },
+    "fox sports 1": { file: "assets/networks/fs1.webp", bare: true },
+    "nbc":          { file: "assets/networks/nbc.webp" },
+    "peacock":      { file: "assets/networks/peacock.webp" },
+    "secn":         { file: "assets/networks/sec-network.webp", bare: true },
+    "sec network":  { file: "assets/networks/sec-network.webp", bare: true },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
     if (!nm) return "";
-    const file = NETWORK_LOGO_FILES[SD.norm(nm)];
-    if (!file) return `<div class="broadcastChip">${SD.escapeHtml(nm)}</div>`;
-    return `<div class="broadcastChip broadcastChipLogo">
-      <img src="${SD.escapeHtml(file)}" alt="${SD.escapeHtml(nm)}" class="broadcastLogoImg" loading="lazy"
+    const entry = NETWORK_LOGO_FILES[SD.norm(nm)];
+    if (!entry) return `<div class="broadcastChip">${SD.escapeHtml(nm)}</div>`;
+    const chipCls = entry.bare ? "broadcastChip broadcastChipBare" : "broadcastChip broadcastChipLogo";
+    return `<div class="${chipCls}">
+      <img src="${SD.escapeHtml(entry.file)}" alt="${SD.escapeHtml(nm)}" class="broadcastLogoImg" loading="lazy"
         onerror="this.style.display='none';this.nextElementSibling.style.display='inline';" />
       <span class="broadcastLogoFallback" style="display:none">${SD.escapeHtml(nm)}</span>
     </div>`;
