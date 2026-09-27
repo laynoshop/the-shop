@@ -783,6 +783,16 @@
     "nfln":            { file: "assets/networks/nfl-network.webp" },
     "nfl network":     { file: "assets/networks/nfl-network.webp" },
     "nfl net":         { file: "assets/networks/nfl-network.webp" },
+    "msgsn":           { file: "assets/networks/msgsn.png" },
+    "msg sn":          { file: "assets/networks/msgsn.png" },
+    "msg network":     { file: "assets/networks/msgsn.png" },
+    "nhln":            { file: "assets/networks/nhl-network.webp" },
+    "nhl network":     { file: "assets/networks/nhl-network.webp" },
+    "nhl net":         { file: "assets/networks/nhl-network.webp" },
+    "scripps sports":  { file: "assets/networks/scripps-sports.png" },
+    "scripps":         { file: "assets/networks/scripps-sports.png" },
+    "disney+":         { file: "assets/networks/disney-plus.webp" },
+    "disney plus":     { file: "assets/networks/disney-plus.webp" },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
