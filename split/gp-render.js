@@ -1594,6 +1594,19 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpLeagueCreateTile:active { background: rgba(255,255,255,0.05); }
 
+.gpArchivedLeaguesToggle {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 16px; padding: 10px 4px;
+  font-size: 13px; font-weight: 800; color: rgba(255,255,255,0.5);
+  letter-spacing: 0.02em;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.gpArchivedLeaguesToggle:active { color: rgba(255,255,255,0.75); }
+.gpArchivedLeaguesArrow { font-size: 11px; width: 12px; text-align: center; }
+.gpArchivedLeaguesGrid { margin-top: 8px; }
+.gpArchivedLeaguesGrid[hidden] { display: none; }
+
 /* ══════════════════════════════════════════════
    LEAGUE SETTINGS FORM
    ══════════════════════════════════════════════ */
@@ -1662,6 +1675,20 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   box-shadow: 0 6px 18px rgba(255,160,0,0.28);
 }
 .gpLeagueSettingsCancelBtn { flex: 1; }
+
+.gpDangerZone {
+  border: 1px solid rgba(216,31,31,0.35);
+  background: rgba(216,31,31,0.06);
+}
+.gpDangerZone .gpAdminBlockLabel { color: rgba(255,140,140,0.9); }
+.gpLeagueDeleteBtn {
+  width: 100%; margin-top: 8px;
+  background: rgba(216,31,31,0.14);
+  border: 1px solid rgba(216,31,31,0.5);
+  color: #ffb3b3;
+  font-weight: 800;
+}
+.gpLeagueDeleteBtn:active { background: rgba(216,31,31,0.26); }
 
 /* Head-to-Head roster: registered-player checklist */
 .gpH2HPlayerChecklist {
@@ -3810,12 +3837,14 @@ ${saveRow}`;
   function gpBuildLeaguePickerHTML({ leagues, isAdmin }) {
     const list = Array.isArray(leagues) ? leagues : [];
     const visible = list.filter(l => !l.archived || isAdmin);
-    const sorted  = [...visible].sort((a, b) => {
-      if (!!a.archived !== !!b.archived) return a.archived ? 1 : -1;
-      return String(a.name || "").localeCompare(String(b.name || ""));
-    });
+    const byName  = (a, b) => String(a.name || "").localeCompare(String(b.name || ""));
+    const active   = visible.filter(l => !l.archived).sort(byName);
+    // Archived leagues are only ever in `visible` for an admin (the
+    // filter above drops them for everyone else), so this is naturally
+    // empty for a non-admin — no extra guard needed below.
+    const archived = visible.filter(l => l.archived).sort(byName);
 
-    const cards = sorted.map(l => {
+    const buildCard = (l) => {
       const weeksCount = Array.isArray(l.weeks) ? l.weeks.length : 0;
       const totalWeeks = Number(l.totalWeeks) || 0;
       const weeksLabel = totalWeeks ? `${weeksCount} of ${totalWeeks} weeks` : `${weeksCount} week${weeksCount !== 1 ? "s" : ""}`;
@@ -3874,22 +3903,44 @@ ${saveRow}`;
   ${countdownRowHTML}
   ${top3HTML}
 </div>`;
-    }).join("");
+    };
+
+    const activeCards = active.map(buildCard).join("");
+
+    // Archived leagues collapse behind a toggle (admin-only — they're
+    // never in `archived` otherwise) so a picker full of old test/one-off
+    // leagues doesn't bury the ones actually in play. Collapsed by
+    // default; state persists like the admin-tools panel's own toggle.
+    let archivedSectionHTML = "";
+    if (isAdmin && archived.length) {
+      const archivedCards = archived.map(buildCard).join("");
+      let startCollapsed = true;
+      try { startCollapsed = localStorage.getItem("theShopGpArchivedLeaguesCollapsed_v1") !== "0"; } catch {}
+      archivedSectionHTML = `
+<div class="gpArchivedLeaguesToggle" data-gpaction="toggleArchivedLeagues" role="button" tabindex="0">
+  <span class="gpArchivedLeaguesArrow" id="gpArchivedLeaguesArrow">${startCollapsed ? "▸" : "▾"}</span>
+  <span>Archived Leagues (${archived.length})</span>
+</div>
+<div class="gpLeaguePickerGrid gpArchivedLeaguesGrid" id="gpArchivedLeaguesGrid" ${startCollapsed ? "hidden" : ""}>
+  ${archivedCards}
+</div>`;
+    }
 
     const createTile = isAdmin
       ? `<div class="gpLeagueCreateTile" data-gpaction="createLeague">+ Create League</div>`
       : "";
 
-    const empty = !sorted.length
+    const empty = !active.length && !archived.length
       ? `<div class="gpEmpty">${isAdmin ? "No leagues yet — create one to get started." : "No leagues yet. Check back soon."}</div>`
       : "";
 
     return `
 <div class="gpLeaguePickerGrid">
   ${empty}
-  ${cards}
+  ${activeCards}
   ${createTile}
-</div>`;
+</div>
+${archivedSectionHTML}`;
   }
 
   // ─── Join League overlay — shown before a first-time visitor enters a
@@ -4317,6 +4368,13 @@ ${saveRow}`;
     <button class="smallBtn gpLeagueSettingsSaveBtn" type="button" data-gpaction="submitLeagueSettings" data-leagueid="${esc(league?.id || "")}">${isEdit ? "Save Settings" : "Create League"}</button>
     <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="cancelLeagueSettings">Cancel</button>
   </div>
+
+  ${isEdit ? `
+  <div class="gpAdminBlock gpDangerZone">
+    <div class="gpAdminBlockLabel">⚠️ Danger Zone</div>
+    <div class="muted" style="font-size:12px">Permanently deletes this league — every week, game, and pick in it. Archiving above is reversible; this isn't.</div>
+    <button class="smallBtn gpLeagueDeleteBtn" type="button" data-gpaction="deleteLeague" data-leagueid="${esc(league?.id || "")}" data-leaguename="${esc(String(league?.name || "this league"))}">🗑️ Delete League Permanently</button>
+  </div>` : ""}
 </div>`;
   }
 

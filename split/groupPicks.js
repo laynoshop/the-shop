@@ -1254,6 +1254,52 @@
       return;
     }
 
+    // ── leagues: expand/collapse the "Archived Leagues" section —
+    //    same direct-DOM-toggle pattern as the admin tools panel below,
+    //    persisted so it stays collapsed across visits once an admin
+    //    tucks it away.
+    if (action === "toggleArchivedLeagues") {
+      const grid = document.getElementById("gpArchivedLeaguesGrid");
+      if (!grid) return;
+      const nowCollapsed = !grid.hidden;
+      grid.hidden = nowCollapsed;
+      const arrow = document.getElementById("gpArchivedLeaguesArrow");
+      if (arrow) arrow.textContent = nowCollapsed ? "▸" : "▾";
+      try { localStorage.setItem("theShopGpArchivedLeaguesCollapsed_v1", nowCollapsed ? "1" : "0"); } catch {}
+      return;
+    }
+
+    // ── leagues: permanently delete a league — every week, game, and
+    //    pick in it, not just hide it the way archiving does. Confirmed
+    //    up front since gpDeleteLeague can't be undone.
+    if (action === "deleteLeague") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      const leagueName = String(btn.getAttribute("data-leaguename") || "this league");
+      if (!confirm(`Permanently delete "${leagueName}"?\n\nThis removes every week, game, and pick in it. This cannot be undone.`)) return;
+
+      const originalLabel = btn.textContent;
+      btn.disabled = true; btn.textContent = "Deleting…";
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        await (Admin().gpDeleteLeague || (async () => {}))(db2, leagueId);
+        const mem2 = gpMem();
+        mem2.gpLeagueEditMode  = null;
+        mem2.gpLeagueEditingId = "";
+        if (gpGetSelectedLeagueId() === leagueId || mem2.pickLeagueId === leagueId) {
+          mem2.pickLeagueId = "";
+          gpSetSelectedLeagueId("");
+        }
+        await renderPicks();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = originalLabel;
+        console.error("[GP] deleteLeague error:", err);
+        alert(err?.message || "Something went wrong deleting the league.");
+      }
+      return;
+    }
+
     // ── admin: collapse/expand the Admin Tools panel down to just the
     //    "Admin Tools" label + arrow — persisted so an admin who mostly
     //    just checks results doesn't have to re-collapse it every visit.
