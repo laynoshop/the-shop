@@ -49,6 +49,22 @@
     if (full && loc) return `${full} - ${loc}`;
     return full || loc || "";
   }
+  // Same extraction scores-render.js uses for the live scoreboard — kept
+  // here too since Pick'em games are captured once at add-time and read
+  // back from Firestore afterward, not re-fetched from ESPN on render.
+  function pickBroadcastName(comp, ev) {
+    const broadcasts = comp?.broadcasts || ev?.broadcasts || [];
+    for (const b of broadcasts) {
+      const names = b?.names || (b?.media?.shortName ? [b.media.shortName] : (b?.name ? [b.name] : []));
+      for (const n of names) { if (n) return String(n).trim(); }
+    }
+    const geo = comp?.geoBroadcasts || [];
+    for (const g of geo) {
+      const n = g?.media?.shortName || g?.media?.callLetters || "";
+      if (n) return String(n).trim();
+    }
+    return "";
+  }
   function buildOdds(comp, homeTeam, awayTeam) {
     const o = Array.isArray(comp?.odds) ? comp.odds[0] : null;
     if (!o) return { details: "", overUnder: "", favoredTeam: "", spreadValue: null, spreadFavoredSide: "" };
@@ -314,8 +330,9 @@
         return `${y}${m}${da}`;
       })();
 
-      const venueLine = buildVenueLine(comp);
-      const odds      = buildOdds(comp, homeTeam, awayTeam);
+      const venueLine     = buildVenueLine(comp);
+      const odds          = buildOdds(comp, homeTeam, awayTeam);
+      const broadcastName = pickBroadcastName(comp, ev);
 
       await slateRef.collection("games").doc(eventId).set({
         eventId,
@@ -329,6 +346,7 @@
         oddsDetails:  String(odds.details || ""),
         oddsOU:       String(odds.overUnder || ""),
         oddsFavored:  String(odds.favoredTeam || ""),
+        broadcastName: String(broadcastName || ""),
         homeTeam,
         awayTeam,
         spreadValue:        odds.spreadValue,
