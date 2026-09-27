@@ -793,6 +793,7 @@
     "scripps":         { file: "assets/networks/scripps-sports.png" },
     "disney+":         { file: "assets/networks/disney-plus.webp" },
     "disney plus":     { file: "assets/networks/disney-plus.webp" },
+    "tbs":             { file: "assets/networks/tbs.webp", bare: true },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
