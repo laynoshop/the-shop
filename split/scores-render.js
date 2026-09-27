@@ -777,7 +777,9 @@
     "espn plus":       { file: "assets/networks/espn-plus.webp" },
     "usa":             { file: "assets/networks/usa.webp" },
     "usa network":     { file: "assets/networks/usa.webp" },
+    "usa net":         { file: "assets/networks/usa.webp" },
     "espnu":           { file: "assets/networks/espnu.webp" },
+    "espn unlimited":  { file: "assets/networks/espn.webp" },
   };
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
