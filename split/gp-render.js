@@ -550,9 +550,9 @@
    of getting clipped. */
 .gpCardDateTimeRow {
   padding: 4px 10px 0; display: flex; justify-content: space-between;
-  align-items: flex-start; gap: 8px;
+  align-items: flex-end; gap: 8px;
 }
-.gpCardDateText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); padding-top: 2px; }
+.gpCardDateText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); }
 .gpCardTimeCol { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .gpCardTimeText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); }
 .gpBroadcastChip {
