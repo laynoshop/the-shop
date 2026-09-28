@@ -914,6 +914,69 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HMatchupRowClickable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .gpH2HMatchupRowClickable:active { background: rgba(255,255,255,0.04); }
 
+/* Weekly High Score callout — Matchup tab */
+.gpH2HHighScoreCallout {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 0 14px; padding: 14px 16px; border-radius: 16px;
+  background: linear-gradient(120deg, rgba(255,120,40,0.14) 0%, rgba(20,10,10,0.7) 70%);
+  border: 1px solid rgba(255,140,60,0.28);
+}
+.gpH2HHighScoreIcon { font-size: 24px; flex-shrink: 0; }
+.gpH2HHighScoreBody { flex: 1 1 0; min-width: 0; }
+.gpH2HHighScoreLabel {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: rgba(255,170,110,0.75);
+}
+.gpH2HHighScoreNames {
+  font-size: 14.5px; font-weight: 900; color: #fff; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpH2HHighScorePts { font-size: 24px; font-weight: 900; color: #ff9a52; flex-shrink: 0; }
+
+/* Schedule tab */
+.gpH2HScheduleFilterActive { color: #ffd76a; border-color: rgba(255,215,100,0.4); }
+.gpH2HScheduleList { display: flex; flex-direction: column; padding: 4px 16px 16px; gap: 16px; }
+.gpH2HScheduleWeek { display: flex; flex-direction: column; }
+.gpH2HScheduleWeekLabel {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+  color: rgba(255,255,255,0.4); margin-bottom: 6px;
+}
+.gpH2HScheduleRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 4px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.gpH2HScheduleRow:last-child { border-bottom: none; }
+.gpH2HScheduleRowMine { background: rgba(255,215,100,0.05); border-radius: 10px; }
+
+/* Playoffs tab — bracket skeleton */
+.gpH2HBracket { display: flex; flex-direction: column; gap: 10px; padding: 6px 16px 16px; }
+.gpH2HBracketMatchup {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 12px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+}
+.gpH2HBracketSlot { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.gpH2HBracketSeed {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 900; color: #ffd76a;
+  background: rgba(255,215,100,0.12); border: 1px solid rgba(255,215,100,0.3);
+}
+.gpH2HBracketName {
+  font-size: 13.5px; font-weight: 800; color: rgba(255,255,255,0.85);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpH2HBracketSlotEmpty .gpH2HBracketName { color: rgba(255,255,255,0.3); }
+
+/* Player profile overlay — all-time H2H record */
+.gpH2HProfileRow {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 4px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.gpH2HProfileRow:last-child { border-bottom: none; }
+.gpH2HProfileOpp { font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.85); }
+.gpH2HProfileRecord { font-size: 14px; font-weight: 900; color: #ffd76a; font-variant-numeric: tabular-nums; }
+
 /* H2H pre-season placeholder (no active week yet — admin hasn't hit
    "Start Season") — a hero card explaining the wait, plus a Competitors
    card listing who's already joined. Same gold hero-gradient treatment
@@ -1032,6 +1095,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   display: flex; flex-direction: column; gap: 8px;
   overflow-y: auto; padding-bottom: 12px;
 }
+/* Inline (Matchup tab) version isn't height-constrained like the overlay
+   sheet is, so it doesn't need its own scroll — and needs its own
+   horizontal padding since it's not nested inside .gpOverlayBody here. */
+.gpH2HMyMatchupCard .gpH2HDetailGames { overflow: visible; padding: 10px 14px 14px; }
 .gpH2HDetailGameRow {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 8px; border-radius: 12px;
@@ -1477,6 +1544,18 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpViewToggleBtn.gpViewToggleActive {
   background: rgba(255,255,255,0.12); color: #fff;
+}
+
+/* H2H's 5-tab bar — too many labels to squeeze evenly like the 2-button
+   points-format toggle, so this scrolls horizontally instead of
+   shrinking every label to fit. */
+.gpH2HTabBar {
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.gpH2HTabBar::-webkit-scrollbar { display: none; }
+.gpH2HTabBar .gpViewToggleBtn {
+  flex: 0 0 auto; white-space: nowrap; padding: 8px 14px; font-size: 12.5px;
 }
 
 /* ══════════════════════════════════════════════
@@ -3067,7 +3146,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // matched to each named player the same case-insensitive way the rest
   // of H2H matches names. `games` is this week's already-loaded game
   // list (window.__gpCurrentGames) — no extra Firestore round trip.
-  function gpBuildH2HMatchupDetailHTML({ nameA, nameB, ptsA, ptsB, weekLabel, games, allPicks, atsEventIds }) {
+  // Shared by the Matchup Detail overlay (any matchup, opened by tapping
+  // a row) and the Matchup tab's own inline "your matchup" hero (always
+  // expanded, no tap needed) — same hero header + game-by-game pick
+  // comparison either way, just wrapped differently by the caller.
+  function gpBuildH2HMatchupBodyHTML({ nameA, nameB, ptsA, ptsB, weekLabel, games, allPicks, atsEventIds }) {
     const GP_Data = window.GP_Data || {};
     const atsSet = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
     const numA = Number(ptsA) || 0;
@@ -3146,12 +3229,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
     }).join("");
 
-    return `
-<div class="gpPicksOverlayBackdrop" id="gpH2HDetailOverlay" role="dialog" aria-modal="true" aria-label="${esc(nameA)} vs ${esc(nameB)}">
-  <div class="gpPicksOverlaySheet gpH2HDetailSheet" id="gpH2HDetailSheet">
-    <div class="gpOverlayHandle"></div>
-    <div class="gpOverlayHeader gpH2HDetailHeader">
-      <button class="gpOverlayCloseBtn gpH2HDetailCloseBtn" id="gpH2HDetailClose" aria-label="Close">✕</button>
+    return {
+      headerHTML: `
       <div class="gpH2HDetailEyebrow">${esc(weekLabel || "")}${weekLabel ? " · " : ""}Matchup</div>
       <div class="gpH2HDetailHeaderRow">
         <div class="gpH2HDetailName gpH2HDetailNameLeft${aLead ? " gpH2HDetailNameLead" : ""}">${esc(nameA)}</div>
@@ -3161,13 +3240,108 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
           <div class="gpH2HPts gpH2HDetailPts${bLead ? " gpH2HPtsWin" : ""}">${esc(String(ptsB ?? 0))}</div>
         </div>
         <div class="gpH2HDetailName gpH2HDetailNameRight${bLead ? " gpH2HDetailNameLead" : ""}">${esc(nameB)}</div>
-      </div>
+      </div>`,
+      gamesHTML: `<div class="gpH2HDetailGames">${rowsHTML || `<div class="gpEmpty">No games this week.</div>`}</div>`,
+    };
+  }
+
+  // ─── Matchup Detail overlay — any matchup in the week, opened by
+  // tapping its row in the matchups list (own or someone else's). ──
+  function gpBuildH2HMatchupDetailHTML(opts) {
+    const { headerHTML, gamesHTML } = gpBuildH2HMatchupBodyHTML(opts);
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpH2HDetailOverlay" role="dialog" aria-modal="true" aria-label="${esc(opts?.nameA)} vs ${esc(opts?.nameB)}">
+  <div class="gpPicksOverlaySheet gpH2HDetailSheet" id="gpH2HDetailSheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader gpH2HDetailHeader">
+      <button class="gpOverlayCloseBtn gpH2HDetailCloseBtn" id="gpH2HDetailClose" aria-label="Close">✕</button>
+      ${headerHTML}
     </div>
     <div class="gpOverlayBody">
-      <div class="gpH2HDetailGames">${rowsHTML || `<div class="gpEmpty">No games this week.</div>`}</div>
+      ${gamesHTML}
     </div>
   </div>
 </div>`;
+  }
+
+  // ─── Matchup tab — your matchup, always expanded inline (no tap
+  // needed), reusing the exact same hero header + game-by-game pick
+  // comparison as the overlay above, just in a plain card instead of a
+  // modal sheet. Falls back to a simple "BYE" card on a bye week.
+  function gpBuildH2HMyMatchupCardHTML(opts) {
+    if (opts?.bye) {
+      return `
+<div class="gpLeaderCard gpH2HMyMatchupCard">
+  <div class="gpH2HDetailEyebrow" style="padding-top:16px">${esc(opts?.weekLabel || "")}${opts?.weekLabel ? " · " : ""}Matchup</div>
+  <div class="gpEmpty" style="padding:8px 20px 24px">You're on a bye this week — sit back and watch the rest of the league.</div>
+</div>`;
+    }
+    const { headerHTML, gamesHTML } = gpBuildH2HMatchupBodyHTML(opts);
+    return `
+<div class="gpLeaderCard gpH2HMyMatchupCard">
+  <div class="gpOverlayHeader gpH2HDetailHeader">
+    ${headerHTML}
+  </div>
+  ${gamesHTML}
+</div>`;
+  }
+
+  // ─── Matchup tab — composes: your matchup (always expanded), the
+  // weekly high score callout, the week recap (once final), pre-lock
+  // pick progress (reuses buildLeaderboardHTML exactly as the old
+  // single-page "This Week" did — it already no-ops once the week has
+  // any final game, via its own h2hFormat guard), then every other
+  // matchup in the league. All of it built from the same
+  // gpComputeWeeklyLeaderboard/gpGetH2HRoundForWeek/gpComputeH2HWeekResults
+  // primitives the rest of the H2H feature already uses — nothing new
+  // computed here beyond finding "which result is mine."
+  function gpBuildH2HMatchupTabHTML({ weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId, h2hSchedule, weekIndex, myName, leagueMembers }) {
+    const GP_Data = window.GP_Data || {};
+    const list = Array.isArray(games) ? games : [];
+    if (!list.length) return `<div class="gpNotice">No games in this week yet.</div>`;
+
+    const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
+      ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds, tiebreakers, tiebreakerEventId })
+      : { rows: [], finalsCount: 0 };
+
+    const round = typeof GP_Data.gpGetH2HRoundForWeek === "function" ? GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex) : [];
+    const results = typeof GP_Data.gpComputeH2HWeekResults === "function" ? GP_Data.gpComputeH2HWeekResults(round, lb.rows) : [];
+
+    const myKey = String(myName || "").trim().toLowerCase();
+    const myResult = results.find(m => m.bye
+      ? String(m.bye).trim().toLowerCase() === myKey
+      : m.players.some(p => String(p).trim().toLowerCase() === myKey));
+
+    let myCardHTML = "";
+    if (myResult) {
+      myCardHTML = myResult.bye
+        ? gpBuildH2HMyMatchupCardHTML({ bye: true, weekLabel })
+        : gpBuildH2HMyMatchupCardHTML({
+            nameA: myResult.players[0], nameB: myResult.players[1],
+            ptsA: myResult.points[0], ptsB: myResult.points[1],
+            weekLabel, games: list, allPicks, atsEventIds
+          });
+    }
+
+    const otherResults = results.filter(m => m !== myResult);
+    const otherMatchupsHTML = gpBuildH2HMatchupsHTML(otherResults, weekLabel);
+    const highScoreHTML = gpBuildH2HHighScoreCalloutHTML({ rows: lb.rows, weekLabel });
+    const progressHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks, h2hFormat: true });
+
+    let recapHTML = "";
+    if (lb.finalsCount > 0 && lb.finalsCount === list.length) {
+      const recap = typeof GP_Data.gpComputeWeeklyRecap === "function"
+        ? GP_Data.gpComputeWeeklyRecap(list, lb, tiebreakers, tiebreakerEventId, lb.tiebreakerActual)
+        : null;
+      recapHTML = gpBuildWeeklyRecapHTML(recap, weekLabel);
+    }
+
+    return `
+${myCardHTML}
+${highScoreHTML}
+${recapHTML}
+${progressHTML}
+${otherMatchupsHTML}`;
   }
 
   function gpShowH2HMatchupOverlay(opts) {
@@ -3524,7 +3698,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       const diffStr = diff > 0 ? `+${diff}` : String(diff);
       const rowCls = rank === 1 ? " gpStRowGold" : rank === 2 ? " gpStRowSilver" : rank === 3 ? " gpStRowBronze" : "";
       return `
-<tr class="gpStandingsRow${rowCls}">
+<tr class="gpStandingsRow${rowCls}" data-gpaction="openH2HProfile" data-name="${esc(nm)}">
   <td class="gpStRank">${rank}</td>
   <td class="gpStName"><div class="gpStNameWrap"><span class="gpStNameText">${esc(nm)}</span></div></td>
   <td>${esc(record)}</td>
@@ -3585,6 +3759,220 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // ─── Weekly High Score callout (Matchup tab) — top scorer(s) across
+  // the whole league this week, independent of anyone's matchup. Ties at
+  // the top all get named. Nothing to celebrate at 0 points, so this
+  // renders nothing until someone's actually scored.
+  function gpBuildH2HHighScoreCalloutHTML({ rows, weekLabel }) {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return "";
+    const top = Number(list[0]?.points || 0);
+    if (top <= 0) return "";
+    const leaders = list.filter(r => Number(r.points || 0) === top).map(r => String(r?.name || "Someone"));
+    return `
+<div class="gpH2HHighScoreCallout">
+  <div class="gpH2HHighScoreIcon">🔥</div>
+  <div class="gpH2HHighScoreBody">
+    <div class="gpH2HHighScoreLabel">${esc(weekLabel || "This Week")}&rsquo;s High Score</div>
+    <div class="gpH2HHighScoreNames">${leaders.map(esc).join(" &amp; ")}</div>
+  </div>
+  <div class="gpH2HHighScorePts">${esc(String(top))}</div>
+</div>`;
+  }
+
+  // ─── Schedule tab — the full season's pairings, week by week. Past/
+  // final weeks show the actual score; anything else just shows the
+  // upcoming opponent. `resultsByWeekIndex` is keyed by weekIndex (0-based,
+  // matching gpGetH2HRoundForWeek) → { rows, finalsCount, gamesCount } or
+  // null/undefined when that week has no games yet.
+  function gpBuildH2HScheduleTabHTML({ schedule, weeks, totalWeeks, myName, resultsByWeekIndex, filterMine }) {
+    const rounds = Array.isArray(schedule) ? schedule : [];
+    if (!rounds.length) {
+      return `<div class="gpLeaderCard"><div class="gpEmpty" style="padding:28px 20px">No schedule yet — your admin hasn't started the season.</div></div>`;
+    }
+    const weekList = Array.isArray(weeks) ? weeks : [];
+    // Show at least every round once, and at least every real week already
+    // created — whichever is longer — so a season that's gone past one
+    // full round-robin (the schedule cycles via gpGetH2HRoundForWeek)
+    // still lists every week that actually exists.
+    const spanCount = Math.max(rounds.length, weekList.length, Number(totalWeeks) || 0);
+    const myKey = String(myName || "").trim().toLowerCase();
+    const GP_Data = window.GP_Data || {};
+    const getRound = typeof GP_Data.gpGetH2HRoundForWeek === "function" ? GP_Data.gpGetH2HRoundForWeek : () => [];
+    const getResults = typeof GP_Data.gpComputeH2HWeekResults === "function" ? GP_Data.gpComputeH2HWeekResults : () => [];
+
+    const weekRowsHTML = [];
+    for (let wi = 0; wi < spanCount; wi++) {
+      const round = getRound(rounds, wi);
+      if (!round.length) continue;
+      const weekMeta = weekList[wi] || null;
+      const label = String(weekMeta?.label || `Week ${wi + 1}`);
+      const wr = resultsByWeekIndex ? resultsByWeekIndex[wi] : null;
+      const isFinal = !!wr && Number(wr.gamesCount || 0) > 0 && Number(wr.finalsCount || 0) === Number(wr.gamesCount || 0);
+      const results = isFinal ? getResults(round, wr.rows) : null;
+
+      const pairsToShow = filterMine
+        ? round.filter(m => m.bye
+            ? String(m.bye).trim().toLowerCase() === myKey
+            : m.players.some(p => String(p).trim().toLowerCase() === myKey))
+        : round;
+      if (filterMine && !pairsToShow.length) continue;
+
+      const pairRowsHTML = pairsToShow.map((m, pi) => {
+        if (m.bye) {
+          return `
+    <div class="gpH2HScheduleRow gpH2HByeRow">
+      <div class="gpH2HName gpH2HNameLeft">${esc(String(m.bye))}</div>
+      <div class="gpH2HByeLabel">BYE</div>
+    </div>`;
+        }
+        const [nameA, nameB] = m.players;
+        const res = results ? results.find(r => !r.bye && r.players[0] === nameA && r.players[1] === nameB) : null;
+        const aWin = res?.winner === "a", bWin = res?.winner === "b", tie = res?.winner === "tie";
+        const isMineRow = filterMine || nameA.trim().toLowerCase() === myKey || nameB.trim().toLowerCase() === myKey;
+        return `
+    <div class="gpH2HScheduleRow${isMineRow ? " gpH2HScheduleRowMine" : ""}">
+      <div class="gpH2HName gpH2HNameLeft${aWin ? " gpH2HWinner" : ""}">${esc(nameA)}${aWin ? " 🏆" : ""}</div>
+      ${res
+        ? `<div class="gpH2HScoreCluster">
+        <span class="gpH2HPts${aWin ? " gpH2HPtsWin" : ""}">${esc(String(res.points[0]))}</span>
+        <span class="gpH2HVs">${tie ? "TIE" : "vs"}</span>
+        <span class="gpH2HPts${bWin ? " gpH2HPtsWin" : ""}">${esc(String(res.points[1]))}</span>
+      </div>`
+        : `<div class="gpH2HVs">vs</div>`}
+      <div class="gpH2HName gpH2HNameRight${bWin ? " gpH2HWinner" : ""}">${bWin ? "🏆 " : ""}${esc(nameB)}</div>
+    </div>`;
+      }).join("");
+      if (!pairRowsHTML) continue;
+
+      weekRowsHTML.push(`
+<div class="gpH2HScheduleWeek">
+  <div class="gpH2HScheduleWeekLabel">${esc(label)}${isFinal ? "" : weekMeta ? " · In Progress" : " · Upcoming"}</div>
+  ${pairRowsHTML}
+</div>`);
+    }
+
+    return `
+<div class="gpLeaderCard gpH2HScheduleCard">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">🗓️ Season Schedule</div>
+    </div>
+    <button type="button" class="smallBtn${filterMine ? " gpH2HScheduleFilterActive" : ""}" data-gpaction="toggleH2HScheduleMine">
+      ${filterMine ? "★ My Schedule" : "☆ My Schedule Only"}
+    </button>
+  </div>
+  <div class="gpH2HScheduleList">${weekRowsHTML.join("") || `<div class="gpEmpty">Nothing to show.</div>`}</div>
+</div>`;
+  }
+
+  // ─── Playoffs tab — projected seeding only (top N by current season
+  // standings), shown as a simple bracket skeleton. Actual playoff
+  // matchups, once the regular season ends, get set by the admin the
+  // same way any round's pairings are hand-edited today (League
+  // Settings' schedule editor) — this tab doesn't persist anything of
+  // its own, it just visualizes current standings.
+  function gpBuildH2HPlayoffsTabHTML({ standings, playoffTeams }) {
+    const rows = Array.isArray(standings?.rows) ? standings.rows : [];
+    const n = [2, 4, 6, 8].includes(Number(playoffTeams)) ? Number(playoffTeams) : 4;
+    if (!rows.length) {
+      return `<div class="gpLeaderCard"><div class="gpEmpty" style="padding:28px 20px">No standings yet — playoff seeding will show up once some weeks are final.</div></div>`;
+    }
+    const seeds = rows.slice(0, n);
+    const pairs = [];
+    for (let i = 0; i < Math.floor(seeds.length / 2); i++) {
+      pairs.push([{ seed: i + 1, row: seeds[i] }, { seed: seeds.length - i, row: seeds[seeds.length - 1 - i] }]);
+    }
+    const seedSlotHTML = (slot) => slot?.row ? `
+    <div class="gpH2HBracketSlot">
+      <span class="gpH2HBracketSeed">${slot.seed}</span>
+      <span class="gpH2HBracketName">${esc(String(slot.row.name || "TBD"))}</span>
+    </div>` : `
+    <div class="gpH2HBracketSlot gpH2HBracketSlotEmpty"><span class="gpH2HBracketName">TBD</span></div>`;
+    const pairsHTML = pairs.map(([a, b]) => `
+  <div class="gpH2HBracketMatchup">
+    ${seedSlotHTML(a)}
+    <div class="gpH2HVs">vs</div>
+    ${seedSlotHTML(b)}
+  </div>`).join("");
+
+    return `
+<div class="gpLeaderCard gpH2HPlayoffsCard">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">🏆 Playoff Picture</div>
+      <div class="gpLeaderWeekLabel">Top ${n}, projected seeding</div>
+    </div>
+  </div>
+  <div class="gpH2HBracket">${pairsHTML}</div>
+  <div class="gpColumnLegend">
+    Seeding updates live from current standings until the regular season ends — your admin then sets the actual playoff matchups.
+  </div>
+</div>`;
+  }
+
+  // ─── Player profile overlay — all-time head-to-head record vs. every
+  // opponent, reached by tapping a name in Standings. Bottom sheet, same
+  // shell as the Join League overlay.
+  function gpBuildH2HProfileOverlayHTML({ name, opponents }) {
+    const list = Object.values(opponents && typeof opponents === "object" ? opponents : {})
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+    const totals = list.reduce((acc, o) => ({ w: acc.w + Number(o.w || 0), l: acc.l + Number(o.l || 0), t: acc.t + Number(o.t || 0) }), { w: 0, l: 0, t: 0 });
+    const rowsHTML = list.map(o => {
+      const rec = Number(o.t || 0) > 0 ? `${o.w}-${o.l}-${o.t}` : `${o.w}-${o.l}`;
+      return `
+<div class="gpH2HProfileRow">
+  <div class="gpH2HProfileOpp">${esc(String(o.name || "Someone"))}</div>
+  <div class="gpH2HProfileRecord">${esc(rec)}</div>
+</div>`;
+    }).join("");
+    const totalsStr = totals.t > 0 ? `${totals.w}-${totals.l}-${totals.t}` : `${totals.w}-${totals.l}`;
+
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpH2HProfileOverlay" role="dialog" aria-modal="true" aria-label="${esc(name)} head-to-head record">
+  <div class="gpPicksOverlaySheet" id="gpH2HProfileSheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader">
+      <div class="gpOverlayTitle">
+        <div>
+          <div class="gpOverlayName">🥊 ${esc(name)}</div>
+          <div class="gpOverlaySubtitle">All-Time Head-to-Head &middot; ${esc(totalsStr)}</div>
+        </div>
+      </div>
+      <button class="gpOverlayCloseBtn" id="gpH2HProfileClose" aria-label="Close">✕</button>
+    </div>
+    <div class="gpOverlayBody">
+      ${rowsHTML || `<div class="gpEmpty">No completed matchups yet.</div>`}
+    </div>
+  </div>
+</div>`;
+  }
+
+  function gpShowH2HProfileOverlay(opts) {
+    const existing = document.getElementById("gpH2HProfileOverlay");
+    if (existing) existing.remove();
+    document.body.insertAdjacentHTML("beforeend", gpBuildH2HProfileOverlayHTML(opts));
+    const backdrop = document.getElementById("gpH2HProfileOverlay");
+    const sheet    = document.getElementById("gpH2HProfileSheet");
+    const closeBtn = document.getElementById("gpH2HProfileClose");
+    if (!backdrop) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+    closeBtn?.addEventListener("click", dismiss);
+    backdrop.addEventListener("click", (e) => {
+      if (!sheet.contains(e.target)) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
   // ─── Season standings tie-break chain (fine print) ────────────────
   function gpBuildSeasonTiebreakRulesHTML() {
     return `
@@ -3593,7 +3981,9 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
-  // ─── View toggle (This Week / Season) ─────────────────────────────
+  // ─── View toggle (This Week / Season) — points-format leagues only.
+  // H2H leagues use gpBuildH2HTabBarHTML instead (see below); this
+  // function's own behavior/callers are unchanged. ────────────────────
   function gpBuildViewToggleHTML(mode) {
     const m = mode === "season" ? "season" : "week";
     return `
@@ -3601,6 +3991,23 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   <button type="button" class="gpViewToggleBtn${m === "week" ? " gpViewToggleActive" : ""}" data-gpaction="viewWeek">This Week</button>
   <button type="button" class="gpViewToggleBtn${m === "season" ? " gpViewToggleActive" : ""}" data-gpaction="viewSeason">Season</button>
 </div>`;
+  }
+
+  // ─── H2H tab bar — replaces the This Week/Season toggle above for
+  // H2H leagues specifically. Five tabs instead of two, so it scrolls
+  // horizontally on narrow phones rather than wrapping/squeezing.
+  const GP_H2H_TABS = [
+    { id: "matchup",   label: "Matchup"   },
+    { id: "picks",     label: "Picks"     },
+    { id: "standings", label: "Standings" },
+    { id: "schedule",  label: "Schedule"  },
+    { id: "playoffs",  label: "Playoffs"  },
+  ];
+  function gpBuildH2HTabBarHTML(activeTab) {
+    const active = GP_H2H_TABS.some(t => t.id === activeTab) ? activeTab : "matchup";
+    const btns = GP_H2H_TABS.map(t => `
+  <button type="button" class="gpViewToggleBtn${t.id === active ? " gpViewToggleActive" : ""}" data-gpaction="viewH2HTab" data-tab="${t.id}">${esc(t.label)}</button>`).join("");
+    return `<div class="gpViewToggle gpH2HTabBar">${btns}</div>`;
   }
 
   // ─── Tiebreaker card ────────────────────────────────────────────
@@ -4069,7 +4476,13 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
   function gpBuildGroupPicksCardHTML({
     weekId, weekLabel, games, myMap, published, allPicks, isAdmin,
     atsEventIds, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
-    lockReminder, h2hFormat, h2hSchedule, weekIndex, leagueMembers
+    lockReminder, h2hFormat, h2hSchedule, weekIndex, leagueMembers,
+    // Set by the H2H Picks tab only — the matchups card, pre-lock
+    // progress, and weekly recap all moved to the Matchup tab, so this
+    // skips computing/rendering them here to avoid showing them twice.
+    // Points-format leagues never pass this, so their own single "This
+    // Week" page (still calling this same function) is unaffected.
+    h2hPicksOnly
   }) {
     if (!weekId) {
       // For H2H leagues specifically, a missing week almost always means
@@ -4104,7 +4517,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
     let leaderboardHTML = "";
     let recapHTML = "";
     let matchupsHTML = "";
-    if (!isDraft) {
+    if (!isDraft && !h2hPicksOnly) {
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
         ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds: [...atsIdSet], tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
@@ -4624,6 +5037,7 @@ ${archivedSectionHTML}`;
     const totalWeeks = Number(league?.totalWeeks) || "";
     const archived = !!league?.archived;
     const isH2H = league?.format === "h2h";
+    const h2hPlayoffTeams = Number(league?.h2hPlayoffTeams) || 4;
     // Backward-compat: a league saved before multi-announcement support
     // only has the old singular `announcement` field — treat it as slot 1.
     const existingAnnouncements = Array.isArray(league?.announcements)
@@ -4802,6 +5216,12 @@ ${archivedSectionHTML}`;
 
   <div class="gpAdminBlock" id="gpLeagueH2HRosterRow" ${isH2H ? "" : 'style="display:none"'}>
     <div class="gpAdminBlockLabel">🥊 Head-to-Head Season</div>
+    <div class="gpLeagueSettingsRow">
+      <div class="gpLeagueSettingsLabel">Playoff Teams</div>
+      <select id="gpLeagueH2HPlayoffTeams" class="gpLeagueSettingsInput">
+        ${[2, 4, 6, 8].map(n => `<option value="${n}" ${n === h2hPlayoffTeams ? "selected" : ""}>${n}</option>`).join("")}
+      </select>
+    </div>
     ${h2hSeasonBodyHTML}
   </div>
 
@@ -4906,6 +5326,14 @@ ${archivedSectionHTML}`;
     gpShowHeaderMenuOverlay,
     gpDismissHeaderMenuOverlay,
     gpEarliestKickoffMs,
+    gpBuildH2HTabBarHTML,
+    gpBuildH2HMatchupTabHTML,
+    gpBuildH2HHighScoreCalloutHTML,
+    gpBuildH2HScheduleTabHTML,
+    gpBuildH2HPlayoffsTabHTML,
+    gpBuildH2HProfileOverlayHTML,
+    gpShowH2HProfileOverlay,
+    gpBuildH2HPreSeasonHTML,
   };
 
 })();

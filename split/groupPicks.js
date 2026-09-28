@@ -240,10 +240,16 @@
   function gpBustSeasonWeekCache(weekId) {
     try { localStorage.removeItem(gpSeasonWeekCacheKey(weekId)); } catch {}
   }
-  async function gpLoadSeasonLeaderboard(db, league) {
+  // Every published week's own weekly leaderboard rows, independent of
+  // format — the raw ingredient both gpLoadSeasonLeaderboard (aggregates
+  // it into either format's standings) and the H2H Schedule/Playoffs/
+  // Profile tabs (which need each week's own result, not just the
+  // aggregate) build on. Factored out of gpLoadSeasonLeaderboard so
+  // there's exactly one place that fetches/computes this, whichever tab
+  // ends up needing it.
+  async function gpLoadWeeklyResultsForSeason(db, league) {
     const allWeeks = Array.isArray(league?.weeks) ? league.weeks : [];
     const published = allWeeks.filter(w => w?.published);
-    const isH2H = league?.format === "h2h";
 
     // Every week's data is independent of every other week's, so fetch
     // them all at once instead of one at a time — sequentially, a season
@@ -293,7 +299,12 @@
       return { weekId: wid, weekLabel: w.label, weekIndex, rows: lb.rows, finalsCount: lb.finalsCount, gamesCount: games.length };
     }));
 
-    const results = weekResults.filter(Boolean);
+    return weekResults.filter(Boolean);
+  }
+
+  async function gpLoadSeasonLeaderboard(db, league) {
+    const isH2H = league?.format === "h2h";
+    const results = await gpLoadWeeklyResultsForSeason(db, league);
     if (isH2H) {
       return (Data().gpComputeH2HSeasonStandings || (() => ({ rows: [], weeksCount: 0 })))(results, league?.h2hSchedule);
     }
@@ -305,6 +316,169 @@
     try { members = await (Data().gpGetLeagueMembers || (async () => []))(db, league?.id); } catch {}
     seasonLB.rows = (Data().gpFillMissingLeagueMembers || ((r) => r))(seasonLB.rows, members);
     return seasonLB;
+  }
+
+  // ───────────────────────────────────────────
+  // H2H leagues — 5-tab experience (Matchup/Picks/Standings/Schedule/
+  // Playoffs), entirely separate from the points-format render path
+  // above. Reuses the same data-fetch functions and H2H compute
+  // primitives (gpComputeWeeklyLeaderboard, gpGetH2HRoundForWeek,
+  // gpComputeH2HWeekResults, gpLoadSeasonLeaderboard,
+  // gpLoadWeeklyResultsForSeason) the points path and the pre-tab H2H
+  // code already used — nothing about how a week/season/matchup is
+  // computed changes here, only how it's split across tabs.
+  // ───────────────────────────────────────────
+  const GP_H2H_TAB_IDS = ["matchup", "picks", "standings", "schedule", "playoffs"];
+
+  async function renderH2HLeague(el, ctx) {
+    const { db, league, weeks, pickLeagueId, isAdmin, playerId, name, postRender } = ctx;
+    const mem = gpMem();
+    const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
+      leagueName: league.name, isAdmin, showLeaguesBtn: true, playerName: name
+    });
+
+    if (!league.seasonStarted) {
+      let leagueMembers = [];
+      try { leagueMembers = await (Data().gpGetLeagueMembers || (async () => []))(db, pickLeagueId); } catch {}
+      const bodyHTML = (Render().gpBuildH2HPreSeasonHTML || (() => ""))(leagueMembers);
+      el.innerHTML = `${headerHTML}<div class="gpContainer">${bodyHTML}</div>`;
+      postRender();
+      return;
+    }
+
+    const tab = GP_H2H_TAB_IDS.includes(mem.gpH2HTab) ? mem.gpH2HTab : "matchup";
+    const tabBarHTML = (Render().gpBuildH2HTabBarHTML || (() => ""))(tab);
+
+    let selectedId = gpGetSelectedWeekId(pickLeagueId, league);
+    const weekMeta = weeks.find(w => String(w?.id) === selectedId) || weeks[weeks.length - 1] || null;
+    if (!selectedId && weekMeta) selectedId = String(weekMeta.id || "");
+    const weekLabel = String(weekMeta?.label || selectedId || "");
+    const published = !!weekMeta?.published;
+    const weekIndex = weeks.findIndex(w => String(w?.id) === selectedId);
+    mem.picksSlateId = selectedId;
+
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${tabBarHTML}<div class="gpNotice">Loading…</div></div>`;
+
+    let bodyHTML = "";
+    let pagerHTML = "";
+    let adminBuilderHTML = "";
+    let announcementHTML = "";
+    let notifOptInHTML = "";
+
+    if (tab === "matchup" || tab === "picks") {
+      if (!selectedId) {
+        bodyHTML = `<div class="gpEmpty">No active week yet. Ask your admin to create one.</div>`;
+      } else if (!published && !isAdmin) {
+        bodyHTML = `<div class="gpEmpty">Week not published yet. Check back soon.</div>`;
+      } else {
+        let games = [], allPicks = {}, slateDoc = {}, tiebreakers = {}, leagueMembers = [], myMap = {}, myPicksUserDoc = {};
+        try {
+          [games, allPicks, slateDoc, tiebreakers, leagueMembers, myMap, myPicksUserDoc] = await Promise.all([
+            (Data().gpGetSlateGames         || (async () => []))(db, selectedId),
+            (Data().gpEnsureAllPicksForWeek || (async () => ({})))(db, selectedId),
+            (Data().gpGetSlateDoc           || (async () => ({})))(db, selectedId),
+            (Data().gpEnsureTiebreakersForWeek || (async () => ({})))(db, selectedId),
+            (Data().gpGetLeagueMembers      || (async () => []))(db, pickLeagueId),
+            tab === "picks" ? (Data().gpGetMyPicksMap     || (async () => ({})))(db, selectedId, playerId) : Promise.resolve({}),
+            tab === "picks" ? (Data().gpGetMyPicksUserDoc || (async () => ({})))(db, selectedId, playerId) : Promise.resolve({}),
+          ]);
+        } catch {}
+
+        if (games.length) {
+          (ESPN().gpApplyStoredLiveState || (() => {}))(games);
+          (ESPN().gpApplyStoredOdds      || (() => {}))(games);
+        }
+        const atsEventIds       = Array.isArray(slateDoc?.atsEventIds) ? slateDoc.atsEventIds.map(String) : [];
+        const tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
+
+        // Same globals the points-format path exposes — the Matchup Detail
+        // overlay (tapping any other matchup) and, on the Picks tab, the
+        // player picks overlay both read these regardless of format.
+        window.__gpCurrentGames             = games;
+        window.__gpCurrentAllPicks          = allPicks;
+        window.__gpCurrentAtsEventIds       = atsEventIds;
+        window.__gpCurrentTiebreakerEventId = tiebreakerEventId;
+        window.__gpCurrentTiebreakers       = tiebreakers;
+        window.__gpCurrentWeekLabel         = weekLabel;
+
+        pagerHTML = weeks.length ? (Render().gpBuildWeekPagerHTML || (() => ""))({
+          weekLabel,
+          isDraft:  !published && isAdmin,
+          canPrev:  !!gpAdjacentWeekId(weeks, selectedId, -1, isAdmin),
+          canNext:  !!gpAdjacentWeekId(weeks, selectedId, +1, isAdmin)
+        }) : "";
+
+        const announcementsList = Array.isArray(league.announcements)
+          ? league.announcements
+          : (league.announcement ? [league.announcement] : []);
+        announcementHTML = (Render().gpBuildLeagueAnnouncementsHTML || (() => ""))(announcementsList);
+        notifOptInHTML = (Render().gpBuildNotifOptInHTML || (() => ""))();
+
+        if (tab === "matchup") {
+          bodyHTML = (Render().gpBuildH2HMatchupTabHTML || (() => ""))({
+            weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId,
+            h2hSchedule: league.h2hSchedule, weekIndex, myName: name, leagueMembers
+          });
+        } else {
+          const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
+            ? Number(myPicksUserDoc.tiebreakerGuess) : null;
+          const lockReminder = gpComputeLockReminder(
+            games, myMap, tiebreakerEventId, myTiebreakerGuess, gpPendingGetTiebreaker()
+          );
+          const lockReminderHTML = lockReminder ? (Render().gpBuildLockReminderHTML || (() => ""))(lockReminder) : "";
+          bodyHTML = (Render().gpBuildGroupPicksCardHTML || (() => ""))({
+            weekId: selectedId, weekLabel, games, myMap, published, allPicks, isAdmin,
+            atsEventIds, tiebreakerEventId, tiebreakers, leagueMembers,
+            myTiebreakerGuess, pendingTiebreakerGuess: gpPendingGetTiebreaker(),
+            lockReminder: lockReminderHTML,
+            h2hFormat: true, h2hSchedule: league.h2hSchedule, weekIndex,
+            h2hPicksOnly: true
+          });
+          if (isAdmin) {
+            const leagueKey    = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
+            const defaultRange = gpDefaultWeekRange();
+            const dateStart    = mem.gpAdminDateStart || defaultRange.start;
+            const dateEnd      = mem.gpAdminDateEnd   || defaultRange.end;
+            const avail        = mem.gpAvailableEvents || [];
+            adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
+              weekId: selectedId, weekLabel, availableEvents: avail,
+              leagueKey, dateStart, dateEnd, isAdmin,
+              games, atsEventIds, tiebreakerEventId, pickLeagueId,
+              loadStatus: mem.gpAdminLoadStatus || ""
+            });
+          }
+        }
+      }
+    } else if (tab === "standings") {
+      try {
+        const standings = await gpLoadSeasonLeaderboard(db, league);
+        bodyHTML = (Render().gpBuildH2HSeasonStandingsHTML || (() => ""))(standings);
+      } catch (err) {
+        bodyHTML = `<div class="gpNotice">Couldn't load standings: ${String(err?.message || err)}</div>`;
+      }
+    } else if (tab === "schedule") {
+      try {
+        const results = await gpLoadWeeklyResultsForSeason(db, league);
+        const resultsByWeekIndex = {};
+        for (const r of results) resultsByWeekIndex[r.weekIndex] = r;
+        bodyHTML = (Render().gpBuildH2HScheduleTabHTML || (() => ""))({
+          schedule: league.h2hSchedule, weeks, totalWeeks: league.totalWeeks,
+          myName: name, resultsByWeekIndex, filterMine: !!mem.gpH2HScheduleMine
+        });
+      } catch (err) {
+        bodyHTML = `<div class="gpNotice">Couldn't load schedule: ${String(err?.message || err)}</div>`;
+      }
+    } else if (tab === "playoffs") {
+      try {
+        const standings = await gpLoadSeasonLeaderboard(db, league);
+        bodyHTML = (Render().gpBuildH2HPlayoffsTabHTML || (() => ""))({ standings, playoffTeams: league.h2hPlayoffTeams });
+      } catch (err) {
+        bodyHTML = `<div class="gpNotice">Couldn't load playoff picture: ${String(err?.message || err)}</div>`;
+      }
+    }
+
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${tabBarHTML}${pagerHTML}${adminBuilderHTML}${bodyHTML}</div>`;
+    postRender();
   }
 
   // ───────────────────────────────────────────
@@ -712,6 +886,16 @@
     const weeks = Array.isArray(league.weeks) ? league.weeks : [];
     mem.picksLeagueWeeksCache = weeks;
 
+    // ── H2H leagues get their own 5-tab experience (Matchup/Picks/
+    //    Standings/Schedule/Playoffs) entirely separate from the
+    //    points-format code below — the points format's own render path,
+    //    data fetch, and This Week/Season toggle are never touched by
+    //    anything in renderH2HLeague. ──
+    if (league.format === "h2h") {
+      await renderH2HLeague(el, { db, league, weeks, pickLeagueId, isAdmin, playerId, name, postRender });
+      return;
+    }
+
     // ── season view: cumulative standings across every published week ──
     if (mem.gpViewMode === "season") {
       const headerHTML  = (Render().renderPicksHeaderHTML || (() => ""))({
@@ -1043,6 +1227,44 @@
       return;
     }
 
+    // ── H2H tab bar ──
+    if (action === "viewH2HTab") {
+      const tab = String(btn.getAttribute("data-tab") || "matchup");
+      gpMem().gpH2HTab = GP_H2H_TAB_IDS.includes(tab) ? tab : "matchup";
+      await renderPicks();
+      return;
+    }
+
+    // ── H2H Schedule tab: "My Schedule Only" filter ──
+    if (action === "toggleH2HScheduleMine") {
+      const mem2 = gpMem();
+      mem2.gpH2HScheduleMine = !mem2.gpH2HScheduleMine;
+      await renderPicks("light");
+      return;
+    }
+
+    // ── H2H Standings row tap → all-time head-to-head record overlay ──
+    if (action === "openH2HProfile") {
+      const oppName = String(btn.getAttribute("data-name") || "").trim();
+      if (!oppName) return;
+      const mem2 = gpMem();
+      const pickLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId();
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId);
+        if (!league) return;
+        const results = await gpLoadWeeklyResultsForSeason(db2, league);
+        const records = (Data().gpComputeH2HAllTimeMatchupRecords || (() => ({})))(results, league?.h2hSchedule);
+        const key = oppName.toLowerCase();
+        const rec = records[key] || { name: oppName, opponents: {} };
+        (Render().gpShowH2HProfileOverlay || (() => {}))({ name: rec.name, opponents: rec.opponents });
+      } catch (err) {
+        console.error("[GP] openH2HProfile error:", err);
+      }
+      return;
+    }
+
     // ── week pager: previous / next ──
     if (action === "weekPrev" || action === "weekNext") {
       const mem2 = gpMem();
@@ -1079,6 +1301,7 @@
       mem2.pickLeagueId = leagueId;
       mem2.gpShowLeaguePicker = false;
       mem2.gpViewMode = "week";
+      mem2.gpH2HTab = "matchup";
       gpSetSelectedLeagueId(leagueId);
       gpPendingClear();
       await renderPicks("heavy");
@@ -1159,6 +1382,7 @@
         mem2.pickLeagueId = leagueId;
         mem2.gpShowLeaguePicker = false;
         mem2.gpViewMode = "week";
+        mem2.gpH2HTab = "matchup";
         gpSetSelectedLeagueId(leagueId);
         gpPendingClear();
         await renderPicks("heavy");
@@ -1206,10 +1430,16 @@
       const totalWeeksEl = document.getElementById("gpLeagueTotalWeeks");
       const archivedEl   = document.getElementById("gpLeagueArchived");
       const formatEl     = document.getElementById("gpLeagueFormat");
+      const playoffTeamsEl = document.getElementById("gpLeagueH2HPlayoffTeams");
       const name       = String(nameEl?.value || "").trim();
       const year       = Number(yearEl?.value || "");
       const totalWeeks = String(totalWeeksEl?.value || "").trim();
       const format     = String(formatEl?.value || "points").trim();
+      // The playoff-teams <select> lives in the (hidden, not removed)
+      // H2H-only block, so it's still present in the DOM for a points
+      // league too — only actually read/saved when the format being
+      // submitted is h2h, so a points league never picks up this field.
+      const h2hPlayoffTeams = format === "h2h" ? (Number(playoffTeamsEl?.value || "") || undefined) : undefined;
       const announcements = [0, 1, 2].map(i => ({
         title:     String(document.getElementById(`gpLeagueAnnouncementTitle${i}`)?.value || "").trim(),
         message:   String(document.getElementById(`gpLeagueAnnouncementMessage${i}`)?.value || "").trim(),
@@ -1234,11 +1464,11 @@
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
             name, seasonYear: year, totalWeeks,
             archived: archivedEl ? !!archivedEl.checked : undefined,
-            format, announcements
+            format, announcements, h2hPlayoffTeams
           });
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
-            name, seasonYear: year, totalWeeks, format, announcements
+            name, seasonYear: year, totalWeeks, format, announcements, h2hPlayoffTeams
           });
           // The admin creating a league is almost always a player in it
           // too — auto-join them so they don't hit their own "Join"

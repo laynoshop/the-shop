@@ -1121,6 +1121,48 @@
     return { rows, weeksCount: weeksFinal };
   }
 
+  // gpComputeH2HAllTimeMatchupRecords(weeklyResults, schedule)
+  // Per-player, per-opponent W-L-T — same "fully final week" walk as
+  // gpComputeH2HSeasonStandings (reuses the exact same
+  // gpGetH2HRoundForWeek/gpComputeH2HWeekResults calls), just keyed by
+  // opponent instead of aggregated into one overall record. Powers the
+  // player-profile "3-1 vs Mike" breakdown.
+  // Returns: { [nameLower]: { name, opponents: { [oppNameLower]: { name, w, l, t } } } }
+  function gpComputeH2HAllTimeMatchupRecords(weeklyResults, schedule) {
+    const players = new Map();
+    function ensure(name) {
+      const key = String(name).trim().toLowerCase();
+      if (!players.has(key)) players.set(key, { name, opponents: new Map() });
+      return players.get(key);
+    }
+    function ensureOpp(player, oppName) {
+      const key = String(oppName).trim().toLowerCase();
+      if (!player.opponents.has(key)) player.opponents.set(key, { name: oppName, w: 0, l: 0, t: 0 });
+      return player.opponents.get(key);
+    }
+    const weeks = Array.isArray(weeklyResults) ? weeklyResults : [];
+    for (const wr of weeks) {
+      const gamesCount = Number(wr?.gamesCount ?? 0);
+      const isFinal = gamesCount > 0 && Number(wr?.finalsCount ?? 0) === gamesCount;
+      if (!isFinal) continue;
+      const round = gpGetH2HRoundForWeek(schedule, wr.weekIndex);
+      for (const m of gpComputeH2HWeekResults(round, wr.rows)) {
+        if (m.bye) continue;
+        const [nameA, nameB] = m.players;
+        const a = ensure(nameA), b = ensure(nameB);
+        const aVsB = ensureOpp(a, nameB), bVsA = ensureOpp(b, nameA);
+        if (m.winner === "a")      { aVsB.w++; bVsA.l++; }
+        else if (m.winner === "b") { bVsA.w++; aVsB.l++; }
+        else if (m.winner === "tie") { aVsB.t++; bVsA.t++; }
+      }
+    }
+    const out = {};
+    for (const [key, p] of players) {
+      out[key] = { name: p.name, opponents: Object.fromEntries(p.opponents) };
+    }
+    return out;
+  }
+
   // ──────────────────────────────────────────────────────────────
   // gpComputeSeasonLeaderboard
   // Sums per-player points/record across an array of already-computed
@@ -1260,6 +1302,7 @@
     gpGetH2HRoundForWeek,
     gpComputeH2HWeekResults,
     gpComputeH2HSeasonStandings,
+    gpComputeH2HAllTimeMatchupRecords,
   };
 
   window.ensureFirebaseReadySafe = ensureFirebaseReadySafe;

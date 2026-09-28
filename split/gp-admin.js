@@ -141,6 +141,16 @@
     return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
   }
 
+  // H2H playoff bracket size — how many top seeds (by season standings)
+  // make the projected/actual playoff bracket. Even numbers only (a
+  // bracket needs pairs); defaults to 4 for any league that predates
+  // this field or left it unset.
+  const H2H_PLAYOFF_TEAMS_OPTIONS = [2, 4, 6, 8];
+  function normalizeH2HPlayoffTeams(n) {
+    const num = Math.round(Number(n));
+    return H2H_PLAYOFF_TEAMS_OPTIONS.includes(num) ? num : 4;
+  }
+
   // League Announcements — up to 3 short admin-authored notices shown
   // stacked at the top of the week view for every player in the league.
   // Each slot normalizes to null (not an empty object) when there's
@@ -182,7 +192,7 @@
       .slice(0, MAX_ANNOUNCEMENTS);
   }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, announcements }) {
+  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, announcements, h2hPlayoffTeams }) {
     const ref = db.collection("leagues").doc();
     const isH2H = format === "h2h";
     await ref.set({
@@ -202,6 +212,9 @@
       h2hRoster:    [],
       h2hSchedule:  [],
       seasonStarted: false,
+      // Additive field, H2H only — how many seeds make the playoff
+      // bracket (Playoffs tab). Harmless/unused on a points league.
+      h2hPlayoffTeams: normalizeH2HPlayoffTeams(h2hPlayoffTeams),
       announcements: normalizeAnnouncements(announcements),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
@@ -209,7 +222,7 @@
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, announcements }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, announcements, h2hPlayoffTeams }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
@@ -218,6 +231,7 @@
     if (seasonYear !== undefined) patch.seasonYear = Number(seasonYear) || currentYear();
     if (totalWeeks !== undefined) patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
     if (archived !== undefined)   patch.archived = !!archived;
+    if (h2hPlayoffTeams !== undefined) patch.h2hPlayoffTeams = normalizeH2HPlayoffTeams(h2hPlayoffTeams);
     if (announcements !== undefined) {
       let prevAnnouncements = [];
       try {
