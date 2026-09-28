@@ -4006,7 +4006,7 @@ ${otherMatchupsHTML}`;
   function gpBuildH2HTabBarHTML(activeTab) {
     const active = GP_H2H_TABS.some(t => t.id === activeTab) ? activeTab : "matchup";
     const btns = GP_H2H_TABS.map(t => `
-  <button type="button" class="gpViewToggleBtn${t.id === active ? " gpViewToggleActive" : ""}" data-gpaction="viewH2HTab" data-tab="${t.id}">${esc(t.label)}</button>`).join("");
+  <button type="button" class="gpViewToggleBtn${t.id === active ? " gpViewToggleActive" : ""}" data-gpaction="viewH2HTab" data-h2htab="${t.id}">${esc(t.label)}</button>`).join("");
     return `<div class="gpViewToggle gpH2HTabBar">${btns}</div>`;
   }
 

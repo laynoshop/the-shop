@@ -366,12 +366,18 @@
     let notifOptInHTML = "";
 
     if (tab === "matchup" || tab === "picks") {
+      // Hoisted so the admin builder panel (below) can always reference
+      // them — it needs to show up even with no week yet, same as the
+      // original points-format placement, which was never gated on a
+      // week existing.
+      let games = [], atsEventIds = [], tiebreakerEventId = "";
+
       if (!selectedId) {
-        bodyHTML = `<div class="gpEmpty">No active week yet. Ask your admin to create one.</div>`;
+        bodyHTML = `<div class="gpEmpty">No active week yet.${isAdmin ? " Use the panel above to load games and create one." : " Ask your admin to create one."}</div>`;
       } else if (!published && !isAdmin) {
         bodyHTML = `<div class="gpEmpty">Week not published yet. Check back soon.</div>`;
       } else {
-        let games = [], allPicks = {}, slateDoc = {}, tiebreakers = {}, leagueMembers = [], myMap = {}, myPicksUserDoc = {};
+        let allPicks = {}, slateDoc = {}, tiebreakers = {}, leagueMembers = [], myMap = {}, myPicksUserDoc = {};
         try {
           [games, allPicks, slateDoc, tiebreakers, leagueMembers, myMap, myPicksUserDoc] = await Promise.all([
             (Data().gpGetSlateGames         || (async () => []))(db, selectedId),
@@ -388,8 +394,8 @@
           (ESPN().gpApplyStoredLiveState || (() => {}))(games);
           (ESPN().gpApplyStoredOdds      || (() => {}))(games);
         }
-        const atsEventIds       = Array.isArray(slateDoc?.atsEventIds) ? slateDoc.atsEventIds.map(String) : [];
-        const tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
+        atsEventIds       = Array.isArray(slateDoc?.atsEventIds) ? slateDoc.atsEventIds.map(String) : [];
+        tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
 
         // Same globals the points-format path exposes — the Matchup Detail
         // overlay (tapping any other matchup) and, on the Picks tab, the
@@ -434,20 +440,27 @@
             h2hFormat: true, h2hSchedule: league.h2hSchedule, weekIndex,
             h2hPicksOnly: true
           });
-          if (isAdmin) {
-            const leagueKey    = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
-            const defaultRange = gpDefaultWeekRange();
-            const dateStart    = mem.gpAdminDateStart || defaultRange.start;
-            const dateEnd      = mem.gpAdminDateEnd   || defaultRange.end;
-            const avail        = mem.gpAvailableEvents || [];
-            adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
-              weekId: selectedId, weekLabel, availableEvents: avail,
-              leagueKey, dateStart, dateEnd, isAdmin,
-              games, atsEventIds, tiebreakerEventId, pickLeagueId,
-              loadStatus: mem.gpAdminLoadStatus || ""
-            });
-          }
         }
+      }
+
+      // Admin builder (Load Games / Publish / + New Week / League
+      // Settings) — Picks tab only, but shown whenever isAdmin regardless
+      // of whether a week/games exist yet, exactly like the original
+      // points-format "This Week" page always did (never gated on
+      // selectedId there either — that's how an admin creates week 1 in
+      // the first place).
+      if (tab === "picks" && isAdmin) {
+        const leagueKey    = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
+        const defaultRange = gpDefaultWeekRange();
+        const dateStart    = mem.gpAdminDateStart || defaultRange.start;
+        const dateEnd      = mem.gpAdminDateEnd   || defaultRange.end;
+        const avail        = mem.gpAvailableEvents || [];
+        adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
+          weekId: selectedId, weekLabel, availableEvents: avail,
+          leagueKey, dateStart, dateEnd, isAdmin,
+          games, atsEventIds, tiebreakerEventId, pickLeagueId,
+          loadStatus: mem.gpAdminLoadStatus || ""
+        });
       }
     } else if (tab === "standings") {
       try {
@@ -1228,8 +1241,17 @@
     }
 
     // ── H2H tab bar ──
+    // Reads data-h2htab, not data-tab — shared.js has its own completely
+    // unscoped `document.addEventListener("click", ...)` that fires
+    // showTab() for ANY clicked <button> carrying a data-tab attribute,
+    // regardless of where it lives in the page. Naming this one data-tab
+    // collided with that: "picks" matched the real top-level Pick'em tab
+    // key and bounced the whole app back to the league picker, and every
+    // other H2H tab id fell through to showTab's default (loadScores),
+    // flashing the Scores tab. Never reuse data-tab for anything that
+    // isn't a real top-level app tab.
     if (action === "viewH2HTab") {
-      const tab = String(btn.getAttribute("data-tab") || "matchup");
+      const tab = String(btn.getAttribute("data-h2htab") || "matchup");
       gpMem().gpH2HTab = GP_H2H_TAB_IDS.includes(tab) ? tab : "matchup";
       await renderPicks();
       return;
@@ -1239,7 +1261,7 @@
     if (action === "toggleH2HScheduleMine") {
       const mem2 = gpMem();
       mem2.gpH2HScheduleMine = !mem2.gpH2HScheduleMine;
-      await renderPicks("light");
+      await renderPicks();
       return;
     }
 
