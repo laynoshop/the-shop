@@ -107,7 +107,12 @@ window.replaceMichiganText = replaceMichiganText;
     }
 
     const loginCounter = document.getElementById("daysSinceNumber");
-    if (loginCounter) loginCounter.textContent = days;
+    if (loginCounter) {
+      // Superstition dodge: 666 is bad luck, so the login screen never
+      // actually shows it — it displays as 665* instead on that one day.
+      // The real count (and every other display of it) is unaffected.
+      loginCounter.textContent = days === 666 ? "665*" : days;
+    }
   }
   window.updateRivalryBanner = updateRivalryBanner;
 
