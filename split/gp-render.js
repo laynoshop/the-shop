@@ -914,6 +914,63 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HMatchupRowClickable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .gpH2HMatchupRowClickable:active { background: rgba(255,255,255,0.04); }
 
+/* H2H pre-season placeholder (no active week yet — admin hasn't hit
+   "Start Season") — a hero card explaining the wait, plus a Competitors
+   card listing who's already joined. Same gold hero-gradient treatment
+   as the Matchup Detail overlay header, for a consistent "this is the
+   H2H part of the app" look. */
+.gpH2HPreSeasonHero {
+  text-align: center; padding: 32px 24px 28px; border-radius: 18px;
+  margin-bottom: 14px;
+  background:
+    radial-gradient(120% 160% at 50% -20%, rgba(255,210,100,0.14) 0%, rgba(255,210,100,0) 62%),
+    rgba(10,10,12,0.7);
+  border: 1px solid rgba(255,255,255,0.09);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
+}
+.gpH2HPreSeasonIcon {
+  font-size: 34px; line-height: 1; margin-bottom: 12px;
+  filter: drop-shadow(0 0 16px rgba(255,210,100,0.35));
+}
+.gpH2HPreSeasonTitle {
+  font-size: 19px; font-weight: 900; color: #fff; letter-spacing: 0.01em;
+  margin-bottom: 8px;
+}
+.gpH2HPreSeasonSub {
+  font-size: 13px; font-weight: 500; line-height: 1.5;
+  color: rgba(255,255,255,0.5); max-width: 320px; margin: 0 auto;
+}
+.gpH2HCompetitorsCount {
+  font-size: 12px; font-weight: 900; color: rgba(255,210,100,0.9);
+  background: rgba(255,210,100,0.12); border: 1px solid rgba(255,210,100,0.28);
+  border-radius: 999px; padding: 3px 11px; flex-shrink: 0;
+}
+.gpH2HCompetitorsList {
+  display: flex; flex-direction: column;
+  padding: 4px 16px 14px;
+}
+.gpH2HCompetitorRow {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.gpH2HCompetitorRow:last-child { border-bottom: none; }
+.gpH2HCompetitorAvatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 900; letter-spacing: -0.3px; text-transform: uppercase;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+.gpH2HCompetitorName {
+  flex: 1 1 0; min-width: 0;
+  font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.85);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpH2HCompetitorJoined {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em;
+  color: #5ddb8a; flex-shrink: 0;
+}
+
 /* Head-to-Head matchup detail overlay — a centered modal (unlike every
    other overlay in the app, which slides up as a bottom sheet), since
    this one's a detail/inspection view rather than a form or a list to
@@ -2968,6 +3025,42 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`;
   }
 
+  // ─── H2H pre-season placeholder — shown in place of the week card
+  // whenever an H2H league has no active week yet, which for this format
+  // almost always means the admin hasn't hit "Start Season" (not just
+  // "hasn't made a week"), so this explains that rather than pointing
+  // players at the wrong fix. Doubles as a roster check so joined players
+  // can see who else is in before things kick off.
+  function gpBuildH2HPreSeasonHTML(leagueMembers) {
+    const list = Array.isArray(leagueMembers) ? leagueMembers : [];
+    const rows = list.map(m => {
+      const nm = String(m?.name || "Someone");
+      const { bg, color } = avatarStyle(nm);
+      return `
+<div class="gpH2HCompetitorRow">
+  <div class="gpH2HCompetitorAvatar" style="background:${bg};color:${color}">${esc(initials(nm))}</div>
+  <div class="gpH2HCompetitorName">${esc(nm)}</div>
+  <div class="gpH2HCompetitorJoined">✓ Joined</div>
+</div>`;
+    }).join("");
+
+    return `
+<div class="gpH2HPreSeasonHero">
+  <div class="gpH2HPreSeasonIcon">⚔️</div>
+  <div class="gpH2HPreSeasonTitle">Season Hasn't Started Yet</div>
+  <div class="gpH2HPreSeasonSub">Your admin hasn't started the season yet. Once they do, your weekly matchups and games will show up right here.</div>
+</div>
+<div class="gpLeaderCard gpH2HCompetitorsCard">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">🥊 Competitors</div>
+    </div>
+    <div class="gpH2HCompetitorsCount">${list.length}</div>
+  </div>
+  ${rows ? `<div class="gpH2HCompetitorsList">${rows}</div>` : `<div class="gpEmpty">No one has joined yet.</div>`}
+</div>`;
+  }
+
   // ─── Head-to-Head matchup detail — one game per row, both players'
   // picks side by side with the game itself in the middle. `allPicks` is
   // gpGetAllPicksForSlate's shape ({ [eventId]: [{name, side, ...}] }),
@@ -3979,6 +4072,12 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
     lockReminder, h2hFormat, h2hSchedule, weekIndex, leagueMembers
   }) {
     if (!weekId) {
+      // For H2H leagues specifically, a missing week almost always means
+      // the admin hasn't hit "Start Season" yet (rather than just needing
+      // a new week created) — the generic points-league message below is
+      // actively misleading here, so this gets its own explanation plus
+      // a look at who's already in.
+      if (h2hFormat) return gpBuildH2HPreSeasonHTML(leagueMembers);
       return `<div class="gpEmpty">No active week yet. Ask your admin to create one.</div>`;
     }
     if (!published && !isAdmin) {
