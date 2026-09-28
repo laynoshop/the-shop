@@ -544,6 +544,17 @@
   text-align: right; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 100%; min-width: 0; flex-shrink: 1;
 }
+/* Date/kickoff-time row, below the header — the broadcast logo moved
+   here (stacked above the time, right-justified) instead of sitting in
+   gpCardHeaderRight, where it was crowding the odds line to the point
+   of getting clipped. */
+.gpCardDateTimeRow {
+  padding: 4px 10px 0; display: flex; justify-content: space-between;
+  align-items: flex-start; gap: 8px;
+}
+.gpCardDateText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); padding-top: 2px; }
+.gpCardTimeCol { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.gpCardTimeText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); }
 .gpBroadcastChip {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
@@ -551,9 +562,14 @@
   background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13);
   color: rgba(255,255,255,0.55); flex-shrink: 0; white-space: nowrap;
 }
-.gpBroadcastChip.gpBroadcastChipLogo { padding: 3px 7px; }
-.gpBroadcastLogoImg { height: 13px; width: auto; max-width: 40px; display: block; }
-.gpBroadcastLogoFallback { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
+.gpBroadcastChip.gpBroadcastChipLogo {
+  background: #fff; border-color: rgba(0,0,0,0.06); padding: 3px 8px;
+}
+.gpBroadcastChip.gpBroadcastChipBare { background: transparent; border: none; padding: 0; }
+.gpBroadcastChip.gpBroadcastChipBare .gpBroadcastLogoImg { border-radius: 3px; }
+.gpBroadcastChip.gpBroadcastChipBare .gpBroadcastLogoFallback { color: rgba(255,255,255,0.55); }
+.gpBroadcastLogoImg { height: 13px; width: auto; max-width: 60px; display: block; }
+.gpBroadcastLogoFallback { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: #222; }
 .gpMatchup {
   display: flex; flex-direction: column;
   padding: 6px 10px 10px; gap: 6px;
@@ -2155,34 +2171,65 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
   // ─── Broadcast network logo (falls back to plain text) ─────────────
   // Mirrors scores-render.js's version — kept a separate copy since these
-  // are independent modules, but same slugs/behavior: try ESPN's own
-  // network-logo CDN, and if the image 404s (an unverified slug guess),
-  // the onerror handler swaps back to the plain text chip automatically.
-  const GP_NETWORK_LOGO_SLUGS = {
-    "espn": "espn", "espn2": "espn2", "espnu": "espnu", "espnews": "espnews",
-    "espn+": "espnplus", "espn plus": "espnplus",
-    "abc": "abc",
-    "fox": "fox", "fs1": "fs1", "fox sports 1": "fs1", "fs2": "fs2", "fox sports 2": "fs2",
-    "cbs": "cbs", "cbssn": "cbssn", "cbs sports network": "cbssn",
-    "nbc": "nbc", "peacock": "peacock",
-    "tbs": "tbs", "tnt": "tnt", "trutv": "trutv",
-    "the cw": "cw", "cw": "cw",
-    "paramount+": "paramount", "paramount plus": "paramount",
-    "prime video": "amazon", "amazon prime video": "amazon", "amazon": "amazon",
-    "accn": "accn", "acc network": "accn",
-    "secn": "secn", "sec network": "secn",
-    "btn": "btn", "big ten network": "btn",
-    "nfln": "nflnetwork", "nfl network": "nflnetwork",
+  // are independent modules, but same real local logo files (under
+  // assets/networks/, not a guessed CDN url) and the same `bare` flag
+  // for a logo that's already a self-contained badge vs. one that needs
+  // the white chip behind it for contrast.
+  const GP_NETWORK_LOGO_FILES = {
+    "espn":         { file: "assets/networks/espn.webp" },
+    "espn2":        { file: "assets/networks/espn2.webp" },
+    "abc":          { file: "assets/networks/abc.webp", bare: true },
+    "cbs":          { file: "assets/networks/cbs.webp" },
+    "fox":          { file: "assets/networks/fox.png", bare: true },
+    "fs1":          { file: "assets/networks/fs1.webp", bare: true },
+    "fox sports 1": { file: "assets/networks/fs1.webp", bare: true },
+    "nbc":          { file: "assets/networks/nbc.webp" },
+    "peacock":      { file: "assets/networks/peacock.webp" },
+    "secn":         { file: "assets/networks/sec-network.webp", bare: true },
+    "sec network":  { file: "assets/networks/sec-network.webp", bare: true },
+    "btn":               { file: "assets/networks/btn.png" },
+    "big ten network":   { file: "assets/networks/btn.png" },
+    "cw":                { file: "assets/networks/cw.webp" },
+    "the cw":            { file: "assets/networks/cw.webp" },
+    "cbssn":                    { file: "assets/networks/cbssn.webp" },
+    "cbs sports network":       { file: "assets/networks/cbssn.webp" },
+    "accn":            { file: "assets/networks/accn.webp" },
+    "acc network":     { file: "assets/networks/accn.webp" },
+    "tnt":             { file: "assets/networks/tnt.webp" },
+    "apple tv":        { file: "assets/networks/apple-tv.webp" },
+    "apple tv+":       { file: "assets/networks/apple-tv.webp" },
+    "espn+":           { file: "assets/networks/espn-plus.webp" },
+    "espn plus":       { file: "assets/networks/espn-plus.webp" },
+    "usa":             { file: "assets/networks/usa.webp" },
+    "usa network":     { file: "assets/networks/usa.webp" },
+    "usa net":         { file: "assets/networks/usa.webp" },
+    "espnu":           { file: "assets/networks/espnu.webp" },
+    "espn unlimited":  { file: "assets/networks/espn.webp" },
+    "espn unlmtd":     { file: "assets/networks/espn.webp" },
+    "nfln":            { file: "assets/networks/nfl-network.webp" },
+    "nfl network":     { file: "assets/networks/nfl-network.webp" },
+    "nfl net":         { file: "assets/networks/nfl-network.webp" },
+    "msgsn":           { file: "assets/networks/msgsn.png" },
+    "msg sn":          { file: "assets/networks/msgsn.png" },
+    "msg network":     { file: "assets/networks/msgsn.png" },
+    "nhln":            { file: "assets/networks/nhl-network.webp" },
+    "nhl network":     { file: "assets/networks/nhl-network.webp" },
+    "nhl net":         { file: "assets/networks/nhl-network.webp" },
+    "scripps sports":  { file: "assets/networks/scripps-sports.png" },
+    "scripps":         { file: "assets/networks/scripps-sports.png" },
+    "disney+":         { file: "assets/networks/disney-plus.webp" },
+    "disney plus":     { file: "assets/networks/disney-plus.webp" },
+    "tbs":             { file: "assets/networks/tbs.webp", bare: true },
   };
   function gpNorm(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
   function buildBroadcastChipHTML(name) {
     const nm = String(name || "").trim();
     if (!nm) return "";
-    const slug = GP_NETWORK_LOGO_SLUGS[gpNorm(nm)];
-    if (!slug) return `<div class="gpBroadcastChip">${esc(nm)}</div>`;
-    const logoUrl = `https://a.espncdn.com/i/networks/500/${slug}.png`;
-    return `<div class="gpBroadcastChip gpBroadcastChipLogo">
-      <img src="${esc(logoUrl)}" alt="${esc(nm)}" class="gpBroadcastLogoImg" loading="lazy"
+    const entry = GP_NETWORK_LOGO_FILES[gpNorm(nm)];
+    if (!entry) return `<div class="gpBroadcastChip">${esc(nm)}</div>`;
+    const chipCls = entry.bare ? "gpBroadcastChip gpBroadcastChipBare" : "gpBroadcastChip gpBroadcastChipLogo";
+    return `<div class="${chipCls}">
+      <img src="${esc(entry.file)}" alt="${esc(nm)}" class="gpBroadcastLogoImg" loading="lazy"
         onerror="this.style.display='none';this.nextElementSibling.style.display='inline';" />
       <span class="gpBroadcastLogoFallback" style="display:none">${esc(nm)}</span>
     </div>`;
@@ -2419,15 +2466,17 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   <div class="gpCardHeader">
     ${statusHTML}
     <div class="gpCardHeaderRight">
-      ${buildBroadcastChipHTML(g?.broadcastName)}
       ${oddsLine ? `<div class="gpOddsLine">${esc(oddsLine)}</div>` : ""}
       ${isAdmin ? `<button type="button" class="gpRemoveGameBtn" data-gpaction="adminRemoveGame" data-eid="${esc(eventId)}" data-weekid="${esc(weekId)}" title="Remove from week" aria-label="Remove game from week">✕</button>` : ""}
     </div>
   </div>
-  ${kickoffDate || kickoffTime ? `
-  <div style="padding:4px 10px 0;display:flex;justify-content:space-between;gap:8px">
-    <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35)">${esc(kickoffDate)}</div>
-    <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.35)">${esc(kickoffTime)}</div>
+  ${kickoffDate || kickoffTime || g?.broadcastName ? `
+  <div class="gpCardDateTimeRow">
+    <div class="gpCardDateText">${esc(kickoffDate)}</div>
+    <div class="gpCardTimeCol">
+      ${buildBroadcastChipHTML(g?.broadcastName)}
+      <div class="gpCardTimeText">${esc(kickoffTime)}</div>
+    </div>
   </div>` : ""}
   ${venueLine ? `<div class="gpVenueLine">${esc(venueLine)}</div>` : ""}
   <div class="gpMatchup">
