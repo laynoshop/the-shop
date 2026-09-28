@@ -97,22 +97,25 @@ window.replaceMichiganText = replaceMichiganText;
     return Math.max(0, Math.floor(diff / 86400000));
   }
 
+  // Superstition dodge: 666 is bad luck, so nowhere in the app should
+  // ever actually display it — every on-screen count of days since the
+  // last TTUN win shows 665* instead on that one day. The real
+  // underlying count (used for the math itself) is unaffected.
+  function displayDays(days) {
+    return days === 666 ? "665*" : days;
+  }
+
   function updateRivalryBanner() {
     const days = daysSince(LAST_TTUN_WIN_DATE);
 
     const banner = document.getElementById("rivalryBanner");
     if (banner) {
-      banner.textContent = `${days} days since TTUN has won in The Game`;
+      banner.textContent = `${displayDays(days)} days since TTUN has won in The Game`;
       banner.style.display = "block";
     }
 
     const loginCounter = document.getElementById("daysSinceNumber");
-    if (loginCounter) {
-      // Superstition dodge: 666 is bad luck, so the login screen never
-      // actually shows it — it displays as 665* instead on that one day.
-      // The real count (and every other display of it) is unaffected.
-      loginCounter.textContent = days === 666 ? "665*" : days;
-    }
+    if (loginCounter) loginCounter.textContent = displayDays(days);
   }
   window.updateRivalryBanner = updateRivalryBanner;
 
