@@ -894,13 +894,32 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HMatchupRowClickable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .gpH2HMatchupRowClickable:active { background: rgba(255,255,255,0.04); }
 
-/* Head-to-Head matchup detail overlay — bottom sheet, game-by-game
-   pick comparison between the two named players in a matchup. The
-   header is a hero treatment reusing the same score-cluster look as
-   the weekly Matchups card (gpH2HScoreCluster/gpH2HPts/gpH2HVs) so the
-   two screens read as one system instead of the overlay looking like
-   a generic sheet bolted on top of it. */
-.gpH2HDetailSheet { max-height: 88vh; display: flex; flex-direction: column; }
+/* Head-to-Head matchup detail overlay — a centered modal (unlike every
+   other overlay in the app, which slides up as a bottom sheet), since
+   this one's a detail/inspection view rather than a form or a list to
+   scroll through. ID selectors here (both elements already have one,
+   for the JS in gpShowH2HMatchupOverlay) beat the shared
+   .gpPicksOverlayBackdrop/.gpPicksOverlaySheet bottom-sheet rules
+   regardless of source order, without needing an extra modifier class.
+   The header below it is a hero treatment reusing the same
+   score-cluster look as the weekly Matchups card
+   (gpH2HScoreCluster/gpH2HPts/gpH2HVs) so the two screens read as one
+   system instead of the overlay looking like a generic sheet bolted
+   on top of it. */
+#gpH2HDetailOverlay { align-items: center; padding: 24px 16px; }
+#gpH2HDetailSheet {
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+  border-radius: 22px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  padding-bottom: 20px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+  transform: translateY(10px) scale(0.97);
+}
+#gpH2HDetailOverlay.gpOverlayVisible #gpH2HDetailSheet {
+  transform: translateY(0) scale(1);
+}
+#gpH2HDetailSheet .gpOverlayHandle { display: none; }
 /* Compound selector (beats .gpOverlayHeader's own display/padding/
    border-bottom on specificity rather than source order, since that
    base rule is defined later in this file). */
