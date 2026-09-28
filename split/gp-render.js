@@ -550,10 +550,11 @@
    of getting clipped. */
 .gpCardDateTimeRow {
   padding: 4px 10px 0; display: flex; justify-content: space-between;
-  align-items: flex-end; gap: 8px;
+  align-items: flex-start; gap: 8px;
 }
+.gpCardDateCol { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .gpCardDateText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); }
-.gpCardTimeCol { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.gpCardTimeCol { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .gpCardTimeText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); }
 .gpBroadcastChip {
   display: inline-flex; align-items: center; gap: 3px;
@@ -646,7 +647,10 @@
 .gpScore.gpLoser  { color: rgba(255,255,255,0.3); text-shadow: none; }
 
 .gpVenueLine {
-  padding: 0 10px 8px; font-size: 11px;
+  /* Nested inside gpCardDateCol now (paired with gpCardTimeCol in the
+     same row) rather than a standalone full-width line below it, so no
+     horizontal padding of its own — gpCardDateTimeRow already has it. */
+  padding: 0 0 8px; font-size: 11px; min-width: 0;
   color: rgba(255,255,255,0.28); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
 }
@@ -2470,15 +2474,17 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       ${isAdmin ? `<button type="button" class="gpRemoveGameBtn" data-gpaction="adminRemoveGame" data-eid="${esc(eventId)}" data-weekid="${esc(weekId)}" title="Remove from week" aria-label="Remove game from week">✕</button>` : ""}
     </div>
   </div>
-  ${kickoffDate || kickoffTime || g?.broadcastName ? `
+  ${kickoffDate || kickoffTime || venueLine || g?.broadcastName ? `
   <div class="gpCardDateTimeRow">
-    <div class="gpCardDateText">${esc(kickoffDate)}</div>
+    <div class="gpCardDateCol">
+      <div class="gpCardDateText">${esc(kickoffDate)}</div>
+      ${venueLine ? `<div class="gpVenueLine">${esc(venueLine)}</div>` : ""}
+    </div>
     <div class="gpCardTimeCol">
       ${buildBroadcastChipHTML(g?.broadcastName)}
       <div class="gpCardTimeText">${esc(kickoffTime)}</div>
     </div>
   </div>` : ""}
-  ${venueLine ? `<div class="gpVenueLine">${esc(venueLine)}</div>` : ""}
   <div class="gpMatchup">
     <button class="gpTeamPickBtn${pickResultCls(awayActive)}${awayFade ? " gpFaded" : ""}"
       type="button"
