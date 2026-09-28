@@ -895,32 +895,43 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HMatchupRowClickable:active { background: rgba(255,255,255,0.04); }
 
 /* Head-to-Head matchup detail overlay — bottom sheet, game-by-game
-   pick comparison between the two named players in a matchup. */
+   pick comparison between the two named players in a matchup. The
+   header is a hero treatment reusing the same score-cluster look as
+   the weekly Matchups card (gpH2HScoreCluster/gpH2HPts/gpH2HVs) so the
+   two screens read as one system instead of the overlay looking like
+   a generic sheet bolted on top of it. */
 .gpH2HDetailSheet { max-height: 88vh; display: flex; flex-direction: column; }
-.gpH2HDetailHeaderRow {
-  flex: 1; display: flex; align-items: center; gap: 10px;
+/* Compound selector (beats .gpOverlayHeader's own display/padding/
+   border-bottom on specificity rather than source order, since that
+   base rule is defined later in this file). */
+.gpOverlayHeader.gpH2HDetailHeader {
+  position: relative;
+  display: flex; flex-direction: column; align-items: stretch; gap: 12px;
+  padding: 18px 20px 16px;
+  background:
+    radial-gradient(120% 160% at 50% -20%, rgba(255,210,100,0.16) 0%, rgba(255,210,100,0) 62%),
+    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%);
+  border-bottom: 1px solid rgba(255,210,100,0.22);
 }
-.gpH2HDetailSide { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
-.gpH2HDetailSideRight { flex-direction: row-reverse; text-align: right; }
-.gpH2HDetailAvatar {
-  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 900; letter-spacing: -0.3px; text-transform: uppercase;
-  border: 1px solid rgba(255,255,255,0.14);
+.gpH2HDetailCloseBtn { position: absolute; top: 14px; right: 16px; }
+.gpH2HDetailEyebrow {
+  text-align: center; font-size: 10.5px; font-weight: 900; letter-spacing: 0.12em;
+  text-transform: uppercase; color: rgba(255,210,100,0.7);
+}
+.gpH2HDetailHeaderRow {
+  display: flex; align-items: center; gap: 12px;
 }
 .gpH2HDetailName {
-  font-size: 13.5px; font-weight: 800; color: rgba(255,255,255,0.85);
+  flex: 1 1 0; min-width: 0;
+  font-size: 16px; font-weight: 900; color: rgba(255,255,255,0.6);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color 150ms ease;
 }
-.gpH2HDetailPts { font-size: 18px; font-weight: 900; color: #ffd76a; flex-shrink: 0; }
-.gpH2HDetailVsLabel {
-  font-size: 10px; font-weight: 900; letter-spacing: 0.08em;
-  text-transform: uppercase; color: rgba(255,255,255,0.3); flex-shrink: 0;
-}
-.gpH2HDetailWeekLabel {
-  font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
-  color: rgba(255,255,255,0.35); text-align: center; margin-bottom: 10px;
-}
+.gpH2HDetailNameLeft { text-align: left; }
+.gpH2HDetailNameRight { text-align: right; }
+.gpH2HDetailName.gpH2HDetailNameLead { color: #fff; }
+.gpH2HDetailScoreCluster { flex-shrink: 0; padding: 8px 18px; gap: 12px; }
+.gpH2HDetailPts { font-size: 25px; }
 .gpH2HDetailGames {
   display: flex; flex-direction: column; gap: 8px;
   overflow-y: auto; padding-bottom: 12px;
@@ -2892,8 +2903,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   function gpBuildH2HMatchupDetailHTML({ nameA, nameB, ptsA, ptsB, weekLabel, games, allPicks, atsEventIds }) {
     const GP_Data = window.GP_Data || {};
     const atsSet = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
-    const { bg: bgA, color: colorA } = avatarStyle(nameA);
-    const { bg: bgB, color: colorB } = avatarStyle(nameB);
+    const numA = Number(ptsA) || 0;
+    const numB = Number(ptsB) || 0;
+    const aLead = numA > numB;
+    const bLead = numB > numA;
 
     function findPick(eventId, playerName) {
       const arr = Array.isArray(allPicks?.[eventId]) ? allPicks[eventId] : [];
@@ -2970,24 +2983,20 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 <div class="gpPicksOverlayBackdrop" id="gpH2HDetailOverlay" role="dialog" aria-modal="true" aria-label="${esc(nameA)} vs ${esc(nameB)}">
   <div class="gpPicksOverlaySheet gpH2HDetailSheet" id="gpH2HDetailSheet">
     <div class="gpOverlayHandle"></div>
-    <div class="gpOverlayHeader">
+    <div class="gpOverlayHeader gpH2HDetailHeader">
+      <button class="gpOverlayCloseBtn gpH2HDetailCloseBtn" id="gpH2HDetailClose" aria-label="Close">✕</button>
+      <div class="gpH2HDetailEyebrow">${esc(weekLabel || "")}${weekLabel ? " · " : ""}Matchup</div>
       <div class="gpH2HDetailHeaderRow">
-        <div class="gpH2HDetailSide">
-          <div class="gpH2HDetailAvatar" style="background:${bgA};color:${colorA}">${esc(initials(nameA))}</div>
-          <div class="gpH2HDetailName">${esc(nameA)}</div>
-          <div class="gpH2HDetailPts">${esc(String(ptsA ?? 0))}</div>
+        <div class="gpH2HDetailName gpH2HDetailNameLeft${aLead ? " gpH2HDetailNameLead" : ""}">${esc(nameA)}</div>
+        <div class="gpH2HScoreCluster gpH2HDetailScoreCluster">
+          <div class="gpH2HPts gpH2HDetailPts${aLead ? " gpH2HPtsWin" : ""}">${esc(String(ptsA ?? 0))}</div>
+          <div class="gpH2HVs">VS</div>
+          <div class="gpH2HPts gpH2HDetailPts${bLead ? " gpH2HPtsWin" : ""}">${esc(String(ptsB ?? 0))}</div>
         </div>
-        <div class="gpH2HDetailVsLabel">VS</div>
-        <div class="gpH2HDetailSide gpH2HDetailSideRight">
-          <div class="gpH2HDetailPts">${esc(String(ptsB ?? 0))}</div>
-          <div class="gpH2HDetailName">${esc(nameB)}</div>
-          <div class="gpH2HDetailAvatar" style="background:${bgB};color:${colorB}">${esc(initials(nameB))}</div>
-        </div>
+        <div class="gpH2HDetailName gpH2HDetailNameRight${bLead ? " gpH2HDetailNameLead" : ""}">${esc(nameB)}</div>
       </div>
-      <button class="gpOverlayCloseBtn" id="gpH2HDetailClose" aria-label="Close">✕</button>
     </div>
     <div class="gpOverlayBody">
-      ${weekLabel ? `<div class="gpH2HDetailWeekLabel">${esc(weekLabel)}</div>` : ""}
       <div class="gpH2HDetailGames">${rowsHTML || `<div class="gpEmpty">No games this week.</div>`}</div>
     </div>
   </div>
