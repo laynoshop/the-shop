@@ -1583,16 +1583,32 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   background: rgba(255,255,255,0.12); color: #fff;
 }
 
-/* H2H's 5-tab bar — too many labels to squeeze evenly like the 2-button
-   points-format toggle, so this scrolls horizontally instead of
-   shrinking every label to fit. */
+/* H2H's 5-tab bar — a fixed 5-column grid (bottom-nav style) so every
+   tab always fits on screen with no horizontal scrolling, regardless
+   of viewport width. */
 .gpH2HTabBar {
-  overflow-x: auto; -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 2px; padding: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
 }
-.gpH2HTabBar::-webkit-scrollbar { display: none; }
-.gpH2HTabBar .gpViewToggleBtn {
-  flex: 0 0 auto; white-space: nowrap; padding: 8px 14px; font-size: 12.5px;
+.gpH2HTabBtn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 8px 2px 7px;
+  border-radius: 12px; border: none; background: none;
+  color: rgba(255,255,255,0.45);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  min-width: 0;
+}
+.gpH2HTabBtn.gpH2HTabBtnActive {
+  background: rgba(255,210,100,0.14); color: #ffd76a;
+}
+.gpH2HTabIcon { font-size: 15px; line-height: 1; }
+.gpH2HTabLabel {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.01em;
+  line-height: 1.15; text-align: center;
+  overflow-wrap: break-word; word-break: break-word;
 }
 
 /* ══════════════════════════════════════════════
@@ -4115,20 +4131,23 @@ ${otherMatchupsHTML}`;
   }
 
   // ─── H2H tab bar — replaces the This Week/Season toggle above for
-  // H2H leagues specifically. Five tabs instead of two, so it scrolls
-  // horizontally on narrow phones rather than wrapping/squeezing.
+  // H2H leagues specifically. Fixed 5-column grid (bottom-nav style)
+  // so all five tabs always fit on screen — no horizontal scrolling.
   const GP_H2H_TABS = [
-    { id: "matchup",   label: "Matchup"   },
-    { id: "picks",     label: "Picks"     },
-    { id: "standings", label: "Standings" },
-    { id: "schedule",  label: "Schedule"  },
-    { id: "playoffs",  label: "Playoffs"  },
+    { id: "matchup",   label: "Matchup",   icon: "⚔️" },
+    { id: "picks",     label: "Picks",     icon: "🏈" },
+    { id: "standings", label: "Standings", icon: "📊" },
+    { id: "schedule",  label: "Schedule",  icon: "🗓️" },
+    { id: "playoffs",  label: "Playoffs",  icon: "🏆" },
   ];
   function gpBuildH2HTabBarHTML(activeTab) {
     const active = GP_H2H_TABS.some(t => t.id === activeTab) ? activeTab : "matchup";
     const btns = GP_H2H_TABS.map(t => `
-  <button type="button" class="gpViewToggleBtn${t.id === active ? " gpViewToggleActive" : ""}" data-gpaction="viewH2HTab" data-h2htab="${t.id}">${esc(t.label)}</button>`).join("");
-    return `<div class="gpViewToggle gpH2HTabBar">${btns}</div>`;
+  <button type="button" class="gpH2HTabBtn${t.id === active ? " gpH2HTabBtnActive" : ""}" data-gpaction="viewH2HTab" data-h2htab="${t.id}">
+    <span class="gpH2HTabIcon">${t.icon}</span>
+    <span class="gpH2HTabLabel">${esc(t.label)}</span>
+  </button>`).join("");
+    return `<div class="gpH2HTabBar">${btns}</div>`;
   }
 
   // ─── Tiebreaker card ────────────────────────────────────────────
