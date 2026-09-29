@@ -1115,11 +1115,21 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   display: flex; flex-direction: column; align-items: center; gap: 3px;
 }
 .gpH2HDetailTeams {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 800; color: rgba(255,255,255,0.6);
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 7px; row-gap: 2px;
+  font-size: 13.5px; font-weight: 900; color: rgba(255,255,255,0.85);
+  letter-spacing: 0.01em;
 }
 .gpH2HDetailScore { font-size: 12px; font-weight: 900; color: rgba(255,255,255,0.85); }
 .gpH2HDetailAt { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.3); }
+/* Day + date + time for a scheduled game (LIVE/Final keep the plain
+   .gpStatusLive/.gpStatusFinal treatment shared with the rest of the
+   app) — a soft gold tint ties it to the same accent color used
+   throughout the rest of this hero card. */
+.gpH2HDetailDateTime {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em;
+  color: rgba(255,210,100,0.6);
+}
 .gpH2HDetailTiebreakerLabel {
   font-size: 12px; font-weight: 900; letter-spacing: 0.03em;
   color: rgba(210,190,255,0.9);
@@ -2313,6 +2323,17 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   }
   function safeRecord(t) { return String(t?.record || "").trim(); }
   function safeAbbr(t)   { return String(t?.abbr   || t?.name || "").slice(0, 4); }
+  // Mascot/nickname only ("Buckeyes", not "Ohio State Buckeyes") — from
+  // the `nickname` field gpAdminAddSelectedGamesToWeek's buildTeam()
+  // captures off ESPN's own team.name (their short form). Only games
+  // added after that field existed have it, so this falls back to the
+  // existing abbreviation rather than the full team name for older
+  // games — full names would overflow the compact H2H matchup row this
+  // is built for.
+  function safeNickname(t) {
+    const nm = String(t?.nickname || "").trim();
+    return nm || safeAbbr(t);
+  }
 
   // The over/under is persisted on the game doc as `oddsOU` (see
   // gpAdminAddSelectedGamesToWeek's buildOdds() capture) — this used to
@@ -3234,6 +3255,25 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       if (guess == null) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
       return `<div class="gpH2HPickChip"><span class="gpH2HPickAbbr">${esc(String(guess))}</span></div>`;
     }
+    // Same LIVE/Final treatment as buildStatusHTML (shared with the rest
+    // of the app), but a scheduled game shows day + date + time here
+    // instead of just the time — this row doesn't have the picks list's
+    // separate date line, so a bare "2:00 PM" reads ambiguous.
+    function matchupStatusHTML(g) {
+      const live   = g?.__live || g?.live || null;
+      const state  = String(live?.state || "").toLowerCase();
+      const detail = String(live?.detail || "").trim();
+      if (state === "in") {
+        return `<div class="gpStatusLive">LIVE${detail ? " · " + esc(detail) : ""}</div>`;
+      }
+      if (state === "post") {
+        const fd = detail && detail.toLowerCase() !== "final" && !/^\d+:\d+$/.test(detail) ? detail : "";
+        return `<div class="gpStatusFinal">Final${fd ? " · " + esc(fd) : ""}</div>`;
+      }
+      const ms = startMs(g);
+      if (!ms) return `<div class="gpStatusPre">Scheduled</div>`;
+      return `<div class="gpH2HDetailDateTime">${esc(fmtDate(ms))} &middot; ${esc(fmtTime(ms))}</div>`;
+    }
 
     const sorted = [...(Array.isArray(games) ? games : [])].sort((a, b) => startMs(a) - startMs(b));
     const rowsHTML = sorted.map(g => {
@@ -3261,11 +3301,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 <div class="gpH2HDetailGameRow">
   <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked || viewerSide === "a")}</div>
   <div class="gpH2HDetailGameInfo">
-    ${buildStatusHTML(g)}
+    ${matchupStatusHTML(g)}
     <div class="gpH2HDetailTeams">
-      <span>${esc(safeAbbr(away))}</span>
+      <span>${esc(safeNickname(away))}</span>
       ${showScores ? `<span class="gpH2HDetailScore">${esc(String(live.awayScore))}&ndash;${esc(String(live.homeScore))}</span>` : `<span class="gpH2HDetailAt">@</span>`}
-      <span>${esc(safeAbbr(home))}</span>
+      <span>${esc(safeNickname(home))}</span>
     </div>
   </div>
   <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB, locked || viewerSide === "b")}</div>
@@ -3293,7 +3333,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 <div class="gpH2HDetailGameRow">
   <div class="gpH2HDetailPickCell">${tiebreakerChipHTML(guessA, tbLocked || viewerSide === "a")}</div>
   <div class="gpH2HDetailGameInfo">
-    ${buildStatusHTML(tbGame)}
+    ${matchupStatusHTML(tbGame)}
     <div class="gpH2HDetailTeams">
       <span class="gpH2HDetailTiebreakerLabel">🎯 Tiebreaker</span>
     </div>

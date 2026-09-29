@@ -33,6 +33,11 @@
     return {
       id:      String(team?.id || ""),
       name:    String(team?.displayName || team?.name || ""),
+      // Mascot/nickname only ("Phillies", not "Philadelphia Phillies")
+      // — ESPN's own team.name is already this short form (displayName
+      // is the full one, captured above); shortDisplayName as a
+      // fallback for any sport where that's not the case.
+      nickname: String(team?.name || team?.shortDisplayName || ""),
       abbr:    String(team?.abbreviation || ""),
       logo:    pickLogo(team),
       record:  pickRecord(competitor),
