@@ -1595,7 +1595,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpH2HTabBtn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 3px; padding: 8px 2px 7px;
+  gap: 6px; padding: 8px 2px 7px;
   border-radius: 12px; border: none; background: none;
   color: rgba(255,255,255,0.45);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
