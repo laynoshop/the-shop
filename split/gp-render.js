@@ -4135,7 +4135,7 @@ ${otherMatchupsHTML}`;
   // so all five tabs always fit on screen — no horizontal scrolling.
   const GP_H2H_TABS = [
     { id: "matchup",   label: "Matchup",   icon: "⚔️" },
-    { id: "picks",     label: "Picks",     icon: "🏈" },
+    { id: "picks",     label: "Picks",     icon: "☑️" },
     { id: "standings", label: "Standings", icon: "📊" },
     { id: "schedule",  label: "Schedule",  icon: "🗓️" },
     { id: "playoffs",  label: "Playoffs",  icon: "🏆" },
