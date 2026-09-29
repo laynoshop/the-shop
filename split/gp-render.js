@@ -1093,7 +1093,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HDetailNameLeft { text-align: left; }
 .gpH2HDetailNameRight { text-align: right; }
 .gpH2HDetailName.gpH2HDetailNameLead { color: #fff; }
-.gpH2HDetailScoreCluster { flex-shrink: 0; padding: 8px 18px; gap: 12px; }
+.gpH2HDetailScoreCluster { flex-shrink: 0; padding: 8px 18px; gap: 12px; border-radius: 14px; }
 .gpH2HDetailPts { font-size: 25px; }
 .gpH2HDetailGames {
   display: flex; flex-direction: column; gap: 8px;
@@ -1131,6 +1131,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpH2HPickChip.gpH2HPickNone { color: rgba(255,255,255,0.25); font-size: 16px; font-weight: 900; }
 .gpH2HPickChip.gpH2HPickHidden { color: rgba(255,255,255,0.3); font-size: 15px; }
+/* Game picks only (not the tiebreaker's simpler text chip) — same 36x36
+   footprint as .gpTeamLogo so a locked slot matches the size of a
+   revealed one instead of looking like a small icon floating in an
+   oversized box. */
+.gpH2HPickLockIcon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+}
 .gpH2HPickAbbr { font-size: 11px; font-weight: 900; letter-spacing: 0.02em; color: rgba(255,255,255,0.8); }
 .gpH2HPickChip.gpH2HPickWin { background: rgba(50,200,100,0.14); border-color: rgba(50,200,100,0.35); }
 .gpH2HPickChip.gpH2HPickWin .gpH2HPickAbbr { color: #5ddb8a; }
@@ -3193,7 +3203,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     // matchup (viewerSide unset) never gets that exception — both sides
     // stay hidden until lock, exactly as before.
     function pickChipHTML(g, side, result, revealed) {
-      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden">🔒</div>`;
+      // Same 36x36 box as the logo a revealed pick shows, so a locked
+      // slot reads as "a pick's not shown yet" rather than looking like
+      // a smaller, different kind of element next to a revealed one.
+      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden"><div class="gpH2HPickLockIcon">🔒</div></div>`;
       if (!side) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
       const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "", logo: g?.awayLogo || "" };
       const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
