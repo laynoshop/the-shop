@@ -3839,6 +3839,7 @@ ${otherMatchupsHTML}`;
   <td class="gpStRank">${rank}</td>
   <td class="gpStName"><div class="gpStNameWrap"><span class="gpStNameText">${esc(nm)}</span></div></td>
   <td>${esc(record)}</td>
+  <td>${esc(String(u.tbWins ?? 0))}</td>
   <td>${esc(String(u.pointsFor ?? 0))}</td>
   <td>${esc(String(u.pointsAgainst ?? 0))}</td>
   <td>${esc(diffStr)}</td>
@@ -3849,11 +3850,12 @@ ${otherMatchupsHTML}`;
 <div class="gpStandingsTableWrap">
   <table class="gpStandingsTable">
     <colgroup>
-      <col style="width:9%"/>
-      <col style="width:33%"/>
-      <col style="width:16%"/>
+      <col style="width:8%"/>
+      <col style="width:28%"/>
       <col style="width:14%"/>
-      <col style="width:14%"/>
+      <col style="width:10%"/>
+      <col style="width:13%"/>
+      <col style="width:13%"/>
       <col style="width:14%"/>
     </colgroup>
     <thead>
@@ -3861,6 +3863,7 @@ ${otherMatchupsHTML}`;
         <th class="gpStRank">#</th>
         <th class="gpStName">Player</th>
         <th>W-L-T</th>
+        <th>TB</th>
         <th>PF</th>
         <th>PA</th>
         <th>Diff</th>
@@ -3888,10 +3891,10 @@ ${otherMatchupsHTML}`;
   </div>
   ${standingsTableHTML}
   <div class="gpColumnLegend">
-    <b>W-L-T</b> matchup record &middot; <b>PF</b> points scored in matchups &middot; <b>PA</b> points allowed &middot; <b>Diff</b> point differential
+    <b>W-L-T</b> matchup record &middot; <b>TB</b> tiebreakers won &middot; <b>PF</b> points scored in matchups &middot; <b>PA</b> points allowed &middot; <b>Diff</b> point differential
   </div>
   <div class="gpColumnLegend">
-    <b>Ties</b> (after wins) are broken by point differential, then name.
+    <b>Ties</b> (after record) are broken by tiebreakers won, then points scored, then differential, then name.
   </div>
 </div>`;
   }

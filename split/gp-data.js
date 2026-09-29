@@ -1089,7 +1089,7 @@
     const players = new Map();
     function ensure(name) {
       const key = String(name).trim().toLowerCase();
-      if (!players.has(key)) players.set(key, { name, wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 });
+      if (!players.has(key)) players.set(key, { name, wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0, tbWins: 0 });
       return players.get(key);
     }
     const weeks = Array.isArray(weeklyResults) ? weeklyResults : [];
@@ -1101,7 +1101,11 @@
       weeksFinal++;
       const round = gpGetH2HRoundForWeek(schedule, wr.weekIndex);
       for (const m of gpComputeH2HWeekResults(round, wr.rows)) {
-        if (m.bye) continue;
+        if (m.bye) {
+          const p = ensure(m.bye);
+          if (m.row?.tiebreakerWon) p.tbWins++;
+          continue;
+        }
         const [nameA, nameB] = m.players;
         const a = ensure(nameA), b = ensure(nameB);
         a.pointsFor += m.points[0]; a.pointsAgainst += m.points[1];
@@ -1109,11 +1113,17 @@
         if (m.winner === "a")      { a.wins++;  b.losses++; }
         else if (m.winner === "b") { b.wins++;  a.losses++; }
         else if (m.winner === "tie") { a.ties++; b.ties++; }
+        if (m.rows[0]?.tiebreakerWon) a.tbWins++;
+        if (m.rows[1]?.tiebreakerWon) b.tbWins++;
       }
     }
+    // Tie-break chain: record (wins, then ties) → tiebreakers won this
+    // season → points scored (PF) → point differential → name.
     const rows = [...players.values()].sort((x, y) => {
       if (y.wins !== x.wins) return y.wins - x.wins;
       if (y.ties !== x.ties) return y.ties - x.ties;
+      if (y.tbWins !== x.tbWins) return y.tbWins - x.tbWins;
+      if (y.pointsFor !== x.pointsFor) return y.pointsFor - x.pointsFor;
       const xDiff = x.pointsFor - x.pointsAgainst, yDiff = y.pointsFor - y.pointsAgainst;
       if (yDiff !== xDiff) return yDiff - xDiff;
       return String(x.name).localeCompare(String(y.name));
