@@ -1610,6 +1610,8 @@
         games: window.__gpCurrentGames || [],
         allPicks: window.__gpCurrentAllPicks || {},
         atsEventIds: window.__gpCurrentAtsEventIds || [],
+        tiebreakerEventId: window.__gpCurrentTiebreakerEventId || "",
+        tiebreakers: window.__gpCurrentTiebreakers || {},
       });
       return;
     }

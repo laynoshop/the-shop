@@ -1120,6 +1120,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpH2HDetailScore { font-size: 12px; font-weight: 900; color: rgba(255,255,255,0.85); }
 .gpH2HDetailAt { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.3); }
+.gpH2HDetailTiebreakerLabel {
+  font-size: 12px; font-weight: 900; letter-spacing: 0.03em;
+  color: rgba(210,190,255,0.9);
+}
 .gpH2HPickChip {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   padding: 6px 8px; border-radius: 10px; width: 100%;
@@ -3154,7 +3158,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // a row) and the Matchup tab's own inline "your matchup" hero (always
   // expanded, no tap needed) — same hero header + game-by-game pick
   // comparison either way, just wrapped differently by the caller.
-  function gpBuildH2HMatchupBodyHTML({ nameA, nameB, ptsA, ptsB, weekLabel, games, allPicks, atsEventIds }) {
+  function gpBuildH2HMatchupBodyHTML({ nameA, nameB, ptsA, ptsB, weekLabel, games, allPicks, atsEventIds, viewerSide, tiebreakerEventId, tiebreakers }) {
     const GP_Data = window.GP_Data || {};
     const atsSet = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
     const numA = Number(ptsA) || 0;
@@ -3182,8 +3186,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       if (!winningSide) return "tie";
       return side === winningSide ? "win" : "loss";
     }
-    function pickChipHTML(g, side, result, locked) {
-      if (!locked) return `<div class="gpH2HPickChip gpH2HPickHidden">🔒</div>`;
+    // `revealed` — true once this specific game/tiebreaker has locked, OR
+    // unconditionally true for whichever side is the viewer's own (you
+    // always see your own pick; your opponent's stays hidden until their
+    // game starts, same as everyone else's). Viewing someone else's
+    // matchup (viewerSide unset) never gets that exception — both sides
+    // stay hidden until lock, exactly as before.
+    function pickChipHTML(g, side, result, revealed) {
+      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden">🔒</div>`;
       if (!side) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
       const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "", logo: g?.awayLogo || "" };
       const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
@@ -3194,6 +3204,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
         ${logoImg(t?.logo || g?.[side + "Logo"], safeAbbr(t))}
         <span class="gpH2HPickAbbr">${esc(safeAbbr(t))}</span>
       </div>`;
+    }
+    function tiebreakerChipHTML(guess, revealed) {
+      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden">🔒</div>`;
+      if (guess == null) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
+      return `<div class="gpH2HPickChip"><span class="gpH2HPickAbbr">${esc(String(guess))}</span></div>`;
     }
 
     const sorted = [...(Array.isArray(games) ? games : [])].sort((a, b) => startMs(a) - startMs(b));
@@ -3220,7 +3235,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
                           live?.homeScore != null && live?.homeScore !== "";
       return `
 <div class="gpH2HDetailGameRow">
-  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked)}</div>
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked || viewerSide === "a")}</div>
   <div class="gpH2HDetailGameInfo">
     ${buildStatusHTML(g)}
     <div class="gpH2HDetailTeams">
@@ -3229,9 +3244,40 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       <span>${esc(safeAbbr(home))}</span>
     </div>
   </div>
-  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB, locked)}</div>
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB, locked || viewerSide === "b")}</div>
 </div>`;
     }).join("");
+
+    // Tiebreaker row — appended to the same games list (not a separate
+    // section), same reveal-on-lock rule as every other row above.
+    let tiebreakerRowHTML = "";
+    const tbEventId = String(tiebreakerEventId || "").trim();
+    if (tbEventId) {
+      const tbGame = sorted.find(g => String(g?.eventId || g?.id || "") === tbEventId);
+      if (tbGame) {
+        const tbMs = startMs(tbGame);
+        const tbLocked = tbMs > 0 && Date.now() >= tbMs;
+        const tbMap = tiebreakers && typeof tiebreakers === "object" ? tiebreakers : {};
+        function guessFor(playerName) {
+          const key = String(playerName || "").trim().toLowerCase();
+          const entry = Object.values(tbMap).find(t => String(t?.name || "").trim().toLowerCase() === key);
+          return entry && Number.isFinite(Number(entry.guess)) ? Number(entry.guess) : null;
+        }
+        const guessA = guessFor(nameA);
+        const guessB = guessFor(nameB);
+        tiebreakerRowHTML = `
+<div class="gpH2HDetailGameRow">
+  <div class="gpH2HDetailPickCell">${tiebreakerChipHTML(guessA, tbLocked || viewerSide === "a")}</div>
+  <div class="gpH2HDetailGameInfo">
+    ${buildStatusHTML(tbGame)}
+    <div class="gpH2HDetailTeams">
+      <span class="gpH2HDetailTiebreakerLabel">🎯 Tiebreaker</span>
+    </div>
+  </div>
+  <div class="gpH2HDetailPickCell">${tiebreakerChipHTML(guessB, tbLocked || viewerSide === "b")}</div>
+</div>`;
+      }
+    }
 
     return {
       headerHTML: `
@@ -3245,7 +3291,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
         </div>
         <div class="gpH2HDetailName gpH2HDetailNameRight${bLead ? " gpH2HDetailNameLead" : ""}">${esc(nameB)}</div>
       </div>`,
-      gamesHTML: `<div class="gpH2HDetailGames">${rowsHTML || `<div class="gpEmpty">No games this week.</div>`}</div>`,
+      gamesHTML: `<div class="gpH2HDetailGames">${rowsHTML || `<div class="gpEmpty">No games this week.</div>`}${tiebreakerRowHTML}</div>`,
     };
   }
 
@@ -3318,13 +3364,20 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
     let myCardHTML = "";
     if (myResult) {
-      myCardHTML = myResult.bye
-        ? gpBuildH2HMyMatchupCardHTML({ bye: true, weekLabel })
-        : gpBuildH2HMyMatchupCardHTML({
-            nameA: myResult.players[0], nameB: myResult.players[1],
-            ptsA: myResult.points[0], ptsB: myResult.points[1],
-            weekLabel, games: list, allPicks, atsEventIds
-          });
+      if (myResult.bye) {
+        myCardHTML = gpBuildH2HMyMatchupCardHTML({ bye: true, weekLabel });
+      } else {
+        // Which side of the pairing is the viewer, so the shared body
+        // builder can always reveal their own pick/tiebreaker guess
+        // while still hiding the opponent's until each one locks.
+        const viewerSide = String(myResult.players[0]).trim().toLowerCase() === myKey ? "a" : "b";
+        myCardHTML = gpBuildH2HMyMatchupCardHTML({
+          nameA: myResult.players[0], nameB: myResult.players[1],
+          ptsA: myResult.points[0], ptsB: myResult.points[1],
+          weekLabel, games: list, allPicks, atsEventIds, viewerSide,
+          tiebreakerEventId, tiebreakers
+        });
+      }
     }
 
     const otherResults = results.filter(m => m !== myResult);
