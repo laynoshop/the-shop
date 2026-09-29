@@ -879,7 +879,9 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HName {
   flex: 1 1 0; min-width: 0;
   font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.75);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Wraps instead of truncating — a long name should always be fully
+     readable, never cut off with an ellipsis. */
+  overflow-wrap: break-word; word-break: break-word; line-height: 1.25;
 }
 .gpH2HNameLeft { text-align: left; }
 .gpH2HNameRight { text-align: right; }
@@ -1083,7 +1085,9 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HDetailName {
   flex: 1 1 0; min-width: 0;
   font-size: 16px; font-weight: 900; color: rgba(255,255,255,0.6);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Wraps instead of truncating — a long name should always be fully
+     readable, never cut off with an ellipsis. */
+  overflow-wrap: break-word; word-break: break-word; line-height: 1.2;
   transition: color 150ms ease;
 }
 .gpH2HDetailNameLeft { text-align: left; }
