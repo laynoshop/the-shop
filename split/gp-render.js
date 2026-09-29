@@ -1142,6 +1142,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   font-size: 17px;
 }
 .gpH2HPickAbbr { font-size: 11px; font-weight: 900; letter-spacing: 0.02em; color: rgba(255,255,255,0.8); }
+/* Invisible — reserves the exact same line height as a revealed pick's
+   real abbreviation text, so a locked chip's box comes out exactly as
+   tall, not just as wide, as one showing a real pick. */
+.gpH2HPickAbbrGhost { visibility: hidden; }
 .gpH2HPickChip.gpH2HPickWin { background: rgba(50,200,100,0.14); border-color: rgba(50,200,100,0.35); }
 .gpH2HPickChip.gpH2HPickWin .gpH2HPickAbbr { color: #5ddb8a; }
 .gpH2HPickChip.gpH2HPickLoss { background: rgba(220,60,60,0.1); border-color: rgba(220,60,60,0.26); }
@@ -3203,10 +3207,12 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     // matchup (viewerSide unset) never gets that exception — both sides
     // stay hidden until lock, exactly as before.
     function pickChipHTML(g, side, result, revealed) {
-      // Same 36x36 box as the logo a revealed pick shows, so a locked
-      // slot reads as "a pick's not shown yet" rather than looking like
-      // a smaller, different kind of element next to a revealed one.
-      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden"><div class="gpH2HPickLockIcon">🔒</div></div>`;
+      // Same 36x36 icon box AND the same two-line structure (icon +
+      // text line) a revealed pick has, right down to an invisible
+      // second line matching the abbreviation's — so the two chips are
+      // pixel-identical in height, not just width, regardless of which
+      // one a given row happens to show.
+      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden"><div class="gpH2HPickLockIcon">🔒</div><span class="gpH2HPickAbbr gpH2HPickAbbrGhost">--</span></div>`;
       if (!side) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
       const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "", logo: g?.awayLogo || "" };
       const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
