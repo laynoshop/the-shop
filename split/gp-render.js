@@ -1130,16 +1130,21 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
 }
 .gpH2HPickChip.gpH2HPickNone { color: rgba(255,255,255,0.25); font-size: 16px; font-weight: 900; }
-.gpH2HPickChip.gpH2HPickHidden { color: rgba(255,255,255,0.3); font-size: 15px; }
-/* Game picks only (not the tiebreaker's simpler text chip) — same 36x36
-   footprint as .gpTeamLogo so a locked slot matches the size of a
-   revealed one instead of looking like a small icon floating in an
-   oversized box. */
+/* One box, not a box-in-a-box — position:relative so the lock emoji
+   (below) can lay itself over the whole chip instead of sitting in its
+   own smaller square. */
+.gpH2HPickChip.gpH2HPickHidden { position: relative; color: rgba(255,255,255,0.3); font-size: 15px; }
+/* Invisible — same 36x36 footprint as .gpTeamLogo, purely to reserve
+   the same overall chip height/width a revealed pick's logo+text
+   occupies. Game picks only (the tiebreaker's chip is plain text and
+   doesn't need this). */
+.gpH2HPickLockSpacer { width: 36px; height: 36px; visibility: hidden; }
+/* The actual visible lock — centered over the entire chip (both axes),
+   ignoring the invisible spacer/ghost-text stacked beneath it. */
 .gpH2HPickLockIcon {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+  position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 17px;
+  font-size: 20px;
 }
 .gpH2HPickAbbr { font-size: 11px; font-weight: 900; letter-spacing: 0.02em; color: rgba(255,255,255,0.8); }
 /* Invisible — reserves the exact same line height as a revealed pick's
@@ -3207,12 +3212,12 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     // matchup (viewerSide unset) never gets that exception — both sides
     // stay hidden until lock, exactly as before.
     function pickChipHTML(g, side, result, revealed) {
-      // Same 36x36 icon box AND the same two-line structure (icon +
-      // text line) a revealed pick has, right down to an invisible
-      // second line matching the abbreviation's — so the two chips are
-      // pixel-identical in height, not just width, regardless of which
-      // one a given row happens to show.
-      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden"><div class="gpH2HPickLockIcon">🔒</div><span class="gpH2HPickAbbr gpH2HPickAbbrGhost">--</span></div>`;
+      // One box, not two — the spacer + ghost line below are invisible,
+      // reserving the exact same footprint a revealed pick's logo+text
+      // occupy (so the chip is pixel-identical in height/width either
+      // way), while the lock itself is a single emoji absolutely
+      // centered over the whole box, not boxed in on its own.
+      if (!revealed) return `<div class="gpH2HPickChip gpH2HPickHidden"><div class="gpH2HPickLockSpacer"></div><span class="gpH2HPickAbbr gpH2HPickAbbrGhost">--</span><span class="gpH2HPickLockIcon">🔒</span></div>`;
       if (!side) return `<div class="gpH2HPickChip gpH2HPickNone">—</div>`;
       const away = g?.awayTeam || { name: g?.awayName || "Away", abbr: "", logo: g?.awayLogo || "" };
       const home = g?.homeTeam || { name: g?.homeName || "Home", abbr: "", logo: g?.homeLogo || "" };
