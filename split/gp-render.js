@@ -554,7 +554,15 @@
 .gpCardDateCol { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .gpCardDateText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); }
 .gpCardTimeCol { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.gpCardTimeTop { display: flex; align-items: center; gap: 6px; }
 .gpCardTimeText { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.35); }
+.gpLeagueBadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 5px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.13);
+  color: rgba(255,255,255,0.5); flex-shrink: 0; white-space: nowrap;
+}
 .gpBroadcastChip {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
@@ -2494,6 +2502,23 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     </div>`;
   }
 
+  // ─── League/sport badge — sits to the left of the broadcast chip so
+  // players can tell what sport a game is without reading team names.
+  // leagueKey is whatever the admin picker's <select> was set to when the
+  // game got added (gpAdminAddSelectedGamesToWeek), e.g. "nfl"/"cfb"/"mlb".
+  // Same label map/styling as the Shop tab's league badge elsewhere in
+  // the app, just under this file's own class name.
+  const GP_LEAGUE_BADGE_LABELS = {
+    ncaam: "NCAAB", cfb: "CFB", nba: "NBA",
+    nhl: "NHL", mls: "MLS", nfl: "NFL", mlb: "MLB",
+  };
+  function leagueBadgeHTML(leagueKey) {
+    const key = String(leagueKey || "").trim().toLowerCase();
+    if (!key) return "";
+    const label = GP_LEAGUE_BADGE_LABELS[key] || key.toUpperCase();
+    return `<div class="gpLeagueBadge">${esc(label)}</div>`;
+  }
+
   // ─── Spread chip (ATS weeks only) ─────────────────────────────────
   function spreadChipHTML(g, side) {
     const val     = Number(g?.spreadValue);
@@ -2736,7 +2761,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       ${venueLine ? `<div class="gpVenueLine">${esc(venueLine)}</div>` : ""}
     </div>
     <div class="gpCardTimeCol">
-      ${buildBroadcastChipHTML(g?.broadcastName)}
+      <div class="gpCardTimeTop">
+        ${leagueBadgeHTML(g?.leagueKey)}
+        ${buildBroadcastChipHTML(g?.broadcastName)}
+      </div>
       <div class="gpCardTimeText">${esc(kickoffTime)}</div>
     </div>
   </div>` : ""}
