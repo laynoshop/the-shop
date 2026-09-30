@@ -3381,6 +3381,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       const typeBadgeHTML = isAts
         ? `<span class="gpH2HTypeBadge gpH2HTypeBadgeAts">ATS</span>`
         : `<span class="gpH2HTypeBadge gpH2HTypeBadgeOw">OW</span>`;
+      // Spread chip — ATS games only, next to whichever team is favored,
+      // same chip/formatting spreadChipHTML already uses on the Picks page.
+      const spreadFavSide = String(g?.spreadFavoredSide || "").toLowerCase();
+      const favSpreadHTML = isAts ? spreadChipHTML(g, spreadFavSide) : "";
       return `
 <div class="gpH2HDetailGameRow">
   <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked || viewerSide === "a", dogWinA)}</div>
@@ -3388,9 +3392,9 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     ${typeBadgeHTML}
     ${matchupStatusHTML(g)}
     <div class="gpH2HDetailTeams">
-      <span>${esc(safeNickname(away))}</span>
+      <span>${esc(safeNickname(away))}${spreadFavSide === "away" ? favSpreadHTML : ""}</span>
       ${showScores ? `<span class="gpH2HDetailScore">${esc(String(live.awayScore))}&ndash;${esc(String(live.homeScore))}</span>` : `<span class="gpH2HDetailAt">@</span>`}
-      <span>${esc(safeNickname(home))}</span>
+      <span>${esc(safeNickname(home))}${spreadFavSide === "home" ? favSpreadHTML : ""}</span>
     </div>
   </div>
   <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB, locked || viewerSide === "b", dogWinB)}</div>
