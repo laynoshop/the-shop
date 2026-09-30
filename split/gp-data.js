@@ -1139,15 +1139,15 @@
         else if (m.tbWinner === "b") b.tbWins++;
       }
     }
-    // Tie-break chain: record (wins, then ties) → tiebreakers won this
-    // season → points scored (PF) → point differential → name.
+    // Tie-break chain: record (wins, then ties) → points scored (PF) →
+    // point differential → tiebreakers won this season → name.
     const rows = [...players.values()].sort((x, y) => {
       if (y.wins !== x.wins) return y.wins - x.wins;
       if (y.ties !== x.ties) return y.ties - x.ties;
-      if (y.tbWins !== x.tbWins) return y.tbWins - x.tbWins;
       if (y.pointsFor !== x.pointsFor) return y.pointsFor - x.pointsFor;
       const xDiff = x.pointsFor - x.pointsAgainst, yDiff = y.pointsFor - y.pointsAgainst;
       if (yDiff !== xDiff) return yDiff - xDiff;
+      if (y.tbWins !== x.tbWins) return y.tbWins - x.tbWins;
       return String(x.name).localeCompare(String(y.name));
     });
     return { rows, weeksCount: weeksFinal };

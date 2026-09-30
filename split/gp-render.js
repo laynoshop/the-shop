@@ -3947,7 +3947,7 @@ ${otherMatchupsHTML}`;
     <b>W-L-T</b> matchup record &middot; <b>PF</b> points scored in matchups &middot; <b>PA</b> points allowed &middot; <b>Diff</b> point differential &middot; <b>🎯</b> tiebreakers won
   </div>
   <div class="gpColumnLegend">
-    <b>Ties</b> (after record) are broken by tiebreakers won, then points scored, then differential, then name.
+    <b>Ties</b> (after record) are broken by points scored, then differential, then tiebreakers won, then name.
   </div>
 </div>`;
   }
