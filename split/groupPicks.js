@@ -348,8 +348,14 @@
   async function renderH2HLeague(el, ctx) {
     const { db, league, weeks, pickLeagueId, isAdmin, playerId, name, postRender } = ctx;
     const mem = gpMem();
+
+    let selectedId = gpGetSelectedWeekId(pickLeagueId, league);
+    const weekMeta = weeks.find(w => String(w?.id) === selectedId) || weeks[weeks.length - 1] || null;
+    if (!selectedId && weekMeta) selectedId = String(weekMeta.id || "");
+
     const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
-      leagueName: league.name, isAdmin, showLeaguesBtn: true, playerName: name
+      leagueName: league.name, isAdmin, showLeaguesBtn: true,
+      showAdminBtn: true, weekId: selectedId, pickLeagueId, playerName: name
     });
 
     if (!league.seasonStarted) {
@@ -364,9 +370,6 @@
     const tab = GP_H2H_TAB_IDS.includes(mem.gpH2HTab) ? mem.gpH2HTab : "matchup";
     const tabBarHTML = (Render().gpBuildH2HTabBarHTML || (() => ""))(tab);
 
-    let selectedId = gpGetSelectedWeekId(pickLeagueId, league);
-    const weekMeta = weeks.find(w => String(w?.id) === selectedId) || weeks[weeks.length - 1] || null;
-    if (!selectedId && weekMeta) selectedId = String(weekMeta.id || "");
     const weekLabel = String(weekMeta?.label || selectedId || "");
     const published = !!weekMeta?.published;
     const weekIndex = weeks.findIndex(w => String(w?.id) === selectedId);
@@ -376,19 +379,14 @@
 
     let bodyHTML = "";
     let pagerHTML = "";
-    let adminBuilderHTML = "";
     let announcementHTML = "";
     let notifOptInHTML = "";
 
     if (tab === "matchup" || tab === "picks") {
-      // Hoisted so the admin builder panel (below) can always reference
-      // them — it needs to show up even with no week yet, same as the
-      // original points-format placement, which was never gated on a
-      // week existing.
       let games = [], atsEventIds = [], tiebreakerEventId = "";
 
       if (!selectedId) {
-        bodyHTML = `<div class="gpEmpty">No active week yet.${isAdmin ? " Use the panel above to load games and create one." : " Ask your admin to create one."}</div>`;
+        bodyHTML = `<div class="gpEmpty">No active week yet.${isAdmin ? " Use Admin Tools (⚙️ in the header) to load games and create one." : " Ask your admin to create one."}</div>`;
       } else if (!published && !isAdmin) {
         bodyHTML = `<div class="gpEmpty">Week not published yet. Check back soon.</div>`;
       } else {
@@ -457,26 +455,6 @@
           });
         }
       }
-
-      // Admin builder (Load Games / Publish / + New Week / League
-      // Settings) — Picks tab only, but shown whenever isAdmin regardless
-      // of whether a week/games exist yet, exactly like the original
-      // points-format "This Week" page always did (never gated on
-      // selectedId there either — that's how an admin creates week 1 in
-      // the first place).
-      if (tab === "picks" && isAdmin) {
-        const leagueKey    = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
-        const defaultRange = gpDefaultWeekRange();
-        const dateStart    = mem.gpAdminDateStart || defaultRange.start;
-        const dateEnd      = mem.gpAdminDateEnd   || defaultRange.end;
-        const avail        = mem.gpAvailableEvents || [];
-        adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
-          weekId: selectedId, weekLabel, availableEvents: avail,
-          leagueKey, dateStart, dateEnd, isAdmin,
-          games, atsEventIds, tiebreakerEventId, pickLeagueId,
-          loadStatus: mem.gpAdminLoadStatus || ""
-        });
-      }
     } else if (tab === "standings") {
       try {
         const standings = await gpLoadSeasonLeaderboard(db, league);
@@ -505,7 +483,7 @@
       }
     }
 
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${tabBarHTML}${pagerHTML}${adminBuilderHTML}${bodyHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${tabBarHTML}${pagerHTML}${bodyHTML}</div>`;
     postRender();
   }
 
@@ -607,6 +585,14 @@
         contentEl.style.setProperty("--gpHeaderH", `${headerEl.offsetHeight}px`);
       }
     } catch {}
+    // Every admin action (Load Games, Add Selected, Publish, + New Week,
+    // Set ATS/Tiebreaker, the 60s auto-refresh...) ends by re-rendering
+    // the underlying page, which lives in #content — the Admin Tools
+    // overlay is a sibling appended to <body>, so it survives that
+    // re-render untouched but stale unless re-populated here. Skipped
+    // while the embedded League Settings view is up so this can't stomp
+    // on in-progress form edits (see gpRefreshAdminToolsOverlay).
+    gpRefreshAdminToolsOverlay();
   }
 
   function syncSaveBtnState() {
@@ -718,6 +704,120 @@
     }, true);
   }
 
+  // League + members fetch for the League Settings form — shared by the
+  // old full-page create/edit flow and the new Admin Tools overlay path
+  // (opened from the header gear button), so both show the exact same
+  // "joined members ∪ anyone with picks on file" list.
+  async function gpFetchLeagueForSettings(db, leagueId) {
+    let league = null;
+    try { league = await (Data().gpGetLeague || (async () => null))(db, leagueId); } catch {}
+    let leagueMembers = [];
+    try {
+      leagueMembers = await (Data().gpGetLeagueMembers || (async () => []))(db, leagueId);
+      const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
+      const picked = await (Data().gpGetAllPickedPlayersForWeeks || (async () => []))(db, weekIds);
+      const pickedById = new Map(picked.map(p => [String(p.playerId), p.weeksPicked]));
+      leagueMembers = leagueMembers.map(m => ({ ...m, weeksPicked: pickedById.get(String(m?.playerId || "")) || 0 }));
+      const knownIds = new Set(leagueMembers.map(m => String(m?.playerId || "")));
+      const extra = picked
+        .filter(p => !knownIds.has(p.playerId))
+        .map(p => ({ playerId: p.playerId, name: p.name, joinedAt: null, notJoined: true, weeksPicked: p.weeksPicked }));
+      if (extra.length) {
+        leagueMembers = [...leagueMembers, ...extra].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      }
+    } catch {}
+    return { league, leagueMembers };
+  }
+
+  // ── Admin Tools overlay (header gear button) ──────────────────────
+  // Builds the Admin Tools panel's HTML fresh, independent of whichever
+  // H2H tab (or the classic page) is currently on screen — the overlay
+  // always shows the league's currently-active week's admin controls,
+  // not whatever the underlying page happens to have already fetched.
+  async function gpBuildAdminToolsPanelHTML() {
+    const mem2 = gpMem();
+    const pickLeagueId = String(mem2.pickLeagueId || gpGetSelectedLeagueId() || "").trim();
+    if (!pickLeagueId) return `<div class="gpNotice">No league selected.</div>`;
+    try {
+      await (Data().ensureFirebaseReadySafe || (async () => {}))();
+      const db2 = firebase.firestore();
+      const league = await (Data().gpGetLeague || (async () => null))(db2, pickLeagueId);
+      if (!league) return `<div class="gpNotice">Couldn't load this league.</div>`;
+      const weekId = gpGetSelectedWeekId(pickLeagueId, league);
+      let games = [], slateDoc = {};
+      if (weekId) {
+        try {
+          [games, slateDoc] = await Promise.all([
+            (Data().gpGetSlateGames || (async () => []))(db2, weekId),
+            (Data().gpGetSlateDoc   || (async () => ({})))(db2, weekId),
+          ]);
+        } catch {}
+        if (games.length) {
+          (ESPN().gpApplyStoredLiveState || (() => {}))(games);
+          (ESPN().gpApplyStoredOdds      || (() => {}))(games);
+        }
+      }
+      const weekMeta  = (Array.isArray(league.weeks) ? league.weeks : []).find(w => String(w?.id) === String(weekId));
+      const weekLabel = weekMeta?.label || weekId || "";
+      const atsEventIds       = Array.isArray(slateDoc?.atsEventIds) ? slateDoc.atsEventIds.map(String) : [];
+      const tiebreakerEventId = String(slateDoc?.tiebreakerEventId || "");
+      const leagueKey    = mem2.gpAdminLeagueKey || getSavedLeagueKeySafe();
+      const defaultRange = gpDefaultWeekRange();
+      const dateStart    = mem2.gpAdminDateStart || defaultRange.start;
+      const dateEnd      = mem2.gpAdminDateEnd   || defaultRange.end;
+      const avail        = mem2.gpAvailableEvents || [];
+      return (Render().gpBuildAdminBuilderHTML || (() => ""))({
+        weekId, weekLabel, availableEvents: avail,
+        leagueKey, dateStart, dateEnd,
+        games, atsEventIds, tiebreakerEventId, pickLeagueId,
+        loadStatus: mem2.gpAdminLoadStatus || ""
+      });
+    } catch (err) {
+      console.error("[GP] gpBuildAdminToolsPanelHTML error:", err);
+      return `<div class="gpNotice">Couldn't load admin tools: ${String(err?.message || err)}</div>`;
+    }
+  }
+
+  // adminMergePlayerPick fires from the Manage Player overlay, which is a
+  // separate DOM node stacked on top rather than a descendant of the
+  // Admin Tools overlay's body — so "am I inside the settings view"
+  // there can't be answered by DOM containment the way the settings
+  // form's own buttons can; this flag-based check is what it uses instead.
+  function gpInAdminOverlaySettings() {
+    return gpMem().gpAdminOverlaySubview === "settings" && !!document.getElementById("gpAdminToolsOverlay");
+  }
+
+  // Re-populates the overlay with the Admin Tools panel, but only while
+  // it's actually open and showing that view — never while the embedded
+  // League Settings form is up, so the 60s background auto-refresh (or
+  // any other render pass) can't clobber in-progress form edits there.
+  async function gpRefreshAdminToolsOverlay() {
+    if (!document.getElementById("gpAdminToolsOverlay")) return;
+    if (gpMem().gpAdminOverlaySubview === "settings") return;
+    const html = await gpBuildAdminToolsPanelHTML();
+    (Render().gpSetAdminToolsOverlayBody || (() => {}))(html);
+  }
+
+  // Fetches + renders the League Settings form into the (already open)
+  // Admin Tools overlay's body, marking the overlay's subview so
+  // gpRefreshAdminToolsOverlay leaves it alone until Save/Cancel move it
+  // back to "tools".
+  async function gpRenderAdminOverlaySettings(leagueId) {
+    const mem2 = gpMem();
+    mem2.gpAdminOverlaySubview = "settings";
+    // Also used as the league-resolution fallback by adminSyncPlayerName/
+    // adminMergePlayerPick (reached from here via the Manage Player
+    // overlay) — those already read gpLeagueEditingId first.
+    mem2.gpLeagueEditingId = leagueId;
+    (Render().gpSetAdminToolsOverlayBody || (() => {}))(`<div class="gpNotice">Loading league settings…</div>`);
+    await (Data().ensureFirebaseReadySafe || (async () => {}))();
+    const db2 = firebase.firestore();
+    const { league, leagueMembers } = await gpFetchLeagueForSettings(db2, leagueId);
+    mem2.gpLeagueSettingsMembersCache = leagueMembers;
+    const formHTML = (Render().gpBuildLeagueSettingsHTML || (() => ""))({ mode: "edit", league, leagueMembers });
+    (Render().gpSetAdminToolsOverlayBody || (() => {}))(formHTML);
+  }
+
   function gpBuildRetryScreenHTML(message) {
     const idObj = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
     const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
@@ -772,40 +872,9 @@
     //    from the picker or from within an active league ──
     if (mem.gpLeagueEditMode) {
       const isEdit = mem.gpLeagueEditMode === "edit";
-      let league = null;
+      let league = null, leagueMembers = [];
       if (isEdit) {
-        try { league = await (Data().gpGetLeague || (async () => null))(db, mem.gpLeagueEditingId); } catch {}
-      }
-      let leagueMembers = [];
-      try {
-        leagueMembers = isEdit ? await (Data().gpGetLeagueMembers || (async () => []))(db, mem.gpLeagueEditingId) : [];
-      } catch {}
-      // League membership and actually having picks on file can drift
-      // apart (e.g. a duplicate playerId from a bad login never went
-      // through gpJoinLeague) — union in anyone with picks in any of
-      // this league's weeks so they're still reachable from League
-      // Settings' admin tools (Manage Player, Merge Into) even though
-      // they were never formally "joined".
-      if (isEdit) {
-        try {
-          const weekIds = (Array.isArray(league?.weeks) ? league.weeks : []).map(w => String(w?.id || "")).filter(Boolean);
-          const picked = await (Data().gpGetAllPickedPlayersForWeeks || (async () => []))(db, weekIds);
-          const pickedById = new Map(picked.map(p => [String(p.playerId), p.weeksPicked]));
-          // weeksPicked is attached to EVERY member, joined or not — two
-          // same-named identities (a real duplicate, or a stale
-          // membership record left behind from one) are otherwise
-          // indistinguishable in this list beyond a join date, which
-          // doesn't say anything about which one actually holds real
-          // picks — this does.
-          leagueMembers = leagueMembers.map(m => ({ ...m, weeksPicked: pickedById.get(String(m?.playerId || "")) || 0 }));
-          const knownIds = new Set(leagueMembers.map(m => String(m?.playerId || "")));
-          const extra = picked
-            .filter(p => !knownIds.has(p.playerId))
-            .map(p => ({ playerId: p.playerId, name: p.name, joinedAt: null, notJoined: true, weeksPicked: p.weeksPicked }));
-          if (extra.length) {
-            leagueMembers = [...leagueMembers, ...extra].sort((a, b) => String(a.name).localeCompare(String(b.name)));
-          }
-        } catch {}
+        ({ league, leagueMembers } = await gpFetchLeagueForSettings(db, mem.gpLeagueEditingId));
       }
       // Stashed so the Manage Player overlay (opened from a ⚙️ tap) can
       // reuse this same member list — it needs every OTHER member as
@@ -938,7 +1007,8 @@
     // ── season view: cumulative standings across every published week ──
     if (mem.gpViewMode === "season") {
       const headerHTML  = (Render().renderPicksHeaderHTML || (() => ""))({
-        leagueName: league.name, isAdmin, showLeaguesBtn: true, playerName: name
+        leagueName: league.name, isAdmin, showLeaguesBtn: true,
+        showAdminBtn: true, pickLeagueId, playerName: name
       });
       const toggleHTML  = (Render().gpBuildViewToggleHTML || (() => ""))("season");
       let seasonHTML = `<div class="gpNotice">Loading season standings…</div>`;
@@ -1034,7 +1104,8 @@
 
     // ── build HTML ──
     const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({
-      leagueName: league.name, isAdmin, showLeaguesBtn: true, playerName: name
+      leagueName: league.name, isAdmin, showLeaguesBtn: true,
+      showAdminBtn: true, weekId: selectedId, pickLeagueId, playerName: name
     });
     const toggleHTML = (Render().gpBuildViewToggleHTML || (() => ""))("week");
     const pagerHTML  = weeks.length ? (Render().gpBuildWeekPagerHTML || (() => ""))({
@@ -1052,23 +1123,7 @@
       weekIndex: weeks.findIndex(w => String(w?.id) === selectedId)
     });
 
-    // Admin builder goes FIRST inside gpContainer
-    let adminBuilderHTML = "";
-    if (isAdmin) {
-      const leagueKey  = mem.gpAdminLeagueKey || getSavedLeagueKeySafe();
-      const defaultRange = gpDefaultWeekRange();
-      const dateStart  = mem.gpAdminDateStart || defaultRange.start;
-      const dateEnd    = mem.gpAdminDateEnd   || defaultRange.end;
-      const avail      = mem.gpAvailableEvents || [];
-      adminBuilderHTML = (Render().gpBuildAdminBuilderHTML || (() => ""))({
-        weekId: selectedId, weekLabel, availableEvents: avail,
-        leagueKey, dateStart, dateEnd, isAdmin,
-        games, atsEventIds, tiebreakerEventId, pickLeagueId,
-        loadStatus: mem.gpAdminLoadStatus || ""
-      });
-    }
-
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${toggleHTML}${pagerHTML}${adminBuilderHTML}${cardsHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${toggleHTML}${pagerHTML}${cardsHTML}</div>`;
     postRender();
   }
 
@@ -1396,6 +1451,25 @@
       return;
     }
 
+    // ── admin: open the Admin Tools overlay from the header gear button —
+    //    works from any H2H tab (or the classic page), independent of
+    //    whatever the underlying page currently has fetched. ──
+    if (action === "openAdminOverlay") {
+      gpMem().gpAdminOverlaySubview = "tools";
+      (Render().gpShowAdminToolsOverlay || (() => {}))(`<div class="gpNotice">Loading admin tools…</div>`);
+      await gpRefreshAdminToolsOverlay();
+      return;
+    }
+
+    // ── admin: open League Settings inside the Admin Tools overlay,
+    //    swapping the overlay's body content in place (no navigation) ──
+    if (action === "openAdminOverlaySettings") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || gpMem().pickLeagueId || "").trim();
+      if (!leagueId) return;
+      await gpRenderAdminOverlaySettings(leagueId);
+      return;
+    }
+
     // ── leagues: show the "Join League" overlay for a league the
     //    player hasn't joined yet (uses the picker's already-fetched
     //    league + member data, no extra round trip) ──
@@ -1461,8 +1535,18 @@
       return;
     }
 
-    // ── leagues: cancel the create/edit form ──
+    // ── leagues: cancel the create/edit form — inside the Admin Tools
+    //    overlay this just swaps back to the Admin Tools view within the
+    //    same sheet; from the League Picker's own create/edit flow it's
+    //    the original full-page navigation back to wherever it opened
+    //    from. Detected structurally (is the button inside the overlay's
+    //    own body?) rather than by a flag, so it can't drift out of sync. ──
     if (action === "cancelLeagueSettings") {
+      if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
+        gpMem().gpAdminOverlaySubview = "tools";
+        await gpRefreshAdminToolsOverlay();
+        return;
+      }
       const mem2 = gpMem();
       mem2.gpLeagueEditMode  = null;
       mem2.gpLeagueEditingId = "";
@@ -1531,9 +1615,22 @@
           mem2.gpShowLeaguePicker = false;
           gpSetSelectedLeagueId(newId);
         }
-        mem2.gpLeagueEditMode  = null;
-        mem2.gpLeagueEditingId = "";
-        await renderPicks();
+        // Same overlay-vs-full-page branch as cancelLeagueSettings above —
+        // a save from inside the Admin Tools overlay (always an edit,
+        // never create) lands back on that overlay's own Admin Tools
+        // view instead of leaving gpLeagueEditMode's full-page flow.
+        if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
+          mem2.gpAdminOverlaySubview = "tools";
+          await gpRefreshAdminToolsOverlay();
+          // The underlying page (header name, tabs, etc.) may also need
+          // to reflect whatever changed — refresh it too, in the
+          // background, without disturbing the overlay that's on top of it.
+          renderPicks();
+        } else {
+          mem2.gpLeagueEditMode  = null;
+          mem2.gpLeagueEditingId = "";
+          await renderPicks();
+        }
       } catch (err) {
         btn.disabled = false; btn.textContent = leagueId ? "Save Settings" : "Create League";
         console.error("[GP] submitLeagueSettings error:", err);
@@ -1559,7 +1656,12 @@
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
         await (Admin().gpAdminStartH2HSeason || (async () => {}))(db2, uid, leagueId);
-        await renderPicks();
+        if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
+          await gpRenderAdminOverlaySettings(leagueId);
+          renderPicks();
+        } else {
+          await renderPicks();
+        }
       } catch (err) {
         btn.disabled = false; btn.textContent = originalLabel;
         console.error("[GP] startH2HSeason error:", err);
@@ -1610,7 +1712,12 @@
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
         await (Admin().gpAdminSetH2HSchedule || (async () => {}))(db2, uid, leagueId, rounds);
-        await renderPicks();
+        if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
+          await gpRenderAdminOverlaySettings(leagueId);
+          renderPicks();
+        } else {
+          await renderPicks();
+        }
       } catch (err) {
         btn.disabled = false; btn.textContent = originalLabel;
         console.error("[GP] saveH2HSchedule error:", err);
@@ -1675,6 +1782,13 @@
         const mem2 = gpMem();
         mem2.gpLeagueEditMode  = null;
         mem2.gpLeagueEditingId = "";
+        // If this was opened from the Admin Tools overlay, close it —
+        // the league it was editing no longer exists, so there's nothing
+        // for Cancel/Save to fall back to inside that sheet.
+        if (mem2.gpAdminOverlaySubview === "settings") {
+          mem2.gpAdminOverlaySubview = null;
+          (Render().gpDismissAdminToolsOverlay || (() => {}))();
+        }
         if (gpGetSelectedLeagueId() === leagueId || mem2.pickLeagueId === leagueId) {
           mem2.pickLeagueId = "";
           gpSetSelectedLeagueId("");
@@ -1685,27 +1799,6 @@
         console.error("[GP] deleteLeague error:", err);
         alert(err?.message || "Something went wrong deleting the league.");
       }
-      return;
-    }
-
-    // ── admin: collapse/expand the Admin Tools panel down to just the
-    //    "Admin Tools" label + arrow — persisted so an admin who mostly
-    //    just checks results doesn't have to re-collapse it every visit.
-    //    Toggles the DOM directly (no re-render) so it doesn't disturb
-    //    anything mid-edit in the panel.
-    if (action === "toggleAdminPanel") {
-      const body = document.getElementById("gpAdminBody");
-      if (!body) return;
-      const nowCollapsed = !body.hidden;
-      body.hidden = nowCollapsed;
-      const week    = document.getElementById("gpAdminHeadWeek");
-      const actions = document.getElementById("gpAdminHeadActions");
-      const arrow   = document.getElementById("gpAdminToggleArrow");
-      if (week)    week.hidden    = nowCollapsed;
-      if (actions) actions.hidden = nowCollapsed;
-      if (arrow)   arrow.textContent = nowCollapsed ? "▸" : "▾";
-      btn.setAttribute("aria-label", (nowCollapsed ? "Expand" : "Collapse") + " admin tools");
-      try { localStorage.setItem("theShopGpAdminCollapsed_v1", nowCollapsed ? "1" : "0"); } catch {}
       return;
     }
 
@@ -2072,7 +2165,12 @@
         league.weeks.forEach(w => gpBustSeasonWeekCache(String(w?.id || "")));
         const breakdown = Array.isArray(perWeek) && perWeek.length ? `\n\n${perWeek.join("\n")}` : "";
         alert(`Merged — "${fromName}" is now combined into "${fixedName}" across ${weeksMerged} week${weeksMerged === 1 ? "" : "s"}. Refresh to see it reflected in standings.${breakdown}\n\nfrom: ${fromPid}\ninto: ${intoPid}`);
-        await renderPicks();
+        if (gpInAdminOverlaySettings()) {
+          await gpRenderAdminOverlaySettings(editLeagueId);
+          renderPicks();
+        } else {
+          await renderPicks();
+        }
         return;
       } catch (err) {
         console.error("[GP] adminMergePlayerPick failed:", err);

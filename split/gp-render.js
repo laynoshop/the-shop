@@ -82,8 +82,16 @@
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px;
 }
+.gpHeaderActionsLeft {
+  display: flex; align-items: center; gap: 8px;
+}
 .gpHeaderActionsRight {
   display: flex; align-items: center; gap: 8px;
+}
+.gpHeaderAdminBtn {
+  background: rgba(255,200,0,0.12);
+  border-color: rgba(255,200,0,0.35);
+  color: rgba(255,222,120,0.95);
 }
 .gpHeaderIconBtn {
   flex: 0 0 auto;
@@ -324,7 +332,7 @@
 }
 
 /* ══════════════════════════════════════════════
-   GP ADMIN BUILDER  (top-of-page panel)
+   GP ADMIN BUILDER  (Admin Tools overlay content)
    Restyled as labeled blocks (Load / Available / Publish / ATS /
    Tiebreaker) instead of one undifferentiated stack of controls, so the
    workflow reads left-to-right, top-to-bottom without guessing what
@@ -341,11 +349,12 @@
   gap: 14px;
   box-shadow: 0 8px 28px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
 }
-.gpAdminBody {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.gpAdminOverlayTop {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
 }
+/* Still used by League Settings' own header block (icon + "Editing
+   League"/"League Settings" label), not just the old admin panel. */
 .gpAdminHead {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; flex-wrap: wrap;
@@ -367,16 +376,6 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gpAdminHeadActions { display: flex; gap: 8px; flex-wrap: wrap; }
-.gpAdminCollapseBtn {
-  flex-shrink: 0;
-  width: 36px; height: 36px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16);
-  color: rgba(255,255,255,0.8); font-size: 16px; line-height: 1;
-  cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: transform 100ms ease, background 100ms ease;
-}
-.gpAdminCollapseBtn:active { background: rgba(255,255,255,0.12); transform: scale(0.94); }
 
 .gpAdminBlock {
   display: flex; flex-direction: column; gap: 9px;
@@ -2086,6 +2085,12 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpPicksOverlayBackdrop.gpOverlayVisible .gpPicksOverlaySheet {
   transform: translateY(0);
+}
+/* Admin Tools — "nearly full page" rather than a normal bottom sheet,
+   since it has a lot to show (game lists, schedule editor, etc.) at once. */
+.gpAdminToolsSheet {
+  max-height: 94dvh;
+  height: 94dvh;
 }
 
 /* Drag handle */
@@ -4399,17 +4404,10 @@ ${otherMatchupsHTML}`;
 </div>`;
   }
 
-  // Collapsed state persists per-browser (an admin who mostly just checks
-  // results doesn't want to re-collapse it every visit) — read here at
-  // render time, written by the toggle click handler in groupPicks.js.
-  // Key shared by name between the two files rather than an export; keep
-  // them in sync if this ever changes.
-  const GP_ADMIN_COLLAPSED_KEY = "theShopGpAdminCollapsed_v1";
-  function gpAdminPanelCollapsed() {
-    try { return localStorage.getItem(GP_ADMIN_COLLAPSED_KEY) === "1"; } catch { return false; }
-  }
-
-  // ─── Admin builder  (rendered at TOP of page) ────────────────────
+  // ─── Admin builder — lives inside the Admin Tools overlay (opened from
+  // the header's gear button), never inline on the page itself. Always
+  // fully expanded — the overlay's own close button replaces the old
+  // inline collapse/expand toggle.
   function gpBuildAdminBuilderHTML({
     weekId, weekLabel, availableEvents, leagueKey, dateStart, dateEnd,
     games, atsEventIds, tiebreakerEventId, pickLeagueId, loadStatus
@@ -4592,69 +4590,56 @@ ${otherMatchupsHTML}`;
 </div>`;
     }).join("");
 
-    const collapsed = gpAdminPanelCollapsed();
-
     return `
-<div class="gpAdminPanel" data-gpadminpanel>
-  <div class="gpAdminHead">
-    <div class="gpAdminHeadTitle">
-      <div class="gpAdminHeadIcon">⚙️</div>
-      <div>
-        <div class="gpAdminHeadLabel">Admin Tools</div>
-        <div class="gpAdminHeadWeek" id="gpAdminHeadWeek" ${collapsed ? "hidden" : ""}>${esc(weekLabel || weekId || "")}</div>
-      </div>
-    </div>
-    <div class="gpAdminHeadActions" id="gpAdminHeadActions" ${collapsed ? "hidden" : ""}>
-      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="editLeague" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
-      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
-    </div>
-    <button class="gpAdminCollapseBtn" type="button" data-gpaction="toggleAdminPanel" id="gpAdminToggleBtn" aria-label="${collapsed ? "Expand" : "Collapse"} admin tools">
-      <span id="gpAdminToggleArrow">${collapsed ? "▸" : "▾"}</span>
-    </button>
+<div class="gpAdminPanel">
+<div class="gpAdminOverlayTop">
+  <div class="gpAdminHeadWeek">${esc(weekLabel || weekId || "No week yet")}</div>
+  <div class="gpAdminHeadActions">
+    <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="openAdminOverlaySettings" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
+    <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
   </div>
+</div>
 
-  <div class="gpAdminBody" id="gpAdminBody" ${collapsed ? "hidden" : ""}>
-  <div class="gpAdminBlock">
-    <div class="gpAdminBlockLabel">🗓️ Load Games</div>
-    <div class="gpAdminControls">
-      <select data-league-select class="gpAdminSelect">
-        ${leagueOptions}
-      </select>
-      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminQuickWeekRange">This Week (Thu–Mon)</button>
-    </div>
-    <div class="gpAdminDateRange">
-      <span class="gpAdminInlineLabel">From</span>
-      <input type="date" data-date-start-input value="${esc(startInputVal)}" class="gpAdminDateInput"/>
-      <span class="gpAdminInlineLabel">to</span>
-      <input type="date" data-date-end-input value="${esc(endInputVal)}" class="gpAdminDateInput"/>
-      <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminLoadGames">Load Games</button>
-    </div>
+<div class="gpAdminBlock">
+  <div class="gpAdminBlockLabel">🗓️ Load Games</div>
+  <div class="gpAdminControls">
+    <select data-league-select class="gpAdminSelect">
+      ${leagueOptions}
+    </select>
+    <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminQuickWeekRange">This Week (Thu–Mon)</button>
   </div>
-
-  <div class="gpAdminBlock">
-    <div class="gpAdminBlockLabel">🏈 Available Games${sorted.length ? `<span class="gpAdminBlockCount">${sorted.length}</span>` : ""}</div>
-    <div id="gpAdminGameList" class="gpAdminGameList">
-      ${sorted.length ? gameRows : `<div class="gpAdminEmptyHint">No games loaded yet — pick a date range above and tap Load Games.</div>`}
-    </div>
-    ${sorted.length ? `
-    <div class="gpAdminControls">
-      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpselect="all">Select All</button>
-      <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpselect="none">Select None</button>
-      <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminAddGames" data-weekid="${esc(weekId)}">Add Selected</button>
-    </div>` : ""}
+  <div class="gpAdminDateRange">
+    <span class="gpAdminInlineLabel">From</span>
+    <input type="date" data-date-start-input value="${esc(startInputVal)}" class="gpAdminDateInput"/>
+    <span class="gpAdminInlineLabel">to</span>
+    <input type="date" data-date-end-input value="${esc(endInputVal)}" class="gpAdminDateInput"/>
+    <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminLoadGames">Load Games</button>
   </div>
+</div>
 
-  ${committedGames.length ? `
-  <div class="gpAdminBlock">
-    <div class="gpAdminBlockLabel">📤 Publish</div>
-    <div class="gpAdminControls">
-      <button class="gpAdminBtn gpAdminBtnPublish" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}" data-leagueid="${esc(pickLeagueId || "")}">Publish Week</button>
-    </div>
+<div class="gpAdminBlock">
+  <div class="gpAdminBlockLabel">🏈 Available Games${sorted.length ? `<span class="gpAdminBlockCount">${sorted.length}</span>` : ""}</div>
+  <div id="gpAdminGameList" class="gpAdminGameList">
+    ${sorted.length ? gameRows : `<div class="gpAdminEmptyHint">No games loaded yet — pick a date range above and tap Load Games.</div>`}
+  </div>
+  ${sorted.length ? `
+  <div class="gpAdminControls">
+    <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpselect="all">Select All</button>
+    <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpselect="none">Select None</button>
+    <button class="gpAdminBtn gpAdminBtnPrimary" type="button" data-gpaction="adminAddGames" data-weekid="${esc(weekId)}">Add Selected</button>
   </div>` : ""}
-  ${atsHTML}
-  ${tiebreakerHTML}
-  <div class="gpAdminStatus${loadStatus && /^error/i.test(loadStatus) ? " gpAdminStatusError" : ""}" id="gpAdminStatus">${loadStatus ? esc(loadStatus) : ""}</div>
+</div>
+
+${committedGames.length ? `
+<div class="gpAdminBlock">
+  <div class="gpAdminBlockLabel">📤 Publish</div>
+  <div class="gpAdminControls">
+    <button class="gpAdminBtn gpAdminBtnPublish" type="button" data-gpaction="adminPublish" data-weekid="${esc(weekId)}" data-leagueid="${esc(pickLeagueId || "")}">Publish Week</button>
   </div>
+</div>` : ""}
+${atsHTML}
+${tiebreakerHTML}
+<div class="gpAdminStatus${loadStatus && /^error/i.test(loadStatus) ? " gpAdminStatusError" : ""}" id="gpAdminStatus">${loadStatus ? esc(loadStatus) : ""}</div>
 </div>`;
   }
 
@@ -4818,7 +4803,11 @@ ${saveRow}`;
   }
 
   // ─── Header ─────────────────────────────────────────────────────
-  function renderPicksHeaderHTML({ leagueName, isAdmin, showLeaguesBtn, showSaveBtn = true, playerName }) {
+  // showAdminBtn: only true from the two "actually inside a league"
+  // render paths (H2H and classic points-format) — never on the League
+  // Picker or the League Settings full-page view, so the gear button
+  // only ever shows where there's a real week/league context behind it.
+  function renderPicksHeaderHTML({ leagueName, isAdmin, showLeaguesBtn, showSaveBtn = true, showAdminBtn = false, weekId, pickLeagueId, playerName }) {
     const welcomeName = String(playerName || "").trim();
     return `
 <div class="gpPageHeader">
@@ -4829,7 +4818,10 @@ ${saveRow}`;
     </div>
   </div>
   <div class="gpHeaderActions">
-    <button class="gpHeaderIconBtn" type="button" data-gpaction="openHeaderMenu" data-show-leagues="${showLeaguesBtn ? "1" : "0"}" aria-label="Menu">⋮</button>
+    <div class="gpHeaderActionsLeft">
+      <button class="gpHeaderIconBtn" type="button" data-gpaction="openHeaderMenu" data-show-leagues="${showLeaguesBtn ? "1" : "0"}" aria-label="Menu">⋮</button>
+      ${showAdminBtn && isAdmin ? `<button class="gpHeaderIconBtn gpHeaderAdminBtn" type="button" data-gpaction="openAdminOverlay" data-weekid="${esc(weekId || "")}" data-leagueid="${esc(pickLeagueId || "")}" aria-label="Admin Tools">⚙️</button>` : ""}
+    </div>
     <div class="gpHeaderActionsRight">
       <button class="gpHeaderIconBtn" type="button" data-gpaction="refresh" aria-label="Refresh">↺</button>
       ${showSaveBtn ? `<button class="gpHeaderSaveBtn" type="button" data-gpaction="savePicks" disabled>Save</button>` : ""}
@@ -5225,6 +5217,78 @@ ${archivedSectionHTML}`;
     if (backdrop) backdrop.remove();
   }
 
+  // ─── Admin Tools overlay ────────────────────────────────────────────
+  // Opened from the header's gear button (any H2H tab or the classic
+  // points-format page) instead of the old inline collapsible panel.
+  // "Nearly full page" per the ask — a taller sheet than the other
+  // bottom sheets in the app, since Admin Tools has a lot to show at
+  // once — but otherwise the exact same overlay recipe (X button,
+  // click-outside, Escape). Its body gets swapped in place (via
+  // gpSetAdminToolsOverlayBody) to show either the Admin Tools panel
+  // itself or, when "League Settings" is tapped, the settings form —
+  // without closing/reopening the overlay, so Save/Cancel inside
+  // Settings can land back on Admin Tools within the same sheet.
+  function gpBuildAdminToolsOverlayHTML(bodyHTML) {
+    return `
+<div class="gpPicksOverlayBackdrop" id="gpAdminToolsOverlay" role="dialog" aria-modal="true" aria-label="Admin Tools">
+  <div class="gpPicksOverlaySheet gpAdminToolsSheet" id="gpAdminToolsOverlaySheet">
+    <div class="gpOverlayHandle"></div>
+    <div class="gpOverlayHeader">
+      <div class="gpOverlayTitle"><div class="gpOverlayName">⚙️ Admin Tools</div></div>
+      <button class="gpOverlayCloseBtn" id="gpAdminToolsOverlayClose" aria-label="Close">✕</button>
+    </div>
+    <div class="gpOverlayBody" id="gpAdminToolsOverlayBody">
+      ${bodyHTML || ""}
+    </div>
+  </div>
+</div>`;
+  }
+
+  function gpShowAdminToolsOverlay(bodyHTML) {
+    const existing = document.getElementById("gpAdminToolsOverlay");
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML("beforeend", gpBuildAdminToolsOverlayHTML(bodyHTML));
+
+    const backdrop = document.getElementById("gpAdminToolsOverlay");
+    const sheet    = document.getElementById("gpAdminToolsOverlaySheet");
+    const closeBtn = document.getElementById("gpAdminToolsOverlayClose");
+    if (!backdrop) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    closeBtn?.addEventListener("click", dismiss);
+    // Only a click genuinely outside the sheet closes it — unlike the ⋮
+    // menu, everything in here (inputs, checkboxes, buttons) needs to
+    // stay open while it's used.
+    backdrop.addEventListener("click", (e) => {
+      if (!sheet.contains(e.target)) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
+  function gpDismissAdminToolsOverlay() {
+    const backdrop = document.getElementById("gpAdminToolsOverlay");
+    if (backdrop) backdrop.remove();
+  }
+
+  // Swaps the overlay's body content in place (Admin Tools <-> League
+  // Settings) without touching the backdrop/sheet's open animation state.
+  function gpSetAdminToolsOverlayBody(bodyHTML) {
+    const body = document.getElementById("gpAdminToolsOverlayBody");
+    if (body) body.innerHTML = bodyHTML || "";
+  }
+
   // ─── League settings form (create or edit) ────────────────────────
   function gpBuildLeagueSettingsHTML({ mode, league, leagueMembers }) {
     const isEdit = mode === "edit" && league;
@@ -5521,6 +5585,9 @@ ${archivedSectionHTML}`;
     gpDismissPlayerManageOverlay,
     gpShowHeaderMenuOverlay,
     gpDismissHeaderMenuOverlay,
+    gpShowAdminToolsOverlay,
+    gpDismissAdminToolsOverlay,
+    gpSetAdminToolsOverlayBody,
     gpEarliestKickoffMs,
     gpBuildH2HTabBarHTML,
     gpBuildH2HMatchupTabHTML,
