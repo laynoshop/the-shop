@@ -1057,14 +1057,24 @@
     return schedule[idx]?.pairs || [];
   }
 
-  // gpComputeH2HWeekResults(round, weeklyRows) — matches this week's
-  // scheduled pairings to that week's points (from the already-computed
-  // gpComputeWeeklyLeaderboard rows), and decides each matchup's winner.
-  function gpComputeH2HWeekResults(round, weeklyRows) {
+  // gpComputeH2HWeekResults(round, weeklyRows, tiebreakerActual) — matches
+  // this week's scheduled pairings to that week's points (from the
+  // already-computed gpComputeWeeklyLeaderboard rows), and decides each
+  // matchup's winner.
+  //
+  // tiebreakerActual (optional): when given, also decides a per-matchup
+  // tiebreaker winner — closest guess to the actual combined score without
+  // going over (gpScoreTiebreakerGuess's Price-is-Right rule), decided
+  // ONLY between the two players in that matchup, not league-wide. So a
+  // single week can crown several different tiebreaker winners, one per
+  // matchup, independent of who actually won each matchup. Reads each
+  // row's `tbGuess` (attached by gpLoadWeeklyResultsForSeason).
+  function gpComputeH2HWeekResults(round, weeklyRows, tiebreakerActual) {
     const byName = new Map();
     for (const r of (Array.isArray(weeklyRows) ? weeklyRows : [])) {
       byName.set(String(r?.name || "").trim().toLowerCase(), r);
     }
+    const actual = Number.isFinite(Number(tiebreakerActual)) ? Number(tiebreakerActual) : null;
     return (Array.isArray(round) ? round : []).map(m => {
       if (m.bye) {
         return { bye: m.bye, row: byName.get(String(m.bye).trim().toLowerCase()) || null };
@@ -1076,7 +1086,18 @@
       const ptsB = Number(rowB?.points ?? 0);
       let winner = null;
       if (rowA || rowB) winner = ptsA > ptsB ? "a" : ptsB > ptsA ? "b" : "tie";
-      return { players: [nameA, nameB], rows: [rowA, rowB], points: [ptsA, ptsB], winner };
+
+      let tbWinner = null;
+      if (actual != null) {
+        const dA = gpScoreTiebreakerGuess(rowA?.tbGuess, actual);
+        const dB = gpScoreTiebreakerGuess(rowB?.tbGuess, actual);
+        const aOk = Number.isFinite(dA), bOk = Number.isFinite(dB);
+        if (aOk && bOk) { if (dA < dB) tbWinner = "a"; else if (dB < dA) tbWinner = "b"; }
+        else if (aOk) tbWinner = "a";
+        else if (bOk) tbWinner = "b";
+      }
+
+      return { players: [nameA, nameB], rows: [rowA, rowB], points: [ptsA, ptsB], winner, tbWinner };
     });
   }
 
@@ -1100,10 +1121,11 @@
       if (!isFinal) continue;
       weeksFinal++;
       const round = gpGetH2HRoundForWeek(schedule, wr.weekIndex);
-      for (const m of gpComputeH2HWeekResults(round, wr.rows)) {
+      for (const m of gpComputeH2HWeekResults(round, wr.rows, wr.tiebreakerActual)) {
         if (m.bye) {
-          const p = ensure(m.bye);
-          if (m.row?.tiebreakerWon) p.tbWins++;
+          ensure(m.bye);
+          // A bye player has no opponent to win the tiebreaker against
+          // this week, so there's nothing to tally for them here.
           continue;
         }
         const [nameA, nameB] = m.players;
@@ -1113,8 +1135,8 @@
         if (m.winner === "a")      { a.wins++;  b.losses++; }
         else if (m.winner === "b") { b.wins++;  a.losses++; }
         else if (m.winner === "tie") { a.ties++; b.ties++; }
-        if (m.rows[0]?.tiebreakerWon) a.tbWins++;
-        if (m.rows[1]?.tiebreakerWon) b.tbWins++;
+        if (m.tbWinner === "a")      a.tbWins++;
+        else if (m.tbWinner === "b") b.tbWins++;
       }
     }
     // Tie-break chain: record (wins, then ties) → tiebreakers won this
@@ -1305,6 +1327,7 @@
     gpFillMissingLeagueMembers,
     gpGradeAtsForGame,
     gpGetGameWinningSide,
+    gpComputeStraightFavSide,
     gpComputeTiebreakerActual,
     gpScoreTiebreakerGuess,
     gpComputeWeeklyRecap,

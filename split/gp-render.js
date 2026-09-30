@@ -1135,9 +1135,20 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   color: rgba(210,190,255,0.9);
 }
 .gpH2HPickChip {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   padding: 6px 8px; border-radius: 10px; width: 100%;
   background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+}
+/* Underdog win badge — a little gold medallion perched on the corner of
+   a winning pick chip, only when that pick was the underdog. */
+.gpH2HDogBadge {
+  position: absolute; top: -7px; right: -7px;
+  width: 20px; height: 20px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; line-height: 1;
+  background: radial-gradient(circle at 32% 28%, #ffe9a8, #ffb020 70%);
+  box-shadow: 0 2px 7px rgba(255,160,40,0.55), 0 0 0 2px rgba(13,10,10,0.92);
 }
 .gpH2HPickChip.gpH2HPickNone { color: rgba(255,255,255,0.25); font-size: 16px; font-weight: 900; }
 /* One box, not a box-in-a-box — position:relative so the lock emoji
@@ -1439,6 +1450,15 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* H2H standings' name column wraps instead of truncating, so a long
+   name is always fully readable rather than cut off with an ellipsis. */
+.gpStandingsTable td.gpH2HStName {
+  white-space: normal; overflow: visible; text-overflow: clip;
+}
+.gpH2HStName .gpStNameText {
+  overflow: visible; text-overflow: clip; white-space: normal;
+  overflow-wrap: break-word; word-break: break-word;
+}
 .gpStandingsRow { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 120ms ease; }
 .gpStandingsRow:active td { background: rgba(255,255,255,0.06); }
 .gpStandingsRow.gpStRowGold   td { background: rgba(255,200,40,0.06); }
@@ -1589,9 +1609,19 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 .gpH2HTabBar {
   display: grid; grid-template-columns: repeat(5, 1fr);
   gap: 2px; padding: 4px;
-  background: rgba(255,255,255,0.05);
+  background: rgba(13,10,10,0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
+  /* Stays visible while scrolling, docked right below the page's own
+     sticky header — --gpHeaderH is set from that header's real measured
+     height in groupPicks.js's postRender (a fixed guess would break the
+     moment the header's admin-only row changes its height). */
+  position: sticky;
+  top: var(--gpHeaderH, 104px);
+  z-index: 90;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
 }
 .gpH2HTabBtn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -3070,9 +3100,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
   // ─── Weekly recap — shown above the leaderboard once every game in
   // the week has gone final ──────────────────────────────────────────
-  function gpBuildWeeklyRecapHTML(recap, weekLabel) {
+  function gpBuildWeeklyRecapHTML(recap, weekLabel, opts) {
     if (!recap) return "";
     const { champions, biggestUpset, perfectWeekPlayers, tiebreaker } = recap;
+    const hideTiebreaker = !!opts?.hideTiebreaker;
 
     const rows = [];
 
@@ -3103,7 +3134,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 </div>`);
     }
 
-    if (tiebreaker) {
+    if (tiebreaker && !hideTiebreaker) {
       rows.push(`
 <div class="gpRecapRow">
   <div class="gpRecapIcon">🎯</div>
@@ -3248,7 +3279,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     // game starts, same as everyone else's). Viewing someone else's
     // matchup (viewerSide unset) never gets that exception — both sides
     // stay hidden until lock, exactly as before.
-    function pickChipHTML(g, side, result, revealed) {
+    function pickChipHTML(g, side, result, revealed, isDogWin) {
       // One box, not two — the spacer + ghost line below are invisible,
       // reserving the exact same footprint a revealed pick's logo+text
       // occupy (so the chip is pixel-identical in height/width either
@@ -3264,6 +3295,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       <div class="gpH2HPickChip${cls}">
         ${logoImg(t?.logo || g?.[side + "Logo"], safeAbbr(t))}
         <span class="gpH2HPickAbbr">${esc(safeAbbr(t))}</span>
+        ${isDogWin ? `<span class="gpH2HDogBadge" title="Underdog win">🐶</span>` : ""}
       </div>`;
     }
     function tiebreakerChipHTML(guess, revealed) {
@@ -3308,6 +3340,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       const sideB = findPick(eventId, nameB);
       const resA = resultFor(g, sideA, isAts);
       const resB = resultFor(g, sideB, isAts);
+      // Underdog win badge — outright picks only (ATS already has its
+      // own "beat the spread" framing), matching the same favorite
+      // detection gpComputeWeeklyLeaderboard uses to award the 2pt
+      // underdog bonus, so the badge always agrees with the score.
+      const favSide = (!isAts && typeof GP_Data.gpComputeStraightFavSide === "function")
+        ? GP_Data.gpComputeStraightFavSide(g) : "";
+      const dogWinA = resA === "win" && !!favSide && !!sideA && sideA !== favSide;
+      const dogWinB = resB === "win" && !!favSide && !!sideB && sideB !== favSide;
       const live = g?.__live || null;
       const liveState = String(live?.state || "").toLowerCase();
       const showScores = (liveState === "in" || liveState === "post") &&
@@ -3315,7 +3355,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
                           live?.homeScore != null && live?.homeScore !== "";
       return `
 <div class="gpH2HDetailGameRow">
-  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked || viewerSide === "a")}</div>
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked || viewerSide === "a", dogWinA)}</div>
   <div class="gpH2HDetailGameInfo">
     ${matchupStatusHTML(g)}
     <div class="gpH2HDetailTeams">
@@ -3324,7 +3364,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       <span>${esc(safeNickname(home))}</span>
     </div>
   </div>
-  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB, locked || viewerSide === "b")}</div>
+  <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideB, resB, locked || viewerSide === "b", dogWinB)}</div>
 </div>`;
     }).join("");
 
@@ -3434,8 +3474,18 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds, tiebreakers, tiebreakerEventId })
       : { rows: [], finalsCount: 0 };
 
+    // Per-matchup tiebreaker winner needs each row's own guess alongside
+    // the actual — attach it here the same way gpLoadWeeklyResultsForSeason
+    // does for the season/standings path, so both agree on who won.
+    if (lb.tiebreakerActual != null) {
+      for (const r of lb.rows) {
+        const guess = tiebreakers?.[r.key]?.guess;
+        r.tbGuess = Number.isFinite(Number(guess)) ? Number(guess) : null;
+      }
+    }
+
     const round = typeof GP_Data.gpGetH2HRoundForWeek === "function" ? GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex) : [];
-    const results = typeof GP_Data.gpComputeH2HWeekResults === "function" ? GP_Data.gpComputeH2HWeekResults(round, lb.rows) : [];
+    const results = typeof GP_Data.gpComputeH2HWeekResults === "function" ? GP_Data.gpComputeH2HWeekResults(round, lb.rows, lb.tiebreakerActual) : [];
 
     const myKey = String(myName || "").trim().toLowerCase();
     const myResult = results.find(m => m.bye
@@ -3470,7 +3520,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       const recap = typeof GP_Data.gpComputeWeeklyRecap === "function"
         ? GP_Data.gpComputeWeeklyRecap(list, lb, tiebreakers, tiebreakerEventId, lb.tiebreakerActual)
         : null;
-      recapHTML = gpBuildWeeklyRecapHTML(recap, weekLabel);
+      // H2H matchups each crown their own tiebreaker winner (see the
+      // per-matchup tbWinner logic), so the single league-wide "closest
+      // guess" line from the shared recap would be redundant/confusing here.
+      recapHTML = gpBuildWeeklyRecapHTML(recap, weekLabel, { hideTiebreaker: true });
     }
 
     return `
@@ -3837,7 +3890,7 @@ ${otherMatchupsHTML}`;
       return `
 <tr class="gpStandingsRow${rowCls}" data-gpaction="openH2HProfile" data-name="${esc(nm)}">
   <td class="gpStRank">${rank}</td>
-  <td class="gpStName"><div class="gpStNameWrap"><span class="gpStNameText">${esc(nm)}</span></div></td>
+  <td class="gpStName gpH2HStName"><div class="gpStNameWrap"><span class="gpStNameText">${esc(nm)}</span></div></td>
   <td>${esc(record)}</td>
   <td>${esc(String(u.pointsFor ?? 0))}</td>
   <td>${esc(String(u.pointsAgainst ?? 0))}</td>
@@ -3850,13 +3903,13 @@ ${otherMatchupsHTML}`;
 <div class="gpStandingsTableWrap">
   <table class="gpStandingsTable">
     <colgroup>
-      <col style="width:8%"/>
-      <col style="width:28%"/>
-      <col style="width:14%"/>
+      <col style="width:7%"/>
+      <col style="width:34%"/>
       <col style="width:13%"/>
+      <col style="width:11%"/>
+      <col style="width:11%"/>
       <col style="width:13%"/>
-      <col style="width:14%"/>
-      <col style="width:10%"/>
+      <col style="width:11%"/>
     </colgroup>
     <thead>
       <tr>

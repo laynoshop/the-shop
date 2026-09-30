@@ -230,7 +230,11 @@
     // gpBustSeasonWeekCache existed left a stale pre-merge blob cached —
     // one more bump so it's dropped without needing every browser to
     // manually clear site data; gpBustSeasonWeekCache handles it from here.
-    return `theShopGpSeasonWeekCache_v4_${weekId}`;
+    // v5: added tiebreakerActual (and each row's tbGuess) so H2H's
+    // per-matchup tiebreaker winner can be computed — earlier cached
+    // blobs don't carry either field, which would silently zero out
+    // tiebreaker tallies for any already-final week until this bump.
+    return `theShopGpSeasonWeekCache_v5_${weekId}`;
   }
   // A fully-final week's cache is meant to live forever — its result
   // "can never change again" — except an admin editing history (Fix
@@ -265,7 +269,7 @@
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch {}
       if (cached && cached.final) {
-        return { weekId: wid, weekLabel: w.label, weekIndex, rows: cached.rows, finalsCount: cached.finalsCount, gamesCount: cached.finalsCount };
+        return { weekId: wid, weekLabel: w.label, weekIndex, rows: cached.rows, finalsCount: cached.finalsCount, gamesCount: cached.finalsCount, tiebreakerActual: cached.tiebreakerActual };
       }
       let games = [];
       try { games = await (Data().gpGetSlateGames || (async () => []))(db, wid); } catch {}
@@ -292,11 +296,22 @@
         games, allPicks, { atsEventIds: slateDoc?.atsEventIds, tiebreakers, tiebreakerEventId: slateDoc?.tiebreakerEventId }
       );
 
+      // Attach each row's own tiebreaker guess so H2H's per-matchup
+      // tiebreaker winner (gpComputeH2HWeekResults) can compare just the
+      // two opponents in a matchup against each other, not the whole
+      // league — tiebreakers is keyed by playerId/uid, same as row.key.
+      if (lb.tiebreakerActual != null) {
+        for (const r of lb.rows) {
+          const guess = tiebreakers?.[r.key]?.guess;
+          r.tbGuess = Number.isFinite(Number(guess)) ? Number(guess) : null;
+        }
+      }
+
       const allFinal = games.length > 0 && lb.finalsCount === games.length;
       if (allFinal) {
-        try { localStorage.setItem(cacheKey, JSON.stringify({ final: true, rows: lb.rows, finalsCount: lb.finalsCount })); } catch {}
+        try { localStorage.setItem(cacheKey, JSON.stringify({ final: true, rows: lb.rows, finalsCount: lb.finalsCount, tiebreakerActual: lb.tiebreakerActual })); } catch {}
       }
-      return { weekId: wid, weekLabel: w.label, weekIndex, rows: lb.rows, finalsCount: lb.finalsCount, gamesCount: games.length };
+      return { weekId: wid, weekLabel: w.label, weekIndex, rows: lb.rows, finalsCount: lb.finalsCount, gamesCount: games.length, tiebreakerActual: lb.tiebreakerActual };
     }));
 
     return weekResults.filter(Boolean);
@@ -579,6 +594,17 @@
       const el = document.getElementById("content");
       if (el && typeof window.replaceMichiganText === "function") {
         window.replaceMichiganText(el, "The Team Up North");
+      }
+    } catch {}
+    // The H2H tab bar docks itself right below the sticky page header via
+    // CSS `top: var(--gpHeaderH)` — the header's real height varies (extra
+    // admin buttons, wrapped text on narrow screens), so it's measured
+    // fresh after every render rather than guessed as a fixed constant.
+    try {
+      const contentEl = document.getElementById("content");
+      const headerEl  = contentEl?.querySelector(".gpPageHeader");
+      if (contentEl && headerEl) {
+        contentEl.style.setProperty("--gpHeaderH", `${headerEl.offsetHeight}px`);
       }
     } catch {}
   }
