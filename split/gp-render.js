@@ -1821,6 +1821,26 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpPicksSectionSubtitle b { color: rgba(255,255,255,0.75); font-weight: 800; }
 
+/* Mini version of the same OW/ATS section pills above, for tagging an
+   individual game row (e.g. the H2H matchup detail) rather than heading
+   a whole section — same colors/wording, just small enough to sit
+   inline above one row's date/time. */
+.gpH2HTypeBadge {
+  display: inline-flex; align-items: center;
+  font-size: 9px; font-weight: 900; letter-spacing: 0.05em;
+  text-transform: uppercase; white-space: nowrap;
+  padding: 2px 9px; border-radius: 999px;
+  margin-bottom: 3px;
+}
+.gpH2HTypeBadgeOw {
+  color: #ffe3e3;
+  background: linear-gradient(135deg, rgba(214,45,70,0.95), rgba(150,20,45,0.95));
+}
+.gpH2HTypeBadgeAts {
+  color: #e7fff3;
+  background: linear-gradient(135deg, rgba(50,208,140,0.95), rgba(20,150,95,0.95));
+}
+
 /* ══════════════════════════════════════════════
    WEEK PAGER (replaces the old week <select>)
    ══════════════════════════════════════════════ */
@@ -3358,10 +3378,14 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       const showScores = (liveState === "in" || liveState === "post") &&
                           live?.awayScore != null && live?.awayScore !== "" &&
                           live?.homeScore != null && live?.homeScore !== "";
+      const typeBadgeHTML = isAts
+        ? `<span class="gpH2HTypeBadge gpH2HTypeBadgeAts">ATS</span>`
+        : `<span class="gpH2HTypeBadge gpH2HTypeBadgeOw">OW</span>`;
       return `
 <div class="gpH2HDetailGameRow">
   <div class="gpH2HDetailPickCell">${pickChipHTML(g, sideA, resA, locked || viewerSide === "a", dogWinA)}</div>
   <div class="gpH2HDetailGameInfo">
+    ${typeBadgeHTML}
     ${matchupStatusHTML(g)}
     <div class="gpH2HDetailTeams">
       <span>${esc(safeNickname(away))}</span>
