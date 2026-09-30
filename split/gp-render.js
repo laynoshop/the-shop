@@ -3056,7 +3056,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
       tiebreakerHTML = gpBuildSectionHeaderHTML("🎯 Tiebreaker", "tiebreaker") + tbRow;
     }
 
-    const outrightHTML = outrightRows ? gpBuildSectionHeaderHTML("🏈 Outright Winners", "outright") + outrightRows : "";
+    const outrightHTML = outrightRows ? gpBuildSectionHeaderHTML("☑️ Outright Winners", "outright") + outrightRows : "";
     const atsHTML       = atsRows      ? gpBuildSectionHeaderHTML("📈 Against the Spread", "ats")     + atsRows      : "";
     const bodyContent   = outrightHTML + atsHTML + tiebreakerHTML;
 
@@ -4787,7 +4787,7 @@ ${matchupsHTML}
 ${recapHTML}
 ${leaderboardHTML}
 ${straightCardsHTML ? gpBuildSectionHeaderHTML(
-  "🏈 Outright Winners", "outright",
+  "☑️ Outright Winners", "outright",
   "Pick the team you think will <b>win the game</b> — margin of victory doesn't matter, just get the winner right."
 ) + straightCardsHTML : ""}
 ${atsCardsHTML ? gpBuildSectionHeaderHTML(
