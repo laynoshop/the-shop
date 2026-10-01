@@ -665,6 +665,13 @@ body.entryMode{
   height: 84px;
 }
 
+/* Putt Putt is admin-only too, but should sit at the normal half-width
+   size like every other door instead of spanning the full row — only
+   Pi Scoreboard (the other .adminOnly door) stays full-width. */
+.entryDoors .doorBtn[data-go="golf"]{
+  grid-column: auto;
+}
+
 /* Small screens */
 @media (max-width: 380px){
   .entryScreen{ padding-top: 56px; }
