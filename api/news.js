@@ -78,20 +78,25 @@ export default async function handler(req, res) {
   }
 }
 
-// A realistic browser UA/Accept pair — some of the RSS hosts below sit
-// behind a CDN/WAF (Fastly, Cloudflare) that treats a bare "Mozilla/5.0"
-// with no Accept header as a bot signal and blocks or empty-responds to
-// it, independent of CORS (which only ever applied to browser requests,
-// never to this server-to-server fetch).
-const BROWSER_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-};
-
+// IMPORTANT: fetchJson (ESPN's API) deliberately keeps the plain
+// "Mozilla/5.0" UA it always used — that combination was proven working
+// in production (NFL/Panthers ESPN content was loading fine). A prior
+// change switched it to a full desktop Chrome UA to try to help the RSS
+// sources below, and that appears to have backfired for ESPN specifically:
+// a full browser UA arriving from a cloud/datacenter IP (Vercel's) is a
+// well-known bot-detection heuristic for WAFs like Akamai (which fronts
+// ESPN) — real browsers don't browse from AWS/GCP ranges, so pairing a
+// convincing browser UA with a datacenter IP can read as MORE suspicious
+// than a generic one, not less. That change broke every ESPN source
+// (OSU, CFB, NFL, Panthers, general) at once, which is worse than the RSS
+// problem it was meant to fix. Only fetchText (the actual RSS hosts) gets
+// the fuller UA now — those sources were already failing either way, so
+// there's no working baseline there to regress.
 async function fetchJson(url, ms = 8000) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
   try {
-    const r = await fetch(url, { signal: c.signal, headers: { ...BROWSER_HEADERS, "Accept": "application/json" } });
+    const r = await fetch(url, { signal: c.signal, headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return await r.json();
   } finally {
@@ -105,7 +110,10 @@ async function fetchText(url, ms = 10000) {
   try {
     const r = await fetch(url, {
       signal: c.signal,
-      headers: { ...BROWSER_HEADERS, "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5" },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
+      },
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return await r.text();
