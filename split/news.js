@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v8"; // v8: 3-day recency cutoff
+  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v9"; // v9: swapped dead Wire/CatScratch RSS sources for Google News
   const NEWS_FILTER_KEY   = "theShopTopNewsFilter_v1";
   const NEWS_CACHE_TTL_MS = 7 * 60 * 1000;
   const NEWS_RECENT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
@@ -263,7 +263,6 @@
     // Panthers source (forced via panthersFeed) counts.
     if (
       t.includes("carolina panthers") || t.includes("bryce young") ||
-      it?.source === "Cat Scratch Reader" || it?.source === "Panthers Wire" ||
       it?.panthersFeed === true
     ) tags.push("panthers");
     if (
