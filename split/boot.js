@@ -959,6 +959,80 @@
     appId: "1:98648984848:web:c4e876c8acdb00d8ba2995"
   };
 
+  // ─── Core Firebase readiness gate ──────────────────────────────────
+  // Initializes the Firebase app (if needed), waits for auth state to
+  // hydrate, and signs in anonymously if no user exists yet. The name
+  // is a holdover from when this lived in the (now-removed) Shop tab's
+  // file — despite that, it was never shop-specific: it's the one gate
+  // the app's own login flow (checkCode, in shared.js) awaits before
+  // redeeming an invite code, and gp-data.js/logout.js depend on it too.
+  // Kept under this exact name since all of those already call it by it.
+  (function () {
+    let chatReady = false;
+    async function ensureFirebaseChatReady() {
+      if (chatReady) return;
+
+      if (!window.firebase || !firebase.initializeApp) {
+        throw new Error("Firebase SDK not loaded. Check index.html script tags.");
+      }
+      if (!window.FIREBASE_CONFIG) {
+        throw new Error("FIREBASE_CONFIG missing. Check split/boot.js loads first.");
+      }
+      if (!firebase.apps || !firebase.apps.length) {
+        firebase.initializeApp(window.FIREBASE_CONFIG);
+      }
+
+      const auth = firebase.auth();
+
+      // iOS/PWA stability: persist auth and wait for restoration before
+      // deciding there's no user, to reduce "null user" windows.
+      try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+      } catch (e) {
+        // If persistence isn't available (rare), proceed anyway.
+      }
+
+      const waitForAuthOnce = (timeoutMs = 1500) =>
+        new Promise((resolve) => {
+          let done = false;
+          const t = setTimeout(() => {
+            if (done) return;
+            done = true;
+            try { unsub && unsub(); } catch {}
+            resolve();
+          }, timeoutMs);
+
+          let unsub = null;
+          try {
+            unsub = auth.onAuthStateChanged(() => {
+              if (done) return;
+              done = true;
+              clearTimeout(t);
+              try { unsub && unsub(); } catch {}
+              resolve();
+            });
+          } catch {
+            clearTimeout(t);
+            resolve();
+          }
+        });
+
+      await waitForAuthOnce();
+
+      if (!auth.currentUser) {
+        await auth.signInAnonymously();
+        await waitForAuthOnce();
+      }
+
+      if (!auth.currentUser) {
+        throw new Error("Auth not ready (anonymous user missing).");
+      }
+
+      chatReady = true;
+    }
+    window.ensureFirebaseChatReady = ensureFirebaseChatReady;
+  })();
+
   // iOS/PWA safety: CSS.escape polyfill
   (function ensureCssEscape() {
     if (!window.CSS) window.CSS = {};
