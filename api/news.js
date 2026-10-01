@@ -46,6 +46,12 @@ export default async function handler(req, res) {
       ...(general.status === "fulfilled" ? general.value : []),
     ];
     if (!items.length) {
+      // A transient all-sources failure (e.g. ESPN rate-limiting a burst of
+      // simultaneous requests) must never get cached — the s-maxage/SWR
+      // header above would otherwise lock every visitor into seeing this
+      // same failure for up to 15 minutes, long after a retry would have
+      // succeeded.
+      res.setHeader("Cache-Control", "no-store");
       return res.status(502).json({ error: "All news sources failed" });
     }
 
@@ -56,9 +62,18 @@ export default async function handler(req, res) {
     const cutoff = Date.now() - RECENT_WINDOW_MS;
     const recent = items.filter((it) => !it.publishedTs || it.publishedTs >= cutoff);
 
+    if (!recent.length) {
+      // Same reasoning: don't let a "nothing in the last 3 days" moment —
+      // which should be rare but isn't impossible — get cached and replayed
+      // to every subsequent request for the next 15 minutes.
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(502).json({ error: "No news within the recency window" });
+    }
+
     return res.status(200).json({ items: recent });
   } catch (err) {
     console.error("[news proxy] error:", err.message);
+    res.setHeader("Cache-Control", "no-store");
     return res.status(500).json({ error: "News proxy error", message: err.message });
   }
 }
