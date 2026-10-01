@@ -1,0 +1,167 @@
+// api/news.js
+// Vercel serverless proxy for the Top News tab — merges ESPN's Ohio State
+// team news feed, general ESPN news, and the Eleven Warriors RSS feed
+// server-side. Fetching each of these happens machine-to-machine here, so
+// none of it is subject to browser CORS the way the old client-side
+// implementation was — that's what made the Eleven Warriors feed (the one
+// actual Buckeye-specific source) silently drop out whenever the public
+// CORS-proxy fallbacks it depended on (allorigins.win / rss2json.com) were
+// slow, rate-limited, or just down.
+//
+// Usage: GET /api/news
+
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=900");
+
+  try {
+    const [osu, ew, general] = await Promise.allSettled([
+      fetchOSU(),
+      fetchElevenWarriors(),
+      fetchGeneralESPN(),
+    ]);
+    const items = [
+      ...(osu.status === "fulfilled" ? osu.value : []),
+      ...(ew.status === "fulfilled" ? ew.value : []),
+      ...(general.status === "fulfilled" ? general.value : []),
+    ];
+    if (!items.length) {
+      return res.status(502).json({ error: "All news sources failed" });
+    }
+    return res.status(200).json({ items });
+  } catch (err) {
+    console.error("[news proxy] error:", err.message);
+    return res.status(500).json({ error: "News proxy error", message: err.message });
+  }
+}
+
+async function fetchJson(url, ms = 8000) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: c.signal, headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function fetchText(url, ms = 8000) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: c.signal, headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function pickImg(a) {
+  const c = [];
+  if (Array.isArray(a?.images)) a.images.forEach((im) => { if (im?.url) c.push(im.url); if (im?.href) c.push(im.href); });
+  [a?.image?.url, a?.image?.href, a?.thumbnail, a?.promoImage].forEach((u) => { if (u) c.push(u); });
+  return c.filter(Boolean).find((u) => u.startsWith("https://")) || c[0] || "";
+}
+
+function normEspnArticle(a, source) {
+  const ts = Date.parse(a?.published || a?.publishedAt || "");
+  return {
+    headline: String(a?.headline || a?.title || ""),
+    description: String(a?.description || a?.summary || ""),
+    source,
+    publishedIso: a?.published || "",
+    publishedTs: Number.isFinite(ts) ? ts : 0,
+    link: a?.links?.web?.href || a?.links?.[0]?.href || a?.url || "",
+    imageUrl: pickImg(a),
+  };
+}
+
+async function fetchOSU() {
+  for (const url of [
+    "https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=194&limit=20",
+    "https://site.api.espn.com/apis/v2/sports/football/college-football/news?team=194&limit=20&lang=en&region=us",
+  ]) {
+    try {
+      const data = await fetchJson(url);
+      const articles = Array.isArray(data?.articles) ? data.articles : [];
+      if (articles.length) {
+        return articles
+          .map((a) => ({ ...normEspnArticle(a, "ESPN · OSU"), osuFeed: true }))
+          .filter((x) => x.headline);
+      }
+    } catch {}
+  }
+  return [];
+}
+
+async function fetchGeneralESPN() {
+  for (const url of [
+    "https://site.api.espn.com/apis/v2/sports/news?limit=50",
+    "https://site.api.espn.com/apis/site/v2/sports/news?limit=50",
+    "https://site.api.espn.com/apis/v2/sports/news?limit=50&lang=en&region=us",
+  ]) {
+    try {
+      const data = await fetchJson(url);
+      const articles = Array.isArray(data?.articles) ? data.articles : [];
+      if (articles.length) {
+        return articles.map((a) => normEspnArticle(a, "ESPN")).filter((x) => x.headline);
+      }
+    } catch {}
+  }
+  return [];
+}
+
+// ---- Minimal RSS <item> extractor — no DOMParser in the Node runtime,
+// and this feed's shape is simple enough not to need a full XML parser. ----
+function matchTag(block, tag) {
+  const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  if (!m) return "";
+  return m[1].replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, "$1").trim();
+}
+function matchSelfClosingAttr(block, tag, attr) {
+  const m = block.match(new RegExp(`<${tag}[^>]*\\s${attr}=["']([^"']+)["'][^>]*/?>`, "i"));
+  return m ? m[1] : "";
+}
+function stripHtml(s) {
+  return String(s || "").replace(/<[^>]*>/g, "").trim();
+}
+
+function parseRss(xml, source) {
+  const items = [];
+  const blocks = String(xml || "").split(/<item[\s>]/i).slice(1);
+  for (const raw of blocks) {
+    const block = `<item ${raw.split(/<\/item>/i)[0]}</item>`;
+    const title = matchTag(block, "title");
+    if (!title) continue;
+    const link = matchTag(block, "link");
+    const desc = stripHtml(matchTag(block, "description"));
+    const pub = matchTag(block, "pubDate");
+    const ts = Date.parse(pub);
+    const img =
+      matchSelfClosingAttr(block, "enclosure", "url") ||
+      matchSelfClosingAttr(block, "media:content", "url") ||
+      matchSelfClosingAttr(block, "media:thumbnail", "url");
+    items.push({
+      headline: title,
+      description: desc,
+      source,
+      publishedIso: pub,
+      publishedTs: Number.isFinite(ts) ? ts : 0,
+      link: link || "",
+      imageUrl: img || "",
+    });
+  }
+  return items.slice(0, 20);
+}
+
+async function fetchElevenWarriors() {
+  try {
+    const xml = await fetchText("https://www.elevenwarriors.com/rss.xml");
+    const items = parseRss(xml, "Eleven Warriors").map((it) => ({ ...it, osuFeed: true }));
+    if (items.length) return items;
+  } catch {}
+  return [];
+}
