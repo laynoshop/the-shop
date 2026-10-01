@@ -48,18 +48,35 @@ export default async function handler(req, res) {
     if (!items.length) {
       return res.status(502).json({ error: "All news sources failed" });
     }
-    return res.status(200).json({ items });
+
+    // Nothing older than 3 days, for any source/filter. Items with no
+    // parseable date are kept rather than hidden — we can't confirm
+    // they're stale, and dropping them would just be guessing.
+    const RECENT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - RECENT_WINDOW_MS;
+    const recent = items.filter((it) => !it.publishedTs || it.publishedTs >= cutoff);
+
+    return res.status(200).json({ items: recent });
   } catch (err) {
     console.error("[news proxy] error:", err.message);
     return res.status(500).json({ error: "News proxy error", message: err.message });
   }
 }
 
+// A realistic browser UA/Accept pair — some of the RSS hosts below sit
+// behind a CDN/WAF (Fastly, Cloudflare) that treats a bare "Mozilla/5.0"
+// with no Accept header as a bot signal and blocks or empty-responds to
+// it, independent of CORS (which only ever applied to browser requests,
+// never to this server-to-server fetch).
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+};
+
 async function fetchJson(url, ms = 8000) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
   try {
-    const r = await fetch(url, { signal: c.signal, headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
+    const r = await fetch(url, { signal: c.signal, headers: { ...BROWSER_HEADERS, "Accept": "application/json" } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return await r.json();
   } finally {
@@ -67,16 +84,34 @@ async function fetchJson(url, ms = 8000) {
   }
 }
 
-async function fetchText(url, ms = 8000) {
+async function fetchText(url, ms = 10000) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
   try {
-    const r = await fetch(url, { signal: c.signal, headers: { "User-Agent": "Mozilla/5.0" } });
+    const r = await fetch(url, {
+      signal: c.signal,
+      headers: { ...BROWSER_HEADERS, "Accept": "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5" },
+    });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return await r.text();
   } finally {
     clearTimeout(t);
   }
+}
+
+// Tries each candidate RSS URL in order, returns the first one that
+// yields items. Used for sources where the exact feed path couldn't be
+// verified live from this environment, so a wrong guess just falls
+// through to the next candidate instead of silently returning nothing.
+async function fetchRssFromAny(urls, source, forcedFlags) {
+  for (const url of urls) {
+    try {
+      const xml = await fetchText(url);
+      const items = parseRss(xml, source).map((it) => ({ ...it, ...forcedFlags }));
+      if (items.length) return items;
+    } catch {}
+  }
+  return [];
 }
 
 function pickImg(a) {
@@ -163,42 +198,41 @@ async function fetchPanthersFeed() {
 // same "Wire" network as every other USA Today team site, so it exposes
 // RSS at the default WordPress /feed/ path.
 async function fetchBuckeyesWire() {
-  try {
-    const xml = await fetchText("https://buckeyeswire.usatoday.com/feed/");
-    const items = parseRss(xml, "Buckeyes Wire").map((it) => ({ ...it, osuFeed: true }));
-    if (items.length) return items;
-  } catch {}
-  return [];
+  return fetchRssFromAny(
+    ["https://buckeyeswire.usatoday.com/feed/", "https://buckeyeswire.usatoday.com/feed"],
+    "Buckeyes Wire",
+    { osuFeed: true }
+  );
 }
 
-// Best-effort second Panthers source — Cat Scratch Reader (SB Nation's
-// Carolina Panthers site) publishes RSS at the standard Vox Media/SB
-// Nation path. Unverified live from this dev environment (outbound
-// fetches to arbitrary domains are proxy-blocked here — see PR notes);
-// if SB Nation ever moves this path, it just silently contributes zero
-// items via the same Promise.allSettled every other source already
-// degrades through, so a wrong URL here can't break anything else.
+// Second Panthers source — Cat Scratch Reader (SB Nation's Carolina
+// Panthers site). The exact feed filename under /rss/ couldn't be
+// confirmed live from this environment, so both common Vox Media/Chorus
+// paths are tried in order.
 async function fetchPanthersBlog() {
-  try {
-    const xml = await fetchText("https://www.catscratchreader.com/rss/current.xml");
-    const items = parseRss(xml, "Cat Scratch Reader").map((it) => ({ ...it, panthersFeed: true }));
-    if (items.length) return items;
-  } catch {}
-  return [];
+  return fetchRssFromAny(
+    [
+      "https://www.catscratchreader.com/rss/index.xml",
+      "https://www.catscratchreader.com/rss/current.xml",
+    ],
+    "Cat Scratch Reader",
+    { panthersFeed: true }
+  );
 }
 
 // Third Panthers source — Panthers Wire, same USA Today "Wire" network
-// and standard WordPress /feed/ path as Buckeyes Wire above. Two
-// independent Panthers RSS sources (this plus Cat Scratch Reader) means
-// one bad/moved URL doesn't leave Panthers fans with only the ESPN team
-// feed.
+// and standard WordPress /feed/ path as Buckeyes Wire above. NOTE: the
+// real domain is "pantherswire.usatoday.com" (no dot before "wire") —
+// unlike Buckeyes Wire, this one does NOT follow the "{team}.wire."
+// subdomain pattern. Three independent Panthers sources (this, Cat
+// Scratch Reader, and the ESPN team feed) means one bad/moved URL
+// doesn't leave Panthers fans starved.
 async function fetchPanthersWire() {
-  try {
-    const xml = await fetchText("https://panthers.wire.usatoday.com/feed/");
-    const items = parseRss(xml, "Panthers Wire").map((it) => ({ ...it, panthersFeed: true, nflFeed: true }));
-    if (items.length) return items;
-  } catch {}
-  return [];
+  return fetchRssFromAny(
+    ["https://pantherswire.usatoday.com/feed/", "https://pantherswire.usatoday.com/feed"],
+    "Panthers Wire",
+    { panthersFeed: true, nflFeed: true }
+  );
 }
 
 async function fetchGeneralESPN() {
@@ -262,10 +296,5 @@ function parseRss(xml, source) {
 }
 
 async function fetchElevenWarriors() {
-  try {
-    const xml = await fetchText("https://www.elevenwarriors.com/rss.xml");
-    const items = parseRss(xml, "Eleven Warriors").map((it) => ({ ...it, osuFeed: true }));
-    if (items.length) return items;
-  } catch {}
-  return [];
+  return fetchRssFromAny(["https://www.elevenwarriors.com/rss.xml"], "Eleven Warriors", { osuFeed: true });
 }
