@@ -140,7 +140,6 @@
   try { if (typeof renderPicks === "function") window.renderPicks = renderPicks; } catch {}
   try { if (typeof renderBeatTTUN === "function") window.renderBeatTTUN = renderBeatTTUN; } catch {}
   try { if (typeof renderTopNews === "function") window.renderTopNews = renderTopNews; } catch {}
-  try { if (typeof renderShop === "function") window.renderShop = renderShop; } catch {}
   try { if (typeof logout === "function") window.logout = logout; } catch {}
 
   // Stamp that split app loaded

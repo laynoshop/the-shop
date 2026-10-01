@@ -143,29 +143,14 @@ window.replaceMichiganText = replaceMichiganText;
     const isAdmin = role === "admin";
 
     // Admin-only entry doors
-    const shopDoor = document.querySelector('.doorBtn[data-go="shop"]');
-    if (shopDoor) shopDoor.style.display = isAdmin ? "" : "none";
-
     const piBtn = document.getElementById("piScoreboardBtn");
     if (piBtn) piBtn.style.display = isAdmin ? "" : "none";
-
-    // =========================
-    // STOCKS: admin only
-    // =========================
-    const stocksDoor = document.querySelector('.doorBtn[data-go="stocks"]');
-    if (stocksDoor) stocksDoor.style.display = isAdmin ? "" : "none";
 
     // =========================
     // PUTT PUTT: admin only
     // =========================
     const golfDoor = document.querySelector('.doorBtn[data-go="golf"]');
     if (golfDoor) golfDoor.style.display = isAdmin ? "" : "none";
-
-    // =========================
-    // DISNEY: admin only (temporary, until the family pin is set up)
-    // =========================
-    const disneyDoor = document.querySelector('.doorBtn[data-go="disney"]');
-    if (disneyDoor) disneyDoor.style.display = isAdmin ? "" : "none";
 
     updateRivalryBanner();
 
@@ -214,21 +199,10 @@ window.replaceMichiganText = replaceMichiganText;
       { key: "picks",  label: "Pick &#8217;em" },
       { key: "beat",   label: "Beat<br/>TTUN" },
       { key: "news",   label: "Top<br/>News" },
-      // Putt Putt: admin only \u2014 kept in its original spot in the order
-      // rather than tacked on with Stocks/Shop below.
+      // Putt Putt: admin only
       ...(role === "admin" ? [{ key: "golf", label: "&#x26F3;<br/>Putt" }] : []),
       { key: "fun",    label: "\uD83E\uDD2A<br/>Random" },
     ];
-
-    // =========================
-    // STOCKS + SHOP: admin only
-    // =========================
-    if (role === "admin") {
-      baseTabs.push({ key: "stocks", label: "&#x1F4C8;<br/>Stocks" });
-      baseTabs.push({ key: "shop",   label: "Shop" });
-      // Disney: admin only (temporary, until the family pin is set up)
-      baseTabs.push({ key: "disney", label: "&#x1F3F0;<br/>Disney" });
-    }
 
     tabs.innerHTML = baseTabs
       .map(t => `<button type="button" data-tab="${t.key}">${t.label}</button>`)
@@ -278,11 +252,6 @@ window.replaceMichiganText = replaceMichiganText;
   // Navigation / tab router
   // ------------------------------------------------------------
   function showTab(tab) {
-    const role = getRole();
-
-    // Block admin-only tabs for guests
-    if ((tab === "shop" || tab === "stocks" || tab === "disney") && role !== "admin") tab = "scores";
-
     currentTab = tab;
     window.__activeTab = tab;
 
@@ -306,17 +275,8 @@ window.replaceMichiganText = replaceMichiganText;
     else if (tab === "picks")      safe("renderPicks", "light", true);
     else if (tab === "beat")       safe("renderBeatTTUN");
     else if (tab === "news")       safe("renderTopNews", true);
-    else if (tab === "shop")       safe("renderShop");
     else if (tab === "golf")       safe("renderGolf");
     else if (tab === "fun")        safe("renderFun");
-    // =========================
-    // STOCKS TAB ROUTE
-    // =========================
-    else if (tab === "stocks")     safe("renderStocks");
-    // =========================
-    // DISNEY TAB ROUTE (admin only, for now)
-    // =========================
-    else if (tab === "disney")     safe("renderDisney");
     else safe("loadScores", true);
 
     updateRivalryBanner();
