@@ -18,7 +18,6 @@
 
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="stocks/stocks-styles.css" />
   <link rel="stylesheet" href="split/golf-map-styles.css" />
 </head>
 
@@ -105,12 +104,6 @@
         <button class="doorBtn" type="button" data-go="news">Top News</button>
         <button class="doorBtn adminOnly" type="button" data-go="golf" style="display:none;">&#x26F3; Putt Putt</button>
         <button class="doorBtn" type="button" data-go="fun">🤪 Random</button>
-        <!-- ========================= -->
-        <!-- STOCKS ENTRY DOOR        -->
-        <!-- ========================= -->
-        <button class="doorBtn adminOnly" type="button" data-go="stocks" style="display:none;">&#x1F4C8; Stocks</button>
-        <button class="doorBtn adminOnly" type="button" data-go="shop" style="display:none;">Shop</button>
-        <button class="doorBtn adminOnly" type="button" data-go="disney" style="display:none;">&#x1F3F0; Disney</button>
         <button class="doorBtn adminOnly" type="button" id="piScoreboardBtn" style="display:none;">&#x1F4FA; Pi Scoreboard</button>
       </div>
     </div>
@@ -162,7 +155,6 @@
 
   <script src="split/news.js" defer onerror="__splitFail('split/news.js')"></script>
   <script src="split/beat.js" defer onerror="__splitFail('split/beat.js')"></script>
-  <script src="split/shop.js" defer onerror="__splitFail('split/shop.js')"></script>
   <script src="split/logout.js" defer onerror="__splitFail('split/logout.js')"></script>
 
   <!-- group picks: sub-modules load first, orchestrator last -->
@@ -178,15 +170,8 @@
   <script src="split/golf.js" defer onerror="__splitFail('split/golf.js')"></script>
   <script src="split/golf-map.js" defer onerror="__splitFail('split/golf-map.js')"></script>
   <script src="split/fun.js" defer onerror="__splitFail('split/fun.js')"></script>
-  <script src="split/disney.js" defer onerror="__splitFail('split/disney.js')"></script>
 
   <script src="split/app.js" defer onerror="__splitFail('split/app.js')"></script>
-
-  <!-- =========================
-       STOCKS MODULE
-       Placeholder: WMT stock chart + XRP crypto chart, pending redesign.
-       ========================= -->
-  <script src="stocks/stocks-render.js" defer onerror="__splitFail('stocks/stocks-render.js')"></script>
 
   <!-- =========================
        READY GATE (wait for checkCode)
