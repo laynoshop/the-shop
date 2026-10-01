@@ -329,15 +329,33 @@
     const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
     try {
       const r = await fetch(url, { cache: "no-store", signal: c.signal });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return await r.json();
+      // Read the body even on a non-2xx response — /api/news includes a
+      // `debug` breakdown in its error payloads specifically so a failure
+      // still carries useful diagnostics instead of being thrown away here.
+      let body = null;
+      try { body = await r.json(); } catch {}
+      if (!r.ok && !body) throw new Error(`HTTP ${r.status}`);
+      return body;
     } finally { clearTimeout(t); }
+  }
+
+  // Logs the per-source breakdown /api/news returns on every fetch (success
+  // or failure) so a dead source can be diagnosed from the browser console
+  // instead of guessing — open the console, reload/refresh Top News, and
+  // copy the block that starts with "[Top News debug]".
+  function logNewsDebug(data) {
+    if (!data || !data.debug) return;
+    try {
+      console.log("%c[Top News debug] copy everything below this line:", "color:#ffd76a;font-weight:bold;font-size:13px;");
+      console.log(JSON.stringify(data.debug, null, 2));
+    } catch {}
   }
 
   async function fetchTopNewsItems() {
     const data = await fetchJsonWithTimeout("/api/news");
+    logNewsDebug(data);
     const raw = Array.isArray(data?.items) ? data.items : [];
-    if (!raw.length) throw new Error("All news sources failed");
+    if (!raw.length) throw new Error(data?.error || "All news sources failed");
 
     const sanitized = raw.map(it => ({
       ...it,

@@ -12,39 +12,60 @@
 //
 // Usage: GET /api/news
 
+// Order matters here, and must match the Promise.allSettled array in
+// handler() below: the client dedupes by link/headline and keeps the
+// FIRST occurrence of each story, so team-specific, correctly-flagged
+// sources are listed before the broader feeds (league-wide CFB/NFL,
+// general cross-sport ESPN) that might carry the same story.
+const SOURCE_NAMES = [
+  "OSU (ESPN)",
+  "Buckeyes Wire (RSS)",
+  "Panthers (ESPN)",
+  "Panthers Wire (RSS)",
+  "Eleven Warriors (RSS)",
+  "Cat Scratch Reader (RSS)",
+  "CFB (ESPN)",
+  "NFL (ESPN)",
+  "General (ESPN)",
+];
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=900");
 
   try {
-    const [osu, buckeyesWire, panthersTeam, panthersWire, ew, panthersBlog, cfb, nfl, general] =
-      await Promise.allSettled([
-        fetchOSU(),
-        fetchBuckeyesWire(),
-        fetchPanthersFeed(),
-        fetchPanthersWire(),
-        fetchElevenWarriors(),
-        fetchPanthersBlog(),
-        fetchCFBFeed(),
-        fetchNFLFeed(),
-        fetchGeneralESPN(),
-      ]);
-    // Order matters: the client dedupes by link/headline and keeps the
-    // FIRST occurrence of each story. Team-specific, correctly-flagged
-    // sources go first so a story that's also picked up by a broader feed
-    // (league-wide CFB/NFL, general cross-sport ESPN) keeps its specific
-    // source/tags instead of losing them to a generic duplicate.
-    const items = [
-      ...(osu.status === "fulfilled" ? osu.value : []),
-      ...(buckeyesWire.status === "fulfilled" ? buckeyesWire.value : []),
-      ...(panthersTeam.status === "fulfilled" ? panthersTeam.value : []),
-      ...(panthersWire.status === "fulfilled" ? panthersWire.value : []),
-      ...(ew.status === "fulfilled" ? ew.value : []),
-      ...(panthersBlog.status === "fulfilled" ? panthersBlog.value : []),
-      ...(cfb.status === "fulfilled" ? cfb.value : []),
-      ...(nfl.status === "fulfilled" ? nfl.value : []),
-      ...(general.status === "fulfilled" ? general.value : []),
-    ];
+    const results = await Promise.allSettled([
+      fetchOSU(),
+      fetchBuckeyesWire(),
+      fetchPanthersFeed(),
+      fetchPanthersWire(),
+      fetchElevenWarriors(),
+      fetchPanthersBlog(),
+      fetchCFBFeed(),
+      fetchNFLFeed(),
+      fetchGeneralESPN(),
+    ]);
+
+    // Every fetch* function below catches its own errors internally and
+    // resolves with { items, attempts } rather than rejecting, so this
+    // mainly guards against a genuinely unexpected throw. `sources` is a
+    // per-source breakdown (item count, and either the URLs that worked
+    // or the error each attempted URL failed with) returned to the client
+    // specifically so a stuck source can be diagnosed from the browser
+    // console instead of guessing blind.
+    const sources = {};
+    const items = [];
+    results.forEach((r, i) => {
+      const name = SOURCE_NAMES[i];
+      if (r.status === "fulfilled") {
+        const { items: its, attempts } = r.value || { items: [], attempts: [] };
+        sources[name] = { itemCount: its.length, attempts };
+        items.push(...its);
+      } else {
+        sources[name] = { itemCount: 0, error: String(r.reason?.message || r.reason) };
+      }
+    });
+
     if (!items.length) {
       // A transient all-sources failure (e.g. ESPN rate-limiting a burst of
       // simultaneous requests) must never get cached — the s-maxage/SWR
@@ -52,7 +73,7 @@ export default async function handler(req, res) {
       // same failure for up to 15 minutes, long after a retry would have
       // succeeded.
       res.setHeader("Cache-Control", "no-store");
-      return res.status(502).json({ error: "All news sources failed" });
+      return res.status(502).json({ error: "All news sources failed", debug: { sources } });
     }
 
     // Nothing older than 3 days, for any source/filter. Items with no
@@ -67,10 +88,16 @@ export default async function handler(req, res) {
       // which should be rare but isn't impossible — get cached and replayed
       // to every subsequent request for the next 15 minutes.
       res.setHeader("Cache-Control", "no-store");
-      return res.status(502).json({ error: "No news within the recency window" });
+      return res.status(502).json({
+        error: "No news within the recency window",
+        debug: { sources, totalBeforeRecency: items.length },
+      });
     }
 
-    return res.status(200).json({ items: recent });
+    return res.status(200).json({
+      items: recent,
+      debug: { sources, totalBeforeRecency: items.length, totalAfterRecency: recent.length },
+    });
   } catch (err) {
     console.error("[news proxy] error:", err.message);
     res.setHeader("Cache-Control", "no-store");
@@ -126,15 +153,23 @@ async function fetchText(url, ms = 10000) {
 // yields items. Used for sources where the exact feed path couldn't be
 // verified live from this environment, so a wrong guess just falls
 // through to the next candidate instead of silently returning nothing.
+// Returns { items, attempts } — attempts records, per URL tried, whether
+// the fetch itself failed (bad host/blocked/timeout) vs. succeeded but
+// parsed zero <item> blocks (wrong path/shape), which are very different
+// problems to debug.
 async function fetchRssFromAny(urls, source, forcedFlags) {
+  const attempts = [];
   for (const url of urls) {
     try {
       const xml = await fetchText(url);
       const items = parseRss(xml, source).map((it) => ({ ...it, ...forcedFlags }));
-      if (items.length) return items;
-    } catch {}
+      attempts.push({ url, ok: true, xmlLength: xml.length, parsedCount: items.length });
+      if (items.length) return { items, attempts };
+    } catch (err) {
+      attempts.push({ url, ok: false, error: String(err?.message || err) });
+    }
   }
-  return [];
+  return { items: [], attempts };
 }
 
 function pickImg(a) {
@@ -158,62 +193,77 @@ function normEspnArticle(a, source) {
 }
 
 async function fetchOSU() {
-  for (const url of [
+  const urls = [
     "https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=194&limit=40",
     "https://site.api.espn.com/apis/v2/sports/football/college-football/news?team=194&limit=40&lang=en&region=us",
-  ]) {
+  ];
+  const attempts = [];
+  for (const url of urls) {
     try {
       const data = await fetchJson(url);
       const articles = Array.isArray(data?.articles) ? data.articles : [];
+      attempts.push({ url, ok: true, articleCount: articles.length });
       if (articles.length) {
-        return articles
+        const items = articles
           .map((a) => ({ ...normEspnArticle(a, "ESPN · OSU"), osuFeed: true }))
           .filter((x) => x.headline);
+        return { items, attempts };
       }
-    } catch {}
+    } catch (err) {
+      attempts.push({ url, ok: false, error: String(err?.message || err) });
+    }
   }
-  return [];
+  return { items: [], attempts };
 }
 
 // General (non-team-scoped) college-football headlines, so the "CFB"
 // filter has a real pool of its own instead of relying on CFB stories
 // coincidentally turning up in the generic cross-sport feed.
 async function fetchCFBFeed() {
+  const url = "https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=40";
   try {
-    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=40");
+    const data = await fetchJson(url);
     const articles = Array.isArray(data?.articles) ? data.articles : [];
-    return articles
+    const items = articles
       .map((a) => ({ ...normEspnArticle(a, "ESPN · CFB"), cfbFeed: true }))
       .filter((x) => x.headline);
-  } catch {}
-  return [];
+    return { items, attempts: [{ url, ok: true, articleCount: articles.length }] };
+  } catch (err) {
+    return { items: [], attempts: [{ url, ok: false, error: String(err?.message || err) }] };
+  }
 }
 
 // League-wide NFL headlines — not team-scoped, so the "NFL" filter
 // always has something reliable instead of depending on whatever
 // happens to be in the broad cross-sport general feed that day.
 async function fetchNFLFeed() {
+  const url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=40";
   try {
-    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=40");
+    const data = await fetchJson(url);
     const articles = Array.isArray(data?.articles) ? data.articles : [];
-    return articles
+    const items = articles
       .map((a) => ({ ...normEspnArticle(a, "ESPN · NFL"), nflFeed: true }))
       .filter((x) => x.headline);
-  } catch {}
-  return [];
+    return { items, attempts: [{ url, ok: true, articleCount: articles.length }] };
+  } catch (err) {
+    return { items: [], attempts: [{ url, ok: false, error: String(err?.message || err) }] };
+  }
 }
 
 // ESPN's Carolina Panthers team feed — team id 29, same pattern as the
 // Ohio State team feed above.
 async function fetchPanthersFeed() {
+  const url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=29&limit=40";
   try {
-    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=29&limit=40");
+    const data = await fetchJson(url);
     const articles = Array.isArray(data?.articles) ? data.articles : [];
-    return articles
+    const items = articles
       .map((a) => ({ ...normEspnArticle(a, "ESPN · Panthers"), nflFeed: true, panthersFeed: true }))
       .filter((x) => x.headline);
-  } catch {}
-  return [];
+    return { items, attempts: [{ url, ok: true, articleCount: articles.length }] };
+  } catch (err) {
+    return { items: [], attempts: [{ url, ok: false, error: String(err?.message || err) }] };
+  }
 }
 
 // Second Buckeyes-specific source — Buckeyes Wire (USA Today Sports
@@ -259,20 +309,26 @@ async function fetchPanthersWire() {
 }
 
 async function fetchGeneralESPN() {
-  for (const url of [
+  const urls = [
     "https://site.api.espn.com/apis/v2/sports/news?limit=50",
     "https://site.api.espn.com/apis/site/v2/sports/news?limit=50",
     "https://site.api.espn.com/apis/v2/sports/news?limit=50&lang=en&region=us",
-  ]) {
+  ];
+  const attempts = [];
+  for (const url of urls) {
     try {
       const data = await fetchJson(url);
       const articles = Array.isArray(data?.articles) ? data.articles : [];
+      attempts.push({ url, ok: true, articleCount: articles.length });
       if (articles.length) {
-        return articles.map((a) => normEspnArticle(a, "ESPN")).filter((x) => x.headline);
+        const items = articles.map((a) => normEspnArticle(a, "ESPN")).filter((x) => x.headline);
+        return { items, attempts };
       }
-    } catch {}
+    } catch (err) {
+      attempts.push({ url, ok: false, error: String(err?.message || err) });
+    }
   }
-  return [];
+  return { items: [], attempts };
 }
 
 // ---- Minimal RSS <item> extractor — no DOMParser in the Node runtime,
