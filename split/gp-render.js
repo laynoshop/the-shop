@@ -1594,22 +1594,6 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 /* ══════════════════════════════════════════════
    VIEW TOGGLE (This Week / Season)
    ══════════════════════════════════════════════ */
-.gpViewToggle {
-  display: flex; gap: 4px; padding: 3px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 999px;
-}
-.gpViewToggleBtn {
-  flex: 1; text-align: center; padding: 8px 12px;
-  border-radius: 999px; border: none; background: none;
-  color: rgba(255,255,255,0.5); font-size: 13px; font-weight: 800;
-  cursor: pointer; -webkit-tap-highlight-color: transparent;
-}
-.gpViewToggleBtn.gpViewToggleActive {
-  background: rgba(255,255,255,0.12); color: #fff;
-}
-
 /* H2H's 5-tab bar — a fixed 5-column grid (bottom-nav style) so every
    tab always fits on screen with no horizontal scrolling, regardless
    of viewport width. */
@@ -1630,6 +1614,9 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   z-index: 90;
   box-shadow: 0 8px 20px rgba(0,0,0,0.35);
 }
+/* Points format's This Week/Season toggle — same bar, just 2 columns
+   instead of 5, for visual consistency with the H2H tab bar. */
+.gpH2HTabBar.gpViewToggle2Col { grid-template-columns: repeat(2, 1fr); }
 .gpH2HTabBtn {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 6px; padding: 8px 2px 7px;
@@ -4238,13 +4225,21 @@ ${otherMatchupsHTML}`;
   // ─── View toggle (This Week / Season) — points-format leagues only.
   // H2H leagues use gpBuildH2HTabBarHTML instead (see below); this
   // function's own behavior/callers are unchanged. ────────────────────
+  // Same bar as the H2H tab bar below, width-wise and style-wise — just
+  // 2 buttons for now instead of 5. Easy to grow: add entries here the
+  // same way GP_H2H_TABS does, and the grid/sizing already adapts.
+  const GP_VIEW_TOGGLE_TABS = [
+    { id: "week",   label: "This Week", icon: "🗓️", action: "viewWeek"   },
+    { id: "season", label: "Season",    icon: "🏆", action: "viewSeason" },
+  ];
   function gpBuildViewToggleHTML(mode) {
     const m = mode === "season" ? "season" : "week";
-    return `
-<div class="gpViewToggle">
-  <button type="button" class="gpViewToggleBtn${m === "week" ? " gpViewToggleActive" : ""}" data-gpaction="viewWeek">This Week</button>
-  <button type="button" class="gpViewToggleBtn${m === "season" ? " gpViewToggleActive" : ""}" data-gpaction="viewSeason">Season</button>
-</div>`;
+    const btns = GP_VIEW_TOGGLE_TABS.map(t => `
+  <button type="button" class="gpH2HTabBtn${t.id === m ? " gpH2HTabBtnActive" : ""}" data-gpaction="${t.action}">
+    <span class="gpH2HTabIcon">${t.icon}</span>
+    <span class="gpH2HTabLabel">${esc(t.label)}</span>
+  </button>`).join("");
+    return `<div class="gpH2HTabBar gpViewToggle2Col">${btns}</div>`;
   }
 
   // ─── H2H tab bar — replaces the This Week/Season toggle above for
