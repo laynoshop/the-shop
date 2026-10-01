@@ -292,6 +292,11 @@ async function fetchGoogleNewsRss(query, source, forcedFlags) {
     const items = parseRss(xml, source).map((it) => ({
       ...it,
       headline: stripGoogleNewsOutletSuffix(it.headline),
+      // Google News' <description> isn't a summary of this one story — it's
+      // a bullet list of "other coverage" links for the same topic from
+      // different outlets, which reads as a garbled run-on even decoded.
+      // Blank it so the card just shows headline + source + time instead.
+      description: "",
       ...forcedFlags,
     }));
     return { items, attempts: [{ url, ok: true, xmlLength: xml.length, parsedCount: items.length }] };
@@ -319,8 +324,23 @@ function matchSelfClosingAttr(block, tag, attr) {
   const m = block.match(new RegExp(`<${tag}[^>]*\\s${attr}=["']([^"']+)["'][^>]*/?>`, "i"));
   return m ? m[1] : "";
 }
+// Some feeds (Google News among them) double-encode their <description>:
+// the CDATA content is itself HTML-escaped text (literal "&lt;a href..."
+// rather than a real "<a href...>" tag), so a plain tag-stripping regex
+// never matches anything and the escaped markup shows up as visible text.
+// Decoding entities first turns it back into real tags that stripHtml
+// below can then actually remove.
+function decodeEntities(s) {
+  return String(s || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
 function stripHtml(s) {
-  return String(s || "").replace(/<[^>]*>/g, "").trim();
+  return decodeEntities(s).replace(/<[^>]*>/g, "").trim();
 }
 
 function parseRss(xml, source) {
