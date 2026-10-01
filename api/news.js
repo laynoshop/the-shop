@@ -16,21 +16,26 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=900");
 
   try {
-    const [osu, ew, general, nfl, panthersTeam, panthersBlog] = await Promise.allSettled([
+    const [osu, panthersTeam, ew, panthersBlog, nfl, general] = await Promise.allSettled([
       fetchOSU(),
-      fetchElevenWarriors(),
-      fetchGeneralESPN(),
-      fetchNFLFeed(),
       fetchPanthersFeed(),
+      fetchElevenWarriors(),
       fetchPanthersBlog(),
+      fetchNFLFeed(),
+      fetchGeneralESPN(),
     ]);
+    // Order matters: the client dedupes by link/headline and keeps the
+    // FIRST occurrence of each story. Team-specific, correctly-flagged
+    // sources go first so a story that's also picked up by a broader feed
+    // (league-wide NFL, general cross-sport ESPN) keeps its specific
+    // source/tags instead of losing them to a generic duplicate.
     const items = [
       ...(osu.status === "fulfilled" ? osu.value : []),
-      ...(ew.status === "fulfilled" ? ew.value : []),
-      ...(general.status === "fulfilled" ? general.value : []),
-      ...(nfl.status === "fulfilled" ? nfl.value : []),
       ...(panthersTeam.status === "fulfilled" ? panthersTeam.value : []),
+      ...(ew.status === "fulfilled" ? ew.value : []),
       ...(panthersBlog.status === "fulfilled" ? panthersBlog.value : []),
+      ...(nfl.status === "fulfilled" ? nfl.value : []),
+      ...(general.status === "fulfilled" ? general.value : []),
     ];
     if (!items.length) {
       return res.status(502).json({ error: "All news sources failed" });

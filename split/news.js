@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v5"; // v5: new /api/news source
+  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v6"; // v6: removed pre-filter cap, added NFL/Panthers sources
   const NEWS_FILTER_KEY   = "theShopTopNewsFilter_v1";
   const NEWS_CACHE_TTL_MS = 7 * 60 * 1000;
 
@@ -336,8 +336,13 @@
     }));
     const tagged  = sanitized.map(it => ({ ...it, tags: tagNewsItem(it) }));
     const deduped = dedupeNewsItems(tagged);
-    const sorted  = sortByNewest(deduped);
-    return sorted.slice(0, 30);
+    // No cap here — this is the full cross-source pool every filter draws
+    // from. Capping it before filtering (the old behavior) let high-volume
+    // generic sources (general ESPN, league-wide NFL) crowd out slower or
+    // narrower ones (Eleven Warriors, CFB, Panthers) entirely before a
+    // filter ever got a chance to run. renderNewsList caps the *filtered*
+    // result instead.
+    return sortByNewest(deduped);
   }
 
   // -----------------------------
