@@ -644,7 +644,24 @@
     const opts = { forceLeaguePicker: !!forceLeaguePicker };
 
     if (!loadingMode) {
-      await renderPicksInto(contentEl, opts);
+      // No blip for internal nav (tab switches, save, week paging,
+      // admin actions) — but still guarded by the same hard timeout the
+      // blip path uses below. Without this, a Firestore/ESPN call that
+      // hangs instead of rejecting (a stuck promise, not an error) left
+      // "Loading…" on screen forever — the only way out was manually
+      // hitting the header's refresh button, which goes through the
+      // "heavy" branch below and so was never affected by this gap.
+      let timedOut = false;
+      const renderTask = renderPicksInto(contentEl, opts).catch((err) => {
+        console.error("[GP] renderPicksInto failed:", err);
+        contentEl.innerHTML = gpBuildRetryScreenHTML("Something went wrong loading the picks page.");
+      });
+      const timeoutTask = new Promise((resolve) => setTimeout(resolve, GP_RENDER_TIMEOUT_MS))
+        .then(() => { timedOut = true; });
+      await Promise.race([renderTask, timeoutTask]);
+      if (timedOut) {
+        contentEl.innerHTML = gpBuildRetryScreenHTML("This is taking longer than expected.");
+      }
       gpScheduleInactivityCheck();
       return;
     }
