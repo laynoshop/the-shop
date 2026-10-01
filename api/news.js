@@ -1,32 +1,39 @@
 // api/news.js
 // Vercel serverless proxy for the Top News tab — merges ESPN's Ohio State
 // team feed, ESPN's Carolina Panthers team feed, ESPN's general
-// college-football feed, ESPN's league-wide NFL feed, general ESPN news,
-// and RSS from Eleven Warriors / Buckeyes Wire (Buckeyes) and Cat Scratch
-// Reader / Panthers Wire (Panthers), all server-side. Fetching each of
-// these happens machine-to-machine here, so none of it is subject to
-// browser CORS the way the old client-side implementation was — that's
-// what made the Eleven Warriors feed (an actual Buckeye-specific source)
-// silently drop out whenever the public CORS-proxy fallbacks it depended
-// on (allorigins.win / rss2json.com) were slow, rate-limited, or down.
+// college-football feed, ESPN's league-wide NFL feed, Eleven Warriors' RSS,
+// and Google News RSS searches scoped to each team, all server-side.
+// Fetching each of these happens machine-to-machine here, so none of it is
+// subject to browser CORS the way the old client-side implementation was.
+//
+// Debug history (api/news.js git log has the full story): Buckeyes Wire
+// and Panthers Wire (USA Today's "Wire" network) returned 404 on every
+// /feed/ path tried — their site isn't WordPress, and no working RSS path
+// could be found/verified for either. Cat Scratch Reader (SB Nation)
+// returned 200 with identical content on two different guessed /rss/
+// paths, but zero parseable <item> blocks — almost certainly a catch-all
+// page, not real RSS. All three are replaced here with Google News RSS
+// (news.google.com/rss/search), a stable, documented format that doesn't
+// depend on guessing a single site's internal feed path, searched for
+// each team by name. The general cross-sport ESPN feed is dropped too —
+// every URL variant tried 404'd, and it's redundant now that CFB/NFL have
+// their own dedicated feeds anyway.
 //
 // Usage: GET /api/news
 
 // Order matters here, and must match the Promise.allSettled array in
 // handler() below: the client dedupes by link/headline and keeps the
 // FIRST occurrence of each story, so team-specific, correctly-flagged
-// sources are listed before the broader feeds (league-wide CFB/NFL,
-// general cross-sport ESPN) that might carry the same story.
+// sources are listed before the broader feeds (league-wide CFB/NFL) that
+// might carry the same story.
 const SOURCE_NAMES = [
   "OSU (ESPN)",
-  "Buckeyes Wire (RSS)",
   "Panthers (ESPN)",
-  "Panthers Wire (RSS)",
   "Eleven Warriors (RSS)",
-  "Cat Scratch Reader (RSS)",
+  "Buckeyes (Google News)",
+  "Panthers (Google News)",
   "CFB (ESPN)",
   "NFL (ESPN)",
-  "General (ESPN)",
 ];
 
 export default async function handler(req, res) {
@@ -36,14 +43,12 @@ export default async function handler(req, res) {
   try {
     const results = await Promise.allSettled([
       fetchOSU(),
-      fetchBuckeyesWire(),
       fetchPanthersFeed(),
-      fetchPanthersWire(),
       fetchElevenWarriors(),
-      fetchPanthersBlog(),
+      fetchBuckeyesGoogleNews(),
+      fetchPanthersGoogleNews(),
       fetchCFBFeed(),
       fetchNFLFeed(),
-      fetchGeneralESPN(),
     ]);
 
     // Every fetch* function below catches its own errors internally and
@@ -266,69 +271,41 @@ async function fetchPanthersFeed() {
   }
 }
 
-// Second Buckeyes-specific source — Buckeyes Wire (USA Today Sports
-// Media Group's Ohio State site) is a standard WordPress site on the
-// same "Wire" network as every other USA Today team site, so it exposes
-// RSS at the default WordPress /feed/ path.
-async function fetchBuckeyesWire() {
-  return fetchRssFromAny(
-    ["https://buckeyeswire.usatoday.com/feed/", "https://buckeyeswire.usatoday.com/feed"],
-    "Buckeyes Wire",
-    { osuFeed: true }
-  );
+// Google News RSS always formats <title> as "Headline - Outlet Name" —
+// strip that trailing attribution so headlines render clean instead of
+// every single one ending in "- ESPN" / "- Yahoo Sports" / etc.
+function stripGoogleNewsOutletSuffix(title) {
+  const m = String(title || "").match(/^(.*\S)\s-\s[^-]{2,40}$/);
+  return m ? m[1] : title;
 }
 
-// Second Panthers source — Cat Scratch Reader (SB Nation's Carolina
-// Panthers site). The exact feed filename under /rss/ couldn't be
-// confirmed live from this environment, so both common Vox Media/Chorus
-// paths are tried in order.
-async function fetchPanthersBlog() {
-  return fetchRssFromAny(
-    [
-      "https://www.catscratchreader.com/rss/index.xml",
-      "https://www.catscratchreader.com/rss/current.xml",
-    ],
-    "Cat Scratch Reader",
-    { panthersFeed: true }
-  );
-}
-
-// Third Panthers source — Panthers Wire, same USA Today "Wire" network
-// and standard WordPress /feed/ path as Buckeyes Wire above. NOTE: the
-// real domain is "pantherswire.usatoday.com" (no dot before "wire") —
-// unlike Buckeyes Wire, this one does NOT follow the "{team}.wire."
-// subdomain pattern. Three independent Panthers sources (this, Cat
-// Scratch Reader, and the ESPN team feed) means one bad/moved URL
-// doesn't leave Panthers fans starved.
-async function fetchPanthersWire() {
-  return fetchRssFromAny(
-    ["https://pantherswire.usatoday.com/feed/", "https://pantherswire.usatoday.com/feed"],
-    "Panthers Wire",
-    { panthersFeed: true, nflFeed: true }
-  );
-}
-
-async function fetchGeneralESPN() {
-  const urls = [
-    "https://site.api.espn.com/apis/v2/sports/news?limit=50",
-    "https://site.api.espn.com/apis/site/v2/sports/news?limit=50",
-    "https://site.api.espn.com/apis/v2/sports/news?limit=50&lang=en&region=us",
-  ];
-  const attempts = [];
-  for (const url of urls) {
-    try {
-      const data = await fetchJson(url);
-      const articles = Array.isArray(data?.articles) ? data.articles : [];
-      attempts.push({ url, ok: true, articleCount: articles.length });
-      if (articles.length) {
-        const items = articles.map((a) => normEspnArticle(a, "ESPN")).filter((x) => x.headline);
-        return { items, attempts };
-      }
-    } catch (err) {
-      attempts.push({ url, ok: false, error: String(err?.message || err) });
-    }
+// Google News RSS search, scoped to a team by query — a documented,
+// stable format (news.google.com/rss/search?q=...) that pulls from many
+// outlets at once instead of depending on one site's own feed path. Used
+// as the non-ESPN source for both Buckeyes and Panthers after Buckeyes
+// Wire / Panthers Wire / Cat Scratch Reader all failed to yield a single
+// real item across every path tried (see the file header for specifics).
+async function fetchGoogleNewsRss(query, source, forcedFlags) {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+  try {
+    const xml = await fetchText(url);
+    const items = parseRss(xml, source).map((it) => ({
+      ...it,
+      headline: stripGoogleNewsOutletSuffix(it.headline),
+      ...forcedFlags,
+    }));
+    return { items, attempts: [{ url, ok: true, xmlLength: xml.length, parsedCount: items.length }] };
+  } catch (err) {
+    return { items: [], attempts: [{ url, ok: false, error: String(err?.message || err) }] };
   }
-  return { items: [], attempts };
+}
+
+async function fetchBuckeyesGoogleNews() {
+  return fetchGoogleNewsRss("Ohio State Buckeyes football", "Google News · Buckeyes", { osuFeed: true });
+}
+
+async function fetchPanthersGoogleNews() {
+  return fetchGoogleNewsRss("Carolina Panthers NFL", "Google News · Panthers", { panthersFeed: true, nflFeed: true });
 }
 
 // ---- Minimal RSS <item> extractor — no DOMParser in the Node runtime,
