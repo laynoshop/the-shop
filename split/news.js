@@ -75,6 +75,7 @@
   // -----------------------------
   const TAG_META = {
     buckeyes: { label: "Buckeyes",   icon: "🌰", bg: "linear-gradient(135deg, rgba(214,45,70,0.95), rgba(150,20,45,0.95))", border: "rgba(209,38,63,0.6)",  text: "#ffe3e3" },
+    panthers: { label: "Panthers",   icon: "🐾", bg: "linear-gradient(135deg, rgba(0,133,202,0.9), rgba(16,24,32,0.95))",  border: "rgba(0,133,202,0.55)", text: "#d6f0ff" },
     cfb:      { label: "College FB", icon: "🎓", bg: "linear-gradient(135deg, rgba(197,165,3,0.85), rgba(150,120,0,0.9))", border: "rgba(197,165,3,0.55)", text: "#ffe680" },
     nfl:      { label: "NFL",        icon: "🏈", bg: "linear-gradient(135deg, rgba(50,208,140,0.9), rgba(20,150,95,0.9))", border: "rgba(46,204,135,0.55)",text: "#e7fff3" },
     mlb:      { label: "MLB",        icon: "⚾", bg: "linear-gradient(135deg, rgba(40,90,210,0.9), rgba(20,50,140,0.9))",  border: "rgba(0,100,220,0.5)", text: "#dce9ff" },
@@ -82,8 +83,10 @@
     all:      { label: "News",       icon: "📰", bg: "rgba(255,255,255,0.10)", border: "rgba(255,255,255,0.22)", text: "#ffffff" }
   };
 
+  // Order matters — more specific tags (a dedicated team feed) win over
+  // more general ones (the sport-wide tag) for which badge shows.
   function getPrimaryTag(tags) {
-    for (const t of ["buckeyes", "cfb", "nfl", "mlb", "nhl"]) {
+    for (const t of ["buckeyes", "panthers", "cfb", "nfl", "mlb", "nhl"]) {
       if ((tags || []).includes(t)) return t;
     }
     return "all";
@@ -127,26 +130,37 @@
       }
       .newsRefreshBtn:active{background:rgba(255,255,255,0.16);transform:scale(0.96);}
 
-      .newsFilterGrid{
-        display:grid; grid-template-columns:repeat(3, 1fr);
-        gap:8px; margin-top:12px;
+      /* Sticky filter bar — same fixed-grid, icon-above-label, gold
+         active-state treatment as the H2H tab bar in Group Picks, docked
+         right below this page's own sticky header. --newsHeaderH is
+         measured from the real header height after each render (its
+         height isn't fixed — the subtitle line can wrap). */
+      .newsTabBar{
+        display:grid; grid-template-columns:repeat(5, 1fr);
+        gap:2px; padding:4px;
+        background:rgba(13,10,10,0.92);
+        backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+        border:1px solid rgba(255,255,255,0.08);
+        border-radius:16px;
+        position:sticky; top:var(--newsHeaderH, 92px); z-index:90;
+        box-shadow:0 8px 20px rgba(0,0,0,0.35);
+        margin-bottom:14px;
       }
-      .newsChip{
-        display:flex;align-items:center;justify-content:center;gap:6px;
-        padding:9px 6px;border-radius:12px;font-size:12.5px;font-weight:800;letter-spacing:0.2px;
-        border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);
-        color:rgba(255,255,255,0.6);cursor:pointer;white-space:nowrap;
-        transition:background 0.18s ease,color 0.18s ease,border-color 0.18s ease,transform 0.15s ease;
-        -webkit-tap-highlight-color:transparent;
+      .newsTabBtn{
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:6px;padding:8px 2px 7px;
+        border-radius:12px;border:none;background:none;
+        color:rgba(255,255,255,0.45);
+        cursor:pointer;-webkit-tap-highlight-color:transparent;
+        min-width:0;
       }
-      .newsChip:active{transform:scale(0.96);}
-      .newsChip.newsChipActive{color:#fff;font-weight:900;}
-      .newsChip[data-newsfilter="all"].newsChipActive      {background:rgba(255,255,255,0.16);border-color:rgba(255,255,255,0.35);}
-      .newsChip[data-newsfilter="buckeyes"].newsChipActive {background:linear-gradient(135deg, rgba(214,45,70,0.9), rgba(150,20,45,0.9));border-color:rgba(209,38,63,0.65);box-shadow:0 4px 14px rgba(187,0,0,0.3);}
-      .newsChip[data-newsfilter="cfb"].newsChipActive      {background:linear-gradient(135deg, rgba(197,165,3,0.8), rgba(150,120,0,0.85));border-color:rgba(197,165,3,0.55);}
-      .newsChip[data-newsfilter="nfl"].newsChipActive      {background:linear-gradient(135deg, rgba(50,208,140,0.85), rgba(20,150,95,0.85));border-color:rgba(46,204,135,0.55);}
-      .newsChip[data-newsfilter="mlb"].newsChipActive      {background:linear-gradient(135deg, rgba(40,90,210,0.85), rgba(20,50,140,0.85));border-color:rgba(0,100,220,0.5);}
-      .newsChip[data-newsfilter="nhl"].newsChipActive      {background:linear-gradient(135deg, rgba(40,150,220,0.85), rgba(10,100,180,0.85));border-color:rgba(0,104,200,0.5);}
+      .newsTabBtn.newsTabBtnActive{background:rgba(255,210,100,0.14);color:#ffd76a;}
+      .newsTabIcon{font-size:15px;line-height:1;}
+      .newsTabLabel{
+        font-size:10.5px;font-weight:800;letter-spacing:0.01em;
+        line-height:1.15;text-align:center;
+        overflow-wrap:break-word;word-break:break-word;
+      }
 
       @keyframes newsShimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
       .newsSkeleton{
@@ -227,8 +241,19 @@
       t.includes("eleven warriors") || (t.includes("columbus") && t.includes("football")) ||
       t.includes("osu ") || it?.source === "Eleven Warriors" || it?.osuFeed === true
     ) tags.push("buckeyes");
+    // Bare "panthers" is deliberately excluded — plenty of college teams
+    // (Pitt, Georgia State, FIU, ...) share that nickname. Only the full
+    // "Carolina Panthers" phrase, a current-roster name, or a dedicated
+    // Panthers source (forced via panthersFeed) counts.
+    if (
+      t.includes("carolina panthers") || t.includes("bryce young") ||
+      it?.source === "Cat Scratch Reader" || it?.panthersFeed === true
+    ) tags.push("panthers");
     if (t.includes("college football") || t.includes("cfb") || (t.includes("ncaa") && t.includes("football")) || t.includes("transfer portal") || t.includes("heisman") || t.includes("bowl")) tags.push("cfb");
-    if (t.includes("nfl") || t.includes("super bowl") || (t.includes("draft") && t.includes("nfl"))) tags.push("nfl");
+    if (
+      t.includes("nfl") || t.includes("super bowl") || (t.includes("draft") && t.includes("nfl")) ||
+      tags.includes("panthers") || it?.nflFeed === true
+    ) tags.push("nfl");
     if (t.includes("mlb") || t.includes("baseball") || t.includes("spring training")) tags.push("mlb");
     if (t.includes("nhl") || t.includes("hockey") || t.includes("stanley cup")) tags.push("nhl");
     tags.push("all");
@@ -254,20 +279,25 @@
     return out;
   }
 
+  // 5 filters, 1 row — same fixed-grid, no-scroll, icon-above-label
+  // treatment as the H2H tab bar in Group Picks.
+  const NEWS_FILTERS = [
+    { key: "all",      label: "All",      icon: "📰" },
+    { key: "buckeyes", label: "Buckeyes", icon: "🌰" },
+    { key: "cfb",      label: "CFB",      icon: "🎓" },
+    { key: "nfl",      label: "NFL",      icon: "🏈" },
+    { key: "panthers", label: "Panthers", icon: "🐾" },
+  ];
   function buildNewsFiltersRowHTML(activeKey) {
-    const filters = [
-      { key: "all",      label: "All",      icon: "📰" },
-      { key: "buckeyes", label: "Buckeyes", icon: "🌰" },
-      { key: "cfb",      label: "CFB",      icon: "🎓" },
-      { key: "nfl",      label: "NFL",      icon: "🏈" },
-      { key: "mlb",      label: "MLB",      icon: "⚾" },
-      { key: "nhl",      label: "NHL",      icon: "🏒" },
-    ];
-    const chips = filters.map(f => {
+    const chips = NEWS_FILTERS.map(f => {
       const on = f.key === activeKey;
-      return `<button class="newsChip${on ? " newsChipActive" : ""}" data-newsfilter="${f.key}">${f.icon} ${escapeHtml(f.label)}</button>`;
+      return `
+      <button type="button" class="newsTabBtn${on ? " newsTabBtnActive" : ""}" data-newsfilter="${f.key}">
+        <span class="newsTabIcon">${f.icon}</span>
+        <span class="newsTabLabel">${escapeHtml(f.label)}</span>
+      </button>`;
     }).join("");
-    return `<div class="newsFilterGrid">${chips}</div>`;
+    return `<div class="newsTabBar">${chips}</div>`;
   }
 
   // -----------------------------
@@ -336,9 +366,18 @@
           </div>
           <button class="newsRefreshBtn" type="button" data-newsaction="refresh" aria-label="Refresh">&#8635;</button>
         </div>
-        ${buildNewsFiltersRowHTML(currentNewsFilter)}
         ${cacheLine}
       </div>`;
+  }
+
+  // Measures the real header height so the sticky tab bar below it docks
+  // flush instead of relying on the CSS fallback guess (the header's
+  // height isn't fixed — the subtitle line can wrap).
+  function measureNewsHeaderHeight(content) {
+    requestAnimationFrame(() => {
+      const header = content.querySelector(".newsPageHeader");
+      if (header) content.style.setProperty("--newsHeaderH", `${header.offsetHeight}px`);
+    });
   }
 
   function renderNewsList(items, headerUpdatedLabel, cacheMetaLabel) {
@@ -346,7 +385,7 @@
     if (!content) return;
     injectNewsStyles();
 
-    const filtered = sortByNewest((items || []).filter(it => passesNewsFilter(it, currentNewsFilter)));
+    const filtered = sortByNewest((items || []).filter(it => passesNewsFilter(it, currentNewsFilter))).slice(0, 30);
 
     let heroHTML = "";
     const hero = filtered[0];
@@ -408,9 +447,12 @@
     content.innerHTML = `
       ${buildHeaderHTML(headerUpdatedLabel, cacheMetaLabel)}
       <div class="newsContainer">
+        ${buildNewsFiltersRowHTML(currentNewsFilter)}
         ${heroHTML}
         ${listHTML || (!heroHTML ? `<div class="newsNotice">No headlines found for this filter.</div>` : "")}
       </div>`;
+
+    measureNewsHeaderHeight(content);
 
     requestAnimationFrame(() => {
       const heroEl = content.querySelector(".newsHeroCard");
@@ -440,9 +482,12 @@
     content.innerHTML = `
       ${buildHeaderHTML(headerUpdated, "")}
       <div class="newsContainer">
+        ${buildNewsFiltersRowHTML(currentNewsFilter)}
         <div class="newsSkeleton" style="width:100%;height:230px;border-radius:20px;margin-bottom:16px;"></div>
         ${skCards}
       </div>`;
+
+    measureNewsHeaderHeight(content);
   }
 
   async function renderTopNews(showLoading) {

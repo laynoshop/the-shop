@@ -1,12 +1,13 @@
 // api/news.js
 // Vercel serverless proxy for the Top News tab — merges ESPN's Ohio State
-// team news feed, general ESPN news, and the Eleven Warriors RSS feed
-// server-side. Fetching each of these happens machine-to-machine here, so
-// none of it is subject to browser CORS the way the old client-side
-// implementation was — that's what made the Eleven Warriors feed (the one
-// actual Buckeye-specific source) silently drop out whenever the public
-// CORS-proxy fallbacks it depended on (allorigins.win / rss2json.com) were
-// slow, rate-limited, or just down.
+// team feed, general ESPN news, ESPN's league-wide NFL feed, ESPN's
+// Carolina Panthers team feed, Eleven Warriors' RSS, and (best-effort)
+// Cat Scratch Reader's Panthers RSS, all server-side. Fetching each of
+// these happens machine-to-machine here, so none of it is subject to
+// browser CORS the way the old client-side implementation was — that's
+// what made the Eleven Warriors feed (an actual Buckeye-specific source)
+// silently drop out whenever the public CORS-proxy fallbacks it depended
+// on (allorigins.win / rss2json.com) were slow, rate-limited, or down.
 //
 // Usage: GET /api/news
 
@@ -15,15 +16,21 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=900");
 
   try {
-    const [osu, ew, general] = await Promise.allSettled([
+    const [osu, ew, general, nfl, panthersTeam, panthersBlog] = await Promise.allSettled([
       fetchOSU(),
       fetchElevenWarriors(),
       fetchGeneralESPN(),
+      fetchNFLFeed(),
+      fetchPanthersFeed(),
+      fetchPanthersBlog(),
     ]);
     const items = [
       ...(osu.status === "fulfilled" ? osu.value : []),
       ...(ew.status === "fulfilled" ? ew.value : []),
       ...(general.status === "fulfilled" ? general.value : []),
+      ...(nfl.status === "fulfilled" ? nfl.value : []),
+      ...(panthersTeam.status === "fulfilled" ? panthersTeam.value : []),
+      ...(panthersBlog.status === "fulfilled" ? panthersBlog.value : []),
     ];
     if (!items.length) {
       return res.status(502).json({ error: "All news sources failed" });
@@ -94,6 +101,49 @@ async function fetchOSU() {
       }
     } catch {}
   }
+  return [];
+}
+
+// League-wide NFL headlines — not team-scoped, so the "NFL" filter
+// always has something reliable instead of depending on whatever
+// happens to be in the broad cross-sport general feed that day.
+async function fetchNFLFeed() {
+  try {
+    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=20");
+    const articles = Array.isArray(data?.articles) ? data.articles : [];
+    return articles
+      .map((a) => ({ ...normEspnArticle(a, "ESPN · NFL"), nflFeed: true }))
+      .filter((x) => x.headline);
+  } catch {}
+  return [];
+}
+
+// ESPN's Carolina Panthers team feed — team id 29, same pattern as the
+// Ohio State team feed above.
+async function fetchPanthersFeed() {
+  try {
+    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=29&limit=20");
+    const articles = Array.isArray(data?.articles) ? data.articles : [];
+    return articles
+      .map((a) => ({ ...normEspnArticle(a, "ESPN · Panthers"), nflFeed: true, panthersFeed: true }))
+      .filter((x) => x.headline);
+  } catch {}
+  return [];
+}
+
+// Best-effort second Panthers source — Cat Scratch Reader (SB Nation's
+// Carolina Panthers site) publishes RSS at the standard Vox Media/SB
+// Nation path. Unverified live from this dev environment (outbound
+// fetches to arbitrary domains are proxy-blocked here — see PR notes);
+// if SB Nation ever moves this path, it just silently contributes zero
+// items via the same Promise.allSettled every other source already
+// degrades through, so a wrong URL here can't break anything else.
+async function fetchPanthersBlog() {
+  try {
+    const xml = await fetchText("https://www.catscratchreader.com/rss/current.xml");
+    const items = parseRss(xml, "Cat Scratch Reader").map((it) => ({ ...it, panthersFeed: true }));
+    if (items.length) return items;
+  } catch {}
   return [];
 }
 
