@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v6"; // v6: removed pre-filter cap, added NFL/Panthers sources
+  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v7"; // v7: dropped "All" tab, added CFB/Buckeyes Wire/Panthers Wire sources
   const NEWS_FILTER_KEY   = "theShopTopNewsFilter_v1";
   const NEWS_CACHE_TTL_MS = 7 * 60 * 1000;
 
@@ -136,7 +136,7 @@
          measured from the real header height after each render (its
          height isn't fixed — the subtitle line can wrap). */
       .newsTabBar{
-        display:grid; grid-template-columns:repeat(5, 1fr);
+        display:grid; grid-template-columns:repeat(4, 1fr);
         gap:2px; padding:4px;
         background:rgba(13,10,10,0.92);
         backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
@@ -229,8 +229,23 @@
   // -----------------------------
   // Filter helpers
   // -----------------------------
-  function loadNewsFilter() { return safeGetLS(NEWS_FILTER_KEY).trim() || "all"; }
-  function saveNewsFilter(v) { safeSetLS(NEWS_FILTER_KEY, String(v || "all")); }
+  // 4 filters, 1 row — same fixed-grid, no-scroll, icon-above-label
+  // treatment as the H2H tab bar in Group Picks. No "All" tab — only
+  // these specific areas matter, so anything that doesn't match one of
+  // them just never surfaces.
+  const NEWS_FILTERS = [
+    { key: "buckeyes", label: "Buckeyes", icon: "🌰" },
+    { key: "cfb",      label: "CFB",      icon: "🎓" },
+    { key: "nfl",      label: "NFL",      icon: "🏈" },
+    { key: "panthers", label: "Panthers", icon: "🐾" },
+  ];
+  const NEWS_FILTER_KEYS = NEWS_FILTERS.map(f => f.key);
+
+  function loadNewsFilter() {
+    const saved = safeGetLS(NEWS_FILTER_KEY).trim();
+    return NEWS_FILTER_KEYS.includes(saved) ? saved : NEWS_FILTER_KEYS[0];
+  }
+  function saveNewsFilter(v) { safeSetLS(NEWS_FILTER_KEY, String(v || NEWS_FILTER_KEYS[0])); }
   let currentNewsFilter = loadNewsFilter();
 
   function tagNewsItem(it) {
@@ -247,9 +262,13 @@
     // Panthers source (forced via panthersFeed) counts.
     if (
       t.includes("carolina panthers") || t.includes("bryce young") ||
-      it?.source === "Cat Scratch Reader" || it?.panthersFeed === true
+      it?.source === "Cat Scratch Reader" || it?.source === "Panthers Wire" ||
+      it?.panthersFeed === true
     ) tags.push("panthers");
-    if (t.includes("college football") || t.includes("cfb") || (t.includes("ncaa") && t.includes("football")) || t.includes("transfer portal") || t.includes("heisman") || t.includes("bowl")) tags.push("cfb");
+    if (
+      t.includes("college football") || t.includes("cfb") || (t.includes("ncaa") && t.includes("football")) ||
+      t.includes("transfer portal") || t.includes("heisman") || t.includes("bowl") || it?.cfbFeed === true
+    ) tags.push("cfb");
     if (
       t.includes("nfl") || t.includes("super bowl") || (t.includes("draft") && t.includes("nfl")) ||
       tags.includes("panthers") || it?.nflFeed === true
@@ -261,7 +280,6 @@
   }
 
   function passesNewsFilter(it, filterKey) {
-    if (!filterKey || filterKey === "all") return true;
     return (it?.tags || []).includes(filterKey);
   }
 
@@ -279,15 +297,6 @@
     return out;
   }
 
-  // 5 filters, 1 row — same fixed-grid, no-scroll, icon-above-label
-  // treatment as the H2H tab bar in Group Picks.
-  const NEWS_FILTERS = [
-    { key: "all",      label: "All",      icon: "📰" },
-    { key: "buckeyes", label: "Buckeyes", icon: "🌰" },
-    { key: "cfb",      label: "CFB",      icon: "🎓" },
-    { key: "nfl",      label: "NFL",      icon: "🏈" },
-    { key: "panthers", label: "Panthers", icon: "🐾" },
-  ];
   function buildNewsFiltersRowHTML(activeKey) {
     const chips = NEWS_FILTERS.map(f => {
       const on = f.key === activeKey;
@@ -367,7 +376,7 @@
         <div class="newsHeaderTop">
           <div>
             <h2 class="newsHeaderTitle">Top News</h2>
-            <div class="newsHeaderSub">ESPN &middot; Eleven Warriors &middot; ${escapeHtml(headerUpdatedLabel || "")}</div>
+            <div class="newsHeaderSub">ESPN &middot; team sources &middot; ${escapeHtml(headerUpdatedLabel || "")}</div>
           </div>
           <button class="newsRefreshBtn" type="button" data-newsaction="refresh" aria-label="Refresh">&#8635;</button>
         </div>
@@ -545,7 +554,7 @@
       if (!btn) return;
       const filterKey = btn.getAttribute("data-newsfilter");
       if (filterKey) {
-        currentNewsFilter = String(filterKey || "all");
+        currentNewsFilter = String(filterKey || NEWS_FILTER_KEYS[0]);
         saveNewsFilter(currentNewsFilter);
         const cached = loadNewsCache();
         const hu = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });

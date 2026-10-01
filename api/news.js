@@ -1,8 +1,9 @@
 // api/news.js
 // Vercel serverless proxy for the Top News tab — merges ESPN's Ohio State
-// team feed, general ESPN news, ESPN's league-wide NFL feed, ESPN's
-// Carolina Panthers team feed, Eleven Warriors' RSS, and (best-effort)
-// Cat Scratch Reader's Panthers RSS, all server-side. Fetching each of
+// team feed, ESPN's Carolina Panthers team feed, ESPN's general
+// college-football feed, ESPN's league-wide NFL feed, general ESPN news,
+// and RSS from Eleven Warriors / Buckeyes Wire (Buckeyes) and Cat Scratch
+// Reader / Panthers Wire (Panthers), all server-side. Fetching each of
 // these happens machine-to-machine here, so none of it is subject to
 // browser CORS the way the old client-side implementation was — that's
 // what made the Eleven Warriors feed (an actual Buckeye-specific source)
@@ -16,24 +17,31 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=180, stale-while-revalidate=900");
 
   try {
-    const [osu, panthersTeam, ew, panthersBlog, nfl, general] = await Promise.allSettled([
-      fetchOSU(),
-      fetchPanthersFeed(),
-      fetchElevenWarriors(),
-      fetchPanthersBlog(),
-      fetchNFLFeed(),
-      fetchGeneralESPN(),
-    ]);
+    const [osu, buckeyesWire, panthersTeam, panthersWire, ew, panthersBlog, cfb, nfl, general] =
+      await Promise.allSettled([
+        fetchOSU(),
+        fetchBuckeyesWire(),
+        fetchPanthersFeed(),
+        fetchPanthersWire(),
+        fetchElevenWarriors(),
+        fetchPanthersBlog(),
+        fetchCFBFeed(),
+        fetchNFLFeed(),
+        fetchGeneralESPN(),
+      ]);
     // Order matters: the client dedupes by link/headline and keeps the
     // FIRST occurrence of each story. Team-specific, correctly-flagged
     // sources go first so a story that's also picked up by a broader feed
-    // (league-wide NFL, general cross-sport ESPN) keeps its specific
+    // (league-wide CFB/NFL, general cross-sport ESPN) keeps its specific
     // source/tags instead of losing them to a generic duplicate.
     const items = [
       ...(osu.status === "fulfilled" ? osu.value : []),
+      ...(buckeyesWire.status === "fulfilled" ? buckeyesWire.value : []),
       ...(panthersTeam.status === "fulfilled" ? panthersTeam.value : []),
+      ...(panthersWire.status === "fulfilled" ? panthersWire.value : []),
       ...(ew.status === "fulfilled" ? ew.value : []),
       ...(panthersBlog.status === "fulfilled" ? panthersBlog.value : []),
+      ...(cfb.status === "fulfilled" ? cfb.value : []),
       ...(nfl.status === "fulfilled" ? nfl.value : []),
       ...(general.status === "fulfilled" ? general.value : []),
     ];
@@ -93,8 +101,8 @@ function normEspnArticle(a, source) {
 
 async function fetchOSU() {
   for (const url of [
-    "https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=194&limit=20",
-    "https://site.api.espn.com/apis/v2/sports/football/college-football/news?team=194&limit=20&lang=en&region=us",
+    "https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=194&limit=40",
+    "https://site.api.espn.com/apis/v2/sports/football/college-football/news?team=194&limit=40&lang=en&region=us",
   ]) {
     try {
       const data = await fetchJson(url);
@@ -109,12 +117,26 @@ async function fetchOSU() {
   return [];
 }
 
+// General (non-team-scoped) college-football headlines, so the "CFB"
+// filter has a real pool of its own instead of relying on CFB stories
+// coincidentally turning up in the generic cross-sport feed.
+async function fetchCFBFeed() {
+  try {
+    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?limit=40");
+    const articles = Array.isArray(data?.articles) ? data.articles : [];
+    return articles
+      .map((a) => ({ ...normEspnArticle(a, "ESPN · CFB"), cfbFeed: true }))
+      .filter((x) => x.headline);
+  } catch {}
+  return [];
+}
+
 // League-wide NFL headlines — not team-scoped, so the "NFL" filter
 // always has something reliable instead of depending on whatever
 // happens to be in the broad cross-sport general feed that day.
 async function fetchNFLFeed() {
   try {
-    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=20");
+    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=40");
     const articles = Array.isArray(data?.articles) ? data.articles : [];
     return articles
       .map((a) => ({ ...normEspnArticle(a, "ESPN · NFL"), nflFeed: true }))
@@ -127,11 +149,24 @@ async function fetchNFLFeed() {
 // Ohio State team feed above.
 async function fetchPanthersFeed() {
   try {
-    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=29&limit=20");
+    const data = await fetchJson("https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=29&limit=40");
     const articles = Array.isArray(data?.articles) ? data.articles : [];
     return articles
       .map((a) => ({ ...normEspnArticle(a, "ESPN · Panthers"), nflFeed: true, panthersFeed: true }))
       .filter((x) => x.headline);
+  } catch {}
+  return [];
+}
+
+// Second Buckeyes-specific source — Buckeyes Wire (USA Today Sports
+// Media Group's Ohio State site) is a standard WordPress site on the
+// same "Wire" network as every other USA Today team site, so it exposes
+// RSS at the default WordPress /feed/ path.
+async function fetchBuckeyesWire() {
+  try {
+    const xml = await fetchText("https://buckeyeswire.usatoday.com/feed/");
+    const items = parseRss(xml, "Buckeyes Wire").map((it) => ({ ...it, osuFeed: true }));
+    if (items.length) return items;
   } catch {}
   return [];
 }
@@ -147,6 +182,20 @@ async function fetchPanthersBlog() {
   try {
     const xml = await fetchText("https://www.catscratchreader.com/rss/current.xml");
     const items = parseRss(xml, "Cat Scratch Reader").map((it) => ({ ...it, panthersFeed: true }));
+    if (items.length) return items;
+  } catch {}
+  return [];
+}
+
+// Third Panthers source — Panthers Wire, same USA Today "Wire" network
+// and standard WordPress /feed/ path as Buckeyes Wire above. Two
+// independent Panthers RSS sources (this plus Cat Scratch Reader) means
+// one bad/moved URL doesn't leave Panthers fans with only the ESPN team
+// feed.
+async function fetchPanthersWire() {
+  try {
+    const xml = await fetchText("https://panthers.wire.usatoday.com/feed/");
+    const items = parseRss(xml, "Panthers Wire").map((it) => ({ ...it, panthersFeed: true, nflFeed: true }));
     if (items.length) return items;
   } catch {}
   return [];
@@ -209,7 +258,7 @@ function parseRss(xml, source) {
       imageUrl: img || "",
     });
   }
-  return items.slice(0, 20);
+  return items.slice(0, 40);
 }
 
 async function fetchElevenWarriors() {
