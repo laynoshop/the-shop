@@ -19,9 +19,10 @@
 (function () {
   "use strict";
 
-  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v7"; // v7: dropped "All" tab, added CFB/Buckeyes Wire/Panthers Wire sources
+  const NEWS_CACHE_KEY    = "theShopTopNewsCache_v8"; // v8: 3-day recency cutoff
   const NEWS_FILTER_KEY   = "theShopTopNewsFilter_v1";
   const NEWS_CACHE_TTL_MS = 7 * 60 * 1000;
+  const NEWS_RECENT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
   function safeGetLS(key) {
     try { return String(localStorage.getItem(key) || ""); } catch { return ""; }
@@ -345,13 +346,18 @@
     }));
     const tagged  = sanitized.map(it => ({ ...it, tags: tagNewsItem(it) }));
     const deduped = dedupeNewsItems(tagged);
+    // Nothing older than 3 days, for any filter. The server already
+    // enforces this, but re-checking here covers anything already sitting
+    // in a device's local cache from before this cutoff existed.
+    const cutoff = Date.now() - NEWS_RECENT_WINDOW_MS;
+    const recent = deduped.filter(it => !it.publishedTs || it.publishedTs >= cutoff);
     // No cap here — this is the full cross-source pool every filter draws
     // from. Capping it before filtering (the old behavior) let high-volume
     // generic sources (general ESPN, league-wide NFL) crowd out slower or
     // narrower ones (Eleven Warriors, CFB, Panthers) entirely before a
     // filter ever got a chance to run. renderNewsList caps the *filtered*
     // result instead.
-    return sortByNewest(deduped);
+    return sortByNewest(recent);
   }
 
   // -----------------------------
