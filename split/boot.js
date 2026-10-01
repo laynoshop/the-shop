@@ -1050,6 +1050,43 @@
   try { console.log("Boot OK:", window.__SCARLETKEY_BUILD); } catch {}
 })();
 
+// =========================================================
+// AUTO-UPDATE CHECK (fixes the iOS "Add to Home Screen" shortcut
+// serving a stale cached version indefinitely)
+// =========================================================
+// An iOS home-screen shortcut launches in its own standalone WebKit
+// context, which has historically been far stickier about caching the
+// top-level page than a regular Safari tab — it can keep serving
+// whatever was cached the day it was added, well past any normal
+// Cache-Control freshness window, and pulling to refresh does nothing
+// since there's no browser chrome to pull from. vercel.json forces
+// index.html/split/*.js/style.css to always revalidate with the server,
+// but as a second, independent layer, this polls a tiny endpoint that's
+// never cached (api/version.js, Cache-Control: no-store) for an
+// identifier that changes on every new deploy, and force-reloads once
+// if it doesn't match what was seen on the last launch. No manual
+// version bump needed going forward — the identifier comes from
+// Vercel's own per-deployment git SHA.
+(function checkForAppUpdate() {
+  var KEY = "theShopAppBuildId";
+  fetch("/api/version", { cache: "no-store" })
+    .then(function (r) { return r && r.ok ? r.json() : null; })
+    .then(function (data) {
+      try {
+        var current = data && data.id ? String(data.id) : "";
+        if (!current) return;
+        var last = localStorage.getItem(KEY);
+        if (last && last !== current) {
+          localStorage.setItem(KEY, current);
+          location.reload();
+        } else if (!last) {
+          localStorage.setItem(KEY, current);
+        }
+      } catch (e) {}
+    })
+    .catch(function () {});
+})();
+
 // =========================
 // COUNTDOWN TO THE GAME
 // =========================
