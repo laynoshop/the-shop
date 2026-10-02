@@ -434,9 +434,19 @@
         notifOptInHTML = (Render().gpBuildNotifOptInHTML || (() => ""))();
 
         if (tab === "matchup") {
+          let champion = null;
+          const playoffRounds = Array.isArray(league.h2hPlayoffRounds) ? league.h2hPlayoffRounds : [];
+          if (playoffRounds.length) {
+            try {
+              const results = await gpLoadWeeklyResultsForSeason(db, league);
+              const resultsByWeekIndex = {};
+              for (const r of results) resultsByWeekIndex[r.weekIndex] = r;
+              champion = (Data().gpComputeH2HChampion || (() => null))(playoffRounds, league.h2hSchedule, resultsByWeekIndex);
+            } catch {}
+          }
           bodyHTML = (Render().gpBuildH2HMatchupTabHTML || (() => ""))({
             weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId,
-            h2hSchedule: league.h2hSchedule, weekIndex, myName: name, leagueMembers
+            h2hSchedule: league.h2hSchedule, weekIndex, myName: name, leagueMembers, champion
           });
         } else {
           const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
@@ -458,7 +468,17 @@
     } else if (tab === "standings") {
       try {
         const standings = await gpLoadSeasonLeaderboard(db, league);
-        bodyHTML = (Render().gpBuildH2HSeasonStandingsHTML || (() => ""))(standings);
+        const playoffRounds = Array.isArray(league.h2hPlayoffRounds) ? league.h2hPlayoffRounds : [];
+        let finalStandings = null;
+        let champion = null;
+        if (playoffRounds.length) {
+          const results = await gpLoadWeeklyResultsForSeason(db, league);
+          const resultsByWeekIndex = {};
+          for (const r of results) resultsByWeekIndex[r.weekIndex] = r;
+          champion = (Data().gpComputeH2HChampion || (() => null))(playoffRounds, league.h2hSchedule, resultsByWeekIndex);
+          finalStandings = (Data().gpComputeH2HPlayoffFinalStandings || (() => null))(standings.rows, playoffRounds, league.h2hSchedule, resultsByWeekIndex);
+        }
+        bodyHTML = (Render().gpBuildH2HSeasonStandingsHTML || (() => ""))(standings, { champion, finalStandings });
       } catch (err) {
         bodyHTML = `<div class="gpNotice">Couldn't load standings: ${String(err?.message || err)}</div>`;
       }
@@ -477,7 +497,16 @@
     } else if (tab === "playoffs") {
       try {
         const standings = await gpLoadSeasonLeaderboard(db, league);
-        bodyHTML = (Render().gpBuildH2HPlayoffsTabHTML || (() => ""))({ standings, playoffTeams: league.h2hPlayoffTeams });
+        const playoffRounds = Array.isArray(league.h2hPlayoffRounds) ? league.h2hPlayoffRounds : [];
+        let resultsByWeekIndex = {};
+        if (playoffRounds.length) {
+          const results = await gpLoadWeeklyResultsForSeason(db, league);
+          for (const r of results) resultsByWeekIndex[r.weekIndex] = r;
+        }
+        bodyHTML = (Render().gpBuildH2HPlayoffsTabHTML || (() => ""))({
+          standings, playoffTeams: league.h2hPlayoffTeams,
+          schedule: league.h2hSchedule, playoffRounds, resultsByWeekIndex, myName: name
+        });
       } catch (err) {
         bodyHTML = `<div class="gpNotice">Couldn't load playoff picture: ${String(err?.message || err)}</div>`;
       }
@@ -1838,10 +1867,12 @@
         if (!confirm(`Generate a new playoff round from current standings?\n\n${seedLines}\n\nEveryone else sits out this round. This appends a new round — rounds already saved aren't touched.`)) {
           return;
         }
-        const originalLabel = btn.textContent;
         btn.disabled = true; btn.textContent = "Generating…";
         const rounds = [...(Array.isArray(league.h2hSchedule) ? league.h2hSchedule : []), { pairs }];
-        await (Admin().gpAdminSetH2HSchedule || (async () => {}))(db2, uid, leagueId, rounds);
+        const newWeekIndex = rounds.length - 1;
+        const label = (Data().gpPlayoffRoundLabel || (() => "Playoffs"))(pairs.length);
+        const playoffRounds = [...(Array.isArray(league.h2hPlayoffRounds) ? league.h2hPlayoffRounds : []), { weekIndex: newWeekIndex, label }];
+        await (Admin().gpAdminSetH2HPlayoffRounds || (async () => {}))(db2, uid, leagueId, rounds, playoffRounds);
         if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
           await gpRenderAdminOverlaySettings(leagueId);
           renderPicks();
@@ -1851,6 +1882,63 @@
       } catch (err) {
         console.error("[GP] generateH2HPlayoffRound error:", err);
         alert(err?.message || "Something went wrong generating the playoff round.");
+      }
+      return;
+    }
+
+    // ── H2H: advance an already-generated playoff bracket to its next
+    //    round — pairs up the previous round's winners (ties broken by
+    //    the same tiebreaker-guess mechanism as a normal matchup) and
+    //    appends the result as a new round. Requires the current last
+    //    playoff round to be fully final; refuses (with a clear message)
+    //    otherwise rather than silently generating a bracket with gaps. ──
+    if (action === "advanceH2HPlayoffRound") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        const { league } = await gpFetchLeagueForSettings(db2, leagueId);
+        if (!league) { alert("League not found."); return; }
+        const playoffRounds = Array.isArray(league.h2hPlayoffRounds) ? league.h2hPlayoffRounds : [];
+        const lastSpec = playoffRounds[playoffRounds.length - 1];
+        if (!lastSpec) { alert("No playoff round to advance yet — generate one first."); return; }
+        const schedule = Array.isArray(league.h2hSchedule) ? league.h2hSchedule : [];
+        const lastRound = (Data().gpGetH2HRoundForWeek || (() => []))(schedule, lastSpec.weekIndex);
+        if (lastRound.length === 1 && !lastRound[0]?.bye) {
+          alert("This bracket already has a champion — nothing left to advance.");
+          return;
+        }
+        const results = await gpLoadWeeklyResultsForSeason(db2, league);
+        const wr = results.find(r => r.weekIndex === lastSpec.weekIndex);
+        const isFinal = !!wr && Number(wr.gamesCount) > 0 && Number(wr.finalsCount) === Number(wr.gamesCount);
+        if (!isFinal) {
+          alert(`"${lastSpec.label}" isn't fully final yet — everyone's games need to finish before you can advance the bracket.`);
+          return;
+        }
+        const nextPairs = (Data().gpAdvancePlayoffWinners || (() => null))(lastRound, wr.rows, wr.tiebreakerActual);
+        if (!nextPairs) {
+          alert("Couldn't determine every winner yet (a tie needs a tiebreaker guess from both players) — try again once that's resolved.");
+          return;
+        }
+        const seedLines = nextPairs.map(p => p.bye ? `${p.bye} — BYE` : `${p.players[0]} vs ${p.players[1]}`).join("\n");
+        if (!confirm(`Advance the bracket to the next round?\n\n${seedLines}`)) return;
+        btn.disabled = true; btn.textContent = "Advancing…";
+        const rounds = [...schedule, { pairs: nextPairs }];
+        const newWeekIndex = rounds.length - 1;
+        const label = (Data().gpPlayoffRoundLabel || (() => "Playoffs"))(nextPairs.length);
+        const newPlayoffRounds = [...playoffRounds, { weekIndex: newWeekIndex, label }];
+        await (Admin().gpAdminSetH2HPlayoffRounds || (async () => {}))(db2, uid, leagueId, rounds, newPlayoffRounds);
+        if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
+          await gpRenderAdminOverlaySettings(leagueId);
+          renderPicks();
+        } else {
+          await renderPicks();
+        }
+      } catch (err) {
+        console.error("[GP] advanceH2HPlayoffRound error:", err);
+        alert(err?.message || "Something went wrong advancing the playoff bracket.");
       }
       return;
     }
