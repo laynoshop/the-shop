@@ -1165,12 +1165,20 @@
       ? `<img class="piRankLogo" src="${_esc(logoUrl)}" alt="" loading="lazy" />`
       : `<div class="piRankLogo piRankLogoPlaceholder"></div>`;
     const record = String(r?.recordSummary || "");
-    // ESPN sends "-" for no previous ranking, but some responses instead send
-    // a literal "0"/"+0"/"-0" for an unchanged rank — treat all of those (and
-    // anything else that isn't a genuine non-zero move) as the flat dash too.
-    const trendRaw = String(r?.trend || "").trim();
-    const trendNum = Number(trendRaw.replace(/^\+/, ""));
-    const isFlat   = !trendRaw || trendRaw === "-" || (!Number.isNaN(trendNum) && trendNum === 0);
+    // ESPN normally sends "-" for "no previous ranking" (e.g. the season's
+    // first poll, where nobody has a real prior spot). But it doesn't always
+    // use that sentinel — sometimes it instead sends a fake delta that's
+    // exactly the team's own current rank (e.g. "-1" for the #1 team, "-2"
+    // for #2, etc.), which would imply a previous rank of 0 — not a real
+    // rank. Detect that by computing the implied previous rank and treating
+    // anything outside 1-25 (not a real rank) as flat too.
+    const trendRaw    = String(r?.trend || "").trim();
+    const currentRank = Number(r?.current) || 0;
+    const trendNum    = Number(trendRaw.replace(/^\+/, ""));
+    const isDown      = trendRaw.startsWith("-");
+    const impliedPrev = Number.isNaN(trendNum) ? NaN : (isDown ? currentRank - Math.abs(trendNum) : currentRank + trendNum);
+    const isFlat = !trendRaw || trendRaw === "-" || Number.isNaN(trendNum) || trendNum === 0
+      || Number.isNaN(impliedPrev) || impliedPrev < 1 || impliedPrev > 25;
     const trendHTML = !isFlat
       ? (trendRaw.startsWith("-")
           ? `<span class="piRankTrend down">&#x25BC;${_esc(trendRaw.slice(1))}</span>`
