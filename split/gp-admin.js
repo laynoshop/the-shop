@@ -292,11 +292,16 @@
   // from the UI (whatever the admin assigned), not regenerated, so this
   // is how an admin can tweak individual matchups without touching who's
   // on the roster. `schedule` must already be in gpGenerateH2HSchedule's
-  // own output shape ([{ pairs: [...] }, ...]).
-  async function gpAdminSetH2HSchedule(db, uid, leagueId, schedule) {
+  // own output shape ([{ pairs: [...] }, ...]). `extra` merges in a
+  // handful of other fields in the same write — e.g. generating a
+  // playoff round also syncs h2hPlayoffTeams to whatever the admin has
+  // selected live, since that dropdown isn't saved by the general
+  // League Settings form until a separate submit.
+  async function gpAdminSetH2HSchedule(db, uid, leagueId, schedule, extra) {
     const rounds = Array.isArray(schedule) ? schedule : [];
     await leaguesRef(db, leagueId).set({
       h2hSchedule: rounds,
+      ...(extra && typeof extra === "object" ? extra : {}),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     }, { merge: true });
     return true;

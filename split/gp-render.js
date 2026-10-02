@@ -5768,7 +5768,7 @@ ${archivedSectionHTML}`;
           ? `"Generate Playoffs Round" seeds a round from current standings (top ${h2hPlayoffTeams}) and places it right after week ${tw} (this league's Total Weeks) — everyone outside that cut sits out, correctly, instead of still being able to pick. Weeks 1–${tw} always stay the regular season, in standings, no matter what happens here.`
           : !bracketIsChampioned
             ? `"Advance to Next Round" needs the current round fully final — it pairs up the winners and appends the next round. Once only one matchup remains and it's final, a champion is crowned automatically. To undo a playoff round, just "✕ Remove Round" it below.`
-            : `🏆 This bracket has crowned a champion — check the Standings and Playoffs tabs. To undo, "✕ Remove Round" the playoff round(s) below.`;
+            : `🏆 This is the championship round — nothing more to generate. Once it's final, a champion is crowned automatically on the Standings and Playoffs tabs. To undo, "✕ Remove Round" it below.`;
       h2hSeasonBodyHTML = `
     <div class="muted" style="font-size:12px">Season started with ${h2hRoster.length} player${h2hRoster.length === 1 ? "" : "s"}. Reassign any matchup below (add/remove matchups or whole rounds freely, or set a side to "— BYE —") and save.</div>
     <div class="gpH2HEditSchedule" id="gpH2HEditSchedule" data-leagueid="${esc(league?.id || "")}">

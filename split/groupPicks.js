@@ -1869,14 +1869,21 @@
           return;
         }
         const standings = await gpLoadSeasonLeaderboard(db2, league);
-        const n = Number(league.h2hPlayoffTeams) || 4;
+        // The "Playoff Teams" dropdown above isn't saved by the general
+        // League Settings form until a separate submit, so read it live
+        // here rather than trusting the last-saved Firestore value —
+        // otherwise generating right after changing the dropdown silently
+        // uses the stale number (e.g. seeding a 4-team bracket when "2"
+        // is what's showing selected).
+        const liveDropdown = document.getElementById("gpLeagueH2HPlayoffTeams");
+        const n = Number(liveDropdown?.value) || Number(league.h2hPlayoffTeams) || 4;
         const pairs = (Data().gpBuildPlayoffPairsFromStandings || (() => []))(standings.rows, n);
         if (!pairs.length) {
           alert(`Need at least one fully-final regular-season week before generating a playoff round (top ${n}).`);
           return;
         }
         const seedLines = pairs.map(p => `${p.players[0]} vs ${p.players[1]}`).join("\n");
-        if (!confirm(`Generate a new playoff round from current standings?\n\n${seedLines}\n\nEveryone else sits out this round.`)) {
+        if (!confirm(`Generate a new playoff round from current standings (top ${n})?\n\n${seedLines}\n\nEveryone else sits out this round.`)) {
           return;
         }
         btn.disabled = true; btn.textContent = "Generating…";
@@ -1889,7 +1896,7 @@
         // exist in the schedule at this exact moment.
         const regularRounds = Array.from({ length: tw }, (_, i) => existingSchedule[i % Math.max(existingSchedule.length, 1)] || { pairs: [] });
         const rounds = [...regularRounds, { pairs }];
-        await (Admin().gpAdminSetH2HSchedule || (async () => {}))(db2, uid, leagueId, rounds);
+        await (Admin().gpAdminSetH2HSchedule || (async () => {}))(db2, uid, leagueId, rounds, { h2hPlayoffTeams: n });
         if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
           await gpRenderAdminOverlaySettings(leagueId);
           renderPicks();
