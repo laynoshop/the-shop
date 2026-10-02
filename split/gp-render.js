@@ -5771,16 +5771,16 @@ ${archivedSectionHTML}`;
             : `🏆 This is the championship round — nothing more to generate. Once it's final, a champion is crowned automatically on the Standings and Playoffs tabs. To undo, "✕ Remove Round" it below.`;
       h2hSeasonBodyHTML = `
     <div class="muted" style="font-size:12px">Season started with ${h2hRoster.length} player${h2hRoster.length === 1 ? "" : "s"}. Reassign any matchup below (add/remove matchups or whole rounds freely, or set a side to "— BYE —") and save.</div>
-    <div class="gpH2HEditSchedule" id="gpH2HEditSchedule" data-leagueid="${esc(league?.id || "")}">
+    <div class="gpH2HEditSchedule" id="gpH2HEditSchedule" data-leagueid="${esc(league?.id || "")}" data-totalweeks="${tw}" data-playoffteams="${h2hPlayoffTeams}">
       ${roundsHTML || `<div class="muted" style="font-size:12px">No rounds yet.</div>`}
     </div>
     <button type="button" class="gpH2HAddRoundBtn" data-gpaction="h2hAddRound">+ Add Round</button>
     <div class="gpLeagueSettingsActions">
       <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="saveH2HSchedule" data-leagueid="${esc(league?.id || "")}">💾 Save Schedule</button>
-      ${playoffActionBtnHTML}
+      <span id="gpH2HPlayoffActionBtn">${playoffActionBtnHTML}</span>
       <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="startH2HSeason" data-leagueid="${esc(league?.id || "")}">🔄 Regenerate From Joined Players</button>
     </div>
-    <div class="muted" style="font-size:11px">${playoffActionNoteHTML} "Regenerate From Joined Players" replaces the <b>entire</b> schedule above with a fresh round-robin — any manual edits (including any generated playoff rounds) are lost.</div>`;
+    <div class="muted" style="font-size:11px"><span id="gpH2HPlayoffActionNote">${playoffActionNoteHTML}</span> "Regenerate From Joined Players" replaces the <b>entire</b> schedule above with a fresh round-robin — any manual edits (including any generated playoff rounds) are lost.</div>`;
     }
 
     return `
