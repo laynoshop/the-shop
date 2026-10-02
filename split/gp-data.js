@@ -1153,6 +1153,28 @@
     return { rows, weeksCount: weeksFinal };
   }
 
+  // gpBuildPlayoffPairsFromStandings(standingsRows, n) — seeds the top n
+  // (from gpComputeH2HSeasonStandings' sorted rows) into playoff matchups:
+  // 1 vs n, 2 vs n-1, etc. Same seeding math as gpBuildH2HPlayoffsTabHTML's
+  // read-only bracket preview (which builds its own {seed,row} display
+  // pairs and isn't wired to this), used here to turn that same top-n cut
+  // into real h2hSchedule data. Returns a `pairs` array in the exact shape
+  // schedule rounds already use ({ players: [a, b] }) — anyone outside the
+  // top n is simply absent from it, not byed, which is what makes them
+  // correctly sit out that round's picks entirely (see
+  // gpBuildGroupPicksCardHTML's sittingOut check) instead of still being
+  // able to pick like before this existed.
+  function gpBuildPlayoffPairsFromStandings(standingsRows, n) {
+    const rows = Array.isArray(standingsRows) ? standingsRows : [];
+    const validN = [2, 4, 6, 8].includes(Number(n)) ? Number(n) : 4;
+    const seeds = rows.slice(0, validN).map(r => String(r?.name || "").trim()).filter(Boolean);
+    const pairs = [];
+    for (let i = 0; i < Math.floor(seeds.length / 2); i++) {
+      pairs.push({ players: [seeds[i], seeds[seeds.length - 1 - i]] });
+    }
+    return pairs;
+  }
+
   // gpComputeH2HAllTimeMatchupRecords(weeklyResults, schedule)
   // Per-player, per-opponent W-L-T — same "fully final week" walk as
   // gpComputeH2HSeasonStandings (reuses the exact same
@@ -1335,6 +1357,7 @@
     gpGetH2HRoundForWeek,
     gpComputeH2HWeekResults,
     gpComputeH2HSeasonStandings,
+    gpBuildPlayoffPairsFromStandings,
     gpComputeH2HAllTimeMatchupRecords,
   };
 
