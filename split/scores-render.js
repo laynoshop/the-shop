@@ -836,8 +836,13 @@
     const awayAbbr = SD.getTeamAbbrevUI(awayTeam);
     const homeRank = Number(home?.curatedRank?.current || home?.rank || 0);
     const awayRank = Number(away?.curatedRank?.current || away?.rank || 0);
-    const homeScore = String(home?.score ?? "");
-    const awayScore = String(away?.score ?? "");
+    // ESPN's API reports score: "0" for a competitor even before the game
+    // starts (not null/undefined), so ?? alone lets a "0" through for a
+    // game that hasn't kicked off yet. Only show a score once the game is
+    // actually live or finished.
+    const showScore = isLive || isPost;
+    const homeScore = showScore ? String(home?.score ?? "") : "";
+    const awayScore = showScore ? String(away?.score ?? "") : "";
     const homeWinner = isPost && String(home?.winner || "") === "true";
     const awayWinner = isPost && String(away?.winner || "") === "true";
     const homeLogoUrl = SD.getTeamLogoUrl(homeTeam);
@@ -1022,8 +1027,9 @@
           }
           el.textContent = newVal;
         }
-        setScoreWithFlash(scoreEls[0], String(away?.score ?? ""));
-        setScoreWithFlash(scoreEls[1], String(home?.score ?? ""));
+        const showScoreNow = isLive || isPost;
+        setScoreWithFlash(scoreEls[0], showScoreNow ? String(away?.score ?? "") : "");
+        setScoreWithFlash(scoreEls[1], showScoreNow ? String(home?.score ?? "") : "");
         if (isPost) {
           const aw = String(away?.winner || "") === "true", hw = String(home?.winner || "") === "true";
           if (scoreEls[0]) { scoreEls[0].classList.toggle("winner", aw); scoreEls[0].classList.toggle("loser", !aw); }
