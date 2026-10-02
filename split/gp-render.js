@@ -2474,6 +2474,11 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     "disney+":         { file: "assets/networks/disney-plus.webp" },
     "disney plus":     { file: "assets/networks/disney-plus.webp" },
     "tbs":             { file: "assets/networks/tbs.webp", bare: true },
+    "prime video":        { file: "assets/networks/prime-video.webp" },
+    "amazon prime video": { file: "assets/networks/prime-video.webp" },
+    "amazon prime":       { file: "assets/networks/prime-video.webp" },
+    "prime":              { file: "assets/networks/prime-video.webp" },
+    "amzn":               { file: "assets/networks/prime-video.webp" },
   };
   function gpNorm(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
   function buildBroadcastChipHTML(name) {
