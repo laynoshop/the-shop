@@ -977,6 +977,80 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 .gpH2HBracketSlotEmpty .gpH2HBracketName { color: rgba(255,255,255,0.3); }
 
+/* Champion banner — shouted from the rooftops */
+.gpChampionBanner {
+  position: relative; overflow: hidden;
+  margin-bottom: 14px; padding: 26px 20px 24px; border-radius: 20px;
+  text-align: center;
+  background: radial-gradient(120% 140% at 50% 0%, rgba(255,215,100,0.22) 0%, rgba(20,14,4,0.9) 60%), #0c0a06;
+  border: 1px solid rgba(255,215,100,0.4);
+  box-shadow: 0 10px 40px rgba(255,180,40,0.18), inset 0 1px 0 rgba(255,255,255,0.08);
+  animation: gpChampionGlow 2.6s ease-in-out infinite;
+}
+@keyframes gpChampionGlow {
+  0%, 100% { box-shadow: 0 10px 40px rgba(255,180,40,0.18), inset 0 1px 0 rgba(255,255,255,0.08); }
+  50% { box-shadow: 0 10px 52px rgba(255,195,60,0.32), inset 0 1px 0 rgba(255,255,255,0.1); }
+}
+.gpChampionConfetti { font-size: 26px; letter-spacing: 0.3em; margin-bottom: 6px; }
+.gpChampionLabel {
+  font-size: 11.5px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(255,214,110,0.8);
+}
+.gpChampionName {
+  font-size: 30px; font-weight: 900; color: #fff; letter-spacing: -0.01em;
+  margin-top: 4px; text-shadow: 0 0 24px rgba(255,210,100,0.5);
+  overflow-wrap: break-word; word-break: break-word;
+}
+.gpChampionSub {
+  font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.55);
+  margin-top: 8px;
+}
+.gpChampionBannerCompact { padding: 18px 18px 16px; margin-bottom: 14px; }
+.gpChampionBannerCompact .gpChampionConfetti { font-size: 20px; }
+.gpChampionBannerCompact .gpChampionName { font-size: 23px; }
+
+/* Playoffs tab — live bracket */
+.gpPlayoffsLive .gpPlayoffRoundBlock { margin: 0 0 4px; }
+.gpPlayoffRoundBlock {
+  padding: 4px 16px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.gpPlayoffRoundBlock:last-child { border-bottom: none; }
+.gpPlayoffChampionshipBlock {
+  background: linear-gradient(160deg, rgba(255,200,40,0.08) 0%, rgba(10,10,12,0) 60%);
+}
+.gpPlayoffRoundHead {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0 8px;
+}
+.gpPlayoffRoundLabel {
+  font-size: 13px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;
+  color: rgba(255,255,255,0.7);
+}
+.gpPlayoffRoundStatus {
+  font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px; flex-shrink: 0;
+}
+.gpPlayoffStatusFinal { color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); }
+.gpPlayoffStatusLive {
+  color: #ff5c5c; background: rgba(255,60,60,0.12); border: 1px solid rgba(255,80,80,0.35);
+  animation: gpPlayoffLivePulse 1.6s ease-in-out infinite;
+}
+@keyframes gpPlayoffLivePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.gpPlayoffStatusUpcoming { color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
+
+.gpPlayoffMatchupRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.gpPlayoffMatchupRow:last-child { border-bottom: none; }
+.gpPlayoffByeRow { justify-content: space-between; }
+.gpPlayoffTbNote {
+  font-size: 10.5px; font-weight: 700; color: rgba(255,214,110,0.6);
+  text-align: center; padding: 0 4px 10px; margin-top: -8px;
+}
+
 /* Player profile overlay — all-time H2H record */
 .gpH2HProfileRow {
   display: flex; align-items: center; justify-content: space-between;
@@ -3535,10 +3609,17 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // gpComputeWeeklyLeaderboard/gpGetH2HRoundForWeek/gpComputeH2HWeekResults
   // primitives the rest of the H2H feature already uses — nothing new
   // computed here beyond finding "which result is mine."
-  function gpBuildH2HMatchupTabHTML({ weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId, h2hSchedule, weekIndex, myName, leagueMembers }) {
+  function gpBuildH2HMatchupTabHTML({ weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId, h2hSchedule, weekIndex, myName, leagueMembers, champion }) {
     const GP_Data = window.GP_Data || {};
     const list = Array.isArray(games) ? games : [];
-    if (!list.length) return `<div class="gpNotice">No games in this week yet.</div>`;
+    const championBannerHTML = champion ? `
+<div class="gpChampionBanner gpChampionBannerCompact">
+  <div class="gpChampionConfetti">🎉 🏆 🎉</div>
+  <div class="gpChampionLabel">LEAGUE CHAMPION</div>
+  <div class="gpChampionName">${esc(champion)}</div>
+  <div class="gpChampionSub">The season is final — check the Standings tab for the full final order.</div>
+</div>` : "";
+    if (!list.length) return `${championBannerHTML}<div class="gpNotice">No games in this week yet.</div>`;
 
     const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
       ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds, tiebreakers, tiebreakerEventId })
@@ -3583,7 +3664,13 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     const otherResults = results.filter(m => m !== myResult);
     const otherMatchupsHTML = gpBuildH2HMatchupsHTML(otherResults, weekLabel);
     const highScoreHTML = gpBuildH2HHighScoreCalloutHTML({ rows: lb.rows, weekLabel });
-    const progressHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks, h2hFormat: true });
+    // Anyone without a real matchup this round (byed, or simply absent
+    // from a round pared down to just playoff qualifiers) isn't making
+    // any picks this week — Pick Progress shouldn't list them at all.
+    const roundParticipants = typeof GP_Data.gpGetH2HRoundParticipants === "function"
+      ? GP_Data.gpGetH2HRoundParticipants(round)
+      : null;
+    const progressHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks, h2hFormat: true, h2hParticipants: roundParticipants });
 
     let recapHTML = "";
     if (lb.finalsCount > 0 && lb.finalsCount === list.length) {
@@ -3597,6 +3684,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
     }
 
     return `
+${championBannerHTML}
 ${myCardHTML}
 ${highScoreHTML}
 ${recapHTML}
@@ -3646,15 +3734,25 @@ ${otherMatchupsHTML}`;
   // progress bar. Falls back to whoever's picked so far for leagues
   // created before the Join League members list existed, so this never
   // regresses to showing nobody.
-  function gpComputePreLockProgress(members, games, allPicks) {
+  // participantNames (optional): H2H only — names with a real matchup
+  // this round (gpGetH2HRoundParticipants). When given, anyone byed or
+  // excluded from a pared-down playoff round is left out entirely —
+  // they're not making any picks this week, so they have no business in
+  // a "games locked in" list.
+  function gpComputePreLockProgress(members, games, allPicks, participantNames) {
     const total = Array.isArray(games) ? games.length : 0;
     const picks = (allPicks && typeof allPicks === "object") ? allPicks : {};
+    const participantKeys = Array.isArray(participantNames)
+      ? new Set(participantNames.map(n => String(n).trim().toLowerCase()))
+      : null;
+    const isParticipant = (name) => !participantKeys || participantKeys.has(String(name).trim().toLowerCase());
 
     const nameById = new Map();
     for (const m of (Array.isArray(members) ? members : [])) {
       const pid = String(m?.playerId || m?.uid || "").trim();
-      if (!pid) continue;
-      nameById.set(pid, String(m?.name || "Someone").trim() || "Someone");
+      const nm = String(m?.name || "Someone").trim() || "Someone";
+      if (!pid || !isParticipant(nm)) continue;
+      nameById.set(pid, nm);
     }
 
     const countById = new Map();
@@ -3662,8 +3760,9 @@ ${otherMatchupsHTML}`;
       const eventPicks = Array.isArray(picks[eventId]) ? picks[eventId] : [];
       for (const p of eventPicks) {
         const pid = String(p?.uid || "").trim();
-        if (!pid) continue;
-        if (!nameById.has(pid)) nameById.set(pid, String(p?.name || "Someone").trim() || "Someone");
+        const nm = String(p?.name || "Someone").trim() || "Someone";
+        if (!pid || !isParticipant(nm)) continue;
+        if (!nameById.has(pid)) nameById.set(pid, nm);
         countById.set(pid, (countById.get(pid) || 0) + 1);
       }
     }
@@ -3761,7 +3860,7 @@ ${otherMatchupsHTML}`;
     //    this week's games they've locked in a pick for, instead of an
     //    empty/all-zero table nobody can do anything with yet ──
     if (!finalsCount) {
-      const progressRows = gpComputePreLockProgress(opts?.leagueMembers, opts?.games, opts?.allPicks);
+      const progressRows = gpComputePreLockProgress(opts?.leagueMembers, opts?.games, opts?.allPicks, opts?.h2hParticipants);
       const countdownHTML = gpBuildCountdownWidgetHTML({
         label: "First game starts in",
         targetMs: gpEarliestKickoffMs(opts?.games),
@@ -3914,12 +4013,23 @@ ${otherMatchupsHTML}`;
   }
 
   // ─── Head-to-Head season standings (win-loss-tie record) ──────────
-  function gpBuildH2HSeasonStandingsHTML(seasonStandings) {
+  function gpBuildH2HSeasonStandingsHTML(seasonStandings, opts) {
     const { rows, weeksCount } = seasonStandings || {};
-    const list = Array.isArray(rows) ? rows : [];
+    const champion = opts?.champion || null;
+    const finalStandings = Array.isArray(opts?.finalStandings) ? opts.finalStandings : null;
+    const list = finalStandings || (Array.isArray(rows) ? rows : []);
+    const isFinal = !!champion && !!finalStandings;
+
+    const championBannerHTML = isFinal ? `
+<div class="gpChampionBanner">
+  <div class="gpChampionConfetti">🎉 🏆 🎉</div>
+  <div class="gpChampionLabel">LEAGUE CHAMPION</div>
+  <div class="gpChampionName">${esc(champion)}</div>
+  <div class="gpChampionSub">The season is final — crowned after a hard-fought playoff run 📣</div>
+</div>` : "";
 
     if (!list.length) {
-      return `
+      return `${championBannerHTML}
 <div class="gpLeaderCard">
   <div class="gpLeaderHeader">
     <div class="gpLeaderHeaderLeft">
@@ -3996,12 +4106,12 @@ ${otherMatchupsHTML}`;
   </table>
 </div>`;
 
-    return `
+    return `${championBannerHTML}
 <div class="gpLeaderCard">
   <div class="gpLeaderHeader">
     <div class="gpLeaderHeaderLeft">
-      <div class="gpLeaderTitle">⚔️ Head-to-Head Standings</div>
-      <div class="gpLeaderWeekLabel">${weeksCount || 0} week${weeksCount === 1 ? "" : "s"} played</div>
+      <div class="gpLeaderTitle">⚔️ ${isFinal ? "Final Standings" : "Head-to-Head Standings"}</div>
+      <div class="gpLeaderWeekLabel">${isFinal ? "Season complete" : `${weeksCount || 0} week${weeksCount === 1 ? "" : "s"} played`}</div>
     </div>
   </div>
   <div class="gpLeaderPodium">
@@ -4009,7 +4119,7 @@ ${otherMatchupsHTML}`;
   </div>
   <div class="gpStandingsDivider">
     <div class="gpStandingsDividerLine"></div>
-    <div class="gpStandingsDividerLabel">Full Standings</div>
+    <div class="gpStandingsDividerLabel">${isFinal ? "Final Order" : "Full Standings"}</div>
     <div class="gpStandingsDividerLine"></div>
   </div>
   ${standingsTableHTML}
@@ -4017,7 +4127,7 @@ ${otherMatchupsHTML}`;
     <b>W-L-T</b> matchup record &middot; <b>PF</b> points scored in matchups &middot; <b>PA</b> points allowed &middot; <b>Diff</b> point differential &middot; <b>🎯</b> tiebreakers won
   </div>
   <div class="gpColumnLegend">
-    <b>Ties</b> (after record) are broken by points scored, then differential, then tiebreakers won, then name.
+    ${isFinal ? "Order reflects how far each player went in the playoff bracket." : "<b>Ties</b> (after record) are broken by points scored, then differential, then tiebreakers won, then name."}
   </div>
 </div>`;
   }
@@ -4129,37 +4239,49 @@ ${otherMatchupsHTML}`;
 </div>`;
   }
 
-  // ─── Playoffs tab — projected seeding only (top N by current season
-  // standings), shown as a simple bracket skeleton. Actual playoff
-  // matchups, once the regular season ends, get set by the admin the
-  // same way any round's pairings are hand-edited today (League
-  // Settings' schedule editor) — this tab doesn't persist anything of
-  // its own, it just visualizes current standings.
-  function gpBuildH2HPlayoffsTabHTML({ standings, playoffTeams }) {
-    const rows = Array.isArray(standings?.rows) ? standings.rows : [];
-    const n = [2, 4, 6, 8].includes(Number(playoffTeams)) ? Number(playoffTeams) : 4;
-    if (!rows.length) {
-      return `<div class="gpLeaderCard"><div class="gpEmpty" style="padding:28px 20px">No standings yet — playoff seeding will show up once some weeks are final.</div></div>`;
-    }
-    const seeds = rows.slice(0, n);
-    const pairs = [];
-    for (let i = 0; i < Math.floor(seeds.length / 2); i++) {
-      pairs.push([{ seed: i + 1, row: seeds[i] }, { seed: seeds.length - i, row: seeds[seeds.length - 1 - i] }]);
-    }
-    const seedSlotHTML = (slot) => slot?.row ? `
+  // ─── Playoffs tab ───────────────────────────────────────────────────
+  // Two very different states:
+  //  - No bracket yet (playoffRounds empty): projected seeding only —
+  //    top N by current season standings, a simple bracket skeleton.
+  //    Nothing persists here; it just visualizes current standings until
+  //    the admin actually generates the bracket (League Settings'
+  //    "Generate Playoffs Round").
+  //  - A bracket exists: live bracket. Every generated round shows its
+  //    REAL matchup(s) with live score/status, reusing the same
+  //    gpGetH2HRoundForWeek/gpComputeH2HWeekResults primitives the
+  //    Matchup/Schedule tabs already use — this tab adds no new picks
+  //    machinery, just a trophy-themed view of the same data. Once the
+  //    last round is a single, fully-final game, gpComputeH2HChampion
+  //    crowns a champion and this tab leads with a banner for it.
+  function gpBuildH2HPlayoffsTabHTML({ standings, playoffTeams, schedule, playoffRounds, resultsByWeekIndex }) {
+    const GP_Data = window.GP_Data || {};
+    const rounds = Array.isArray(playoffRounds) ? playoffRounds : [];
+
+    if (!rounds.length) {
+      const rows = Array.isArray(standings?.rows) ? standings.rows : [];
+      const n = [2, 4, 6, 8].includes(Number(playoffTeams)) ? Number(playoffTeams) : 4;
+      if (!rows.length) {
+        return `<div class="gpLeaderCard"><div class="gpEmpty" style="padding:28px 20px">No standings yet — playoff seeding will show up once some weeks are final.</div></div>`;
+      }
+      const seeds = rows.slice(0, n);
+      const pairs = [];
+      for (let i = 0; i < Math.floor(seeds.length / 2); i++) {
+        pairs.push([{ seed: i + 1, row: seeds[i] }, { seed: seeds.length - i, row: seeds[seeds.length - 1 - i] }]);
+      }
+      const seedSlotHTML = (slot) => slot?.row ? `
     <div class="gpH2HBracketSlot">
       <span class="gpH2HBracketSeed">${slot.seed}</span>
       <span class="gpH2HBracketName">${esc(String(slot.row.name || "TBD"))}</span>
     </div>` : `
     <div class="gpH2HBracketSlot gpH2HBracketSlotEmpty"><span class="gpH2HBracketName">TBD</span></div>`;
-    const pairsHTML = pairs.map(([a, b]) => `
+      const pairsHTML = pairs.map(([a, b]) => `
   <div class="gpH2HBracketMatchup">
     ${seedSlotHTML(a)}
     <div class="gpH2HVs">vs</div>
     ${seedSlotHTML(b)}
   </div>`).join("");
 
-    return `
+      return `
 <div class="gpLeaderCard gpH2HPlayoffsCard">
   <div class="gpLeaderHeader">
     <div class="gpLeaderHeaderLeft">
@@ -4171,6 +4293,82 @@ ${otherMatchupsHTML}`;
   <div class="gpColumnLegend">
     Seeding updates live from current standings until the regular season ends — your admin then sets the actual playoff matchups.
   </div>
+</div>`;
+    }
+
+    // ── Live bracket ──
+    const champion = typeof GP_Data.gpComputeH2HChampion === "function"
+      ? GP_Data.gpComputeH2HChampion(rounds, schedule, resultsByWeekIndex)
+      : null;
+
+    const championBannerHTML = champion ? `
+<div class="gpChampionBanner">
+  <div class="gpChampionConfetti">🎉 🏆 🎉</div>
+  <div class="gpChampionLabel">LEAGUE CHAMPION</div>
+  <div class="gpChampionName">${esc(champion)}</div>
+  <div class="gpChampionSub">Crowned after a hard-fought playoff run — shout it from the rooftops 📣</div>
+</div>` : "";
+
+    function playoffMatchupRowHTML(m, isFinal) {
+      if (m.bye) {
+        return `
+  <div class="gpPlayoffMatchupRow gpPlayoffByeRow">
+    <div class="gpH2HName gpH2HNameLeft">${esc(String(m.bye || "Someone"))}</div>
+    <div class="gpH2HByeLabel">BYE — advances</div>
+  </div>`;
+      }
+      const [nameA, nameB] = m.players;
+      const [ptsA, ptsB] = Array.isArray(m.points) ? m.points : [0, 0];
+      const decided = isFinal && (m.winner === "a" || m.winner === "b" || ((m.tbWinner === "a" || m.tbWinner === "b")));
+      const aWin = decided && (m.winner === "a" || (m.winner === "tie" && m.tbWinner === "a"));
+      const bWin = decided && (m.winner === "b" || (m.winner === "tie" && m.tbWinner === "b"));
+      const tbNote = isFinal && m.winner === "tie" && (m.tbWinner === "a" || m.tbWinner === "b")
+        ? `<div class="gpPlayoffTbNote">🎯 Decided by tiebreaker</div>` : "";
+      return `
+  <div class="gpPlayoffMatchupRow gpH2HMatchupRowClickable" data-gpaction="openH2HMatchup"
+    data-namea="${esc(nameA)}" data-nameb="${esc(nameB)}" data-ptsa="${esc(String(ptsA))}" data-ptsb="${esc(String(ptsB))}">
+    <div class="gpH2HName gpH2HNameLeft${aWin ? " gpH2HWinner" : ""}">${esc(nameA)}${aWin ? " 👑" : ""}</div>
+    <div class="gpH2HScoreCluster">
+      <span class="gpH2HPts${aWin ? " gpH2HPtsWin" : ""}">${esc(String(ptsA))}</span>
+      <span class="gpH2HVs">vs</span>
+      <span class="gpH2HPts${bWin ? " gpH2HPtsWin" : ""}">${esc(String(ptsB))}</span>
+    </div>
+    <div class="gpH2HName gpH2HNameRight${bWin ? " gpH2HWinner" : ""}">${bWin ? "👑 " : ""}${esc(nameB)}</div>
+  </div>
+  ${tbNote}`;
+    }
+
+    const roundsHTML = rounds.map((spec) => {
+      const pairs = typeof GP_Data.gpGetH2HRoundForWeek === "function" ? GP_Data.gpGetH2HRoundForWeek(schedule, spec.weekIndex) : [];
+      const wr = resultsByWeekIndex?.[spec.weekIndex];
+      const hasStarted = !!wr;
+      const isFinal = hasStarted && Number(wr.gamesCount) > 0 && Number(wr.finalsCount) === Number(wr.gamesCount);
+      const results = hasStarted && typeof GP_Data.gpComputeH2HWeekResults === "function"
+        ? GP_Data.gpComputeH2HWeekResults(pairs, wr.rows, wr.tiebreakerActual)
+        : pairs.map(p => p.bye ? p : { ...p, points: [0, 0], winner: null, tbWinner: null });
+      const isChampionshipRound = pairs.length === 1 && !pairs[0]?.bye;
+      const statusLabel = isFinal ? "FINAL" : (hasStarted ? "LIVE" : "UPCOMING");
+      const statusClass = isFinal ? "gpPlayoffStatusFinal" : (hasStarted ? "gpPlayoffStatusLive" : "gpPlayoffStatusUpcoming");
+      return `
+<div class="gpPlayoffRoundBlock${isChampionshipRound ? " gpPlayoffChampionshipBlock" : ""}">
+  <div class="gpPlayoffRoundHead">
+    <div class="gpPlayoffRoundLabel">${isChampionshipRound ? "🏆 " : ""}${esc(spec.label)}</div>
+    <div class="gpPlayoffRoundStatus ${statusClass}">${statusLabel}</div>
+  </div>
+  ${results.map(r => playoffMatchupRowHTML(r, isFinal)).join("")}
+</div>`;
+    }).join("");
+
+    return `
+${championBannerHTML}
+<div class="gpLeaderCard gpH2HPlayoffsCard gpPlayoffsLive">
+  <div class="gpLeaderHeader">
+    <div class="gpLeaderHeaderLeft">
+      <div class="gpLeaderTitle">🏆 Playoffs</div>
+      <div class="gpLeaderWeekLabel">${champion ? "Final results" : "Bracket in progress"}</div>
+    </div>
+  </div>
+  ${roundsHTML}
 </div>`;
   }
 
@@ -4761,22 +4959,29 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
     const atsIdSet   = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
     const GP_Data = window.GP_Data || {};
 
-    // H2H only: a player with no matchup this round — either explicitly
+    // H2H only: a player with no REAL matchup this round — explicitly
     // byed, or simply absent from a round that's been pared down to just
     // the playoff qualifiers (see the "generateH2HPlayoffRound" admin
     // action) — has nothing to pick toward and shouldn't see the
-    // game-picking UI at all. A round
-    // with zero pairs (schedule not generated yet) is NOT treated as
-    // exclusion — that falls through to normal picks so a data gap here
-    // can never accidentally lock everyone out.
+    // game-picking UI at all. A round with zero pairs (schedule not
+    // generated yet) is NOT treated as exclusion — that falls through to
+    // normal picks so a data gap here can never accidentally lock
+    // everyone out. roundParticipants (names with a real pair this
+    // round) is also handed to Pick Progress below so it can stop
+    // listing someone who isn't making any picks this week.
     let sittingOut = false;
-    if (h2hFormat && myName && typeof GP_Data.gpGetH2HRoundForWeek === "function") {
+    let roundParticipants = null;
+    if (h2hFormat && typeof GP_Data.gpGetH2HRoundForWeek === "function") {
       const round = GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex);
-      const myKey = String(myName).trim().toLowerCase();
-      const inRound = (Array.isArray(round) ? round : []).some(m => m?.bye
-        ? String(m.bye).trim().toLowerCase() === myKey
-        : Array.isArray(m?.players) && m.players.some(p => String(p).trim().toLowerCase() === myKey));
-      sittingOut = Array.isArray(round) && round.length > 0 && !inRound;
+      if (Array.isArray(round) && round.length > 0) {
+        roundParticipants = typeof GP_Data.gpGetH2HRoundParticipants === "function"
+          ? GP_Data.gpGetH2HRoundParticipants(round)
+          : [];
+        if (myName) {
+          const myKey = String(myName).trim().toLowerCase();
+          sittingOut = !roundParticipants.some(p => String(p).trim().toLowerCase() === myKey);
+        }
+      }
     }
 
     const sorted = [...list].sort((a, b) => startMs(a) - startMs(b));
@@ -4796,7 +5001,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
       const lb = typeof GP_Data.gpComputeWeeklyLeaderboard === "function"
         ? GP_Data.gpComputeWeeklyLeaderboard(list, allPicks, { atsEventIds: [...atsIdSet], tiebreakers, tiebreakerEventId })
         : { rows: [], finalsCount: 0 };
-      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks, h2hFormat });
+      leaderboardHTML = buildLeaderboardHTML(weekLabel, lb, { leagueMembers, games: list, allPicks, h2hFormat, h2hParticipants: roundParticipants });
 
       if (h2hFormat && typeof GP_Data.gpGetH2HRoundForWeek === "function" && typeof GP_Data.gpComputeH2HWeekResults === "function") {
         const round = GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex);
@@ -5530,6 +5735,20 @@ ${archivedSectionHTML}`;
       // sitting-out players correctly lose the picks UI for that round
       // (see the sittingOut check in gpBuildGroupPicksCardHTML) instead of
       // still being able to pick like before this existed.
+      const playoffRoundsSoFar = Array.isArray(league?.h2hPlayoffRounds) ? league.h2hPlayoffRounds : [];
+      const lastPlayoffRound = playoffRoundsSoFar[playoffRoundsSoFar.length - 1];
+      const lastRoundPairs = lastPlayoffRound ? (h2hSchedule[lastPlayoffRound.weekIndex]?.pairs || []) : [];
+      const bracketIsChampioned = playoffRoundsSoFar.length > 0 && lastRoundPairs.length === 1 && !lastRoundPairs[0]?.bye;
+      const playoffActionBtnHTML = !playoffRoundsSoFar.length
+        ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">🏆 Generate Playoffs Round</button>`
+        : !bracketIsChampioned
+          ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="advanceH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">➡️ Advance to Next Round</button>`
+          : "";
+      const playoffActionNoteHTML = !playoffRoundsSoFar.length
+        ? `"Generate Playoffs Round" appends a new round seeded from current standings (top ${h2hPlayoffTeams}) — everyone outside that cut sits out, correctly, instead of still being able to pick.`
+        : !bracketIsChampioned
+          ? `"Advance to Next Round" needs the current round fully final — it pairs up the winners and appends the next round. Once only one matchup remains and it's final, a champion is crowned automatically.`
+          : `🏆 This bracket has crowned a champion — check the Standings and Playoffs tabs.`;
       h2hSeasonBodyHTML = `
     <div class="muted" style="font-size:12px">Season started with ${h2hRoster.length} player${h2hRoster.length === 1 ? "" : "s"}. Reassign any matchup below (add/remove matchups or whole rounds freely, or set a side to "— BYE —") and save.</div>
     <div class="gpH2HEditSchedule" id="gpH2HEditSchedule" data-leagueid="${esc(league?.id || "")}">
@@ -5538,10 +5757,10 @@ ${archivedSectionHTML}`;
     <button type="button" class="gpH2HAddRoundBtn" data-gpaction="h2hAddRound">+ Add Round</button>
     <div class="gpLeagueSettingsActions">
       <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="saveH2HSchedule" data-leagueid="${esc(league?.id || "")}">💾 Save Schedule</button>
-      <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">🏆 Generate Playoffs Round</button>
+      ${playoffActionBtnHTML}
       <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="startH2HSeason" data-leagueid="${esc(league?.id || "")}">🔄 Regenerate From Joined Players</button>
     </div>
-    <div class="muted" style="font-size:11px">"Generate Playoffs Round" appends a new round seeded from current standings (top ${h2hPlayoffTeams}) — everyone outside that cut sits out, correctly, instead of still being able to pick. "Regenerate From Joined Players" replaces the <b>entire</b> schedule above with a fresh round-robin — any manual edits (including a generated playoff round) are lost.</div>`;
+    <div class="muted" style="font-size:11px">${playoffActionNoteHTML} "Regenerate From Joined Players" replaces the <b>entire</b> schedule above with a fresh round-robin — any manual edits (including any generated playoff rounds) are lost.</div>`;
     }
 
     return `

@@ -1057,6 +1057,22 @@
     return schedule[idx]?.pairs || [];
   }
 
+  // gpGetH2HRoundParticipants(round) — names with a real (non-bye)
+  // matchup this round, i.e. who's actually making picks. A player byed
+  // or simply absent from a pared-down playoff round has nothing to
+  // lock in, so this is what both the Picks page's sitting-out gate and
+  // Pick Progress's roster filter key off of, instead of either showing
+  // them a picks form with no matchup behind it or listing them in
+  // progress for games they'll never pick.
+  function gpGetH2HRoundParticipants(round) {
+    const names = [];
+    for (const m of (Array.isArray(round) ? round : [])) {
+      if (m?.bye) continue;
+      if (Array.isArray(m?.players)) names.push(...m.players.filter(Boolean));
+    }
+    return names;
+  }
+
   // gpComputeH2HWeekResults(round, weeklyRows, tiebreakerActual) — matches
   // this week's scheduled pairings to that week's points (from the
   // already-computed gpComputeWeeklyLeaderboard rows), and decides each
@@ -1153,26 +1169,186 @@
     return { rows, weeksCount: weeksFinal };
   }
 
+  // gpStandardBracketSeedOrder(size) — the standard single-elimination
+  // seed-to-slot order for a power-of-2 bracket, built by the well-known
+  // recursive halving rule (each existing seed s gets a partner n+1-s in
+  // the next size up). size=2 -> [1,2]. size=4 -> [1,4,2,3]. size=8 ->
+  // [1,8,4,5,2,7,3,6]. This is what keeps the two best seeds apart until
+  // the final (and the next two apart until the semis, etc.) — a plain
+  // "1 vs N, 2 vs N-1" serpentine gets the first round right for size=4
+  // but is WRONG for size=8 (it would let seeds 1 and 2 both land in the
+  // same semifinal instead of being held apart for a possible final).
+  function gpStandardBracketSeedOrder(size) {
+    let order = [1];
+    while (order.length < size) {
+      const n = order.length * 2;
+      const next = [];
+      for (const s of order) next.push(s, n + 1 - s);
+      order = next;
+    }
+    return order;
+  }
+
   // gpBuildPlayoffPairsFromStandings(standingsRows, n) — seeds the top n
-  // (from gpComputeH2HSeasonStandings' sorted rows) into playoff matchups:
-  // 1 vs n, 2 vs n-1, etc. Same seeding math as gpBuildH2HPlayoffsTabHTML's
-  // read-only bracket preview (which builds its own {seed,row} display
-  // pairs and isn't wired to this), used here to turn that same top-n cut
-  // into real h2hSchedule data. Returns a `pairs` array in the exact shape
-  // schedule rounds already use ({ players: [a, b] }) — anyone outside the
-  // top n is simply absent from it, not byed, which is what makes them
-  // correctly sit out that round's picks entirely (see
-  // gpBuildGroupPicksCardHTML's sittingOut check) instead of still being
-  // able to pick like before this existed.
+  // (from gpComputeH2HSeasonStandings' sorted rows) into a proper
+  // single-elimination first round via gpStandardBracketSeedOrder. n=6
+  // uses the standard 8-slot bracket skeleton with the two weakest slots
+  // (7 and 8) byed out, which is the conventional way to run a 6-team
+  // single-elim bracket (the top 2 seeds sit out round 1). Returns a
+  // `pairs` array in the exact shape schedule rounds already use
+  // ({ players: [a, b] } or { bye: name }) — anyone outside the top n is
+  // simply absent from it, not byed, which is what makes them correctly
+  // sit out that round's picks entirely (see gpBuildGroupPicksCardHTML's
+  // sittingOut check) instead of still being able to pick like before
+  // this existed.
   function gpBuildPlayoffPairsFromStandings(standingsRows, n) {
     const rows = Array.isArray(standingsRows) ? standingsRows : [];
     const validN = [2, 4, 6, 8].includes(Number(n)) ? Number(n) : 4;
-    const seeds = rows.slice(0, validN).map(r => String(r?.name || "").trim()).filter(Boolean);
+    const seedNames = rows.slice(0, validN).map(r => String(r?.name || "").trim()).filter(Boolean);
+    if (seedNames.length < 2) return [];
+    const bracketSize = validN <= 2 ? 2 : (validN <= 4 ? 4 : 8);
+    const order = gpStandardBracketSeedOrder(bracketSize);
+    const slots = order.map(seedNum => seedNames[seedNum - 1] || null);
     const pairs = [];
-    for (let i = 0; i < Math.floor(seeds.length / 2); i++) {
-      pairs.push({ players: [seeds[i], seeds[seeds.length - 1 - i]] });
+    for (let i = 0; i < slots.length; i += 2) {
+      const a = slots[i], b = slots[i + 1];
+      if (a && b) pairs.push({ players: [a, b] });
+      else if (a) pairs.push({ bye: a });
+      else if (b) pairs.push({ bye: b });
     }
     return pairs;
+  }
+
+  // gpAdvancePlayoffWinners(round, weeklyRows, tiebreakerActual) — takes a
+  // just-finished playoff round's pairs and that week's actual results,
+  // and returns the NEXT round's `pairs` array: winners paired up in the
+  // same consecutive order (0&1 together, 2&3 together, ...), which is
+  // correct bracket advancement as long as the round came from
+  // gpBuildPlayoffPairsFromStandings' standard seed order above. A bye
+  // entry's player auto-advances (no game to decide). A tied matchup
+  // falls back to that pair's own tiebreaker winner (gpComputeH2HWeekResults'
+  // tbWinner) — a playoff game needs a decided winner to advance, unlike
+  // the regular season where a tie just stands. Returns null if any
+  // matchup in the round is still unresolved (no winner and no
+  // tiebreaker winner either) — the caller should treat that as "not
+  // ready to advance yet," never silently drop the undecided player.
+  function gpAdvancePlayoffWinners(round, weeklyRows, tiebreakerActual) {
+    const results = gpComputeH2HWeekResults(round, weeklyRows, tiebreakerActual);
+    const winners = results.map(r => {
+      if (r.bye) return r.bye;
+      if (r.winner === "a") return r.players[0];
+      if (r.winner === "b") return r.players[1];
+      if (r.tbWinner === "a") return r.players[0];
+      if (r.tbWinner === "b") return r.players[1];
+      return null;
+    });
+    if (!winners.length || winners.some(w => !w)) return null;
+    const pairs = [];
+    for (let i = 0; i < winners.length; i += 2) {
+      if (winners[i + 1]) pairs.push({ players: [winners[i], winners[i + 1]] });
+      else pairs.push({ bye: winners[i] });
+    }
+    return pairs;
+  }
+
+  // gpPlayoffRoundLabel(pairCount) — "Championship" once the bracket is
+  // down to one game, standard round names for the common sizes, else a
+  // generic fallback (shouldn't come up for the supported 2/4/6/8 sizes).
+  function gpPlayoffRoundLabel(pairCount) {
+    if (pairCount === 1) return "Championship";
+    if (pairCount === 2) return "Semifinals";
+    if (pairCount === 4) return "Quarterfinals";
+    return `Round of ${pairCount * 2}`;
+  }
+
+  // gpComputeH2HChampion(playoffRounds, schedule, resultsByWeekIndex) —
+  // playoffRounds: [{ weekIndex, label }, ...] in bracket order (see
+  // gpAdminSetH2HPlayoffRounds). Returns the champion's name once the
+  // LAST entry is a single-pair round whose week has gone fully final,
+  // else null (including "no bracket yet" and "bracket in progress but
+  // not down to a single championship game yet").
+  function gpComputeH2HChampion(playoffRounds, schedule, resultsByWeekIndex) {
+    const rounds = Array.isArray(playoffRounds) ? playoffRounds : [];
+    if (!rounds.length) return null;
+    const last = rounds[rounds.length - 1];
+    const round = gpGetH2HRoundForWeek(schedule, last.weekIndex);
+    if (round.length !== 1) return null;
+    const wr = resultsByWeekIndex?.[last.weekIndex];
+    if (!wr || !(Number(wr.gamesCount) > 0 && Number(wr.finalsCount) === Number(wr.gamesCount))) return null;
+    const [r] = gpComputeH2HWeekResults(round, wr.rows, wr.tiebreakerActual);
+    if (!r) return null;
+    if (r.bye) return r.bye;
+    if (r.winner === "a") return r.players[0];
+    if (r.winner === "b") return r.players[1];
+    if (r.tbWinner === "a") return r.players[0];
+    if (r.tbWinner === "b") return r.players[1];
+    return null;
+  }
+
+  // gpComputeH2HPlayoffFinalStandings(regularRows, playoffRounds, schedule,
+  // resultsByWeekIndex) — once a champion is decided (gpComputeH2HChampion
+  // non-null), reorders the regular-season standings rows to reflect how
+  // far each player actually got in the bracket: champion, then
+  // runner-up, then each earlier round's eliminated players as a tied
+  // group (ties broken by the normal regular-season chain), then anyone
+  // who never made the bracket at all, in their usual order. Returns null
+  // if there's no champion yet — callers should fall back to the regular
+  // season order in that case rather than show a half-finished bracket
+  // ranking.
+  function gpComputeH2HPlayoffFinalStandings(regularRows, playoffRounds, schedule, resultsByWeekIndex) {
+    const rounds = Array.isArray(playoffRounds) ? playoffRounds : [];
+    if (!rounds.length) return null;
+    const champion = gpComputeH2HChampion(rounds, schedule, resultsByWeekIndex);
+    if (!champion) return null;
+
+    const rows = Array.isArray(regularRows) ? regularRows : [];
+    const byKey = new Map(rows.map(r => [String(r?.name || "").trim().toLowerCase(), r]));
+    const tierOf = new Map();
+    const placed = new Set();
+
+    for (let ri = rounds.length - 1; ri >= 0; ri--) {
+      const spec = rounds[ri];
+      const pairs = gpGetH2HRoundForWeek(schedule, spec.weekIndex);
+      const wr = resultsByWeekIndex?.[spec.weekIndex];
+      const isFinal = !!wr && Number(wr.gamesCount) > 0 && Number(wr.finalsCount) === Number(wr.gamesCount);
+      if (!isFinal) continue;
+      const results = gpComputeH2HWeekResults(pairs, wr.rows, wr.tiebreakerActual);
+      const depthFromEnd = rounds.length - 1 - ri;
+      for (const res of results) {
+        if (res.bye) continue;
+        const [a, b] = res.players;
+        let winnerName = null, loserName = null;
+        if (res.winner === "a")      { winnerName = a; loserName = b; }
+        else if (res.winner === "b") { winnerName = b; loserName = a; }
+        else if (res.tbWinner === "a") { winnerName = a; loserName = b; }
+        else if (res.tbWinner === "b") { winnerName = b; loserName = a; }
+        if (!winnerName) continue;
+        const loserKey = loserName.trim().toLowerCase();
+        if (!placed.has(loserKey)) { tierOf.set(loserKey, depthFromEnd + 1); placed.add(loserKey); }
+        if (depthFromEnd === 0) {
+          const winnerKey = winnerName.trim().toLowerCase();
+          if (!placed.has(winnerKey)) { tierOf.set(winnerKey, 0); placed.add(winnerKey); }
+        }
+      }
+    }
+
+    const bracketRows = [...placed]
+      .map(k => byKey.get(k))
+      .filter(Boolean)
+      .sort((x, y) => {
+        const tx = tierOf.get(String(x.name).trim().toLowerCase());
+        const ty = tierOf.get(String(y.name).trim().toLowerCase());
+        if (tx !== ty) return tx - ty;
+        if (y.wins !== x.wins) return y.wins - x.wins;
+        if (y.ties !== x.ties) return y.ties - x.ties;
+        if (y.pointsFor !== x.pointsFor) return y.pointsFor - x.pointsFor;
+        const xDiff = x.pointsFor - x.pointsAgainst, yDiff = y.pointsFor - y.pointsAgainst;
+        if (yDiff !== xDiff) return yDiff - xDiff;
+        if (y.tbWins !== x.tbWins) return y.tbWins - x.tbWins;
+        return String(x.name).localeCompare(String(y.name));
+      });
+    const others = rows.filter(r => !placed.has(String(r?.name || "").trim().toLowerCase()));
+    return [...bracketRows, ...others];
   }
 
   // gpComputeH2HAllTimeMatchupRecords(weeklyResults, schedule)
@@ -1355,9 +1531,14 @@
     gpComputeWeeklyRecap,
     gpGenerateH2HSchedule,
     gpGetH2HRoundForWeek,
+    gpGetH2HRoundParticipants,
     gpComputeH2HWeekResults,
     gpComputeH2HSeasonStandings,
     gpBuildPlayoffPairsFromStandings,
+    gpAdvancePlayoffWinners,
+    gpPlayoffRoundLabel,
+    gpComputeH2HChampion,
+    gpComputeH2HPlayoffFinalStandings,
     gpComputeH2HAllTimeMatchupRecords,
   };
 
