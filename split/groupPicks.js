@@ -1180,6 +1180,64 @@
     postRender();
   }
 
+  // ── H2H schedule editor: relabels every round ("Round N of <Total
+  //    Weeks>" vs "🏆 Playoffs — <round name>") and refreshes the
+  //    Generate/Advance action area, purely from what's currently sitting
+  //    in the editor's DOM — no Firestore round trip. Module-level (not
+  //    nested in the click listener below) so both the click delegate
+  //    (add/remove row or round) and the change delegate further down
+  //    (reassigning a matchup slot, including toggling one to "— BYE —")
+  //    can call it. Without this, removing the playoff round from the
+  //    editor left "Advance to Next Round" showing until the admin
+  //    actually saved and the panel reloaded from the server — confusing,
+  //    since nothing on screen looked like a playoff round remained. ──
+  function gpRenumberH2HEditRounds() {
+    const container = document.getElementById("gpH2HEditSchedule");
+    if (!container) return;
+    const tw = Number(container.dataset.totalweeks) || 0;
+    const playoffTeams = Number(container.dataset.playoffteams) || 4;
+    const leagueId = String(container.dataset.leagueid || "");
+    const roundEls = Array.from(container.querySelectorAll(".gpH2HEditRound"));
+
+    let lastIsRealSingleMatchup = false;
+    roundEls.forEach((roundEl, i) => {
+      const rowEls = Array.from(roundEl.querySelectorAll(".gpH2HEditRow"));
+      const pairCount = rowEls.length;
+      const isPlayoffRound = !!tw && i >= tw;
+      roundEl.classList.toggle("gpH2HEditRoundPlayoff", isPlayoffRound);
+      const label = roundEl.querySelector(".gpH2HEditRoundLabel");
+      if (label) {
+        label.textContent = isPlayoffRound
+          ? `🏆 Playoffs — ${(Data().gpPlayoffRoundLabel || (() => "Round"))(pairCount)}`
+          : `Round ${i + 1}${tw ? ` of ${tw}` : ""}`;
+      }
+      if (i === roundEls.length - 1) {
+        const onlyRow = pairCount === 1 ? rowEls[0] : null;
+        const selects = onlyRow ? onlyRow.querySelectorAll("select[data-gp-h2h-slot]") : [];
+        lastIsRealSingleMatchup = pairCount === 1 && !!String(selects[0]?.value || "").trim() && !!String(selects[1]?.value || "").trim();
+      }
+    });
+
+    const btnArea = document.getElementById("gpH2HPlayoffActionBtn");
+    const noteArea = document.getElementById("gpH2HPlayoffActionNote");
+    if (!btnArea || !noteArea) return;
+    const playoffRoundsCount = tw ? Math.max(0, roundEls.length - tw) : 0;
+    const bracketIsChampioned = playoffRoundsCount > 0 && lastIsRealSingleMatchup;
+    if (!tw) {
+      btnArea.innerHTML = "";
+      noteArea.textContent = `Set a "Total Weeks" value above to enable playoffs — once the season reaches that many weeks, any round generated here automatically becomes the postseason, so nothing needs separately marking as "the playoffs."`;
+    } else if (!playoffRoundsCount) {
+      btnArea.innerHTML = `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${leagueId}">🏆 Generate Playoffs Round</button>`;
+      noteArea.textContent = `"Generate Playoffs Round" seeds a round from current standings (top ${playoffTeams}) and places it right after week ${tw} (this league's Total Weeks) — everyone outside that cut sits out, correctly, instead of still being able to pick. Weeks 1–${tw} always stay the regular season, in standings, no matter what happens here.`;
+    } else if (!bracketIsChampioned) {
+      btnArea.innerHTML = `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="advanceH2HPlayoffRound" data-leagueid="${leagueId}">➡️ Advance to Next Round</button>`;
+      noteArea.textContent = `"Advance to Next Round" needs the current round fully final — it pairs up the winners and appends the next round. Once only one matchup remains and it's final, a champion is crowned automatically. To undo a playoff round, just "✕ Remove Round" it below.`;
+    } else {
+      btnArea.innerHTML = "";
+      noteArea.textContent = `🏆 This is the championship round — nothing more to generate. Once it's final, a champion is crowned automatically on the Standings and Playoffs tabs. To undo, "✕ Remove Round" it below.`;
+    }
+  }
+
   // ───────────────────────────────────────────
   // Click delegation
   // ───────────────────────────────────────────
@@ -1785,13 +1843,10 @@
     //    .gpH2HEditRound/.gpH2HEditRow structure (no index attributes),
     //    so adding/removing rows or whole rounds here never needs to
     //    renumber anything for saving to work — only the round labels
-    //    (cosmetic) get refreshed, via gpRenumberH2HEditRounds below. ──
-    function gpRenumberH2HEditRounds() {
-      document.querySelectorAll("#gpH2HEditSchedule .gpH2HEditRound").forEach((roundEl, i) => {
-        const label = roundEl.querySelector(".gpH2HEditRoundLabel");
-        if (label) label.textContent = `Round ${i + 1}`;
-      });
-    }
+    //    and the Generate/Advance action area (cosmetic, both purely
+    //    derived from what's currently in the editor) get refreshed,
+    //    via gpRenumberH2HEditRounds (module-level, so the change-event
+    //    delegate below can call it too). ──
     function gpH2HBlankPairRowHTML() {
       const sampleSelect = document.querySelector('#gpH2HEditSchedule select[data-gp-h2h-slot="a"]');
       const opts = sampleSelect ? sampleSelect.innerHTML : '<option value="" selected>— BYE —</option>';
@@ -1810,11 +1865,13 @@
       row.innerHTML = gpH2HBlankPairRowHTML();
       row.querySelectorAll("select").forEach(s => { s.value = ""; });
       roundEl.insertBefore(row, btn);
+      gpRenumberH2HEditRounds();
       return;
     }
 
     if (action === "h2hRemovePairRow") {
       btn.closest(".gpH2HEditRow")?.remove();
+      gpRenumberH2HEditRounds();
       return;
     }
 
@@ -2597,6 +2654,15 @@
       const raw = String(t.value || "").trim();
       if (raw === "") { gpPendingClearTiebreaker(); } else { gpPendingSetTiebreaker(raw); }
       syncSaveBtnState();
+      return;
+    }
+
+    // H2H schedule editor — reassigning a matchup slot (including toggling
+    // one to "— BYE —") can flip whether the last round is a true single
+    // championship matchup, so refresh the Generate/Advance action area
+    // the same way adding or removing a row does.
+    if (t.getAttribute("data-gp-h2h-slot") !== null && t.closest("#gpH2HEditSchedule")) {
+      gpRenumberH2HEditRounds();
       return;
     }
   });
