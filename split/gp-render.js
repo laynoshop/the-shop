@@ -5768,6 +5768,13 @@ ${archivedSectionHTML}`;
         : !bracketIsChampioned
           ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="advanceH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">➡️ Advance to Next Round</button>`
           : "";
+      // Always available once any bracket bookkeeping exists — pure undo,
+      // never touches the schedule or results, so there's no wrong time
+      // to offer it (including right after a champion was crowned by
+      // mistake, which has no other way back).
+      const playoffUndoBtnHTML = playoffRoundsSoFar.length
+        ? `<button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="clearH2HPlayoffRounds" data-leagueid="${esc(league?.id || "")}">↩️ Undo Playoff Bracket</button>`
+        : "";
       const playoffActionNoteHTML = !playoffRoundsSoFar.length
         ? (looksLikeUnregisteredPlayoffRound
             ? `The last round above only has ${veryLastParticipants.length} of ${h2hRoster.length} players in it — looks like a playoff round that was never marked as one. "Register Last Round as Playoffs" fixes that in place (no schedule changes) so the Playoffs/Standings tabs pick it up.`
@@ -5784,6 +5791,7 @@ ${archivedSectionHTML}`;
     <div class="gpLeagueSettingsActions">
       <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="saveH2HSchedule" data-leagueid="${esc(league?.id || "")}">💾 Save Schedule</button>
       ${playoffActionBtnHTML}
+      ${playoffUndoBtnHTML}
       <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="startH2HSeason" data-leagueid="${esc(league?.id || "")}">🔄 Regenerate From Joined Players</button>
     </div>
     <div class="muted" style="font-size:11px">${playoffActionNoteHTML} "Regenerate From Joined Players" replaces the <b>entire</b> schedule above with a fresh round-robin — any manual edits (including any generated playoff rounds) are lost.</div>`;
