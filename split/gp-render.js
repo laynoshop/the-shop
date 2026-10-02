@@ -5591,6 +5591,7 @@ ${archivedSectionHTML}`;
 
   // ─── League settings form (create or edit) ────────────────────────
   function gpBuildLeagueSettingsHTML({ mode, league, leagueMembers }) {
+    const GP_Data = window.GP_Data || {};
     const isEdit = mode === "edit" && league;
     const name    = esc(String(league?.name ?? ""));
     const year    = Number(league?.seasonYear) || new Date().getFullYear();
@@ -5739,13 +5740,38 @@ ${archivedSectionHTML}`;
       const lastPlayoffRound = playoffRoundsSoFar[playoffRoundsSoFar.length - 1];
       const lastRoundPairs = lastPlayoffRound ? (h2hSchedule[lastPlayoffRound.weekIndex]?.pairs || []) : [];
       const bracketIsChampioned = playoffRoundsSoFar.length > 0 && lastRoundPairs.length === 1 && !lastRoundPairs[0]?.bye;
+      // A round can end up looking like a playoff round (fewer real
+      // participants than the full roster) without h2hPlayoffRounds ever
+      // being written for it — e.g. one generated before this bookkeeping
+      // existed, or trimmed by hand in the editor above. Offer to just
+      // register it instead of silently stacking a second playoff round
+      // on top (or leaving the Playoffs tab stuck on its pre-bracket
+      // preview forever).
+      const veryLastRound = h2hSchedule[h2hSchedule.length - 1];
+      const veryLastPairs = veryLastRound?.pairs || [];
+      const veryLastParticipants = veryLastRound && typeof GP_Data.gpGetH2HRoundParticipants === "function"
+        ? GP_Data.gpGetH2HRoundParticipants(veryLastPairs) : [];
+      // A bye'd player is still accounted for in a round (just inactive
+      // that week — normal for an odd-sized roster, every round), unlike
+      // a player cut entirely for a playoff round. Only "truly absent"
+      // (neither playing nor byed) is a reliable playoff-round signal —
+      // counting byes against the roster would flag every ordinary round
+      // of an odd-numbered league as an "unregistered playoff round".
+      const veryLastAccountedFor = new Set(veryLastParticipants.map(n => String(n).trim().toLowerCase()));
+      for (const p of veryLastPairs) { if (p?.bye) veryLastAccountedFor.add(String(p.bye).trim().toLowerCase()); }
+      const looksLikeUnregisteredPlayoffRound = !playoffRoundsSoFar.length && h2hSchedule.length > 0 &&
+        veryLastParticipants.length > 0 && veryLastAccountedFor.size < h2hRoster.length;
       const playoffActionBtnHTML = !playoffRoundsSoFar.length
-        ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">🏆 Generate Playoffs Round</button>`
+        ? (looksLikeUnregisteredPlayoffRound
+            ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="registerLastRoundAsPlayoff" data-leagueid="${esc(league?.id || "")}">📌 Register Last Round as Playoffs</button>`
+            : `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">🏆 Generate Playoffs Round</button>`)
         : !bracketIsChampioned
           ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="advanceH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">➡️ Advance to Next Round</button>`
           : "";
       const playoffActionNoteHTML = !playoffRoundsSoFar.length
-        ? `"Generate Playoffs Round" appends a new round seeded from current standings (top ${h2hPlayoffTeams}) — everyone outside that cut sits out, correctly, instead of still being able to pick.`
+        ? (looksLikeUnregisteredPlayoffRound
+            ? `The last round above only has ${veryLastParticipants.length} of ${h2hRoster.length} players in it — looks like a playoff round that was never marked as one. "Register Last Round as Playoffs" fixes that in place (no schedule changes) so the Playoffs/Standings tabs pick it up.`
+            : `"Generate Playoffs Round" appends a new round seeded from current standings (top ${h2hPlayoffTeams}) — everyone outside that cut sits out, correctly, instead of still being able to pick.`)
         : !bracketIsChampioned
           ? `"Advance to Next Round" needs the current round fully final — it pairs up the winners and appends the next round. Once only one matchup remains and it's final, a champion is crowned automatically.`
           : `🏆 This bracket has crowned a champion — check the Standings and Playoffs tabs.`;

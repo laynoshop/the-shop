@@ -451,7 +451,14 @@
         } else {
           const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
             ? Number(myPicksUserDoc.tiebreakerGuess) : null;
-          const lockReminder = gpComputeLockReminder(
+          // A player with no real matchup this round (byed, or cut from a
+          // pared-down playoff round) isn't making any picks — don't nag
+          // them with a lock-reminder banner for games they can't pick.
+          const round = (Data().gpGetH2HRoundForWeek || (() => []))(league.h2hSchedule, weekIndex);
+          const roundParticipants = round.length ? (Data().gpGetH2HRoundParticipants || (() => []))(round) : [];
+          const myKey = String(name || "").trim().toLowerCase();
+          const sittingOut = round.length > 0 && !roundParticipants.some(p => String(p).trim().toLowerCase() === myKey);
+          const lockReminder = sittingOut ? null : gpComputeLockReminder(
             games, myMap, tiebreakerEventId, myTiebreakerGuess, gpPendingGetTiebreaker()
           );
           const lockReminderHTML = lockReminder ? (Render().gpBuildLockReminderHTML || (() => ""))(lockReminder) : "";
@@ -1939,6 +1946,42 @@
       } catch (err) {
         console.error("[GP] advanceH2HPlayoffRound error:", err);
         alert(err?.message || "Something went wrong advancing the playoff bracket.");
+      }
+      return;
+    }
+
+    // ── H2H: register an already-existing schedule round as a playoff
+    //    round without touching the schedule itself — covers a round
+    //    generated before h2hPlayoffRounds bookkeeping existed, or one
+    //    manually trimmed down to fewer than the full roster. Pure
+    //    bookkeeping write; the pairs/results it points at are untouched. ──
+    if (action === "registerLastRoundAsPlayoff") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        const { league } = await gpFetchLeagueForSettings(db2, leagueId);
+        if (!league) { alert("League not found."); return; }
+        const schedule = Array.isArray(league.h2hSchedule) ? league.h2hSchedule : [];
+        if (!schedule.length) { alert("No rounds in the schedule yet."); return; }
+        const weekIndex = schedule.length - 1;
+        const pairs = schedule[weekIndex]?.pairs || [];
+        const label = (Data().gpPlayoffRoundLabel || (() => "Playoffs"))(pairs.length);
+        if (!confirm(`Register "${label}" (the last round in the schedule) as a playoff round?\n\nThis only marks it — the schedule itself isn't changed.`)) return;
+        btn.disabled = true; btn.textContent = "Registering…";
+        const playoffRounds = [{ weekIndex, label }];
+        await (Admin().gpAdminSetH2HPlayoffRounds || (async () => {}))(db2, uid, leagueId, schedule, playoffRounds);
+        if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
+          await gpRenderAdminOverlaySettings(leagueId);
+          renderPicks();
+        } else {
+          await renderPicks();
+        }
+      } catch (err) {
+        console.error("[GP] registerLastRoundAsPlayoff error:", err);
+        alert(err?.message || "Something went wrong registering the playoff round.");
       }
       return;
     }
