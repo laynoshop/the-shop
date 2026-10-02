@@ -281,10 +281,6 @@
     await leagueRef.set({
       h2hRoster: roster,
       h2hSchedule: schedule,
-      // Every round index gets reshuffled by a full regenerate, so any
-      // previously-generated playoff bracket's weekIndex pointers would
-      // now point at the wrong rounds — clear it rather than let it drift.
-      h2hPlayoffRounds: [],
       seasonStarted: true,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     }, { merge: true });
@@ -301,25 +297,6 @@
     const rounds = Array.isArray(schedule) ? schedule : [];
     await leaguesRef(db, leagueId).set({
       h2hSchedule: rounds,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
-    }, { merge: true });
-    return true;
-  }
-
-  // --------------- H2H: append/advance the playoff bracket ---------------
-  // Writes both h2hSchedule (the new round's actual pairs — same shape
-  // every other round already uses, so picks/results/standings all keep
-  // working through the existing machinery) and h2hPlayoffRounds (just
-  // { weekIndex, label } bookkeeping marking which schedule rounds are
-  // playoff rounds, in order) together, atomically — the two must never
-  // drift out of sync, since gpComputeH2HChampion and the bracket display
-  // both read h2hPlayoffRounds to know which schedule entries to look at.
-  async function gpAdminSetH2HPlayoffRounds(db, uid, leagueId, schedule, playoffRounds) {
-    const rounds = Array.isArray(schedule) ? schedule : [];
-    const bracket = Array.isArray(playoffRounds) ? playoffRounds : [];
-    await leaguesRef(db, leagueId).set({
-      h2hSchedule: rounds,
-      h2hPlayoffRounds: bracket,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     }, { merge: true });
     return true;
@@ -720,7 +697,6 @@
     gpDeleteLeague,
     gpAdminStartH2HSeason,
     gpAdminSetH2HSchedule,
-    gpAdminSetH2HPlayoffRounds,
     gpAdminCreateNewWeekInLeague,
     gpAdminAddSelectedGamesToWeek,
     gpAdminRemoveGameFromWeek,

@@ -1117,12 +1117,17 @@
     });
   }
 
-  // gpComputeH2HSeasonStandings(weeklyResults, schedule)
+  // gpComputeH2HSeasonStandings(weeklyResults, schedule, totalWeeks)
   // weeklyResults: [{ weekIndex, rows, finalsCount, gamesCount }, ...]
   // A week only counts once every game in it has gone final — same
   // "fully final" signal the points format's season cache uses. Byes
-  // never affect anyone's record.
-  function gpComputeH2HSeasonStandings(weeklyResults, schedule) {
+  // never affect anyone's record. Once a league has a fixed season
+  // length (totalWeeks), any week at or past it is the postseason —
+  // deliberately excluded here so a playoff cut can never shrink the
+  // regular-season standings table down to just the players who made
+  // the bracket; everyone who played the actual season keeps their row.
+  function gpComputeH2HSeasonStandings(weeklyResults, schedule, totalWeeks) {
+    const tw = Number(totalWeeks) || 0;
     const players = new Map();
     function ensure(name) {
       const key = String(name).trim().toLowerCase();
@@ -1132,6 +1137,7 @@
     const weeks = Array.isArray(weeklyResults) ? weeklyResults : [];
     let weeksFinal = 0;
     for (const wr of weeks) {
+      if (tw && Number(wr?.weekIndex) >= tw) continue;
       const gamesCount = Number(wr?.gamesCount ?? 0);
       const isFinal = gamesCount > 0 && Number(wr?.finalsCount ?? 0) === gamesCount;
       if (!isFinal) continue;
@@ -1261,12 +1267,33 @@
     return `Round of ${pairCount * 2}`;
   }
 
+  // gpGetH2HPlayoffRoundSpecs(schedule, totalWeeks) — which schedule
+  // rounds are the postseason, derived purely from the league's
+  // configured season length instead of separately tracked bookkeeping:
+  // once a season has a fixed length, every round at or past that index
+  // is automatically the playoffs. Nothing to register, nothing that can
+  // drift out of sync — removing a playoff round is just removing it
+  // from the schedule (the existing "Remove Round" editor control),
+  // which un-playoffs it the same way. Returns [] if the league has no
+  // fixed season length yet, or the schedule hasn't grown past it.
+  function gpGetH2HPlayoffRoundSpecs(schedule, totalWeeks) {
+    const tw = Number(totalWeeks) || 0;
+    const rounds = Array.isArray(schedule) ? schedule : [];
+    if (!tw || rounds.length <= tw) return [];
+    return rounds.slice(tw).map((r, i) => ({
+      weekIndex: tw + i,
+      label: gpPlayoffRoundLabel((r?.pairs || []).length),
+    }));
+  }
+
   // gpComputeH2HChampion(playoffRounds, schedule, resultsByWeekIndex) —
   // playoffRounds: [{ weekIndex, label }, ...] in bracket order (see
-  // gpAdminSetH2HPlayoffRounds). Returns the champion's name once the
-  // LAST entry is a single-pair round whose week has gone fully final,
-  // else null (including "no bracket yet" and "bracket in progress but
-  // not down to a single championship game yet").
+  // gpGetH2HPlayoffRoundSpecs, which derives this list from the league's
+  // Total Weeks setting — nothing separately tracked to pass here
+  // instead). Returns the champion's name once the LAST entry is a
+  // single-pair round whose week has gone fully final, else null
+  // (including "no bracket yet" and "bracket in progress but not down to
+  // a single championship game yet").
   function gpComputeH2HChampion(playoffRounds, schedule, resultsByWeekIndex) {
     const rounds = Array.isArray(playoffRounds) ? playoffRounds : [];
     if (!rounds.length) return null;
@@ -1532,6 +1559,7 @@
     gpGenerateH2HSchedule,
     gpGetH2HRoundForWeek,
     gpGetH2HRoundParticipants,
+    gpGetH2HPlayoffRoundSpecs,
     gpComputeH2HWeekResults,
     gpComputeH2HSeasonStandings,
     gpBuildPlayoffPairsFromStandings,

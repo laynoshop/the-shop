@@ -2132,6 +2132,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   border: 1px solid rgba(255,255,255,0.1);
   padding: 8px 10px;
 }
+.gpH2HEditRoundPlayoff {
+  background: rgba(255,200,40,0.06);
+  border-color: rgba(255,210,100,0.3);
+}
 .gpH2HEditRoundHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .gpH2HEditRoundLabel {
   font-size: 10.5px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em;
@@ -5711,6 +5715,14 @@ ${archivedSectionHTML}`;
           <select class="gpLeagueSettingsInput gpH2HEditSelect" data-gp-h2h-slot="b">${optionsHTML(b)}</select>
           <button type="button" class="gpH2HRemoveRowBtn" data-gpaction="h2hRemovePairRow" aria-label="Remove matchup">✕</button>
         </div>`;
+      // Once the league has a fixed season length (Total Weeks, set
+      // above), any round at or past that index is automatically the
+      // postseason — derived here purely from that setting (see
+      // gpGetH2HPlayoffRoundSpecs) rather than separately tracked, so
+      // there's nothing that can drift out of sync with the schedule.
+      const tw = Number(league?.totalWeeks) || 0;
+      const playoffRoundsSoFar = tw && typeof GP_Data.gpGetH2HPlayoffRoundSpecs === "function"
+        ? GP_Data.gpGetH2HPlayoffRoundSpecs(h2hSchedule, tw) : [];
       const roundsHTML = h2hSchedule.map((round, ri) => {
         const pairs = Array.isArray(round?.pairs) ? round.pairs : [];
         const pairRowsHTML = pairs.map((p) => {
@@ -5718,10 +5730,14 @@ ${archivedSectionHTML}`;
           const b = p?.players ? p.players[1] : "";
           return pairRowHTML(a, b, ri);
         }).join("");
+        const isPlayoffRound = !!tw && ri >= tw;
+        const roundLabel = isPlayoffRound
+          ? `🏆 Playoffs — ${esc((typeof GP_Data.gpPlayoffRoundLabel === "function" ? GP_Data.gpPlayoffRoundLabel(pairs.length) : "Round"))}`
+          : `Round ${ri + 1}${tw ? ` of ${tw}` : ""}`;
         return `
-      <div class="gpH2HEditRound">
+      <div class="gpH2HEditRound${isPlayoffRound ? " gpH2HEditRoundPlayoff" : ""}">
         <div class="gpH2HEditRoundHead">
-          <div class="gpH2HEditRoundLabel">Round ${ri + 1}</div>
+          <div class="gpH2HEditRoundLabel">${roundLabel}</div>
           <button type="button" class="gpH2HRemoveRoundBtn" data-gpaction="h2hRemoveRound">✕ Remove Round</button>
         </div>
         ${pairRowsHTML}
@@ -5736,52 +5752,23 @@ ${archivedSectionHTML}`;
       // sitting-out players correctly lose the picks UI for that round
       // (see the sittingOut check in gpBuildGroupPicksCardHTML) instead of
       // still being able to pick like before this existed.
-      const playoffRoundsSoFar = Array.isArray(league?.h2hPlayoffRounds) ? league.h2hPlayoffRounds : [];
       const lastPlayoffRound = playoffRoundsSoFar[playoffRoundsSoFar.length - 1];
       const lastRoundPairs = lastPlayoffRound ? (h2hSchedule[lastPlayoffRound.weekIndex]?.pairs || []) : [];
       const bracketIsChampioned = playoffRoundsSoFar.length > 0 && lastRoundPairs.length === 1 && !lastRoundPairs[0]?.bye;
-      // A round can end up looking like a playoff round (fewer real
-      // participants than the full roster) without h2hPlayoffRounds ever
-      // being written for it — e.g. one generated before this bookkeeping
-      // existed, or trimmed by hand in the editor above. Offer to just
-      // register it instead of silently stacking a second playoff round
-      // on top (or leaving the Playoffs tab stuck on its pre-bracket
-      // preview forever).
-      const veryLastRound = h2hSchedule[h2hSchedule.length - 1];
-      const veryLastPairs = veryLastRound?.pairs || [];
-      const veryLastParticipants = veryLastRound && typeof GP_Data.gpGetH2HRoundParticipants === "function"
-        ? GP_Data.gpGetH2HRoundParticipants(veryLastPairs) : [];
-      // A bye'd player is still accounted for in a round (just inactive
-      // that week — normal for an odd-sized roster, every round), unlike
-      // a player cut entirely for a playoff round. Only "truly absent"
-      // (neither playing nor byed) is a reliable playoff-round signal —
-      // counting byes against the roster would flag every ordinary round
-      // of an odd-numbered league as an "unregistered playoff round".
-      const veryLastAccountedFor = new Set(veryLastParticipants.map(n => String(n).trim().toLowerCase()));
-      for (const p of veryLastPairs) { if (p?.bye) veryLastAccountedFor.add(String(p.bye).trim().toLowerCase()); }
-      const looksLikeUnregisteredPlayoffRound = !playoffRoundsSoFar.length && h2hSchedule.length > 0 &&
-        veryLastParticipants.length > 0 && veryLastAccountedFor.size < h2hRoster.length;
-      const playoffActionBtnHTML = !playoffRoundsSoFar.length
-        ? (looksLikeUnregisteredPlayoffRound
-            ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="registerLastRoundAsPlayoff" data-leagueid="${esc(league?.id || "")}">📌 Register Last Round as Playoffs</button>`
-            : `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">🏆 Generate Playoffs Round</button>`)
-        : !bracketIsChampioned
-          ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="advanceH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">➡️ Advance to Next Round</button>`
-          : "";
-      // Always available once any bracket bookkeeping exists — pure undo,
-      // never touches the schedule or results, so there's no wrong time
-      // to offer it (including right after a champion was crowned by
-      // mistake, which has no other way back).
-      const playoffUndoBtnHTML = playoffRoundsSoFar.length
-        ? `<button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="clearH2HPlayoffRounds" data-leagueid="${esc(league?.id || "")}">↩️ Undo Playoff Bracket</button>`
-        : "";
-      const playoffActionNoteHTML = !playoffRoundsSoFar.length
-        ? (looksLikeUnregisteredPlayoffRound
-            ? `The last round above only has ${veryLastParticipants.length} of ${h2hRoster.length} players in it — looks like a playoff round that was never marked as one. "Register Last Round as Playoffs" fixes that in place (no schedule changes) so the Playoffs/Standings tabs pick it up.`
-            : `"Generate Playoffs Round" appends a new round seeded from current standings (top ${h2hPlayoffTeams}) — everyone outside that cut sits out, correctly, instead of still being able to pick.`)
-        : !bracketIsChampioned
-          ? `"Advance to Next Round" needs the current round fully final — it pairs up the winners and appends the next round. Once only one matchup remains and it's final, a champion is crowned automatically.`
-          : `🏆 This bracket has crowned a champion — check the Standings and Playoffs tabs.`;
+      const playoffActionBtnHTML = !tw
+        ? ""
+        : !playoffRoundsSoFar.length
+          ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">🏆 Generate Playoffs Round</button>`
+          : !bracketIsChampioned
+            ? `<button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="advanceH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">➡️ Advance to Next Round</button>`
+            : "";
+      const playoffActionNoteHTML = !tw
+        ? `Set a "Total Weeks" value above to enable playoffs — once the season reaches that many weeks, any round generated here automatically becomes the postseason, so nothing needs separately marking as "the playoffs."`
+        : !playoffRoundsSoFar.length
+          ? `"Generate Playoffs Round" seeds a round from current standings (top ${h2hPlayoffTeams}) and places it right after week ${tw} (this league's Total Weeks) — everyone outside that cut sits out, correctly, instead of still being able to pick. Weeks 1–${tw} always stay the regular season, in standings, no matter what happens here.`
+          : !bracketIsChampioned
+            ? `"Advance to Next Round" needs the current round fully final — it pairs up the winners and appends the next round. Once only one matchup remains and it's final, a champion is crowned automatically. To undo a playoff round, just "✕ Remove Round" it below.`
+            : `🏆 This bracket has crowned a champion — check the Standings and Playoffs tabs. To undo, "✕ Remove Round" the playoff round(s) below.`;
       h2hSeasonBodyHTML = `
     <div class="muted" style="font-size:12px">Season started with ${h2hRoster.length} player${h2hRoster.length === 1 ? "" : "s"}. Reassign any matchup below (add/remove matchups or whole rounds freely, or set a side to "— BYE —") and save.</div>
     <div class="gpH2HEditSchedule" id="gpH2HEditSchedule" data-leagueid="${esc(league?.id || "")}">
@@ -5791,7 +5778,6 @@ ${archivedSectionHTML}`;
     <div class="gpLeagueSettingsActions">
       <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="saveH2HSchedule" data-leagueid="${esc(league?.id || "")}">💾 Save Schedule</button>
       ${playoffActionBtnHTML}
-      ${playoffUndoBtnHTML}
       <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="startH2HSeason" data-leagueid="${esc(league?.id || "")}">🔄 Regenerate From Joined Players</button>
     </div>
     <div class="muted" style="font-size:11px">${playoffActionNoteHTML} "Regenerate From Joined Players" replaces the <b>entire</b> schedule above with a fresh round-robin — any manual edits (including any generated playoff rounds) are lost.</div>`;
