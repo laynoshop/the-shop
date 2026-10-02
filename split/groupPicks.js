@@ -450,7 +450,7 @@
             atsEventIds, tiebreakerEventId, tiebreakers, leagueMembers,
             myTiebreakerGuess, pendingTiebreakerGuess: gpPendingGetTiebreaker(),
             lockReminder: lockReminderHTML,
-            h2hFormat: true, h2hSchedule: league.h2hSchedule, weekIndex,
+            h2hFormat: true, h2hSchedule: league.h2hSchedule, weekIndex, myName: name,
             h2hPicksOnly: true
           });
         }
@@ -1739,6 +1739,118 @@
         btn.disabled = false; btn.textContent = originalLabel;
         console.error("[GP] saveH2HSchedule error:", err);
         alert(err?.message || "Something went wrong saving the schedule.");
+      }
+      return;
+    }
+
+    // ── H2H schedule editor: free-form add/remove controls. Pure DOM
+    //    edits — nothing touches Firestore until "Save Schedule" is
+    //    clicked, whose handler above reads the editor purely by
+    //    .gpH2HEditRound/.gpH2HEditRow structure (no index attributes),
+    //    so adding/removing rows or whole rounds here never needs to
+    //    renumber anything for saving to work — only the round labels
+    //    (cosmetic) get refreshed, via gpRenumberH2HEditRounds below. ──
+    function gpRenumberH2HEditRounds() {
+      document.querySelectorAll("#gpH2HEditSchedule .gpH2HEditRound").forEach((roundEl, i) => {
+        const label = roundEl.querySelector(".gpH2HEditRoundLabel");
+        if (label) label.textContent = `Round ${i + 1}`;
+      });
+    }
+    function gpH2HBlankPairRowHTML() {
+      const sampleSelect = document.querySelector('#gpH2HEditSchedule select[data-gp-h2h-slot="a"]');
+      const opts = sampleSelect ? sampleSelect.innerHTML : '<option value="" selected>— BYE —</option>';
+      return `
+        <select class="gpLeagueSettingsInput gpH2HEditSelect" data-gp-h2h-slot="a">${opts}</select>
+        <span class="gpH2HEditVs">vs</span>
+        <select class="gpLeagueSettingsInput gpH2HEditSelect" data-gp-h2h-slot="b">${opts}</select>
+        <button type="button" class="gpH2HRemoveRowBtn" data-gpaction="h2hRemovePairRow" aria-label="Remove matchup">✕</button>`;
+    }
+
+    if (action === "h2hAddPairRow") {
+      const roundEl = btn.closest(".gpH2HEditRound");
+      if (!roundEl) return;
+      const row = document.createElement("div");
+      row.className = "gpH2HEditRow";
+      row.innerHTML = gpH2HBlankPairRowHTML();
+      row.querySelectorAll("select").forEach(s => { s.value = ""; });
+      roundEl.insertBefore(row, btn);
+      return;
+    }
+
+    if (action === "h2hRemovePairRow") {
+      btn.closest(".gpH2HEditRow")?.remove();
+      return;
+    }
+
+    if (action === "h2hAddRound") {
+      const container = document.getElementById("gpH2HEditSchedule");
+      if (!container) return;
+      const emptyNotice = container.querySelector(".muted");
+      if (emptyNotice) emptyNotice.remove();
+      const roundEl = document.createElement("div");
+      roundEl.className = "gpH2HEditRound";
+      roundEl.innerHTML = `
+        <div class="gpH2HEditRoundHead">
+          <div class="gpH2HEditRoundLabel">Round</div>
+          <button type="button" class="gpH2HRemoveRoundBtn" data-gpaction="h2hRemoveRound">✕ Remove Round</button>
+        </div>
+        <div class="gpH2HEditRow">${gpH2HBlankPairRowHTML()}</div>
+        <button type="button" class="gpH2HAddPairBtn" data-gpaction="h2hAddPairRow">+ Add Matchup</button>`;
+      roundEl.querySelectorAll("select").forEach(s => { s.value = ""; });
+      container.appendChild(roundEl);
+      gpRenumberH2HEditRounds();
+      return;
+    }
+
+    if (action === "h2hRemoveRound") {
+      btn.closest(".gpH2HEditRound")?.remove();
+      gpRenumberH2HEditRounds();
+      return;
+    }
+
+    // ── H2H: generate a real playoff round from current standings — the
+    //    top N (league's Playoff Teams setting) seeded 1 vs N, 2 vs N-1,
+    //    etc. and appended as a new round. Everyone outside that cut is
+    //    simply left out of the round (not byed), which is what makes
+    //    gpBuildGroupPicksCardHTML's sittingOut check correctly hide the
+    //    picks UI for them instead of letting them pick like before this
+    //    existed. Confirms first so the admin can see exactly who got in
+    //    before committing — the standings read needed for that preview
+    //    happens before the confirm, not after, so canceling costs
+    //    nothing but the one read. ──
+    if (action === "generateH2HPlayoffRound") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      if (!leagueId) return;
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db2 = firebase.firestore();
+        const uid = firebase.auth().currentUser?.uid || "admin";
+        const { league } = await gpFetchLeagueForSettings(db2, leagueId);
+        if (!league) { alert("League not found."); return; }
+        const standings = await gpLoadSeasonLeaderboard(db2, league);
+        const n = Number(league.h2hPlayoffTeams) || 4;
+        const pairs = (Data().gpBuildPlayoffPairsFromStandings || (() => []))(standings.rows, n);
+        if (!pairs.length) {
+          alert(`Need at least one fully-final week of standings before generating a playoff round (top ${n}).`);
+          return;
+        }
+        const seedLines = pairs.map(p => `${p.players[0]} vs ${p.players[1]}`).join("\n");
+        if (!confirm(`Generate a new playoff round from current standings?\n\n${seedLines}\n\nEveryone else sits out this round. This appends a new round — rounds already saved aren't touched.`)) {
+          return;
+        }
+        const originalLabel = btn.textContent;
+        btn.disabled = true; btn.textContent = "Generating…";
+        const rounds = [...(Array.isArray(league.h2hSchedule) ? league.h2hSchedule : []), { pairs }];
+        await (Admin().gpAdminSetH2HSchedule || (async () => {}))(db2, uid, leagueId, rounds);
+        if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
+          await gpRenderAdminOverlaySettings(leagueId);
+          renderPicks();
+        } else {
+          await renderPicks();
+        }
+      } catch (err) {
+        console.error("[GP] generateH2HPlayoffRound error:", err);
+        alert(err?.message || "Something went wrong generating the playoff round.");
       }
       return;
     }

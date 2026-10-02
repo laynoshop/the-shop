@@ -2058,14 +2058,31 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   border: 1px solid rgba(255,255,255,0.1);
   padding: 8px 10px;
 }
+.gpH2HEditRoundHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .gpH2HEditRoundLabel {
   font-size: 10.5px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em;
-  color: rgba(255,210,110,0.85); margin-bottom: 6px;
+  color: rgba(255,210,110,0.85);
 }
 .gpH2HEditRow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .gpH2HEditRow:last-child { margin-bottom: 0; }
 .gpH2HEditSelect { flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; }
 .gpH2HEditVs { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.35); flex-shrink: 0; }
+.gpH2HRemoveRowBtn, .gpH2HRemoveRoundBtn {
+  flex-shrink: 0; background: rgba(220,60,60,0.12); border: 1px solid rgba(220,60,60,0.3);
+  color: rgba(255,140,140,0.9); border-radius: 7px; cursor: pointer;
+}
+.gpH2HRemoveRowBtn { width: 28px; height: 28px; font-size: 13px; line-height: 1; padding: 0; }
+.gpH2HRemoveRoundBtn { font-size: 10px; font-weight: 800; letter-spacing: 0.03em; padding: 4px 9px; }
+.gpH2HAddPairBtn {
+  width: 100%; margin-top: 2px; background: rgba(255,255,255,0.06);
+  border: 1px dashed rgba(255,255,255,0.22); color: rgba(255,255,255,0.65);
+  font-size: 11.5px; font-weight: 800; padding: 7px 0; border-radius: 8px; cursor: pointer;
+}
+.gpH2HAddRoundBtn {
+  width: 100%; margin-top: 10px; background: rgba(255,210,110,0.1);
+  border: 1px dashed rgba(255,210,110,0.4); color: rgba(255,210,110,0.9);
+  font-size: 12px; font-weight: 800; padding: 9px 0; border-radius: 10px; cursor: pointer;
+}
 
 /* ══════════════════════════════════════════════
    PLAYER PICKS OVERLAY
@@ -4713,7 +4730,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
   function gpBuildGroupPicksCardHTML({
     weekId, weekLabel, games, myMap, published, allPicks, isAdmin,
     atsEventIds, tiebreakerEventId, tiebreakers, myTiebreakerGuess, pendingTiebreakerGuess,
-    lockReminder, h2hFormat, h2hSchedule, weekIndex, leagueMembers,
+    lockReminder, h2hFormat, h2hSchedule, weekIndex, leagueMembers, myName,
     // Set by the H2H Picks tab only — the matchups card, pre-lock
     // progress, and weekly recap all moved to the Matchup tab, so this
     // skips computing/rendering them here to avoid showing them twice.
@@ -4742,15 +4759,36 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
     const pendingGet = window.gpPendingGet || (() => "");
     const isDraft    = !published && isAdmin;
     const atsIdSet   = new Set((Array.isArray(atsEventIds) ? atsEventIds : []).map(String));
+    const GP_Data = window.GP_Data || {};
+
+    // H2H only: a player with no matchup this round — either explicitly
+    // byed, or simply absent from a round that's been pared down to just
+    // the playoff qualifiers (see the "generateH2HPlayoffRound" admin
+    // action) — has nothing to pick toward and shouldn't see the
+    // game-picking UI at all. A round
+    // with zero pairs (schedule not generated yet) is NOT treated as
+    // exclusion — that falls through to normal picks so a data gap here
+    // can never accidentally lock everyone out.
+    let sittingOut = false;
+    if (h2hFormat && myName && typeof GP_Data.gpGetH2HRoundForWeek === "function") {
+      const round = GP_Data.gpGetH2HRoundForWeek(h2hSchedule, weekIndex);
+      const myKey = String(myName).trim().toLowerCase();
+      const inRound = (Array.isArray(round) ? round : []).some(m => m?.bye
+        ? String(m.bye).trim().toLowerCase() === myKey
+        : Array.isArray(m?.players) && m.players.some(p => String(p).trim().toLowerCase() === myKey));
+      sittingOut = Array.isArray(round) && round.length > 0 && !inRound;
+    }
 
     const sorted = [...list].sort((a, b) => startMs(a) - startMs(b));
     const straightGames = sorted.filter(g => !atsIdSet.has(String(g?.eventId || g?.id || "")));
     const atsGames      = sorted.filter(g => atsIdSet.has(String(g?.eventId || g?.id || "")));
 
-    const straightCardsHTML = straightGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, false, isAdmin)).filter(Boolean).join("");
-    const atsCardsHTML      = atsGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, true, isAdmin)).filter(Boolean).join("");
+    const straightCardsHTML = sittingOut ? "" : straightGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, false, isAdmin)).filter(Boolean).join("");
+    const atsCardsHTML      = sittingOut ? "" : atsGames.map(g => buildGameCard(g, weekId, myMap, pendingGet, true, isAdmin)).filter(Boolean).join("");
+    const sittingOutHTML    = sittingOut
+      ? `<div class="gpEmpty" style="padding:24px 20px;text-align:center;">🏈 No matchup scheduled for you this round — sit back and watch the rest of the league.</div>`
+      : "";
 
-    const GP_Data = window.GP_Data || {};
     let leaderboardHTML = "";
     let recapHTML = "";
     let matchupsHTML = "";
@@ -4779,7 +4817,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
 
     // ── tiebreaker section (last, right before the save row) ──
     let tiebreakerHTML = "";
-    if (tiebreakerEventId) {
+    if (tiebreakerEventId && !sittingOut) {
       const tbGame = list.find(g => String(g?.eventId || g?.id || "") === String(tiebreakerEventId));
       if (tbGame) {
         const tbMs     = startMs(tbGame);
@@ -4802,7 +4840,7 @@ ${subtitle ? `<div class="gpPicksSectionSubtitle">${subtitle}</div>` : ""}`;
       }
     }
 
-    const saveRow = `
+    const saveRow = sittingOut ? "" : `
 <div class="gpSaveRow">
   <button class="gpHeaderSaveBtn" type="button" data-gpaction="savePicks" disabled>Save</button>
   <span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.4)">Saves your pending picks</span>
@@ -4814,6 +4852,7 @@ ${lockReminder || ""}
 ${matchupsHTML}
 ${recapHTML}
 ${leaderboardHTML}
+${sittingOutHTML}
 ${straightCardsHTML ? gpBuildSectionHeaderHTML(
   "☑️ Outright Winners", "outright",
   "Pick the team you think will <b>win the game</b> — margin of victory doesn't matter, just get the winner right."
@@ -5459,34 +5498,50 @@ ${archivedSectionHTML}`;
         return `<option value="" ${selKey ? "" : "selected"}>— BYE —</option>` +
           pool.map(n => `<option value="${esc(n)}" ${n.toLowerCase() === selKey ? "selected" : ""}>${esc(n)}</option>`).join("");
       };
-      const roundsHTML = h2hSchedule.map((round, ri) => {
-        const pairs = Array.isArray(round?.pairs) ? round.pairs : [];
-        const pairRowsHTML = pairs.map((p, pi) => {
-          const a = p?.players ? p.players[0] : (p?.bye || "");
-          const b = p?.players ? p.players[1] : "";
-          return `
-        <div class="gpH2HEditRow" data-round="${ri}" data-pair="${pi}">
+      const pairRowHTML = (a, b, ri) => `
+        <div class="gpH2HEditRow" data-round="${ri}">
           <select class="gpLeagueSettingsInput gpH2HEditSelect" data-gp-h2h-slot="a">${optionsHTML(a)}</select>
           <span class="gpH2HEditVs">vs</span>
           <select class="gpLeagueSettingsInput gpH2HEditSelect" data-gp-h2h-slot="b">${optionsHTML(b)}</select>
+          <button type="button" class="gpH2HRemoveRowBtn" data-gpaction="h2hRemovePairRow" aria-label="Remove matchup">✕</button>
         </div>`;
+      const roundsHTML = h2hSchedule.map((round, ri) => {
+        const pairs = Array.isArray(round?.pairs) ? round.pairs : [];
+        const pairRowsHTML = pairs.map((p) => {
+          const a = p?.players ? p.players[0] : (p?.bye || "");
+          const b = p?.players ? p.players[1] : "";
+          return pairRowHTML(a, b, ri);
         }).join("");
         return `
       <div class="gpH2HEditRound">
-        <div class="gpH2HEditRoundLabel">Round ${ri + 1}</div>
+        <div class="gpH2HEditRoundHead">
+          <div class="gpH2HEditRoundLabel">Round ${ri + 1}</div>
+          <button type="button" class="gpH2HRemoveRoundBtn" data-gpaction="h2hRemoveRound">✕ Remove Round</button>
+        </div>
         ${pairRowsHTML}
+        <button type="button" class="gpH2HAddPairBtn" data-gpaction="h2hAddPairRow">+ Add Matchup</button>
       </div>`;
       }).join("");
+      // Playoff Teams (set above) only feeds the read-only Playoff Picture
+      // preview on its own — this button is what actually turns "top N by
+      // current standings" into a real, playable round: it appends one new
+      // round pairing just those N players, and leaves everyone else out
+      // of it entirely (not even a bye entry), which is what makes the
+      // sitting-out players correctly lose the picks UI for that round
+      // (see the sittingOut check in gpBuildGroupPicksCardHTML) instead of
+      // still being able to pick like before this existed.
       h2hSeasonBodyHTML = `
-    <div class="muted" style="font-size:12px">Season started with ${h2hRoster.length} player${h2hRoster.length === 1 ? "" : "s"}. Reassign any matchup below (or set a side to "— BYE —") and save.</div>
+    <div class="muted" style="font-size:12px">Season started with ${h2hRoster.length} player${h2hRoster.length === 1 ? "" : "s"}. Reassign any matchup below (add/remove matchups or whole rounds freely, or set a side to "— BYE —") and save.</div>
     <div class="gpH2HEditSchedule" id="gpH2HEditSchedule" data-leagueid="${esc(league?.id || "")}">
       ${roundsHTML || `<div class="muted" style="font-size:12px">No rounds yet.</div>`}
     </div>
+    <button type="button" class="gpH2HAddRoundBtn" data-gpaction="h2hAddRound">+ Add Round</button>
     <div class="gpLeagueSettingsActions">
       <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="saveH2HSchedule" data-leagueid="${esc(league?.id || "")}">💾 Save Schedule</button>
+      <button class="smallBtn gpH2HStartSeasonBtn" type="button" data-gpaction="generateH2HPlayoffRound" data-leagueid="${esc(league?.id || "")}">🏆 Generate Playoffs Round</button>
       <button class="smallBtn gpLeagueSettingsCancelBtn" type="button" data-gpaction="startH2HSeason" data-leagueid="${esc(league?.id || "")}">🔄 Regenerate From Joined Players</button>
     </div>
-    <div class="muted" style="font-size:11px">Regenerating replaces the whole schedule above with a fresh round-robin from everyone currently joined — any manual edits here are lost.</div>`;
+    <div class="muted" style="font-size:11px">"Generate Playoffs Round" appends a new round seeded from current standings (top ${h2hPlayoffTeams}) — everyone outside that cut sits out, correctly, instead of still being able to pick. "Regenerate From Joined Players" replaces the <b>entire</b> schedule above with a fresh round-robin — any manual edits (including a generated playoff round) are lost.</div>`;
     }
 
     return `
