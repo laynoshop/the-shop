@@ -1800,8 +1800,8 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gpAnnouncementArrow {
-  flex-shrink: 0; width: 18px; text-align: center;
-  font-size: 13px; color: rgba(255,255,255,0.5);
+  flex-shrink: 0; width: 24px; text-align: center;
+  font-size: 22px; font-weight: 900; line-height: 1; color: rgba(255,255,255,0.75);
   transition: transform 0.2s ease;
 }
 .gpAnnouncementBanner.gpAnnouncementExpanded .gpAnnouncementArrow { transform: rotate(90deg); }
