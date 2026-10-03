@@ -1012,6 +1012,15 @@
     // ── league resolution ──
     const pickLeagueId = mem.pickLeagueId || gpGetSelectedLeagueId();
     const showPicker = forceLeaguePicker || !pickLeagueId || mem.gpShowLeaguePicker;
+    // Persist the decision, not just act on it for this one render pass —
+    // otherwise a forced-picker call (the bottom nav's Pick'em tab always
+    // passes forceLeaguePicker) that times out mid-render loses that
+    // intent entirely: the header's refresh button re-derives "am I on
+    // the picker" from this same flag, and without it falling back to
+    // gpGetSelectedLeagueId() drops the player straight into whatever
+    // league they'd previously been viewing instead of the picker they
+    // were actually headed to.
+    mem.gpShowLeaguePicker = showPicker;
 
     if (showPicker) {
       const headerHTML = (Render().renderPicksHeaderHTML || (() => ""))({ isAdmin, showLeaguesBtn: false, showSaveBtn: false, playerName: name });
