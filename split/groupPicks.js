@@ -1267,6 +1267,8 @@
           ? (Data().gpPlayoffRoundLabel || (() => "Playoff Round"))(pairCount)
           : `Week ${i + 1}${tw ? ` of ${tw}` : ""}`;
       }
+      const removeBtn = roundEl.querySelector(".gpH2HRemoveRoundBtn");
+      if (removeBtn) removeBtn.textContent = `✕ Remove ${isPlayoffRound ? "Round" : "Week"}`;
       if (isPlayoffRound && i === tw) {
         const divider = document.createElement("div");
         divider.className = "gpH2HPlayoffDivider";
