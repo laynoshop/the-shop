@@ -5754,7 +5754,7 @@ ${archivedSectionHTML}`;
       <div class="gpH2HEditRound${isPlayoffRound ? " gpH2HEditRoundPlayoff" : ""}">
         <div class="gpH2HEditRoundHead">
           <div class="gpH2HEditRoundLabel">${roundLabel}</div>
-          <button type="button" class="gpH2HRemoveRoundBtn" data-gpaction="h2hRemoveRound">✕ Remove Round</button>
+          <button type="button" class="gpH2HRemoveRoundBtn" data-gpaction="h2hRemoveRound">✕ Remove ${isPlayoffRound ? "Round" : "Week"}</button>
         </div>
         ${pairRowsHTML}
         <button type="button" class="gpH2HAddPairBtn" data-gpaction="h2hAddPairRow">+ Add Matchup</button>
