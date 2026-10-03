@@ -844,17 +844,46 @@
   // it's actually open and showing that view — never while the embedded
   // League Settings form is up, so the 60s background auto-refresh (or
   // any other render pass) can't clobber in-progress form edits there.
+  // Same hung-promise protection as gpRenderAdminOverlaySettings below —
+  // a stuck Firestore/ESPN call here used to strand the Admin Tools
+  // overlay on "Loading admin tools…" forever.
   async function gpRefreshAdminToolsOverlay() {
     if (!document.getElementById("gpAdminToolsOverlay")) return;
     if (gpMem().gpAdminOverlaySubview === "settings") return;
-    const html = await gpBuildAdminToolsPanelHTML();
-    (Render().gpSetAdminToolsOverlayBody || (() => {}))(html);
+    let settled = false;
+    const loadTask = gpBuildAdminToolsPanelHTML().then((html) => {
+      if (settled) return;
+      settled = true;
+      (Render().gpSetAdminToolsOverlayBody || (() => {}))(html);
+    }).catch((err) => {
+      if (settled) return;
+      settled = true;
+      console.error("[GP] gpRefreshAdminToolsOverlay error:", err);
+      (Render().gpSetAdminToolsOverlayBody || (() => {}))(
+        `<div class="gpNotice">Couldn't load admin tools: ${String(err?.message || err)}<br><button type="button" class="smallBtn gpH2HStartSeasonBtn" style="margin-top:10px" data-gpaction="openAdminOverlay">🔄 Try Again</button></div>`
+      );
+    });
+    const timeoutTask = new Promise((resolve) => setTimeout(resolve, GP_ADMIN_OVERLAY_TIMEOUT_MS));
+    await Promise.race([loadTask, timeoutTask]);
+    if (!settled) {
+      settled = true;
+      (Render().gpSetAdminToolsOverlayBody || (() => {}))(
+        `<div class="gpNotice">This is taking longer than expected.<br><button type="button" class="smallBtn gpH2HStartSeasonBtn" style="margin-top:10px" data-gpaction="openAdminOverlay">🔄 Try Again</button></div>`
+      );
+    }
   }
 
   // Fetches + renders the League Settings form into the (already open)
   // Admin Tools overlay's body, marking the overlay's subview so
   // gpRefreshAdminToolsOverlay leaves it alone until Save/Cancel move it
   // back to "tools".
+  const GP_ADMIN_OVERLAY_TIMEOUT_MS = 15000;
+
+  // A hung Firestore/auth call (never settling, not even rejecting) used to
+  // strand this panel on "Loading league settings…" forever — a plain
+  // try/catch can't protect against that, only a hard timeout race can
+  // (same pattern renderPicks uses below for the main page). Without it,
+  // the only way out was closing the whole overlay and reopening it.
   async function gpRenderAdminOverlaySettings(leagueId) {
     const mem2 = gpMem();
     mem2.gpAdminOverlaySubview = "settings";
@@ -863,12 +892,33 @@
     // overlay) — those already read gpLeagueEditingId first.
     mem2.gpLeagueEditingId = leagueId;
     (Render().gpSetAdminToolsOverlayBody || (() => {}))(`<div class="gpNotice">Loading league settings…</div>`);
-    await (Data().ensureFirebaseReadySafe || (async () => {}))();
-    const db2 = firebase.firestore();
-    const { league, leagueMembers } = await gpFetchLeagueForSettings(db2, leagueId);
-    mem2.gpLeagueSettingsMembersCache = leagueMembers;
-    const formHTML = (Render().gpBuildLeagueSettingsHTML || (() => ""))({ mode: "edit", league, leagueMembers });
-    (Render().gpSetAdminToolsOverlayBody || (() => {}))(formHTML);
+
+    const retryHTML = (msg) => `<div class="gpNotice">${String(msg)}<br><button type="button" class="smallBtn gpH2HStartSeasonBtn" style="margin-top:10px" data-gpaction="retryAdminOverlaySettings" data-leagueid="${String(leagueId || "")}">🔄 Try Again</button></div>`;
+
+    let settled = false;
+    const loadTask = (async () => {
+      await (Data().ensureFirebaseReadySafe || (async () => {}))();
+      const db2 = firebase.firestore();
+      const { league, leagueMembers } = await gpFetchLeagueForSettings(db2, leagueId);
+      mem2.gpLeagueSettingsMembersCache = leagueMembers;
+      return (Render().gpBuildLeagueSettingsHTML || (() => ""))({ mode: "edit", league, leagueMembers });
+    })().then((formHTML) => {
+      if (settled) return;
+      settled = true;
+      (Render().gpSetAdminToolsOverlayBody || (() => {}))(formHTML);
+    }).catch((err) => {
+      if (settled) return;
+      settled = true;
+      console.error("[GP] gpRenderAdminOverlaySettings error:", err);
+      (Render().gpSetAdminToolsOverlayBody || (() => {}))(retryHTML(`Couldn't load league settings: ${String(err?.message || err)}`));
+    });
+
+    const timeoutTask = new Promise((resolve) => setTimeout(resolve, GP_ADMIN_OVERLAY_TIMEOUT_MS));
+    await Promise.race([loadTask, timeoutTask]);
+    if (!settled) {
+      settled = true;
+      (Render().gpSetAdminToolsOverlayBody || (() => {}))(retryHTML("This is taking longer than expected."));
+    }
   }
 
   function gpBuildRetryScreenHTML(message) {
@@ -1199,6 +1249,12 @@
     const leagueId = String(container.dataset.leagueid || "");
     const roundEls = Array.from(container.querySelectorAll(".gpH2HEditRound"));
 
+    // Any pre-existing divider gets removed and reinserted fresh below —
+    // simplest way to keep it correctly positioned (or gone entirely)
+    // as rounds are added/removed, matching gp-render.js's server-side
+    // placement exactly (right before the first index at/past `tw`).
+    container.querySelectorAll(".gpH2HPlayoffDivider").forEach(d => d.remove());
+
     let lastIsRealSingleMatchup = false;
     roundEls.forEach((roundEl, i) => {
       const rowEls = Array.from(roundEl.querySelectorAll(".gpH2HEditRow"));
@@ -1208,8 +1264,14 @@
       const label = roundEl.querySelector(".gpH2HEditRoundLabel");
       if (label) {
         label.textContent = isPlayoffRound
-          ? `🏆 Playoffs — ${(Data().gpPlayoffRoundLabel || (() => "Round"))(pairCount)}`
-          : `Round ${i + 1}${tw ? ` of ${tw}` : ""}`;
+          ? (Data().gpPlayoffRoundLabel || (() => "Playoff Round"))(pairCount)
+          : `Week ${i + 1}${tw ? ` of ${tw}` : ""}`;
+      }
+      if (isPlayoffRound && i === tw) {
+        const divider = document.createElement("div");
+        divider.className = "gpH2HPlayoffDivider";
+        divider.textContent = "🏆 Playoffs";
+        container.insertBefore(divider, roundEl);
       }
       if (i === roundEls.length - 1) {
         const onlyRow = pairCount === 1 ? rowEls[0] : null;
@@ -1576,6 +1638,15 @@
     //    swapping the overlay's body content in place (no navigation) ──
     if (action === "openAdminOverlaySettings") {
       const leagueId = String(btn.getAttribute("data-leagueid") || gpMem().pickLeagueId || "").trim();
+      if (!leagueId) return;
+      await gpRenderAdminOverlaySettings(leagueId);
+      return;
+    }
+
+    // ── admin: retry after League Settings failed or timed out loading —
+    //    same panel, no need to close the overlay and reopen it. ──
+    if (action === "retryAdminOverlaySettings") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
       if (!leagueId) return;
       await gpRenderAdminOverlaySettings(leagueId);
       return;

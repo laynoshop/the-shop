@@ -2136,6 +2136,16 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   background: rgba(255,200,40,0.06);
   border-color: rgba(255,210,100,0.3);
 }
+.gpH2HPlayoffDivider {
+  display: flex; align-items: center; gap: 8px;
+  margin: 4px 2px 2px;
+  font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
+  color: rgba(255,210,110,0.85);
+}
+.gpH2HPlayoffDivider::after {
+  content: ""; flex: 1 1 auto; height: 1px;
+  background: linear-gradient(90deg, rgba(255,210,100,0.4), rgba(255,210,100,0));
+}
 .gpH2HEditRoundHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .gpH2HEditRoundLabel {
   font-size: 10.5px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em;
@@ -5731,10 +5741,16 @@ ${archivedSectionHTML}`;
           return pairRowHTML(a, b, ri);
         }).join("");
         const isPlayoffRound = !!tw && ri >= tw;
+        // "Round" reads as ambiguous once there's also a Playoffs section —
+        // the regular season is weeks, plain and simple; only the
+        // postseason gets "round" language (Semifinals, Championship),
+        // under its own divider so it's never confused for "just another
+        // week" even if someone doesn't notice the gold styling.
         const roundLabel = isPlayoffRound
-          ? `🏆 Playoffs — ${esc((typeof GP_Data.gpPlayoffRoundLabel === "function" ? GP_Data.gpPlayoffRoundLabel(pairs.length) : "Round"))}`
-          : `Round ${ri + 1}${tw ? ` of ${tw}` : ""}`;
-        return `
+          ? esc((typeof GP_Data.gpPlayoffRoundLabel === "function" ? GP_Data.gpPlayoffRoundLabel(pairs.length) : "Playoff Round"))
+          : `Week ${ri + 1}${tw ? ` of ${tw}` : ""}`;
+        const playoffDividerHTML = (isPlayoffRound && ri === tw) ? `<div class="gpH2HPlayoffDivider">🏆 Playoffs</div>` : "";
+        return `${playoffDividerHTML}
       <div class="gpH2HEditRound${isPlayoffRound ? " gpH2HEditRoundPlayoff" : ""}">
         <div class="gpH2HEditRoundHead">
           <div class="gpH2HEditRoundLabel">${roundLabel}</div>
