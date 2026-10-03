@@ -311,13 +311,53 @@
   }
 
   // ─── all picks for slate ────────────────────────────────────────────
+  // Fast path: a denormalized picksByEvent summary the onPickGameWritten
+  // Cloud Function (functions/index.js) maintains directly on the slate
+  // doc — one read instead of one query plus one more read per player.
+  // That function backfills this summary completely the first time it
+  // ever touches a slate (even one that already had picks before it was
+  // deployed), so once the field is present here it's safe to trust
+  // outright — no partial-migration risk where an old slate's summary
+  // only reflects whoever happened to save a pick after deploy. Falls
+  // back to the full per-player fan-out below only for a slate nothing
+  // has saved a pick on since this shipped; its very next save upgrades
+  // it, no backfill needed from this side.
+  async function gpGetAllPicksForSlate(db, slateId) {
+    try {
+      const slateSnap = await db.collection("pickSlates").doc(slateId).get();
+      const picksByEvent = slateSnap.exists ? slateSnap.data()?.picksByEvent : null;
+      if (picksByEvent && typeof picksByEvent === "object") {
+        const out = {};
+        for (const [eventId, byPlayer] of Object.entries(picksByEvent)) {
+          if (!byPlayer || typeof byPlayer !== "object") continue;
+          const rows = Object.entries(byPlayer).map(([playerId, row]) => ({
+            uid: String(row?.uid || playerId),
+            name: String(row?.name || "Someone"),
+            side: String(row?.side || ""),
+            updatedAt: row?.updatedAt || null,
+          }));
+          if (rows.length) {
+            rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+            out[eventId] = rows;
+          }
+        }
+        return out;
+      }
+    } catch (err) {
+      console.error(`[GP] gpGetAllPicksForSlate fast path failed for ${slateId}, falling back to per-player fan-out:`, err);
+    }
+    return gpGetAllPicksForSlateFanOut(db, slateId);
+  }
+
   // One Firestore round trip per player's games subcollection — with a
   // league of any real size, doing these one at a time (in sequence) is
   // exactly the kind of cumulative latency that can trip the picks
   // page's hard render timeout on a slow connection, even though no
   // single call is actually stuck. Fetched in parallel instead, since
-  // every player's data here is independent of every other's.
-  async function gpGetAllPicksForSlate(db, slateId) {
+  // every player's data here is independent of every other's. Only
+  // reached now when a slate's picksByEvent summary (above) doesn't
+  // exist yet.
+  async function gpGetAllPicksForSlateFanOut(db, slateId) {
     const out = {};
     const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
     const userDocs  = usersSnap.docs || [];
