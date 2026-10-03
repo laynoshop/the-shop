@@ -29,7 +29,13 @@
   const SESSION_KEYS_TO_CLEAR_PREFIXES = [
     "theShopOddsCache_v1_",
     "theShopAiInsightCache_v1",
-    "theShopConfCache_v1_"
+    "theShopConfCache_v1_",
+    // Group Picks' per-week picks/tiebreaker read-through cache
+    // (gp-data.js) — clears so a different identity logging in on the
+    // same shared device/tab never sees a cached week from whoever used
+    // it last.
+    "theShopGpAllPicksCache_v1_",
+    "theShopGpTiebreakersCache_v1_"
   ];
 
   async function safeFirebaseSignOut() {

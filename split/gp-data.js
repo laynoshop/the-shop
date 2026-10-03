@@ -29,6 +29,25 @@
     try { localStorage.setItem(key, String(val)); } catch {}
   }
 
+  // ─── safe sessionStorage helpers ─────────────────────────────────
+  // Same privacy/quota caveats as localStorage (private browsing, quota
+  // exceeded, disabled storage) — every call is wrapped so a failure here
+  // never breaks the actual feature, just falls back to no caching.
+  // sessionStorage (not localStorage) deliberately: it clears itself when
+  // the tab closes, so a stale pick never outlives the visit it was
+  // fetched during, and logout.js's SESSION_KEYS_TO_CLEAR_PREFIXES sweep
+  // (theShopGp*Cache_v1_ below) covers the "someone else logs in on this
+  // shared device" case explicitly too.
+  function safeGetSS(key) {
+    try { return sessionStorage.getItem(key); } catch { return null; }
+  }
+  function safeSetSS(key, val) {
+    try { sessionStorage.setItem(key, val); } catch {}
+  }
+  function safeRemoveSS(key) {
+    try { sessionStorage.removeItem(key); } catch {}
+  }
+
   // ─── Firebase ready ───────────────────────────────────────────────
   async function ensureFirebaseReadySafe() {
     if (typeof window.ensureFirebaseChatReady === "function") {
@@ -516,11 +535,52 @@
     return { weeksMerged, details };
   }
 
+  // ─── sessionStorage-backed read-through for per-week caches ──────────
+  // window.__GP_ALLPICKS_CACHE / __GP_TIEBREAKERS_CACHE only live as long
+  // as the current JS context — fine for normal same-page navigation, but
+  // iOS Safari (and most mobile browsers) routinely reload a backgrounded
+  // tab's JS context from scratch when it's foregrounded again, especially
+  // for a Home-Screen PWA. That reload looks identical to a brand-new
+  // visit to these in-memory caches, so every background/foreground cycle
+  // re-paid the full per-player games-subcollection fan-out in
+  // gpGetAllPicksForSlate (1 read per league member) even though, from
+  // the player's perspective, they never left. Backing these with
+  // sessionStorage closes that gap: it survives exactly that kind of
+  // reload (the tab's identity persists), while still clearing itself the
+  // moment the tab actually closes — a stale pick can never outlive the
+  // visit it was fetched during, and logout.js's
+  // SESSION_KEYS_TO_CLEAR_PREFIXES sweep (the "theShopGp" prefix below)
+  // covers someone else logging in on the same shared device.
+  const GP_WEEK_CACHE_TTL_MS = 2 * 60 * 1000;
+  function gpWeekCacheSessionKey(prefix, weekId) {
+    return `theShopGp${prefix}Cache_v1_${String(weekId || "")}`;
+  }
+  function gpSeedBucketFromSession(bucket, prefix, weekId) {
+    const raw = safeGetSS(gpWeekCacheSessionKey(prefix, weekId));
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.ts && (Date.now() - parsed.ts) < GP_WEEK_CACHE_TTL_MS) {
+        bucket.data = parsed.data;
+        bucket.ts = parsed.ts;
+      }
+    } catch {}
+  }
+  function gpWriteBucketToSession(prefix, weekId, ts, data) {
+    try { safeSetSS(gpWeekCacheSessionKey(prefix, weekId), JSON.stringify({ ts, data })); } catch {}
+  }
+  function gpClearWeekCacheSession(prefix, weekId) {
+    safeRemoveSS(gpWeekCacheSessionKey(prefix, weekId));
+  }
+
   // ─── everyone's picks cache ─────────────────────────────────────────
   function gpGetAllPicksCacheBucket(weekId) {
     window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
     const k = String(weekId || "");
-    if (!window.__GP_ALLPICKS_CACHE[k]) window.__GP_ALLPICKS_CACHE[k] = { ts: 0, data: null, promise: null };
+    if (!window.__GP_ALLPICKS_CACHE[k]) {
+      window.__GP_ALLPICKS_CACHE[k] = { ts: 0, data: null, promise: null };
+      gpSeedBucketFromSession(window.__GP_ALLPICKS_CACHE[k], "AllPicks", k);
+    }
     return window.__GP_ALLPICKS_CACHE[k];
   }
 
@@ -531,6 +591,7 @@
     if (!k) return;
     window.__GP_ALLPICKS_CACHE = window.__GP_ALLPICKS_CACHE || {};
     window.__GP_ALLPICKS_CACHE[k] = { ts: 0, data: null, promise: null };
+    gpClearWeekCacheSession("AllPicks", k);
     gpBustTiebreakersCache(k);
   }
 
@@ -547,8 +608,7 @@
     const k = String(weekId || "").trim();
     if (!k) return {};
     const bucket = gpGetAllPicksCacheBucket(k);
-    const TTL    = 2 * 60 * 1000;
-    const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+    const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < GP_WEEK_CACHE_TTL_MS;
     if (fresh) return bucket.data || {};
     const pendingTooLong = bucket.promise && bucket.startedAt && (Date.now() - bucket.startedAt) > GP_CACHE_MAX_PENDING_MS;
     if (bucket.promise && !pendingTooLong) return bucket.promise;
@@ -558,6 +618,7 @@
         const data  = await gpGetAllPicksForSlate(db, k);
         bucket.data = data || {};
         bucket.ts   = Date.now();
+        gpWriteBucketToSession("AllPicks", k, bucket.ts, bucket.data);
         return bucket.data;
       } finally {
         bucket.promise = null;
@@ -620,7 +681,10 @@
   function gpGetTiebreakersCacheBucket(weekId) {
     window.__GP_TIEBREAKERS_CACHE = window.__GP_TIEBREAKERS_CACHE || {};
     const k = String(weekId || "");
-    if (!window.__GP_TIEBREAKERS_CACHE[k]) window.__GP_TIEBREAKERS_CACHE[k] = { ts: 0, data: null, promise: null };
+    if (!window.__GP_TIEBREAKERS_CACHE[k]) {
+      window.__GP_TIEBREAKERS_CACHE[k] = { ts: 0, data: null, promise: null };
+      gpSeedBucketFromSession(window.__GP_TIEBREAKERS_CACHE[k], "Tiebreakers", k);
+    }
     return window.__GP_TIEBREAKERS_CACHE[k];
   }
 
@@ -629,14 +693,14 @@
     if (!k) return;
     window.__GP_TIEBREAKERS_CACHE = window.__GP_TIEBREAKERS_CACHE || {};
     window.__GP_TIEBREAKERS_CACHE[k] = { ts: 0, data: null, promise: null };
+    gpClearWeekCacheSession("Tiebreakers", k);
   }
 
   async function gpEnsureTiebreakersForWeek(db, weekId) {
     const k = String(weekId || "").trim();
     if (!k) return {};
     const bucket = gpGetTiebreakersCacheBucket(k);
-    const TTL    = 2 * 60 * 1000;
-    const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < TTL;
+    const fresh  = bucket.data && bucket.ts && (Date.now() - bucket.ts) < GP_WEEK_CACHE_TTL_MS;
     if (fresh) return bucket.data || {};
     const pendingTooLong = bucket.promise && bucket.startedAt && (Date.now() - bucket.startedAt) > GP_CACHE_MAX_PENDING_MS;
     if (bucket.promise && !pendingTooLong) return bucket.promise;
@@ -646,6 +710,7 @@
         const data  = await gpGetAllTiebreakersForSlate(db, k);
         bucket.data = data || {};
         bucket.ts   = Date.now();
+        gpWriteBucketToSession("Tiebreakers", k, bucket.ts, bucket.data);
         return bucket.data;
       } finally {
         bucket.promise = null;

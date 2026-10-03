@@ -189,6 +189,14 @@
         if (bodyEl) bodyEl.removeAttribute("data-loaded");
       });
     } catch {}
+    // 3. A just-saved pick can change the current league's season
+    //    standings (an in-progress week's points) — bust its short-TTL
+    //    cache too so Standings/Schedule/Playoffs reflect it on the very
+    //    next load instead of waiting out the TTL.
+    try {
+      const leagueId = gpMem().pickLeagueId;
+      if (leagueId && typeof gpBustSeasonLeaderboardCache === "function") gpBustSeasonLeaderboardCache(leagueId);
+    } catch {}
   }
 
   // ───────────────────────────────────────────
@@ -333,7 +341,7 @@
     return weekResults.filter(Boolean);
   }
 
-  async function gpLoadSeasonLeaderboard(db, league) {
+  async function gpLoadSeasonLeaderboardUncached(db, league) {
     const isH2H = league?.format === "h2h";
     const results = await gpLoadWeeklyResultsForSeason(db, league);
     if (isH2H) {
@@ -347,6 +355,54 @@
     try { members = await (Data().gpGetLeagueMembers || (async () => []))(db, league?.id); } catch {}
     seasonLB.rows = (Data().gpFillMissingLeagueMembers || ((r) => r))(seasonLB.rows, members);
     return seasonLB;
+  }
+
+  // Short in-memory cache on top of the assembled season standings, keyed
+  // by league. gpLoadWeeklyResultsForSeason already caches each published
+  // week's own raw result (in-memory + sessionStorage, see gp-data.js),
+  // but every Standings/Schedule/Playoffs visit — and the League Picker,
+  // which does this once per joined league, all in parallel — still redid
+  // the Promise.all fan-out across every published week plus the
+  // standings aggregation/sort itself, every single time. A real pick
+  // save busts this immediately via gpBustAllPicksCache below; anything
+  // else that could change it (a score going final) is bounded by this
+  // short TTL instead of needing its own invalidation call, so staleness
+  // never lasts more than a minute even if some future path forgets to
+  // bust it. The in-flight promise is also shared — if the Picker is
+  // already loading a league's standings and the Standings tab asks for
+  // the same league a moment later, it joins the same fetch instead of
+  // starting a second one.
+  const GP_SEASON_LB_CACHE_TTL_MS = 60 * 1000;
+  function gpSeasonLeaderboardCacheBucket(leagueId) {
+    window.__GP_SEASON_LB_CACHE = window.__GP_SEASON_LB_CACHE || {};
+    const k = String(leagueId || "");
+    if (!window.__GP_SEASON_LB_CACHE[k]) window.__GP_SEASON_LB_CACHE[k] = { ts: 0, data: null, promise: null };
+    return window.__GP_SEASON_LB_CACHE[k];
+  }
+  function gpBustSeasonLeaderboardCache(leagueId) {
+    const k = String(leagueId || "").trim();
+    if (!k) return;
+    window.__GP_SEASON_LB_CACHE = window.__GP_SEASON_LB_CACHE || {};
+    window.__GP_SEASON_LB_CACHE[k] = { ts: 0, data: null, promise: null };
+  }
+  async function gpLoadSeasonLeaderboard(db, league) {
+    const leagueId = String(league?.id || "");
+    if (!leagueId) return gpLoadSeasonLeaderboardUncached(db, league);
+    const bucket = gpSeasonLeaderboardCacheBucket(leagueId);
+    const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < GP_SEASON_LB_CACHE_TTL_MS;
+    if (fresh) return bucket.data;
+    if (bucket.promise) return bucket.promise;
+    bucket.promise = (async () => {
+      try {
+        const data = await gpLoadSeasonLeaderboardUncached(db, league);
+        bucket.data = data;
+        bucket.ts = Date.now();
+        return data;
+      } finally {
+        bucket.promise = null;
+      }
+    })();
+    return bucket.promise;
   }
 
   // ───────────────────────────────────────────
