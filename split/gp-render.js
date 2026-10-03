@@ -1779,20 +1779,36 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
    LEAGUE ANNOUNCEMENT BANNER — admin-authored, top of the week view
    ══════════════════════════════════════════════ */
 .gpAnnouncementBanner {
-  display: flex; align-items: flex-start; gap: 12px;
-  margin-bottom: 14px; padding: 14px 16px;
+  margin-bottom: 10px;
   border-radius: 16px;
   background: linear-gradient(160deg, rgba(40,140,255,0.16) 0%, rgba(12,16,26,0.8) 60%);
   border: 1px solid rgba(90,170,255,0.4);
   box-shadow: 0 8px 26px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  overflow: hidden;
 }
+.gpAnnouncementToggle {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 13px 16px;
+  background: none; border: none; cursor: pointer; font: inherit; color: inherit;
+  text-align: left; -webkit-tap-highlight-color: transparent;
+}
+.gpAnnouncementToggle:active { background: rgba(255,255,255,0.05); }
 .gpAnnouncementIcon { font-size: 22px; line-height: 1.2; flex-shrink: 0; }
-.gpAnnouncementBody { min-width: 0; flex: 1; }
-.gpAnnouncementTitle {
+.gpAnnouncementHeadline {
+  flex: 1 1 0; min-width: 0;
   font-size: 15px; font-weight: 900; color: #fff; letter-spacing: 0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.gpAnnouncementArrow {
+  flex-shrink: 0; width: 18px; text-align: center;
+  font-size: 13px; color: rgba(255,255,255,0.5);
+  transition: transform 0.2s ease;
+}
+.gpAnnouncementBanner.gpAnnouncementExpanded .gpAnnouncementArrow { transform: rotate(90deg); }
+.gpAnnouncementDetail { display: none; padding: 0 16px 14px 50px; }
+.gpAnnouncementBanner.gpAnnouncementExpanded .gpAnnouncementDetail { display: block; }
 .gpAnnouncementMessage {
-  margin-top: 4px; font-size: 13px; font-weight: 600; line-height: 1.45;
+  font-size: 13px; font-weight: 600; line-height: 1.45;
   color: rgba(255,255,255,0.82);
 }
 .gpAnnouncementPostedAt {
@@ -4578,22 +4594,33 @@ ${championBannerHTML}
   }
 
   // ─── Lock reminder banner ──────────────────────────────────────────
-  // ─── League announcement — admin-authored notice at the very top of
-  // the week view. Absent entirely (returns "") when there's nothing
-  // set, for every user including admins — editing happens in League
-  // Settings, not inline here.
-  function gpBuildLeagueAnnouncementHTML(announcement) {
+  // ─── League announcement — admin-authored notice shown at the top of
+  // every page of the league, above the sticky tab bar. Absent entirely
+  // (returns "") when there's nothing set, for every user including
+  // admins — editing happens in League Settings, not inline here.
+  // Collapsed by default: only the headline (title, or the start of the
+  // message if there's no title) and an expand arrow show until tapped —
+  // the full message and posted time are revealed on expand. `expanded`
+  // is passed in by the caller (persisted in session memory, not here)
+  // since the page re-renders wholesale often enough — tab switches, the
+  // 60s auto-refresh — that baking the open/closed state into this HTML
+  // alone would silently re-collapse an announcement the player opened.
+  function gpBuildLeagueAnnouncementHTML(announcement, idx, expanded) {
     const title   = String(announcement?.title || "").trim();
     const message = String(announcement?.message || "").trim();
     if (!title && !message) return "";
+    const headline = title || message;
     // No postedAt on an announcement saved before this field existed —
     // just omit the line rather than fabricate a posted time for it.
     const postedStr = fmtSavedAt(announcement?.postedAt);
     return `
-<div class="gpAnnouncementBanner">
-  <div class="gpAnnouncementIcon">📣</div>
-  <div class="gpAnnouncementBody">
-    ${title ? `<div class="gpAnnouncementTitle">${esc(title)}</div>` : ""}
+<div class="gpAnnouncementBanner${expanded ? " gpAnnouncementExpanded" : ""}">
+  <button type="button" class="gpAnnouncementToggle" data-gpaction="toggleAnnouncement" data-idx="${idx}" aria-expanded="${expanded ? "true" : "false"}">
+    <span class="gpAnnouncementIcon">📣</span>
+    <span class="gpAnnouncementHeadline">${esc(headline)}</span>
+    <span class="gpAnnouncementArrow">▸</span>
+  </button>
+  <div class="gpAnnouncementDetail">
     ${message ? `<div class="gpAnnouncementMessage">${esc(message)}</div>` : ""}
     ${postedStr ? `<div class="gpAnnouncementPostedAt">${esc(postedStr)}</div>` : ""}
   </div>
@@ -4651,10 +4678,18 @@ ${championBannerHTML}
   // Up to 3 announcements, stacked in the order the admin entered them.
   // Each one reuses the exact same banner as a single announcement, so
   // one, two, or three all look consistent — an empty/missing list just
-  // renders nothing, same as before.
-  function gpBuildLeagueAnnouncementsHTML(announcements) {
+  // renders nothing, same as before. `expandedMap` is keyed by each
+  // announcement's ORIGINAL slot index (0/1/2), not its position after
+  // filtering expired ones out — otherwise an earlier slot expiring
+  // would shift every later one's index and silently swap their
+  // expand/collapse state.
+  function gpBuildLeagueAnnouncementsHTML(announcements, expandedMap) {
     const list = Array.isArray(announcements) ? announcements : [];
-    return list.filter(a => !gpAnnouncementExpired(a)).map(gpBuildLeagueAnnouncementHTML).filter(Boolean).join("");
+    const expanded = expandedMap && typeof expandedMap === "object" ? expandedMap : {};
+    return list
+      .map((a, i) => gpAnnouncementExpired(a) ? "" : gpBuildLeagueAnnouncementHTML(a, i, !!expanded[i]))
+      .filter(Boolean)
+      .join("");
   }
 
   // Shows whenever this player has open, unlocked games without a pick,
