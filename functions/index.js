@@ -1,6 +1,6 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { logger } = require("firebase-functions");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -135,6 +135,111 @@ exports.onWeekPublished = onDocumentUpdated("pickSlates/{slateId}", async (event
     body: `Picks are open for ${leagueName}.`,
   });
 });
+
+// Full per-player fan-out, done ONCE server-side — mirrors the original
+// client-side gpGetAllPicksForSlate (split/gp-data.js) exactly, just run
+// from a Cloud Function instead of a player's phone. Only ever called
+// the first time a slate's picksByEvent summary gets built (see below);
+// after that, incremental single-leaf writes keep it current.
+async function buildFullPicksByEvent(slateId) {
+  const picksByEvent = {};
+  const usersSnap = await db.collection("pickSlates").doc(slateId).collection("picks").get();
+  await Promise.all(usersSnap.docs.map(async (u) => {
+    const playerId = u.id;
+    const gamesSnap = await db.collection("pickSlates").doc(slateId)
+      .collection("picks").doc(playerId).collection("games").get();
+    gamesSnap.forEach((d) => {
+      const data = d.data() || {};
+      const eventId = d.id;
+      if (!picksByEvent[eventId]) picksByEvent[eventId] = {};
+      picksByEvent[eventId][playerId] = {
+        uid: String(data.uid || playerId),
+        name: String(data.name || u.data()?.name || "Someone"),
+        side: String(data.side || ""),
+        updatedAt: data.updatedAt || null,
+      };
+    });
+  }));
+  return picksByEvent;
+}
+
+// ─── Trigger: a player's pick for one game was saved, changed, or
+// removed ────────────────────────────────────────────────────────────
+// Maintains a denormalized picksByEvent summary directly on the week's
+// own pickSlates/{slateId} doc — the same doc every client render
+// already fetches (gpGetSlateDoc) — so reading "everyone's picks for
+// this week" becomes a read the client is already making instead of a
+// separate 1-read-per-player fan-out (gpGetAllPicksForSlate in
+// split/gp-data.js, which reads every player's own games subcollection
+// individually). That fan-out is what was timing page loads out for
+// leagues with more than a handful of members; this removes it entirely
+// for any week this function has touched.
+//
+// Shape: picksByEvent.{eventId}.{playerId} = { uid, name, side, updatedAt }.
+//
+// A slate that already had picks on it BEFORE this function existed
+// would otherwise start with an empty/partial summary — the first
+// player to save after deploy would make picksByEvent non-null but
+// containing only THEIR pick, silently hiding everyone else's
+// already-saved picks from any reader that trusts the summary. So the
+// first write this function ever sees for a given slate does a full,
+// one-time fan-out (buildFullPicksByEvent, above) instead of a
+// single-leaf update, guaranteeing the summary starts complete. Every
+// write after that just updates its own leaf — a plain {merge:true} on
+// a nested object only touches the paths provided, so concurrent saves
+// from different players never clobber each other's entries. (Two
+// players saving for the very first time on the same slate within
+// moments of each other can both see "not migrated yet" and both run
+// the full backfill — redundant but harmless, since both backfills
+// read the same up-to-date data and merge to the same result.)
+//
+// The client falls back to the old per-player fan-out whenever
+// picksByEvent is missing entirely (same gpGetAllPicksForSlate) — pure
+// belt-and-suspenders once a slate has any pick doc at all, every write
+// to it runs through here and gets backfilled on first touch. The
+// per-game subcollection docs remain the source of truth throughout —
+// this is a derived cache sitting next to them, never the only copy.
+exports.onPickGameWritten = onDocumentWritten(
+  "pickSlates/{slateId}/picks/{playerId}/games/{eventId}",
+  async (event) => {
+    const { slateId, playerId, eventId } = event.params;
+    const slateRef = db.collection("pickSlates").doc(slateId);
+    const slateSnap = await slateRef.get();
+    const alreadyMigrated = slateSnap.exists && slateSnap.data()?.picksByEvent != null;
+
+    if (!alreadyMigrated) {
+      const picksByEvent = await buildFullPicksByEvent(slateId);
+      await slateRef.set({ picksByEvent }, { merge: true });
+      return;
+    }
+
+    const after = event.data?.after?.exists ? event.data.after.data() : null;
+    if (!after) {
+      // Deleted (e.g. the "merge duplicate player" admin tool moving a
+      // duplicate's picks onto the surviving player) — drop just this
+      // one leaf, not the whole event's map.
+      await slateRef.update({
+        [`picksByEvent.${eventId}.${playerId}`]: FieldValue.delete(),
+      }).catch((err) => {
+        logger.warn(`[onPickGameWritten] delete cleanup failed for ${slateId}/${eventId}/${playerId}: ${err.message}`);
+      });
+      return;
+    }
+
+    await slateRef.set({
+      picksByEvent: {
+        [eventId]: {
+          [playerId]: {
+            uid: String(after.uid || playerId),
+            name: String(after.name || "Someone"),
+            side: String(after.side || ""),
+            updatedAt: after.updatedAt || FieldValue.serverTimestamp(),
+          },
+        },
+      },
+    }, { merge: true });
+  }
+);
 
 // Same scoreboard endpoints gp-espn.js uses client-side — kept in sync
 // by hand since this runs in a separate Node runtime, not the browser.
