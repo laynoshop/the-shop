@@ -106,6 +106,22 @@
     return window.__GP_MEM;
   }
 
+  // League announcements (admin-authored, shown at the top of every page
+  // of the league, above the sticky tab bar) — a league saved before
+  // multi-announcement support only has the old singular `announcement`
+  // field; treat it as a 1-item list. Expand/collapse state is kept here
+  // (per session, keyed by slot index) rather than in the rendered HTML
+  // itself, since the page re-renders wholesale on tab switches and the
+  // 60s auto-refresh — without this, an announcement a player opened
+  // would silently re-collapse on its own a few seconds later.
+  function gpBuildAnnouncementsHTMLForLeague(league) {
+    const announcementsList = Array.isArray(league?.announcements)
+      ? league.announcements
+      : (league?.announcement ? [league.announcement] : []);
+    const expandedMap = gpMem().gpAnnouncementExpanded || {};
+    return (Render().gpBuildLeagueAnnouncementsHTML || (() => ""))(announcementsList, expandedMap);
+  }
+
   // ───────────────────────────────────────────
   // Pending picks (in-memory, per session)
   // ───────────────────────────────────────────
@@ -362,7 +378,8 @@
       let leagueMembers = [];
       try { leagueMembers = await (Data().gpGetLeagueMembers || (async () => []))(db, pickLeagueId); } catch {}
       const bodyHTML = (Render().gpBuildH2HPreSeasonHTML || (() => ""))(leagueMembers);
-      el.innerHTML = `${headerHTML}<div class="gpContainer">${bodyHTML}</div>`;
+      const announcementHTML = gpBuildAnnouncementsHTMLForLeague(league);
+      el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${bodyHTML}</div>`;
       postRender();
       return;
     }
@@ -379,7 +396,11 @@
 
     let bodyHTML = "";
     let pagerHTML = "";
-    let announcementHTML = "";
+    // Computed once here (not per-tab) so it shows on every tab of the
+    // league, not just Matchup/Picks — it used to only get set inside
+    // those two tabs' branches, silently vanishing on Standings/Schedule/
+    // Playoffs.
+    const announcementHTML = gpBuildAnnouncementsHTMLForLeague(league);
     let notifOptInHTML = "";
 
     if (tab === "matchup" || tab === "picks") {
@@ -426,12 +447,6 @@
           canPrev:  !!gpAdjacentWeekId(weeks, selectedId, -1, isAdmin),
           canNext:  !!gpAdjacentWeekId(weeks, selectedId, +1, isAdmin)
         }) : "";
-
-        const announcementsList = Array.isArray(league.announcements)
-          ? league.announcements
-          : (league.announcement ? [league.announcement] : []);
-        announcementHTML = (Render().gpBuildLeagueAnnouncementsHTML || (() => ""))(announcementsList);
-        notifOptInHTML = (Render().gpBuildNotifOptInHTML || (() => ""))();
 
         if (tab === "matchup") {
           let champion = null;
@@ -1190,13 +1205,7 @@
     window.__gpCurrentTiebreakers       = tiebreakers;
     window.__gpCurrentWeekLabel         = weekLabel;
 
-    // ── league announcements (admin-authored, top of the page) —
-    //    a league saved before multi-announcement support only has the
-    //    old singular `announcement` field; treat it as a 1-item list ──
-    const announcementsList = Array.isArray(league.announcements)
-      ? league.announcements
-      : (league.announcement ? [league.announcement] : []);
-    const announcementHTML = (Render().gpBuildLeagueAnnouncementsHTML || (() => ""))(announcementsList);
+    const announcementHTML = gpBuildAnnouncementsHTMLForLeague(league);
     const notifOptInHTML = (Render().gpBuildNotifOptInHTML || (() => ""))();
 
     // ── lock reminder (mine only) — missing picks + tiebreaker ──
@@ -1448,6 +1457,23 @@
         console.error("[GP] save error:", err);
         alert(`Couldn't save: ${String(err?.message || err)}`);
       }
+      return;
+    }
+
+    // ── league announcement: expand/collapse one, in place — a pure
+    //    DOM toggle (cheap, instant), with the state remembered in
+    //    session memory so it survives the next full re-render (tab
+    //    switch, the 60s auto-refresh) instead of silently re-collapsing. ──
+    if (action === "toggleAnnouncement") {
+      const idx = String(btn.getAttribute("data-idx") || "");
+      if (!idx) return;
+      const mem2 = gpMem();
+      if (!mem2.gpAnnouncementExpanded) mem2.gpAnnouncementExpanded = {};
+      const next = !mem2.gpAnnouncementExpanded[idx];
+      mem2.gpAnnouncementExpanded[idx] = next;
+      const banner = btn.closest(".gpAnnouncementBanner");
+      if (banner) banner.classList.toggle("gpAnnouncementExpanded", next);
+      btn.setAttribute("aria-expanded", next ? "true" : "false");
       return;
     }
 
