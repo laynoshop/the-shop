@@ -272,7 +272,18 @@ window.replaceMichiganText = replaceMichiganText;
     };
 
     if (tab === "scores")          safe("loadScores", true);
-    else if (tab === "picks")      safe("renderPicks", "light", true);
+    else if (tab === "picks") {
+      // Set by the Pick'em quick-switch menu (groupPicks.js) right before
+      // it calls showTab("picks") itself, for "jump straight into league
+      // X" — the normal bottom-nav tap always forces the League Picker
+      // (the "true" below), but a quick-switch selection already set
+      // pickLeagueId and just needs this tab's usual housekeeping
+      // (clearing #content, highlighting the active button, etc.), not
+      // another forced trip through the picker.
+      const skipForcePicker = !!window.__gpSkipForceLeaguePicker;
+      window.__gpSkipForceLeaguePicker = false;
+      safe("renderPicks", skipForcePicker ? "heavy" : "light", !skipForcePicker);
+    }
     else if (tab === "beat")       safe("renderBeatTTUN");
     else if (tab === "news")       safe("renderTopNews", true);
     else if (tab === "golf")       safe("renderGolf");
@@ -424,6 +435,15 @@ window.checkCode = checkCode;
 
     const tab = btn.getAttribute("data-tab");
     if (tab) {
+      // The bottom nav's Pick'em button only ever carries data-tab="picks"
+      // here (the in-league header's own "Leagues" button is a separate
+      // data-gpaction, untouched by this) — pop the quick-switch menu
+      // (groupPicks.js) instead of unconditionally forcing the full
+      // League Picker on every single tap.
+      if (tab === "picks" && typeof window.gpShowPickemQuickSwitch === "function") {
+        window.gpShowPickemQuickSwitch();
+        return;
+      }
       showTab(tab);
       return;
     }

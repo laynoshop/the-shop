@@ -2229,6 +2229,54 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   height: 94dvh;
 }
 
+/* Pick'em quick-switch menu — compact, content-sized rather than the
+   tall 82dvh default sheet above (it's just "All Leagues" + a handful
+   of league rows, never a scroll-heavy screen). */
+.gpQuickSwitchSheet {
+  width: 100%; max-width: 480px;
+  background: #17161a;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-bottom: none;
+  border-radius: 22px 22px 0 0;
+  padding: 0 0 calc(env(safe-area-inset-bottom) + 16px);
+  box-shadow: 0 -8px 48px rgba(0,0,0,0.7);
+  transform: translateY(32px);
+  transition: transform 260ms cubic-bezier(0.16,1,0.3,1);
+  max-height: 70dvh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.gpPicksOverlayBackdrop.gpOverlayVisible .gpQuickSwitchSheet {
+  transform: translateY(0);
+}
+.gpQuickSwitchRow {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 14px 20px;
+  background: none; border: none; text-align: left;
+  color: #fff; font-size: 15px; font-weight: 800;
+  cursor: pointer;
+}
+.gpQuickSwitchRow:active { background: rgba(255,255,255,0.06); }
+.gpQuickSwitchIcon { font-size: 18px; flex-shrink: 0; }
+.gpQuickSwitchLabel {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gpQuickSwitchChevron { opacity: 0.4; font-size: 18px; flex-shrink: 0; }
+.gpQuickSwitchRowCurrent .gpQuickSwitchLabel { color: #ffb454; }
+.gpQuickSwitchCurrentTag {
+  font-size: 10.5px; font-weight: 900; letter-spacing: 0.3px;
+  color: #ffb454; background: rgba(255,180,84,0.12);
+  border: 1px solid rgba(255,180,84,0.3);
+  border-radius: 6px; padding: 3px 7px; flex-shrink: 0;
+}
+.gpQuickSwitchDivider { height: 1px; background: rgba(255,255,255,0.08); margin: 6px 0; flex-shrink: 0; }
+.gpQuickSwitchEmpty {
+  padding: 14px 20px 18px; color: rgba(255,255,255,0.5);
+  font-size: 13.5px; font-weight: 700;
+}
+#gpQuickSwitchRows { overflow-y: auto; }
+
 /* Drag handle */
 .gpOverlayHandle {
   width: 40px; height: 4px; border-radius: 999px;
@@ -5243,7 +5291,23 @@ ${saveRow}`;
     const buildCard = (l) => {
       const weeksCount = Array.isArray(l.weeks) ? l.weeks.length : 0;
       const totalWeeks = Number(l.totalWeeks) || 0;
-      const weeksLabel = totalWeeks ? `${weeksCount} of ${totalWeeks} weeks` : `${weeksCount} week${weeksCount !== 1 ? "s" : ""}`;
+      // Playoff rounds are extra weeks tacked on past the regular season
+      // length, so weeksCount can exceed totalWeeks once an H2H league's
+      // bracket starts — "N of totalWeeks weeks" reads like broken math
+      // at that point (e.g. "3 of 2 weeks"). Show the current round's
+      // real name instead, from the same source of truth the in-league
+      // Matchup/Picks tabs use (gpGetH2HPlayoffRoundSpecs) — "Championship"
+      // once a round is down to one pair, "Semifinals" at two, etc.
+      let weeksLabel;
+      if (totalWeeks && weeksCount > totalWeeks) {
+        const GP_Data = window.GP_Data || {};
+        const specs = typeof GP_Data.gpGetH2HPlayoffRoundSpecs === "function"
+          ? GP_Data.gpGetH2HPlayoffRoundSpecs(l.h2hSchedule, totalWeeks)
+          : [];
+        weeksLabel = specs.length ? specs[specs.length - 1].label : "Playoffs";
+      } else {
+        weeksLabel = totalWeeks ? `${weeksCount} of ${totalWeeks} weeks` : `${weeksCount} week${weeksCount !== 1 ? "s" : ""}`;
+      }
       const meta = `${esc(String(l.seasonYear || ""))} · ${weeksLabel}${l.archived ? " · Archived" : ""}`;
       const activePill = (l.active && !l.archived) ? `<span class="gpLeagueActivePill"><span class="gpLeagueActiveDot"></span>Active</span>` : "";
       const isMember = !!l.isMember;
@@ -5438,6 +5502,88 @@ ${archivedSectionHTML}`;
 
   function gpDismissJoinLeagueOverlay() {
     const backdrop = document.getElementById("gpJoinOverlay");
+    if (backdrop) backdrop.remove();
+  }
+
+  // ─── Pick'em quick-switch menu (bottom-nav tap) ────────────────────
+  // Tapping the bottom nav's Pick'em button used to always force a full
+  // League Picker load before the player could even tap into the league
+  // they actually wanted — two full page loads for what's usually just
+  // "go back to the league I was just in" or "check my other league."
+  // This pops up instantly instead, with "All Leagues" (the old forced-
+  // picker behavior, unchanged) plus a one-tap shortcut straight into
+  // each league the player belongs to and is currently active.
+  function gpBuildPickemQuickSwitchRowsHTML(leagues, currentLeagueId, loading) {
+    if (loading) return `<div class="gpQuickSwitchEmpty">Loading your leagues…</div>`;
+    const list = Array.isArray(leagues) ? leagues : [];
+    if (!list.length) return `<div class="gpQuickSwitchEmpty">No other active leagues yet.</div>`;
+    return list.map(l => {
+      const isCurrent = String(l.id) === String(currentLeagueId || "");
+      return `
+    <button type="button" class="gpQuickSwitchRow${isCurrent ? " gpQuickSwitchRowCurrent" : ""}" data-gpaction="quickSwitchLeague" data-leagueid="${esc(l.id)}">
+      <span class="gpQuickSwitchIcon">🏈</span>
+      <span class="gpQuickSwitchLabel">${esc(l.name)}</span>
+      ${isCurrent ? `<span class="gpQuickSwitchCurrentTag">Current</span>` : `<span class="gpQuickSwitchChevron">›</span>`}
+    </button>`;
+    }).join("");
+  }
+
+  function gpBuildPickemQuickSwitchHTML({ leagues, currentLeagueId, loading }) {
+    return `
+<div class="gpPicksOverlayBackdrop gpQuickSwitchBackdrop" id="gpQuickSwitchOverlay" role="dialog" aria-modal="true" aria-label="Switch league">
+  <div class="gpQuickSwitchSheet" id="gpQuickSwitchSheet">
+    <div class="gpOverlayHandle"></div>
+    <button type="button" class="gpQuickSwitchRow gpQuickSwitchRowAll" data-gpaction="quickSwitchAllLeagues">
+      <span class="gpQuickSwitchIcon">📋</span>
+      <span class="gpQuickSwitchLabel">All Leagues</span>
+      <span class="gpQuickSwitchChevron">›</span>
+    </button>
+    <div class="gpQuickSwitchDivider"></div>
+    <div id="gpQuickSwitchRows">${gpBuildPickemQuickSwitchRowsHTML(leagues, currentLeagueId, loading)}</div>
+  </div>
+</div>`;
+  }
+
+  function gpShowPickemQuickSwitchOverlay({ leagues, currentLeagueId, loading }) {
+    const existing = document.getElementById("gpQuickSwitchOverlay");
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML("beforeend", gpBuildPickemQuickSwitchHTML({ leagues, currentLeagueId, loading }));
+
+    const backdrop = document.getElementById("gpQuickSwitchOverlay");
+    const sheet    = document.getElementById("gpQuickSwitchSheet");
+    if (!backdrop) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    backdrop.addEventListener("click", (e) => {
+      if (!sheet.contains(e.target)) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
+  // Updates just the league rows in place once the (async) membership
+  // lookup resolves — the overlay is already open and animated in by
+  // then, so this never closes/reopens it, just swaps the "Loading your
+  // leagues…" placeholder for the real list.
+  function gpUpdatePickemQuickSwitchRows(leagues, currentLeagueId) {
+    const rowsEl = document.getElementById("gpQuickSwitchRows");
+    if (!rowsEl) return; // overlay already dismissed — nothing to update
+    rowsEl.innerHTML = gpBuildPickemQuickSwitchRowsHTML(leagues, currentLeagueId, false);
+  }
+
+  function gpDismissPickemQuickSwitchOverlay() {
+    const backdrop = document.getElementById("gpQuickSwitchOverlay");
     if (backdrop) backdrop.remove();
   }
 
@@ -6019,6 +6165,9 @@ ${archivedSectionHTML}`;
     gpBuildJoinLeagueOverlayHTML,
     gpShowJoinLeagueOverlay,
     gpDismissJoinLeagueOverlay,
+    gpShowPickemQuickSwitchOverlay,
+    gpUpdatePickemQuickSwitchRows,
+    gpDismissPickemQuickSwitchOverlay,
     gpShowPlayerManageOverlay,
     gpDismissPlayerManageOverlay,
     gpShowHeaderMenuOverlay,
