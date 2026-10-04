@@ -405,6 +405,75 @@
     return bucket.promise;
   }
 
+  // ── my active leagues cache (Pick'em bottom-nav quick-switch menu) ──
+  // Short TTL — just long enough that repeated taps of the bottom-nav
+  // Pick'em button within the same minute feel instant without hitting
+  // Firestore every time. Deliberately separate from the League Picker's
+  // own data: gpListMyActiveLeagues (gp-data.js) is a much lighter fetch
+  // (one membership-doc existence check per league, no per-league
+  // games/standings), so there's nothing to share between the two.
+  const GP_MY_LEAGUES_CACHE_TTL_MS = 60 * 1000;
+  let gpMyLeaguesCacheBucket = null; // { playerId, ts, data, promise }
+  async function gpLoadMyActiveLeaguesCached(db, playerId) {
+    const bucket = gpMyLeaguesCacheBucket;
+    if (bucket && bucket.playerId === playerId) {
+      const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < GP_MY_LEAGUES_CACHE_TTL_MS;
+      if (fresh) return bucket.data;
+      if (bucket.promise) return bucket.promise;
+    }
+    const newBucket = { playerId, ts: 0, data: null, promise: null };
+    gpMyLeaguesCacheBucket = newBucket;
+    newBucket.promise = (async () => {
+      try {
+        const data = await (Data().gpListMyActiveLeagues || (async () => []))(db, playerId);
+        newBucket.data = data;
+        newBucket.ts = Date.now();
+        return data;
+      } finally {
+        newBucket.promise = null;
+      }
+    })();
+    return newBucket.promise;
+  }
+
+  // ── Pick'em bottom-nav quick-switch menu ────────────────────────────
+  // Replaces the old "tap Pick'em → always forced to the full League
+  // Picker → tap the league you actually wanted → wait again" two-step
+  // with an instant popup: "All Leagues" (unchanged forced-picker
+  // behavior) plus a one-tap shortcut straight into each league the
+  // player belongs to and is currently active in. Hooked up from
+  // shared.js's global tab click-delegation in place of its normal
+  // showTab("picks") for just this one button.
+  async function gpShowPickemQuickSwitch() {
+    const idObj = (ID().gpGetIdentityFromStorageOrMem || (() => ({})))();
+    const validIdentity = (ID().gpIsIdentityValid || (() => false))(idObj);
+    if (!validIdentity) { window.showTab("picks"); return; }
+
+    const mem2 = gpMem();
+    const currentLeagueId = mem2.pickLeagueId || gpGetSelectedLeagueId() || "";
+    const playerId = idObj.playerId || mem2.picksPlayerId || "";
+    if (!playerId) { window.showTab("picks"); return; }
+
+    const bucket = gpMyLeaguesCacheBucket;
+    const cached = (bucket && bucket.playerId === playerId && bucket.data
+      && (Date.now() - bucket.ts) < GP_MY_LEAGUES_CACHE_TTL_MS) ? bucket.data : null;
+
+    (Render().gpShowPickemQuickSwitchOverlay || (() => { window.showTab("picks"); }))({
+      leagues: cached || [], currentLeagueId, loading: !cached
+    });
+
+    if (!cached) {
+      let leagues = [];
+      try {
+        await (Data().ensureFirebaseReadySafe || (async () => {}))();
+        const db = firebase.firestore();
+        leagues = await gpLoadMyActiveLeaguesCached(db, playerId);
+      } catch {}
+      (Render().gpUpdatePickemQuickSwitchRows || (() => {}))(leagues, currentLeagueId);
+    }
+  }
+  window.gpShowPickemQuickSwitch = gpShowPickemQuickSwitch;
+
   // ───────────────────────────────────────────
   // H2H leagues — 5-tab experience (Matchup/Picks/Standings/Schedule/
   // Playoffs), entirely separate from the points-format render path
@@ -1106,7 +1175,14 @@
         const weeks = Array.isArray(l.weeks) ? l.weeks : [];
         const weekId = String(l.activeWeekId || (weeks.length ? weeks[weeks.length - 1].id : "") || "");
         const weekMeta = weeks.find(w => String(w?.id) === weekId) || null;
-        return { weekId, weekLabel: String(weekMeta?.label || "") };
+        // Same playoff-round-name lookup as the in-league Matchup/Picks
+        // tabs (gpGetH2HPlayoffRoundSpecs) — otherwise this falls back to
+        // the slate's raw stored "Week N" label even for a playoff round,
+        // same stale-label bug as the card's "N of totalWeeks weeks" text.
+        const weekIndex = weeks.findIndex(w => String(w?.id) === weekId);
+        const playoffSpec = (Data().gpGetH2HPlayoffRoundSpecs || (() => []))(l.h2hSchedule, l.totalWeeks)
+          .find(r => r.weekIndex === weekIndex);
+        return { weekId, weekLabel: String(playoffSpec?.label || weekMeta?.label || "") };
       });
       // Week 1's id per league, used below to hide a league from anyone
       // who hasn't joined it once its season has actually kicked off —
@@ -1687,6 +1763,38 @@
       gpSetSelectedLeagueId(leagueId);
       gpPendingClear();
       await renderPicks("heavy");
+      return;
+    }
+
+    // ── Pick'em quick-switch menu: "All Leagues" → the normal forced
+    //    League Picker, unchanged ──
+    if (action === "quickSwitchAllLeagues") {
+      (Render().gpDismissPickemQuickSwitchOverlay || (() => {}))();
+      window.showTab("picks");
+      return;
+    }
+
+    // ── Pick'em quick-switch menu: jump straight into a specific league,
+    //    same end state selectLeague above reaches, just triggered from
+    //    outside the Pick'em tab (any bottom-nav tab can open this menu),
+    //    so it routes through showTab("picks") first for the normal tab-
+    //    switch housekeeping (active button, clearing #content, etc.) —
+    //    window.__gpSkipForceLeaguePicker tells shared.js's dispatch not
+    //    to force the picker this one time, since pickLeagueId is already
+    //    set below. ──
+    if (action === "quickSwitchLeague") {
+      const leagueId = String(btn.getAttribute("data-leagueid") || "").trim();
+      (Render().gpDismissPickemQuickSwitchOverlay || (() => {}))();
+      if (!leagueId) { window.showTab("picks"); return; }
+      const mem2 = gpMem();
+      mem2.pickLeagueId = leagueId;
+      mem2.gpShowLeaguePicker = false;
+      mem2.gpViewMode = "week";
+      mem2.gpH2HTab = "matchup";
+      gpSetSelectedLeagueId(leagueId);
+      gpPendingClear();
+      window.__gpSkipForceLeaguePicker = true;
+      window.showTab("picks");
       return;
     }
 

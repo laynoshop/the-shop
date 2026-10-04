@@ -224,6 +224,34 @@
     }
   }
 
+  // ─── my active leagues (lightweight — Pick'em bottom-nav quick-switch) ──
+  // Deliberately NOT the same fetch the League Picker screen uses: that
+  // one pulls, per league, the whole members subcollection, the current
+  // week's games (for a countdown), and top-3 season standings — way
+  // more than a quick-switch menu needs. Here, membership is checked as
+  // a single doc existence read (leagues/{id}/members/{playerId}) instead
+  // of fetching every member, so this stays cheap even as more leagues
+  // get added.
+  async function gpListMyActiveLeagues(db, playerId) {
+    const pid = String(playerId || "").trim();
+    if (!pid) return [];
+    const leagues = await gpListLeagues(db);
+    const candidates = leagues.filter(l => !l.archived);
+    const checked = await Promise.all(candidates.map(async (l) => {
+      try {
+        const memberSnap = await db.collection("leagues").doc(String(l.id))
+          .collection("members").doc(pid).get();
+        if (!memberSnap.exists) return null;
+        const active = await gpIsLeagueActive(db, l);
+        if (!active) return null;
+        return { id: String(l.id), name: String(l.name || "League") };
+      } catch {
+        return null;
+      }
+    }));
+    return checked.filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async function gpGetLeagueMembers(db, leagueId) {
     if (!leagueId) return [];
     try {
@@ -1655,6 +1683,7 @@
     gpGetLeague,
     gpListLeagues,
     gpIsLeagueActive,
+    gpListMyActiveLeagues,
     gpRegisterPlayer,
     gpGetPlayerDoc,
     gpFindPlayerIdByCodeHash,
