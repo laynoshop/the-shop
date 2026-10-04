@@ -935,6 +935,50 @@
     return { league, leagueMembers };
   }
 
+  // gpGetAllPickedPlayersForWeeks above fans out one Firestore read per
+  // week the league has ever had, run in parallel — on a slow connection,
+  // for a league several weeks deep, that can genuinely take longer than
+  // GP_ADMIN_OVERLAY_TIMEOUT_MS (gpRenderAdminOverlaySettings's 15s race
+  // below). That timeout only gives up on *showing* the result — it
+  // can't actually cancel the fetch already in flight, which keeps
+  // running and does eventually resolve, just too late to matter. Without
+  // this cache, hitting "Try Again" started an entirely new fan-out from
+  // scratch instead of reusing that still-running (or by-then-finished)
+  // work, so it could time out all over again; only closing the overlay
+  // and reopening it later "worked instantly," because by then enough
+  // time had passed for the original, abandoned fetch to quietly finish
+  // on its own with nowhere to put its result. Sharing the in-flight
+  // promise (plus a short TTL once it resolves) means every caller below
+  // either joins that same work or reads its already-resolved result,
+  // never restarts it.
+  const GP_LEAGUE_SETTINGS_FETCH_CACHE_TTL_MS = 60 * 1000;
+  let gpLeagueSettingsFetchBucket = null; // { leagueId, ts, data, promise }
+  async function gpFetchLeagueForSettingsCached(db, leagueId) {
+    const id = String(leagueId || "");
+    const bucket = gpLeagueSettingsFetchBucket;
+    if (bucket && bucket.leagueId === id) {
+      const fresh = bucket.data && bucket.ts && (Date.now() - bucket.ts) < GP_LEAGUE_SETTINGS_FETCH_CACHE_TTL_MS;
+      if (fresh) return bucket.data;
+      if (bucket.promise) return bucket.promise;
+    }
+    const newBucket = { leagueId: id, ts: 0, data: null, promise: null };
+    gpLeagueSettingsFetchBucket = newBucket;
+    newBucket.promise = (async () => {
+      try {
+        const data = await gpFetchLeagueForSettings(db, id);
+        newBucket.data = data;
+        newBucket.ts = Date.now();
+        return data;
+      } finally {
+        newBucket.promise = null;
+      }
+    })();
+    return newBucket.promise;
+  }
+  function gpBustLeagueSettingsFetchCache() {
+    gpLeagueSettingsFetchBucket = null;
+  }
+
   // ── Admin Tools overlay (header gear button) ──────────────────────
   // Builds the Admin Tools panel's HTML fresh, independent of whichever
   // H2H tab (or the classic page) is currently on screen — the overlay
@@ -1053,7 +1097,7 @@
     const loadTask = (async () => {
       await (Data().ensureFirebaseReadySafe || (async () => {}))();
       const db2 = firebase.firestore();
-      const { league, leagueMembers } = await gpFetchLeagueForSettings(db2, leagueId);
+      const { league, leagueMembers } = await gpFetchLeagueForSettingsCached(db2, leagueId);
       mem2.gpLeagueSettingsMembersCache = leagueMembers;
       return (Render().gpBuildLeagueSettingsHTML || (() => ""))({ mode: "edit", league, leagueMembers });
     })().then((formHTML) => {
@@ -1131,7 +1175,7 @@
       const isEdit = mem.gpLeagueEditMode === "edit";
       let league = null, leagueMembers = [];
       if (isEdit) {
-        ({ league, leagueMembers } = await gpFetchLeagueForSettings(db, mem.gpLeagueEditingId));
+        ({ league, leagueMembers } = await gpFetchLeagueForSettingsCached(db, mem.gpLeagueEditingId));
       }
       // Stashed so the Manage Player overlay (opened from a ⚙️ tap) can
       // reuse this same member list — it needs every OTHER member as
@@ -2022,6 +2066,7 @@
             archived: archivedEl ? !!archivedEl.checked : undefined,
             format, announcements, h2hPlayoffTeams
           });
+          gpBustLeagueSettingsFetchCache();
         } else {
           const newId = await (Admin().gpCreateLeague || (async () => ""))(db2, uid, {
             name, seasonYear: year, totalWeeks, format, announcements, h2hPlayoffTeams
@@ -2233,7 +2278,7 @@
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
-        const { league } = await gpFetchLeagueForSettings(db2, leagueId);
+        const { league } = await gpFetchLeagueForSettingsCached(db2, leagueId);
         if (!league) { alert("League not found."); return; }
         const tw = Number(league.totalWeeks) || 0;
         if (!tw) {
@@ -2298,7 +2343,7 @@
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         const uid = firebase.auth().currentUser?.uid || "admin";
-        const { league } = await gpFetchLeagueForSettings(db2, leagueId);
+        const { league } = await gpFetchLeagueForSettingsCached(db2, leagueId);
         if (!league) { alert("League not found."); return; }
         const schedule = Array.isArray(league.h2hSchedule) ? league.h2hSchedule : [];
         const playoffRounds = (Data().gpGetH2HPlayoffRoundSpecs || (() => []))(schedule, league.totalWeeks);
@@ -2392,6 +2437,7 @@
         await (Data().ensureFirebaseReadySafe || (async () => {}))();
         const db2 = firebase.firestore();
         await (Admin().gpDeleteLeague || (async () => {}))(db2, leagueId);
+        gpBustLeagueSettingsFetchCache();
         const mem2 = gpMem();
         mem2.gpLeagueEditMode  = null;
         mem2.gpLeagueEditingId = "";
