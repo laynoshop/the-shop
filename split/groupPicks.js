@@ -1028,6 +1028,39 @@
     }
   }
 
+  // gpBuildAdminToolsPanelHTML's own fetch (gpGetLeague + gpGetSlateGames
+  // + gpGetSlateDoc) doesn't fan out the way gpFetchLeagueForSettings
+  // does — it's already just 3 bounded reads — but it hits the identical
+  // architectural flaw: gpRefreshAdminToolsOverlay below races it against
+  // a 15s timeout that can only give up on *showing* the result, not
+  // cancel the fetch itself, which keeps running and does eventually
+  // resolve. "Try Again" used to call gpBuildAdminToolsPanelHTML again
+  // from scratch, discarding that in-flight work and starting an
+  // entirely new fetch, which could time out all over again on a slow
+  // connection. Unlike the League Settings cache above (a short TTL
+  // after resolving is fine there, since it's rarely mutated), this
+  // panel is the most frequently mutated screen in the app — Load Games,
+  // Publish, +New Week, ATS/tiebreaker, remove game all fire from right
+  // here — so there's no safe "stay fresh for N seconds" window, only
+  // pure in-flight sharing: a concurrent or retried call joins whichever
+  // fetch is already running, but the moment it settles the slot clears,
+  // so the very next call always starts a brand new fetch and can never
+  // see stale post-mutation data.
+  let gpAdminToolsPanelFetchPromise = null;
+  let gpAdminToolsPanelFetchKey = null;
+  function gpBuildAdminToolsPanelHTMLShared() {
+    const key = String(gpMem().pickLeagueId || gpGetSelectedLeagueId() || "").trim();
+    if (gpAdminToolsPanelFetchPromise && gpAdminToolsPanelFetchKey === key) {
+      return gpAdminToolsPanelFetchPromise;
+    }
+    gpAdminToolsPanelFetchKey = key;
+    gpAdminToolsPanelFetchPromise = gpBuildAdminToolsPanelHTML().finally(() => {
+      gpAdminToolsPanelFetchPromise = null;
+      gpAdminToolsPanelFetchKey = null;
+    });
+    return gpAdminToolsPanelFetchPromise;
+  }
+
   // adminMergePlayerPick fires from the Manage Player overlay, which is a
   // separate DOM node stacked on top rather than a descendant of the
   // Admin Tools overlay's body — so "am I inside the settings view"
@@ -1041,14 +1074,17 @@
   // it's actually open and showing that view — never while the embedded
   // League Settings form is up, so the 60s background auto-refresh (or
   // any other render pass) can't clobber in-progress form edits there.
-  // Same hung-promise protection as gpRenderAdminOverlaySettings below —
-  // a stuck Firestore/ESPN call here used to strand the Admin Tools
-  // overlay on "Loading admin tools…" forever.
+  // Races the fetch against a hard timeout so a stuck Firestore/ESPN call
+  // can't strand the overlay on "Loading admin tools…" forever — the
+  // fetch itself goes through gpBuildAdminToolsPanelHTMLShared above so a
+  // background auto-refresh tick or a "Try Again" tap that lands while
+  // the first attempt is still running joins that same fetch instead of
+  // starting a redundant one.
   async function gpRefreshAdminToolsOverlay() {
     if (!document.getElementById("gpAdminToolsOverlay")) return;
     if (gpMem().gpAdminOverlaySubview === "settings") return;
     let settled = false;
-    const loadTask = gpBuildAdminToolsPanelHTML().then((html) => {
+    const loadTask = gpBuildAdminToolsPanelHTMLShared().then((html) => {
       if (settled) return;
       settled = true;
       (Render().gpSetAdminToolsOverlayBody || (() => {}))(html);
