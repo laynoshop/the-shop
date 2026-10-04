@@ -266,6 +266,64 @@ const LEAGUE_ENDPOINTS = {
   pga:   (date) => `https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard?dates=${date}`,
 };
 
+// Mirrors buildTeam() in gp-admin.js (a browser-only module, not
+// requirable from a Cloud Function, hence the separate copy). A playoff
+// game can get added to a week while one or both slots are still a
+// placeholder — e.g. "White Sox/Astros" — because the prior round
+// hasn't finished; buildTeam() only ever runs once, at add-time, so
+// without this the placeholder is what's stuck on the game doc forever,
+// even after ESPN resolves the real matchup. Picks are stored purely as
+// side: "home"/"away" (never a team name or id), so refreshing this on
+// every sync tick — the same way scores and odds already are — is safe:
+// it only ever corrects what's displayed for a side, never touches an
+// existing pick.
+function pickTeamLogo(teamObj) {
+  const l1 = teamObj?.logo;
+  const l2 = Array.isArray(teamObj?.logos) ? teamObj.logos[0]?.href : "";
+  return String(l1 || l2 || "");
+}
+function pickTeamRecord(competitor) {
+  const recs = Array.isArray(competitor?.records) ? competitor.records : [];
+  const total = recs.find((r) => r?.type === "total") || recs[0];
+  return String(total?.summary || "");
+}
+function pickTeamRank(competitor, teamObj) {
+  const r = competitor?.curatedRank?.current ?? competitor?.rank ?? teamObj?.rank ?? "";
+  const n = Number(r);
+  return Number.isFinite(n) && n >= 1 && n <= 25 ? n : null;
+}
+function buildTeamFromCompetitor(competitor) {
+  const team = competitor?.team || {};
+  return {
+    id:       String(team?.id || ""),
+    name:     String(team?.displayName || team?.name || ""),
+    nickname: String(team?.name || team?.shortDisplayName || ""),
+    abbr:     String(team?.abbreviation || ""),
+    logo:     pickTeamLogo(team),
+    record:   pickTeamRecord(competitor),
+    rank:     pickTeamRank(competitor, team),
+    homeAway: String(competitor?.homeAway || ""),
+  };
+}
+function getEventTeams(ev) {
+  try {
+    const comp = ev?.competitions?.[0] || null;
+    if (!comp) return null;
+    const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+    const homeC = competitors.find((c) => c?.homeAway === "home");
+    const awayC = competitors.find((c) => c?.homeAway === "away");
+    if (!homeC || !awayC) return null;
+    const homeTeam = buildTeamFromCompetitor(homeC);
+    const awayTeam = buildTeamFromCompetitor(awayC);
+    // No usable id on either side yet (still a bare TBD slot with
+    // nothing real to show) — nothing worth writing this tick.
+    if (!homeTeam.id || !awayTeam.id) return null;
+    return { homeTeam, awayTeam };
+  } catch {
+    return null;
+  }
+}
+
 // Mirrors what gp-espn.js used to parse client-side from the same
 // ESPN scoreboard event shape.
 function getEventLiveInfo(ev) {
@@ -449,9 +507,16 @@ exports.syncPickemScores = onSchedule(
           if (!ev) continue;
           const info = getEventLiveInfo(ev);
           const odds = getEventOdds(ev);
-          if (!info && !odds) continue;
+          const teams = getEventTeams(ev);
+          if (!info && !odds && !teams) continue;
 
           const update = {};
+          if (teams) {
+            update.homeTeam = teams.homeTeam;
+            update.awayTeam = teams.awayTeam;
+            update.homeName = teams.homeTeam.name || "Home";
+            update.awayName = teams.awayTeam.name || "Away";
+          }
           if (odds) {
             update.liveOddsDetails = odds.details || "";
             update.liveOddsOverUnder = odds.overUnder || "";
