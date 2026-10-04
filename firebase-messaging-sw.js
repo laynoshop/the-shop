@@ -26,12 +26,16 @@ const messaging = firebase.messaging();
 // Fires when a push arrives while the app isn't in the foreground —
 // the normal case for a phone with the app closed. A push that arrives
 // while the app IS open and focused is instead delivered to the page
-// itself (not this handler); Cloud Functions always sends a
-// `notification` payload, so the browser shows it automatically even
-// without this handler, but defining it lets us control the icon.
+// itself (not this handler).
+//
+// Cloud Functions (functions/index.js) sends title/body under `data`,
+// not a top-level `notification` field, on purpose: if the payload
+// carried `notification`, the FCM service-worker library would
+// auto-display it in addition to the showNotification() call below,
+// producing two identical notifications for every push.
 messaging.onBackgroundMessage((payload) => {
-  const title = payload?.notification?.title || "The Shop";
-  const body  = payload?.notification?.body  || "";
+  const title = payload?.data?.title || "The Shop";
+  const body  = payload?.data?.body  || "";
   self.registration.showNotification(title, {
     body,
     icon: "/buckeye-O.png",

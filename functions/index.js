@@ -17,6 +17,15 @@ const db = getFirestore();
 // multicast push. Tokens FCM reports as no-longer-registered
 // (uninstalled app, revoked permission, etc.) are cleaned up from the
 // player doc so they stop being retried.
+//
+// IMPORTANT: this is sent as a data-only message (no top-level
+// `notification` field) on purpose. firebase-messaging-sw.js defines its
+// own onBackgroundMessage handler that calls showNotification() — if the
+// FCM payload also carries a `notification` field, the browser's FCM
+// service-worker library auto-displays it AND onBackgroundMessage fires
+// and displays it again, producing two identical notifications for
+// every single push. Keeping title/body in `data` (FCM requires string
+// values there) means only our own showNotification() call ever runs.
 async function sendPushToPlayerIds(playerIds, notification, data) {
   const uniqueIds = [...new Set((playerIds || []).map(String).filter(Boolean))];
   if (!uniqueIds.length) return { sent: 0, players: 0 };
@@ -35,8 +44,11 @@ async function sendPushToPlayerIds(playerIds, notification, data) {
 
   const response = await getMessaging().sendEachForMulticast({
     tokens,
-    notification,
-    data: data || {},
+    data: {
+      title: String(notification?.title || "The Shop"),
+      body: String(notification?.body || ""),
+      ...Object.fromEntries(Object.entries(data || {}).map(([k, v]) => [k, String(v)])),
+    },
   });
 
   const staleByPlayer = new Map(); // playerId -> tokens to drop
