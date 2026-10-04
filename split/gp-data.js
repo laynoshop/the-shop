@@ -759,18 +759,42 @@
     return bucket.promise;
   }
 
+  // ─── Effective spread (closing > live > legacy) ─────────────────────
+  // Mirrors gpEffectiveSpread in gp-render.js (separate module, same
+  // pattern as the other "mirrors X" copies in this app). Priority:
+  // closingSpreadValue — locked by syncPickemScores (functions/index.js)
+  // the moment the game is first seen as no longer pre-game, and never
+  // rewritten after that — beats liveSpreadValue, which keeps refreshing
+  // every minute right up until kickoff but is meaningless once the game
+  // has actually started (grading needs a fixed number). Both beat the
+  // legacy spreadValue/spreadFavoredSide captured once by the admin when
+  // the game was first added to the week, which can be days stale by
+  // kickoff.
+  function gpEffectiveSpread(g) {
+    if (g?.closingSpreadValue != null) {
+      const v = Number(g.closingSpreadValue);
+      if (Number.isFinite(v)) return { value: v, favSide: String(g.closingSpreadFavoredSide || "").toLowerCase() };
+    }
+    if (g?.__odds?.spreadValue != null) {
+      const v = Number(g.__odds.spreadValue);
+      if (Number.isFinite(v)) return { value: v, favSide: String(g.__odds.spreadFavoredSide || "").toLowerCase() };
+    }
+    const legacyV = Number(g?.spreadValue);
+    if (Number.isFinite(legacyV)) return { value: legacyV, favSide: String(g?.spreadFavoredSide || "").toLowerCase() };
+    return { value: NaN, favSide: "" };
+  }
+
   // ──────────────────────────────────────────────────────────────
   // gpGradeAtsForGame
-  // Grades one game against its stored spread (spreadValue / spreadFavoredSide,
-  // captured once by the admin at add-time — the line never moves after that,
-  // so grading stays fair regardless of when the leaderboard is computed).
+  // Grades one game against its effective spread (see gpEffectiveSpread
+  // above) — closing line once the game has started, so grading stays
+  // fixed regardless of when the leaderboard is computed after that point.
   // Returns { coverSide: "home"|"away"|"", pushed: bool, ok: bool }
   //   ok=false means there isn't enough data (no line, or no final score) to
   //   grade this game at all — callers should skip it rather than score it.
   // ──────────────────────────────────────────────────────────────
   function gpGradeAtsForGame(g) {
-    const spreadValue = Number(g?.spreadValue);
-    const favSide      = String(g?.spreadFavoredSide || "").toLowerCase();
+    const { value: spreadValue, favSide } = gpEffectiveSpread(g);
     const liveHome     = g?.__live?.homeScore;
     const liveAway     = g?.__live?.awayScore;
     const homeNum      = Number(liveHome ?? g?.finalHomeScore ?? NaN);
@@ -804,8 +828,9 @@
   // re-capture step), and only the live-synced odds ever fill that gap.
   // ──────────────────────────────────────────────────────────────
   function gpComputeStraightFavSide(g) {
-    // Prefer the clean structured field captured at add-time, when present.
-    const structured = String(g?.spreadFavoredSide || "").toLowerCase();
+    // Prefer the clean structured field (closing > live > legacy — see
+    // gpEffectiveSpread above), when present.
+    const structured = gpEffectiveSpread(g).favSide;
     if (structured === "home" || structured === "away") return structured;
 
     let favSide = "";
@@ -921,7 +946,7 @@
       const winner = gpGetGameWinningSide(g);
       if (!winner) continue; // not final yet, or a tie
       const favSide = gpComputeStraightFavSide(g);
-      const spread  = Number(g?.spreadValue);
+      const spread  = gpEffectiveSpread(g).value;
       if (!favSide || !Number.isFinite(spread) || spread <= 0 || winner === favSide) continue;
       if (biggestUpset && spread <= biggestUpset.spread) continue;
       const away = g?.awayTeam || { name: g?.awayName || "Away" };

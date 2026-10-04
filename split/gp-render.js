@@ -2528,20 +2528,49 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // written anywhere, so the O/U silently never showed even though it
   // was sitting right there on the game the whole time.
   function safeOverUnder(g) {
+    const closing  = String(g?.closingOddsOverUnder || "").trim();
     const hydrated = String(g?.__odds?.overUnder || "").trim();
     const legacy    = String(g?.oddsOU || g?.odds?.overUnder || "").trim();
-    return hydrated || legacy;
+    return closing || hydrated || legacy;
   }
 
+  // Priority: closing (locked the moment the game started — never moves
+  // again after that) > live (refreshed every minute by syncPickemScores,
+  // right up until kickoff) > legacy (the line captured once when the
+  // admin originally added the game to the week, which can be days stale).
+  // spreadChipHTML below uses this same priority for its numeric
+  // spreadValue/spreadFavoredSide, so the per-team chip and this header
+  // text always agree with each other at every point in a game's life.
   function safeOddsLine(g) {
+    const closingDetails  = String(g?.closingOddsDetails || "").trim();
     const hydratedDetails = String(g?.__odds?.details || "").trim();
     const legacyDetails   = String(g?.oddsDetails || g?.odds?.details || "").trim();
-    const d  = hydratedDetails || legacyDetails;
+    const d  = closingDetails || hydratedDetails || legacyDetails;
     const ou = safeOverUnder(g);
     const parts = [];
     if (d)  parts.push(`Fav: ${d}`);
     if (ou) parts.push(`O/U ${ou}`);
     return parts.join("  ·  ");
+  }
+
+  // ─── Effective spread (closing > live > legacy) ─────────────────────
+  // Same priority chain as safeOddsLine, just for the structured
+  // {value, favSide} shape spreadChipHTML/grading need instead of display
+  // text. Used by both spreadChipHTML here and gpGradeAtsForGame /
+  // gpComputeStraightFavSide in gp-data.js (duplicated there — separate
+  // module, same pattern as the other "mirrors X" copies in this app).
+  function gpEffectiveSpread(g) {
+    if (g?.closingSpreadValue != null) {
+      const v = Number(g.closingSpreadValue);
+      if (Number.isFinite(v)) return { value: v, favSide: String(g.closingSpreadFavoredSide || "").toLowerCase() };
+    }
+    if (g?.__odds?.spreadValue != null) {
+      const v = Number(g.__odds.spreadValue);
+      if (Number.isFinite(v)) return { value: v, favSide: String(g.__odds.spreadFavoredSide || "").toLowerCase() };
+    }
+    const legacyV = Number(g?.spreadValue);
+    if (Number.isFinite(legacyV)) return { value: legacyV, favSide: String(g?.spreadFavoredSide || "").toLowerCase() };
+    return { value: NaN, favSide: "" };
   }
 
   // ─── Broadcast network logo (falls back to plain text) ─────────────
@@ -2634,8 +2663,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
   // ─── Spread chip (ATS weeks only) ─────────────────────────────────
   function spreadChipHTML(g, side) {
-    const val     = Number(g?.spreadValue);
-    const favSide = String(g?.spreadFavoredSide || "").toLowerCase();
+    const { value: val, favSide } = gpEffectiveSpread(g);
     if (!Number.isFinite(val) || !(favSide === "home" || favSide === "away")) return "";
     const isFav = side === favSide;
     const num   = val % 1 === 0 ? val.toFixed(0) : String(val);
@@ -3524,7 +3552,10 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
         : `<span class="gpH2HTypeBadge gpH2HTypeBadgeOw">OW</span>`;
       // Spread chip — ATS games only, next to whichever team is favored,
       // same chip/formatting spreadChipHTML already uses on the Picks page.
-      const spreadFavSide = String(g?.spreadFavoredSide || "").toLowerCase();
+      // Uses the same effective (closing > live > legacy) favored side as
+      // the chip's own value, so this never attaches the chip to the wrong
+      // team's row if the favorite flips before kickoff.
+      const spreadFavSide = gpEffectiveSpread(g).favSide;
       const favSpreadHTML = isAts ? spreadChipHTML(g, spreadFavSide) : "";
       return `
 <div class="gpH2HDetailGameRow">
