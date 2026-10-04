@@ -1026,10 +1026,11 @@
     }
   }
 
-  // Fetches + renders the League Settings form into the (already open)
-  // Admin Tools overlay's body, marking the overlay's subview so
-  // gpRefreshAdminToolsOverlay leaves it alone until Save/Cancel move it
-  // back to "tools".
+  // Fetches + renders the League Settings form into the Admin Tools
+  // overlay's body (its shell is opened first if not already — see
+  // openAdminOverlaySettings), marking the overlay's subview so
+  // gpRefreshAdminToolsOverlay leaves it alone until Save/Cancel/Delete
+  // close the whole overlay.
   const GP_ADMIN_OVERLAY_TIMEOUT_MS = 15000;
 
   // A hung Firestore/auth call (never settling, not even rejecting) used to
@@ -1860,7 +1861,7 @@
     if (action === "openAdminOverlayTools") {
       (Render().gpDismissAdminChooserOverlay || (() => {}))();
       gpMem().gpAdminOverlaySubview = "tools";
-      (Render().gpShowAdminToolsOverlay || (() => {}))(`<div class="gpNotice">Loading admin tools…</div>`);
+      (Render().gpShowAdminToolsOverlay || (() => {}))(`<div class="gpNotice">Loading admin tools…</div>`, { skipEnterAnimation: true });
       await gpRefreshAdminToolsOverlay();
       return;
     }
@@ -1875,7 +1876,7 @@
       if (!leagueId) return;
       if (!document.getElementById("gpAdminToolsOverlay")) {
         (Render().gpDismissAdminChooserOverlay || (() => {}))();
-        (Render().gpShowAdminToolsOverlay || (() => {}))(`<div class="gpNotice">Loading league settings…</div>`);
+        (Render().gpShowAdminToolsOverlay || (() => {}))(`<div class="gpNotice">Loading league settings…</div>`, { skipEnterAnimation: true });
       }
       await gpRenderAdminOverlaySettings(leagueId);
       return;
@@ -1956,15 +1957,18 @@
     }
 
     // ── leagues: cancel the create/edit form — inside the Admin Tools
-    //    overlay this just swaps back to the Admin Tools view within the
-    //    same sheet; from the League Picker's own create/edit flow it's
-    //    the original full-page navigation back to wherever it opened
-    //    from. Detected structurally (is the button inside the overlay's
-    //    own body?) rather than by a flag, so it can't drift out of sync. ──
+    //    overlay this closes the whole overlay (League Settings is only
+    //    ever reached there via the chooser now, so there's no Picks
+    //    Settings view to "go back to" within the same sheet — matches
+    //    deleteLeague's existing behavior below); from the League
+    //    Picker's own create/edit flow it's the original full-page
+    //    navigation back to wherever it opened from. Detected
+    //    structurally (is the button inside the overlay's own body?)
+    //    rather than by a flag, so it can't drift out of sync. ──
     if (action === "cancelLeagueSettings") {
       if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
-        gpMem().gpAdminOverlaySubview = "tools";
-        await gpRefreshAdminToolsOverlay();
+        gpMem().gpAdminOverlaySubview = null;
+        (Render().gpDismissAdminToolsOverlay || (() => {}))();
         return;
       }
       const mem2 = gpMem();
@@ -2037,15 +2041,17 @@
         }
         // Same overlay-vs-full-page branch as cancelLeagueSettings above —
         // a save from inside the Admin Tools overlay (always an edit,
-        // never create) lands back on that overlay's own Admin Tools
-        // view instead of leaving gpLeagueEditMode's full-page flow.
+        // never create) closes the whole overlay, same as Cancel/Delete,
+        // instead of landing on Picks Settings (League Settings is only
+        // ever reached there via the chooser now, so there's no Picks
+        // Settings view the admin was "in" to go back to).
         if (document.getElementById("gpAdminToolsOverlayBody")?.contains(btn)) {
-          mem2.gpAdminOverlaySubview = "tools";
-          await gpRefreshAdminToolsOverlay();
-          // The underlying page (header name, tabs, etc.) may also need
-          // to reflect whatever changed — refresh it too, in the
-          // background, without disturbing the overlay that's on top of it.
-          renderPicks();
+          mem2.gpAdminOverlaySubview = null;
+          (Render().gpDismissAdminToolsOverlay || (() => {}))();
+          // The underlying page (header name, tabs, etc.) needs to
+          // reflect whatever changed, now that the overlay covering it
+          // is gone.
+          await renderPicks();
         } else {
           mem2.gpLeagueEditMode  = null;
           mem2.gpLeagueEditingId = "";

@@ -5132,7 +5132,6 @@ ${championBannerHTML}
 <div class="gpAdminOverlayTop">
   <div class="gpAdminHeadWeek">${esc(weekLabel || weekId || "No week yet")}</div>
   <div class="gpAdminHeadActions">
-    <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="openAdminOverlaySettings" data-leagueid="${esc(pickLeagueId || "")}">League Settings</button>
     <button class="gpAdminBtn gpAdminBtnGhost" type="button" data-gpaction="adminCreateWeek" data-leagueid="${esc(pickLeagueId || "")}">+ New Week</button>
   </div>
 </div>
@@ -5953,16 +5952,18 @@ ${archivedSectionHTML}`;
   }
 
   // ─── Admin Tools overlay ────────────────────────────────────────────
-  // Opened from the header's gear button (any H2H tab or the classic
-  // points-format page) instead of the old inline collapsible panel.
-  // "Nearly full page" per the ask — a taller sheet than the other
-  // bottom sheets in the app, since Admin Tools has a lot to show at
-  // once — but otherwise the exact same overlay recipe (X button,
-  // click-outside, Escape). Its body gets swapped in place (via
-  // gpSetAdminToolsOverlayBody) to show either the Admin Tools panel
-  // itself or, when "League Settings" is tapped, the settings form —
-  // without closing/reopening the overlay, so Save/Cancel inside
-  // Settings can land back on Admin Tools within the same sheet.
+  // Opened from the admin chooser (League Settings / Picks Settings —
+  // itself opened from the header's gear button, any H2H tab or the
+  // classic points-format page), never directly. "Nearly full page" per
+  // the ask — a taller sheet than the other bottom sheets in the app,
+  // since Picks Settings has a lot to show at once — but otherwise the
+  // exact same overlay recipe (X button, click-outside, Escape). Its body
+  // gets swapped in place (via gpSetAdminToolsOverlayBody) when retrying
+  // a failed load, without closing/reopening the overlay — but Save/
+  // Cancel/Delete from the League Settings form always close the whole
+  // overlay now (gpAdminOverlaySubview back to null) rather than landing
+  // on Picks Settings, since the chooser is the only way in and there's
+  // no Picks Settings view to "go back to" within the same sheet.
   function gpBuildAdminToolsOverlayHTML(bodyHTML) {
     return `
 <div class="gpPicksOverlayBackdrop" id="gpAdminToolsOverlay" role="dialog" aria-modal="true" aria-label="Admin Tools">
@@ -5979,7 +5980,16 @@ ${archivedSectionHTML}`;
 </div>`;
   }
 
-  function gpShowAdminToolsOverlay(bodyHTML) {
+  // skipEnterAnimation: true when this is replacing another overlay that
+  // was just dismissed in the same tick (the admin chooser handing off to
+  // either settings screen) — the normal double-rAF delay before adding
+  // .gpOverlayVisible left the backdrop transparent for a couple of
+  // frames right after the chooser's own backdrop was removed, flashing
+  // the bare underlying page for an instant in between. Applying the
+  // class immediately instead means the dimmed backdrop never actually
+  // disappears across the handoff — the browser only paints once both
+  // DOM changes have already happened.
+  function gpShowAdminToolsOverlay(bodyHTML, opts) {
     const existing = document.getElementById("gpAdminToolsOverlay");
     if (existing) existing.remove();
 
@@ -5990,9 +6000,13 @@ ${archivedSectionHTML}`;
     const closeBtn = document.getElementById("gpAdminToolsOverlayClose");
     if (!backdrop) return;
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
-    });
+    if (opts?.skipEnterAnimation) {
+      backdrop.classList.add("gpOverlayVisible");
+    } else {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+      });
+    }
 
     function dismiss() {
       backdrop.classList.remove("gpOverlayVisible");
