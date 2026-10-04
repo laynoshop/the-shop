@@ -212,7 +212,17 @@
     for (const g of (Array.isArray(games) ? games : [])) {
       if (!g) continue;
       g.__odds = g.liveOddsDetails || g.liveOddsOverUnder
-        ? { details: g.liveOddsDetails || "", overUnder: g.liveOddsOverUnder || "" }
+        ? {
+            details: g.liveOddsDetails || "",
+            overUnder: g.liveOddsOverUnder || "",
+            // Structured spread alongside the live details text — lets
+            // gp-render.js's per-team spread chip track the same
+            // continuously-refreshed line the "Fav: ..." header text shows,
+            // instead of the stale line captured once when the game was
+            // first added to the week.
+            spreadValue: g.liveSpreadValue != null ? Number(g.liveSpreadValue) : null,
+            spreadFavoredSide: String(g.liveSpreadFavoredSide || ""),
+          }
         : null;
     }
   }

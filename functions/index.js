@@ -300,11 +300,32 @@ function cleanFavoredText(s) {
 function normalizeNumberString(n) {
   return (n === null || n === undefined || n === "") ? "" : String(n).trim();
 }
+// Same signed-spread-relative-to-home logic as buildOdds() in gp-admin.js
+// (a browser-only module, not requirable from a Cloud Function, hence the
+// separate copy) — spread is negative when the home team is favored.
+// Falls back to pulling the magnitude out of the details text when the
+// favorite is only indicated by a boolean flag, not a signed number.
+function deriveSpread(oddsObj, detailsText) {
+  const spreadRaw = Number(oddsObj?.spread ?? oddsObj?.line ?? oddsObj?.handicap);
+  const homeFav = !!oddsObj?.homeTeamOdds?.favorite;
+  const awayFav = !!oddsObj?.awayTeamOdds?.favorite;
+  if (Number.isFinite(spreadRaw) && spreadRaw !== 0) {
+    return { spreadValue: Math.abs(spreadRaw), spreadFavoredSide: spreadRaw < 0 ? "home" : "away" };
+  }
+  if (homeFav || awayFav) {
+    const m = String(detailsText || "").match(/-\s*(\d+(\.\d+)?)/);
+    if (m) return { spreadValue: Number(m[1]), spreadFavoredSide: homeFav ? "home" : "away" };
+  }
+  return { spreadValue: null, spreadFavoredSide: "" };
+}
 function parseOddsFromPickcenter(pc) {
   if (!pc) return null;
   const overUnder = normalizeNumberString(pc.overUnder ?? pc.total ?? pc.overunder ?? "");
   const detailsRaw = cleanFavoredText(pc.details || pc.displayValue || pc.awayTeamOdds?.details || pc.homeTeamOdds?.details || "");
-  if (detailsRaw || overUnder) return { details: detailsRaw, overUnder };
+  if (detailsRaw || overUnder) {
+    const { spreadValue, spreadFavoredSide } = deriveSpread(pc, detailsRaw);
+    return { details: detailsRaw, overUnder, spreadValue, spreadFavoredSide };
+  }
   const spreadNum = Number(pc.spread ?? pc.line ?? pc.handicap);
   if (!Number.isFinite(spreadNum)) return null;
   const homeFav = !!pc.homeTeamOdds?.favorite;
@@ -312,7 +333,12 @@ function parseOddsFromPickcenter(pc) {
   const favoredTeam = homeFav ? "Home" : awayFav ? "Away" : (spreadNum < 0 ? "Home" : "Away");
   const abs = Math.abs(spreadNum);
   const spreadVal = abs % 1 === 0 ? String(abs.toFixed(0)) : String(abs);
-  return { details: `${favoredTeam} -${spreadVal}`, overUnder };
+  return {
+    details: `${favoredTeam} -${spreadVal}`,
+    overUnder,
+    spreadValue: abs,
+    spreadFavoredSide: spreadNum < 0 ? "home" : "away",
+  };
 }
 function getEventOdds(ev) {
   try {
@@ -322,7 +348,10 @@ function getEventOdds(ev) {
     if (o) {
       const details = cleanFavoredText(o?.details || o?.displayValue || "");
       const overUnder = normalizeNumberString(o?.overUnder ?? o?.total ?? "");
-      if (details || overUnder) return { details, overUnder };
+      if (details || overUnder) {
+        const { spreadValue, spreadFavoredSide } = deriveSpread(o, details);
+        return { details, overUnder, spreadValue, spreadFavoredSide };
+      }
     }
     const pc = Array.isArray(comp?.pickcenter) && comp.pickcenter.length ? comp.pickcenter[0] : null;
     const fromPc = parseOddsFromPickcenter(pc);
@@ -387,7 +416,12 @@ exports.syncPickemScores = onSchedule(
         if (!leagueKey || !date || !LEAGUE_ENDPOINTS[leagueKey]) continue;
         const key = `${leagueKey}__${date}`;
         if (!groups.has(key)) groups.set(key, { leagueKey, date, games: [] });
-        groups.get(key).games.push({ ref: gameDoc.ref, eventId, slateId: slateDoc.id });
+        groups.get(key).games.push({
+          ref: gameDoc.ref,
+          eventId,
+          slateId: slateDoc.id,
+          closingLocked: g.closingSpreadValue != null,
+        });
       }
     }
 
@@ -410,7 +444,7 @@ exports.syncPickemScores = onSchedule(
         }
 
         const byId = new Map(events.map((ev) => [String(ev?.id || ""), ev]));
-        for (const { ref, eventId, slateId } of games) {
+        for (const { ref, eventId, slateId, closingLocked } of games) {
           const ev = byId.get(eventId);
           if (!ev) continue;
           const info = getEventLiveInfo(ev);
@@ -422,6 +456,26 @@ exports.syncPickemScores = onSchedule(
             update.liveOddsDetails = odds.details || "";
             update.liveOddsOverUnder = odds.overUnder || "";
             update.liveOddsUpdatedAt = FieldValue.serverTimestamp();
+            if (odds.spreadValue != null) {
+              update.liveSpreadValue = odds.spreadValue;
+              update.liveSpreadFavoredSide = odds.spreadFavoredSide;
+            }
+          }
+          // Lock the "closing line" the first time this game is seen as no
+          // longer pre-game — everything above keeps refreshing right up
+          // until kickoff (a line can move for days before that), but once
+          // the game actually starts the spread used for grading AND for
+          // display needs to stop moving, or picks saved against one line
+          // end up graded against a different one than what was pinned to
+          // the scorecard when they were made. Guarded by closingLocked (set
+          // from the already-stored closingSpreadValue at the top of this
+          // run) so it only ever gets written once per game.
+          if (!closingLocked && odds && odds.spreadValue != null && info && info.state !== "pre") {
+            update.closingSpreadValue = odds.spreadValue;
+            update.closingSpreadFavoredSide = odds.spreadFavoredSide;
+            update.closingOddsDetails = odds.details || "";
+            update.closingOddsOverUnder = odds.overUnder || "";
+            update.closingLockedAt = FieldValue.serverTimestamp();
           }
           if (info) {
             if (info.state === "post" && Number.isFinite(info.homeScore) && Number.isFinite(info.awayScore)) {
