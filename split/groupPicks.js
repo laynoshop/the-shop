@@ -443,9 +443,21 @@
     const tab = GP_H2H_TAB_IDS.includes(mem.gpH2HTab) ? mem.gpH2HTab : "matchup";
     const tabBarHTML = (Render().gpBuildH2HTabBarHTML || (() => ""))(tab);
 
-    const weekLabel = String(weekMeta?.label || selectedId || "");
     const published = !!weekMeta?.published;
     const weekIndex = weeks.findIndex(w => String(w?.id) === selectedId);
+    // Once a week's index falls at/past the league's configured season
+    // length, it's a playoff round (gpGetH2HPlayoffRoundSpecs) — the
+    // stored slate label is still just "Week N" (set once, when the
+    // admin created it), so swap in the real round name ("Championship",
+    // "Semifinals", ...) everywhere this label shows: the week pager,
+    // the Matchup/Picks tab headers, and (below) suppressing the High
+    // Score callout, since "who scored the most across the whole
+    // league" stops meaning anything once the field has narrowed to a
+    // single bracket matchup.
+    const playoffSpecForWeek = (Data().gpGetH2HPlayoffRoundSpecs || (() => []))(league.h2hSchedule, league.totalWeeks)
+      .find(r => r.weekIndex === weekIndex);
+    const isPlayoffWeek = !!playoffSpecForWeek;
+    const weekLabel = String(playoffSpecForWeek?.label || weekMeta?.label || selectedId || "");
     mem.picksSlateId = selectedId;
 
     el.innerHTML = `${headerHTML}<div class="gpContainer">${tabBarHTML}<div class="gpNotice">Loading…</div></div>`;
@@ -517,7 +529,8 @@
           }
           bodyHTML = (Render().gpBuildH2HMatchupTabHTML || (() => ""))({
             weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId,
-            h2hSchedule: league.h2hSchedule, weekIndex, myName: name, leagueMembers, champion
+            h2hSchedule: league.h2hSchedule, weekIndex, myName: name, leagueMembers, champion,
+            isPlayoffWeek
           });
         } else {
           const myTiebreakerGuess = Number.isFinite(Number(myPicksUserDoc?.tiebreakerGuess))
