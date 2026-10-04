@@ -2229,6 +2229,69 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   height: 94dvh;
 }
 
+/* ══════════════════════════════════════════════
+   ADMIN CHOOSER — centered dialog
+   The one deliberately different overlay style in the app: every other
+   overlay is a bottom sheet (see .gpPicksOverlayBackdrop above); this
+   one is a small card centered on screen instead, since it's a quick
+   either/or decision (League Settings vs. Picks Settings) rather than a
+   scrolling form or list — a bottom sheet covering most of the screen
+   for a two-button choice felt heavier than the decision warranted.
+   ══════════════════════════════════════════════ */
+.gpCenterModalBackdrop {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.16,1,0.3,1);
+  pointer-events: none;
+}
+.gpCenterModalBackdrop.gpOverlayVisible {
+  opacity: 1;
+  pointer-events: all;
+}
+.gpCenterModalCard {
+  width: 100%; max-width: 340px;
+  background: #17161a;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 20px;
+  padding: 22px 16px 10px;
+  box-shadow: 0 16px 60px rgba(0,0,0,0.65);
+  transform: scale(0.92);
+  transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1);
+}
+.gpCenterModalBackdrop.gpOverlayVisible .gpCenterModalCard {
+  transform: scale(1);
+}
+.gpCenterModalTitle {
+  font-size: 16px; font-weight: 900; color: #fff;
+  text-align: center; margin-bottom: 16px;
+}
+.gpCenterModalOption {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  text-align: left; cursor: pointer;
+  margin-bottom: 10px;
+}
+.gpCenterModalOption:active { background: rgba(255,255,255,0.09); }
+.gpCenterModalOptionIcon { font-size: 24px; flex-shrink: 0; }
+.gpCenterModalOptionText { flex: 1 1 auto; min-width: 0; }
+.gpCenterModalOptionLabel { font-size: 15px; font-weight: 800; color: #fff; }
+.gpCenterModalOptionSub { font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,0.5); margin-top: 2px; }
+.gpCenterModalCancel {
+  display: block; width: 100%;
+  padding: 12px; background: none; border: none;
+  color: rgba(255,255,255,0.5); font-size: 13.5px; font-weight: 800;
+  text-align: center; cursor: pointer;
+}
+.gpCenterModalCancel:active { color: rgba(255,255,255,0.8); }
+
 /* Pick'em quick-switch menu — compact, content-sized rather than the
    tall 82dvh default sheet above (it's just "All Leagues" + a handful
    of league rows, never a scroll-heavy screen). */
@@ -3297,6 +3360,75 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   </div>
 </div>`;
   }
+
+  // ─── Floating FAB vs. overlays ────────────────────────────────────────
+  // Every overlay in this app is appended straight onto document.body —
+  // bottom sheets (.gpPicksOverlayBackdrop: player picks, H2H matchup
+  // detail, H2H player profile, Join League, Manage Player, header ⋮
+  // menu, Admin Tools, Pick'em quick-switch) and the one centered modal
+  // (.gpCenterModalBackdrop: the admin chooser). The floating FAB
+  // (#__fab_wrap, built in boot.js — coin flip/weather/logout) sits fixed
+  // at a very high z-index (99998) so it's always reachable over any
+  // screen, which means it draws right on top of whichever one happens
+  // to be open.
+  //
+  // One generic fix instead of one per overlay: a MutationObserver on
+  // document.body's direct children (NOT the whole subtree — a pick
+  // button toggling classes deep inside #content on every tap would
+  // otherwise fire this constantly for no reason) notices any overlay
+  // backdrop being added or removed and either shifts the FAB above a
+  // bottom sheet (still reachable, just out of the way) or hides it
+  // entirely for a centered modal (which dims the whole screen, so
+  // there's no "shift up" spot that makes sense), restoring it when
+  // neither is open. Covers every overlay listed above automatically,
+  // including any future one built the same way — nothing to remember to
+  // wire up per-overlay.
+  let gpFabOriginalBottom = null;
+  let gpFabOriginalDisplay = null;
+  function gpSyncFabAboveOverlay() {
+    const fab = document.getElementById("__fab_wrap");
+    if (!fab) return;
+
+    // Centered modals (.gpCenterModalBackdrop — the admin chooser) dim the
+    // WHOLE screen, so the FAB just needs to be out of the way entirely
+    // until it's dismissed; there's no "shift up" spot that makes sense
+    // when the backdrop covers top to bottom. Captures whatever display
+    // value was already there first (so this can't accidentally un-hide
+    // a FAB that boot.js itself has locked, e.g. pre-login).
+    const centerModal = document.querySelector(".gpCenterModalBackdrop");
+    if (centerModal) {
+      if (gpFabOriginalDisplay == null) gpFabOriginalDisplay = fab.style.display || "";
+      fab.style.display = "none";
+      return;
+    }
+    if (gpFabOriginalDisplay != null) {
+      fab.style.display = gpFabOriginalDisplay;
+      gpFabOriginalDisplay = null;
+    }
+
+    // Bottom-sheet overlays (.gpPicksOverlayBackdrop) only cover the
+    // lower part of the screen — shift the FAB up above whichever one is
+    // open instead of hiding it, so it stays reachable.
+    const backdrops = document.querySelectorAll(".gpPicksOverlayBackdrop");
+    const topBackdrop = backdrops.length ? backdrops[backdrops.length - 1] : null;
+    const sheet = topBackdrop ? topBackdrop.querySelector(":scope > div") : null;
+    if (!sheet) {
+      if (gpFabOriginalBottom != null) {
+        fab.style.bottom = gpFabOriginalBottom;
+        gpFabOriginalBottom = null;
+      }
+      return;
+    }
+    if (fab.style.display === "none") return;
+    if (gpFabOriginalBottom == null) gpFabOriginalBottom = fab.style.bottom || "";
+    fab.style.transition = "transform 0.22s cubic-bezier(0.34,1.56,0.64,1), bottom 220ms cubic-bezier(0.34,1.56,0.64,1)";
+    fab.style.bottom = `${sheet.offsetHeight + 16}px`;
+  }
+  (function gpInitFabOverlayWatcher() {
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(gpSyncFabAboveOverlay);
+    observer.observe(document.body, { childList: true });
+  })();
 
   // ─── Show / dismiss overlay (DOM management) ─────────────────────
   function gpShowPlayerPicksOverlay(playerName, games, picksMap, atsEventIds, tiebreakerEventId, myTiebreaker) {
@@ -5544,33 +5676,6 @@ ${archivedSectionHTML}`;
 </div>`;
   }
 
-  // The bottom-nav sits under a floating ⚙️-style FAB (#__fab_wrap, built
-  // in boot.js — coin flip / weather / logout ring) pinned at
-  // bottom:110px with a very high z-index (99998, well above this
-  // overlay's 999) so it's always reachable over any other screen. That
-  // means it was drawing right on top of this sheet's bottom-right
-  // corner. Shifting it up above the sheet (instead of hiding it) keeps
-  // it reachable while the menu is open, and reuses the same
-  // transform-transition timing boot.js already sets up for its own ring
-  // animation so the move looks native to it, not bolted on. Grabbed by
-  // DOM id rather than needing boot.js to expose anything — it's already
-  // a real element id, not an internal closure variable.
-  let gpFabOriginalBottom = null;
-  function gpShiftFabAboveQuickSwitchSheet() {
-    const fab   = document.getElementById("__fab_wrap");
-    const sheet = document.getElementById("gpQuickSwitchSheet");
-    if (!fab || !sheet || fab.style.display === "none") return;
-    if (gpFabOriginalBottom == null) gpFabOriginalBottom = fab.style.bottom || "";
-    fab.style.transition = "transform 0.22s cubic-bezier(0.34,1.56,0.64,1), bottom 220ms cubic-bezier(0.34,1.56,0.64,1)";
-    fab.style.bottom = `${sheet.offsetHeight + 16}px`;
-  }
-  function gpRestoreFabPosition() {
-    const fab = document.getElementById("__fab_wrap");
-    if (!fab || gpFabOriginalBottom == null) return;
-    fab.style.bottom = gpFabOriginalBottom;
-    gpFabOriginalBottom = null;
-  }
-
   function gpShowPickemQuickSwitchOverlay({ leagues, currentLeagueId, loading }) {
     const existing = document.getElementById("gpQuickSwitchOverlay");
     if (existing) existing.remove();
@@ -5581,14 +5686,11 @@ ${archivedSectionHTML}`;
     const sheet    = document.getElementById("gpQuickSwitchSheet");
     if (!backdrop) return;
 
-    gpShiftFabAboveQuickSwitchSheet();
-
     requestAnimationFrame(() => {
       requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
     });
 
     function dismiss() {
-      gpRestoreFabPosition();
       backdrop.classList.remove("gpOverlayVisible");
       backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
     }
@@ -5605,18 +5707,15 @@ ${archivedSectionHTML}`;
   // Updates just the league rows in place once the (async) membership
   // lookup resolves — the overlay is already open and animated in by
   // then, so this never closes/reopens it, just swaps the "Loading your
-  // leagues…" placeholder for the real list. Re-shifts the FAB too,
-  // since the sheet usually grows taller once real rows replace the
-  // single loading line.
+  // leagues…" placeholder for the real list.
   function gpUpdatePickemQuickSwitchRows(leagues, currentLeagueId) {
     const rowsEl = document.getElementById("gpQuickSwitchRows");
     if (!rowsEl) return; // overlay already dismissed — nothing to update
     rowsEl.innerHTML = gpBuildPickemQuickSwitchRowsHTML(leagues, currentLeagueId, false);
-    gpShiftFabAboveQuickSwitchSheet();
+    gpSyncFabAboveOverlay();
   }
 
   function gpDismissPickemQuickSwitchOverlay() {
-    gpRestoreFabPosition();
     const backdrop = document.getElementById("gpQuickSwitchOverlay");
     if (backdrop) backdrop.remove();
   }
@@ -5780,6 +5879,76 @@ ${archivedSectionHTML}`;
 
   function gpDismissHeaderMenuOverlay() {
     const backdrop = document.getElementById("gpHeaderMenuOverlay");
+    if (backdrop) backdrop.remove();
+  }
+
+  // ─── Admin chooser overlay (header gear button) ──────────────────────
+  // Opened first, before Admin Tools — lets the admin pick League
+  // Settings or Picks Settings up front instead of always landing on
+  // Picks Settings and having to dig for the "League Settings" button
+  // buried in its header. The one deliberately different overlay style
+  // in the app: a centered card instead of a bottom sheet, since this is
+  // a quick either/or decision rather than a scrolling form or list — a
+  // bottom sheet covering most of the screen felt heavier than a
+  // two-button choice warranted. Picking either option hands off to the
+  // existing openAdminOverlayTools/openAdminOverlaySettings handlers
+  // (groupPicks.js) unchanged — this overlay only decides which one.
+  function gpBuildAdminOverlayChooserHTML(leagueId) {
+    return `
+<div class="gpCenterModalBackdrop" id="gpAdminChooserOverlay" role="dialog" aria-modal="true" aria-label="Admin Tools">
+  <div class="gpCenterModalCard" id="gpAdminChooserCard">
+    <div class="gpCenterModalTitle">⚙️ Admin Tools</div>
+    <button type="button" class="gpCenterModalOption" data-gpaction="openAdminOverlaySettings" data-leagueid="${esc(leagueId || "")}">
+      <span class="gpCenterModalOptionIcon">🏆</span>
+      <span class="gpCenterModalOptionText">
+        <div class="gpCenterModalOptionLabel">League Settings</div>
+        <div class="gpCenterModalOptionSub">Name, season length, playoffs, announcements, roster</div>
+      </span>
+    </button>
+    <button type="button" class="gpCenterModalOption" data-gpaction="openAdminOverlayTools">
+      <span class="gpCenterModalOptionIcon">🛠️</span>
+      <span class="gpCenterModalOptionText">
+        <div class="gpCenterModalOptionLabel">Picks Settings</div>
+        <div class="gpCenterModalOptionSub">Load games, build the week, ATS &amp; tiebreaker</div>
+      </span>
+    </button>
+    <button type="button" class="gpCenterModalCancel" id="gpAdminChooserCancel">Cancel</button>
+  </div>
+</div>`;
+  }
+
+  function gpShowAdminChooserOverlay(leagueId) {
+    const existing = document.getElementById("gpAdminChooserOverlay");
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML("beforeend", gpBuildAdminOverlayChooserHTML(leagueId));
+
+    const backdrop  = document.getElementById("gpAdminChooserOverlay");
+    const card      = document.getElementById("gpAdminChooserCard");
+    const cancelBtn = document.getElementById("gpAdminChooserCancel");
+    if (!backdrop) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
+    });
+
+    function dismiss() {
+      backdrop.classList.remove("gpOverlayVisible");
+      backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
+    }
+
+    cancelBtn?.addEventListener("click", dismiss);
+    backdrop.addEventListener("click", (e) => {
+      if (!card.contains(e.target)) dismiss();
+    });
+    function onKey(e) {
+      if (e.key === "Escape") { dismiss(); document.removeEventListener("keydown", onKey); }
+    }
+    document.addEventListener("keydown", onKey);
+  }
+
+  function gpDismissAdminChooserOverlay() {
+    const backdrop = document.getElementById("gpAdminChooserOverlay");
     if (backdrop) backdrop.remove();
   }
 
@@ -6206,6 +6375,8 @@ ${archivedSectionHTML}`;
     gpDismissPlayerManageOverlay,
     gpShowHeaderMenuOverlay,
     gpDismissHeaderMenuOverlay,
+    gpShowAdminChooserOverlay,
+    gpDismissAdminChooserOverlay,
     gpShowAdminToolsOverlay,
     gpDismissAdminToolsOverlay,
     gpSetAdminToolsOverlayBody,

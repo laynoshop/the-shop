@@ -1013,7 +1013,7 @@
       settled = true;
       console.error("[GP] gpRefreshAdminToolsOverlay error:", err);
       (Render().gpSetAdminToolsOverlayBody || (() => {}))(
-        `<div class="gpNotice">Couldn't load admin tools: ${String(err?.message || err)}<br><button type="button" class="smallBtn gpH2HStartSeasonBtn" style="margin-top:10px" data-gpaction="openAdminOverlay">🔄 Try Again</button></div>`
+        `<div class="gpNotice">Couldn't load admin tools: ${String(err?.message || err)}<br><button type="button" class="smallBtn gpH2HStartSeasonBtn" style="margin-top:10px" data-gpaction="openAdminOverlayTools">🔄 Try Again</button></div>`
       );
     });
     const timeoutTask = new Promise((resolve) => setTimeout(resolve, GP_ADMIN_OVERLAY_TIMEOUT_MS));
@@ -1021,7 +1021,7 @@
     if (!settled) {
       settled = true;
       (Render().gpSetAdminToolsOverlayBody || (() => {}))(
-        `<div class="gpNotice">This is taking longer than expected.<br><button type="button" class="smallBtn gpH2HStartSeasonBtn" style="margin-top:10px" data-gpaction="openAdminOverlay">🔄 Try Again</button></div>`
+        `<div class="gpNotice">This is taking longer than expected.<br><button type="button" class="smallBtn gpH2HStartSeasonBtn" style="margin-top:10px" data-gpaction="openAdminOverlayTools">🔄 Try Again</button></div>`
       );
     }
   }
@@ -1838,21 +1838,45 @@
       return;
     }
 
-    // ── admin: open the Admin Tools overlay from the header gear button —
-    //    works from any H2H tab (or the classic page), independent of
-    //    whatever the underlying page currently has fetched. ──
+    // ── admin: header gear button — shows the League Settings / Picks
+    //    Settings chooser instead of jumping straight into Picks Settings
+    //    (the old behavior; still reachable via openAdminOverlayTools
+    //    below, including the error/timeout "Try Again" buttons, which
+    //    deliberately retry the thing that failed rather than bouncing
+    //    back to this chooser). Dismisses a stray already-open Admin
+    //    Tools overlay first — the header's gear button technically stays
+    //    tappable while that overlay covers the page, so a second tap
+    //    shouldn't stack a second overlay on top of it. ──
     if (action === "openAdminOverlay") {
+      (Render().gpDismissAdminToolsOverlay || (() => {}))();
+      const leagueId = String(gpMem().pickLeagueId || gpGetSelectedLeagueId() || "").trim();
+      (Render().gpShowAdminChooserOverlay || (() => {}))(leagueId);
+      return;
+    }
+
+    // ── admin: "Picks Settings" chosen from the chooser — the Admin
+    //    Tools panel itself (load games, build the week, ATS/tiebreaker),
+    //    exactly what the gear button used to open directly. ──
+    if (action === "openAdminOverlayTools") {
+      (Render().gpDismissAdminChooserOverlay || (() => {}))();
       gpMem().gpAdminOverlaySubview = "tools";
       (Render().gpShowAdminToolsOverlay || (() => {}))(`<div class="gpNotice">Loading admin tools…</div>`);
       await gpRefreshAdminToolsOverlay();
       return;
     }
 
-    // ── admin: open League Settings inside the Admin Tools overlay,
-    //    swapping the overlay's body content in place (no navigation) ──
+    // ── admin: open League Settings — either "League Settings" chosen
+    //    from the chooser (Admin Tools overlay shell isn't open yet, so
+    //    open it first) or the existing shortcut embedded inside the
+    //    Picks Settings panel itself (shell already open — just swap its
+    //    body in place, no navigation, same as before). ──
     if (action === "openAdminOverlaySettings") {
       const leagueId = String(btn.getAttribute("data-leagueid") || gpMem().pickLeagueId || "").trim();
       if (!leagueId) return;
+      if (!document.getElementById("gpAdminToolsOverlay")) {
+        (Render().gpDismissAdminChooserOverlay || (() => {}))();
+        (Render().gpShowAdminToolsOverlay || (() => {}))(`<div class="gpNotice">Loading league settings…</div>`);
+      }
       await gpRenderAdminOverlaySettings(leagueId);
       return;
     }
