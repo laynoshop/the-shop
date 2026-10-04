@@ -119,8 +119,8 @@
     if (!gpNotifSupported() || gpNotifPermission() !== "granted") return;
     try {
       firebase.messaging().onMessage((payload) => {
-        const title = payload?.notification?.title || "The Shop";
-        const body  = payload?.notification?.body  || "";
+        const title = payload?.data?.title || "The Shop";
+        const body  = payload?.data?.body  || "";
         const options = { body, icon: "/buckeye-O.png", badge: "/buckeye-O.png", data: payload?.data || {} };
         navigator.serviceWorker.ready
           .then((reg) => reg.showNotification(title, options))
