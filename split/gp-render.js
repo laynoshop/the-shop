@@ -3670,7 +3670,7 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
   // gpComputeWeeklyLeaderboard/gpGetH2HRoundForWeek/gpComputeH2HWeekResults
   // primitives the rest of the H2H feature already uses — nothing new
   // computed here beyond finding "which result is mine."
-  function gpBuildH2HMatchupTabHTML({ weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId, h2hSchedule, weekIndex, myName, leagueMembers, champion }) {
+  function gpBuildH2HMatchupTabHTML({ weekLabel, games, allPicks, atsEventIds, tiebreakers, tiebreakerEventId, h2hSchedule, weekIndex, myName, leagueMembers, champion, isPlayoffWeek }) {
     const GP_Data = window.GP_Data || {};
     const list = Array.isArray(games) ? games : [];
     const championBannerHTML = champion ? `
@@ -3724,7 +3724,13 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 
     const otherResults = results.filter(m => m !== myResult);
     const otherMatchupsHTML = gpBuildH2HMatchupsHTML(otherResults, weekLabel);
-    const highScoreHTML = gpBuildH2HHighScoreCalloutHTML({ rows: lb.rows, weekLabel });
+    // "Who scored the most across the whole league this week" only means
+    // something in the regular season, when everyone's playing their own
+    // separate matchup in parallel. Once a round is a playoff round, the
+    // field has already narrowed to just that round's bracket pair(s) —
+    // down to exactly one matchup by the championship — so this would
+    // just be restating the one matchup already shown above/below it.
+    const highScoreHTML = isPlayoffWeek ? "" : gpBuildH2HHighScoreCalloutHTML({ rows: lb.rows, weekLabel });
     // Anyone without a real matchup this round (byed, or simply absent
     // from a round pared down to just playoff qualifiers) isn't making
     // any picks this week — Pick Progress shouldn't list them at all.
