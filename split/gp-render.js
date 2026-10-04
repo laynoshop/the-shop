@@ -5544,6 +5544,33 @@ ${archivedSectionHTML}`;
 </div>`;
   }
 
+  // The bottom-nav sits under a floating ⚙️-style FAB (#__fab_wrap, built
+  // in boot.js — coin flip / weather / logout ring) pinned at
+  // bottom:110px with a very high z-index (99998, well above this
+  // overlay's 999) so it's always reachable over any other screen. That
+  // means it was drawing right on top of this sheet's bottom-right
+  // corner. Shifting it up above the sheet (instead of hiding it) keeps
+  // it reachable while the menu is open, and reuses the same
+  // transform-transition timing boot.js already sets up for its own ring
+  // animation so the move looks native to it, not bolted on. Grabbed by
+  // DOM id rather than needing boot.js to expose anything — it's already
+  // a real element id, not an internal closure variable.
+  let gpFabOriginalBottom = null;
+  function gpShiftFabAboveQuickSwitchSheet() {
+    const fab   = document.getElementById("__fab_wrap");
+    const sheet = document.getElementById("gpQuickSwitchSheet");
+    if (!fab || !sheet || fab.style.display === "none") return;
+    if (gpFabOriginalBottom == null) gpFabOriginalBottom = fab.style.bottom || "";
+    fab.style.transition = "transform 0.22s cubic-bezier(0.34,1.56,0.64,1), bottom 220ms cubic-bezier(0.34,1.56,0.64,1)";
+    fab.style.bottom = `${sheet.offsetHeight + 16}px`;
+  }
+  function gpRestoreFabPosition() {
+    const fab = document.getElementById("__fab_wrap");
+    if (!fab || gpFabOriginalBottom == null) return;
+    fab.style.bottom = gpFabOriginalBottom;
+    gpFabOriginalBottom = null;
+  }
+
   function gpShowPickemQuickSwitchOverlay({ leagues, currentLeagueId, loading }) {
     const existing = document.getElementById("gpQuickSwitchOverlay");
     if (existing) existing.remove();
@@ -5554,11 +5581,14 @@ ${archivedSectionHTML}`;
     const sheet    = document.getElementById("gpQuickSwitchSheet");
     if (!backdrop) return;
 
+    gpShiftFabAboveQuickSwitchSheet();
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => backdrop.classList.add("gpOverlayVisible"));
     });
 
     function dismiss() {
+      gpRestoreFabPosition();
       backdrop.classList.remove("gpOverlayVisible");
       backdrop.addEventListener("transitionend", () => backdrop.remove(), { once: true });
     }
@@ -5575,14 +5605,18 @@ ${archivedSectionHTML}`;
   // Updates just the league rows in place once the (async) membership
   // lookup resolves — the overlay is already open and animated in by
   // then, so this never closes/reopens it, just swaps the "Loading your
-  // leagues…" placeholder for the real list.
+  // leagues…" placeholder for the real list. Re-shifts the FAB too,
+  // since the sheet usually grows taller once real rows replace the
+  // single loading line.
   function gpUpdatePickemQuickSwitchRows(leagues, currentLeagueId) {
     const rowsEl = document.getElementById("gpQuickSwitchRows");
     if (!rowsEl) return; // overlay already dismissed — nothing to update
     rowsEl.innerHTML = gpBuildPickemQuickSwitchRowsHTML(leagues, currentLeagueId, false);
+    gpShiftFabAboveQuickSwitchSheet();
   }
 
   function gpDismissPickemQuickSwitchOverlay() {
+    gpRestoreFabPosition();
     const backdrop = document.getElementById("gpQuickSwitchOverlay");
     if (backdrop) backdrop.remove();
   }
