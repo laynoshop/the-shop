@@ -663,6 +663,27 @@
      bigger than before — bigger than the old 0.8rem, still under team names. */
   .piShopMetaItem.venue { font-size: 1.1rem; color: #888; }
 
+  /* Network logo chip — pushed to the right edge of the bottom meta row
+     (same row as venue) via margin-left:auto, scaled up from the app's
+     normal chip size to read clearly on a TV a few feet away. "bare"
+     logos (already a self-contained graphic) get no white backing;
+     everything else is ink-only art that needs the white chip for
+     contrast against this board's dark cards. */
+  .piNetworkChip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 6px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14);
+    color: rgba(255,255,255,0.6); flex-shrink: 0; white-space: nowrap;
+    margin-left: auto;
+  }
+  .piNetworkChip.piNetworkChipLogo { background: #fff; border-color: rgba(0,0,0,0.06); padding: 4px 10px; }
+  .piNetworkChip.piNetworkChipBare { background: transparent; border: none; padding: 0; }
+  .piNetworkChip.piNetworkChipBare .piNetworkLogoImg { border-radius: 4px; }
+  .piNetworkChip.piNetworkChipBare .piNetworkLogoFallback { color: rgba(255,255,255,0.6); }
+  .piNetworkLogoImg { height: 20px; width: auto; max-width: 130px; display: block; }
+  .piNetworkLogoFallback { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #222; }
+
   /* ---- Bottom banner ---- */
   #piBanner {
     grid-column: 1 / -1;
@@ -1939,6 +1960,93 @@
   }
 
   // ----------------------------------------------------------------
+  // Broadcast network logo — mirrors NETWORK_LOGO_FILES in
+  // scores-render.js and GP_NETWORK_LOGO_FILES in gp-render.js (same
+  // local assets/networks/* files, same ESPN event shape) — kept as its
+  // own copy here since this is an independent module, same as those two.
+  // "bare" entries are already self-contained logo graphics (a colored
+  // background or wordmark-on-transparent that reads fine on this
+  // board's dark cards); everything else is ink-only art that needs the
+  // white chip behind it for contrast.
+  // ----------------------------------------------------------------
+  const PI_NETWORK_LOGO_FILES = {
+    "espn":         { file: "assets/networks/espn.webp" },
+    "espn2":        { file: "assets/networks/espn2.webp" },
+    "abc":          { file: "assets/networks/abc.webp", bare: true },
+    "cbs":          { file: "assets/networks/cbs.webp" },
+    "fox":          { file: "assets/networks/fox.png", bare: true },
+    "fs1":          { file: "assets/networks/fs1.webp", bare: true },
+    "fox sports 1": { file: "assets/networks/fs1.webp", bare: true },
+    "nbc":          { file: "assets/networks/nbc.webp" },
+    "peacock":      { file: "assets/networks/peacock.webp" },
+    "secn":         { file: "assets/networks/sec-network.webp", bare: true },
+    "sec network":  { file: "assets/networks/sec-network.webp", bare: true },
+    "btn":               { file: "assets/networks/btn.png" },
+    "big ten network":   { file: "assets/networks/btn.png" },
+    "cw":                { file: "assets/networks/cw.webp" },
+    "the cw":            { file: "assets/networks/cw.webp" },
+    "cbssn":                    { file: "assets/networks/cbssn.webp" },
+    "cbs sports network":       { file: "assets/networks/cbssn.webp" },
+    "accn":            { file: "assets/networks/accn.webp" },
+    "acc network":     { file: "assets/networks/accn.webp" },
+    "tnt":             { file: "assets/networks/tnt.webp" },
+    "apple tv":        { file: "assets/networks/apple-tv.webp" },
+    "apple tv+":       { file: "assets/networks/apple-tv.webp" },
+    "espn+":           { file: "assets/networks/espn-plus.webp" },
+    "espn plus":       { file: "assets/networks/espn-plus.webp" },
+    "usa":             { file: "assets/networks/usa.webp" },
+    "usa network":     { file: "assets/networks/usa.webp" },
+    "usa net":         { file: "assets/networks/usa.webp" },
+    "espnu":           { file: "assets/networks/espnu.webp" },
+    "espn unlimited":  { file: "assets/networks/espn.webp" },
+    "espn unlmtd":     { file: "assets/networks/espn.webp" },
+    "nfln":            { file: "assets/networks/nfl-network.webp" },
+    "nfl network":     { file: "assets/networks/nfl-network.webp" },
+    "nfl net":         { file: "assets/networks/nfl-network.webp" },
+    "msgsn":           { file: "assets/networks/msgsn.png" },
+    "msg sn":          { file: "assets/networks/msgsn.png" },
+    "msg network":     { file: "assets/networks/msgsn.png" },
+    "nhln":            { file: "assets/networks/nhl-network.webp" },
+    "nhl network":     { file: "assets/networks/nhl-network.webp" },
+    "nhl net":         { file: "assets/networks/nhl-network.webp" },
+    "scripps sports":  { file: "assets/networks/scripps-sports.png" },
+    "scripps":         { file: "assets/networks/scripps-sports.png" },
+    "disney+":         { file: "assets/networks/disney-plus.webp" },
+    "disney plus":     { file: "assets/networks/disney-plus.webp" },
+    "tbs":             { file: "assets/networks/tbs.webp", bare: true },
+    "prime video":        { file: "assets/networks/prime-video.webp" },
+    "amazon prime video": { file: "assets/networks/prime-video.webp" },
+    "amazon prime":       { file: "assets/networks/prime-video.webp" },
+    "prime":              { file: "assets/networks/prime-video.webp" },
+    "amzn":               { file: "assets/networks/prime-video.webp" },
+  };
+  function _pickBroadcastName(comp, ev) {
+    const broadcasts = comp?.broadcasts || ev?.broadcasts || [];
+    for (const b of broadcasts) {
+      const names = b?.names || (b?.media?.shortName ? [b.media.shortName] : (b?.name ? [b.name] : []));
+      for (const n of names) { if (n) return String(n).trim(); }
+    }
+    const geo = comp?.geoBroadcasts || [];
+    for (const g of geo) {
+      const n = g?.media?.shortName || g?.media?.callLetters || "";
+      if (n) return String(n).trim();
+    }
+    return "";
+  }
+  function _buildNetworkLogoHTML(name) {
+    const nm = String(name || "").trim();
+    if (!nm) return "";
+    const entry = PI_NETWORK_LOGO_FILES[nm.toLowerCase()];
+    if (!entry) return `<span class="piNetworkChip">${_esc(nm)}</span>`;
+    const chipCls = entry.bare ? "piNetworkChip piNetworkChipBare" : "piNetworkChip piNetworkChipLogo";
+    return `<span class="${chipCls}">
+      <img src="${_esc(entry.file)}" alt="${_esc(nm)}" class="piNetworkLogoImg" loading="lazy"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='inline';" />
+      <span class="piNetworkLogoFallback" style="display:none">${_esc(nm)}</span>
+    </span>`;
+  }
+
+  // ----------------------------------------------------------------
   // Score card builder
   // ----------------------------------------------------------------
   function _buildShopCard(leagueKey, leagueLabel, ev, seriesOverride, oddsOverride, upcoming = false, showLeagueBadge = true) {
@@ -2020,13 +2128,17 @@
     const seriesHTML = series ? `<div class="piSeriesLine">${_buildSeriesHTML(series)}</div>` : `<div class="piSeriesLine"></div>`;
 
     const venue    = String(comp?.venue?.fullName || comp?.venue?.shortName || "");
+    const broadcastName = _pickBroadcastName(comp, ev);
+    const networkHTML   = _buildNetworkLogoHTML(broadcastName);
     const oddsLine = oddsOverride ? _buildOddsLine(oddsOverride.favored, oddsOverride.ou) : "";
     // Odds span always renders (even empty) so the async odds fetch below has
     // an element to fill in later — it isn't known yet at initial render time.
-    // It lives in the top row now; the bottom meta row is venue-only.
-    const metaHTML = venue ? `
+    // It lives in the top row now; the bottom meta row is venue + network,
+    // network logo pushed to the right edge via margin-left:auto on the chip.
+    const metaHTML = (venue || networkHTML) ? `
       <div class="piShopMeta">
-        <span class="piShopMetaItem venue">📍 ${_esc(venue)}</span>
+        ${venue ? `<span class="piShopMetaItem venue">📍 ${_esc(venue)}</span>` : ""}
+        ${networkHTML}
       </div>` : "";
 
     return `
