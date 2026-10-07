@@ -1963,7 +1963,13 @@
       const evDate = new Date(ev?.date || "");
       const now = new Date();
       const diffDays = Math.round((evDate - now) / 86400000);
-      statusText = diffDays <= 0 ? "Today" : diffDays === 1 ? "Tomorrow" : `In ${diffDays} days`;
+      const dayLabel = diffDays <= 0 ? "Today" : diffDays === 1 ? "Tomorrow" : `In ${diffDays} days`;
+      // Same time format the "scheduled, not flagged upcoming" branch
+      // below already uses — keeps "3:30 PM" consistent everywhere on
+      // this board instead of inventing a second format just for
+      // upcoming-game tiles.
+      const timeStr = !isNaN(evDate) ? evDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      statusText = timeStr ? `${dayLabel} · ${timeStr}` : dayLabel;
     } else if (state === "in" || statusName.includes("in_progress") || statusName === "in") {
       cardClass += " live";
       statusClass = "live";
