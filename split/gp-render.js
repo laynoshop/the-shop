@@ -1817,6 +1817,23 @@ details[open] > .gpEveryoneSummary::after { content: "▾"; }
 }
 
 /* ══════════════════════════════════════════════
+   COMMISSIONER / TREASURER ROLE RIBBON
+   ══════════════════════════════════════════════ */
+.gpRoleRibbon {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 6px 10px;
+  margin-bottom: 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255,205,70,0.14) 0%, rgba(20,16,8,0.5) 100%);
+  border: 1px solid rgba(255,205,70,0.35);
+  font-size: 12px; font-weight: 800;
+  color: rgba(255,235,180,0.92);
+}
+.gpRoleRibbonLabel { color: rgba(255,210,100,0.85); font-weight: 900; margin-right: 3px; }
+.gpRoleRibbonSep { opacity: 0.4; margin: 0 2px; }
+
+/* ══════════════════════════════════════════════
    LOCK REMINDER BANNER
    ══════════════════════════════════════════════ */
 .gpLockBanner {
@@ -4909,6 +4926,22 @@ ${championBannerHTML}
       .join("");
   }
 
+  // Commissioner/Treasurer ribbon — reads the denormalized names straight
+  // off the league doc (set by submitLeagueSettings), so this costs zero
+  // extra Firestore reads on every page view. Renders nothing until at
+  // least one role has been assigned. TEMPORARY: caller gates this to
+  // admin-only per the initial rollout request — remove that gate once
+  // it's been tested and is ready for every player to see.
+  function gpBuildLeagueRoleRibbonHTML(league) {
+    const commissioner = String(league?.commissionerName || "").trim();
+    const treasurer = String(league?.treasurerName || "").trim();
+    if (!commissioner && !treasurer) return "";
+    const parts = [];
+    if (commissioner) parts.push(`<span class="gpRoleRibbonItem"><span class="gpRoleRibbonLabel">Commissioner:</span> ${esc(commissioner)}</span>`);
+    if (treasurer) parts.push(`<span class="gpRoleRibbonItem"><span class="gpRoleRibbonLabel">Treasurer:</span> ${esc(treasurer)}</span>`);
+    return `<div class="gpRoleRibbon">${parts.join('<span class="gpRoleRibbonSep">·</span>')}</div>`;
+  }
+
   // Shows whenever this player has open, unlocked games without a pick,
   // and/or an unanswered tiebreaker for this week — every time they land
   // on the league, not just when a lock is imminent, per the "make it
@@ -6119,6 +6152,24 @@ ${archivedSectionHTML}`;
       : `<div class="gpJoinMembersEmpty">Nobody's joined this league yet.</div>`}
   </div>` : "";
 
+    // Commissioner / Treasurer — picked from whoever has actually joined
+    // (same membersList as above). Only meaningful once there's a roster
+    // to pick from, so this block only shows in edit mode.
+    const roleOptionsHTML = (selectedId) => {
+      const selId = String(selectedId || "").trim();
+      return `<option value="">— none —</option>` +
+        membersList.map(m => `<option value="${esc(m.playerId)}" ${String(m.playerId) === selId ? "selected" : ""}>${esc(m.name)}</option>`).join("");
+    };
+    const rolesSectionHTML = isEdit ? `
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">Commissioner</div>
+    <select id="gpLeagueCommissioner" class="gpLeagueSettingsInput">${roleOptionsHTML(league?.commissionerPlayerId)}</select>
+  </div>
+  <div class="gpLeagueSettingsRow">
+    <div class="gpLeagueSettingsLabel">Treasurer</div>
+    <select id="gpLeagueTreasurer" class="gpLeagueSettingsInput">${roleOptionsHTML(league?.treasurerPlayerId)}</select>
+  </div>` : "";
+
     // ── Head-to-Head: "Start Season" (pre-season) or a manual schedule
     //    editor (post-season) — roster comes from whoever has actually
     //    joined (membersList, real Join League flow), not admin-typed
@@ -6255,6 +6306,13 @@ ${archivedSectionHTML}`;
     ${membersSectionHTML}
   </div>
 
+  ${isEdit ? `
+  <div class="gpAdminBlock">
+    <div class="gpAdminBlockLabel">👑 League Roles</div>
+    <div class="muted" style="font-size:12px">Pick from joined players. Shown in a ribbon at the top of the league page.</div>
+    ${rolesSectionHTML}
+  </div>` : ""}
+
   <div class="gpAdminBlock">
     <div class="gpAdminBlockLabel">🗓️ Schedule</div>
     <div class="gpLeagueSettingsRow">
@@ -6376,6 +6434,7 @@ ${archivedSectionHTML}`;
     gpBuildLockReminderHTML,
     gpBuildLeagueAnnouncementHTML,
     gpBuildLeagueAnnouncementsHTML,
+    gpBuildLeagueRoleRibbonHTML,
     gpBuildNotifOptInHTML,
     gpApplyAdminSelection,
     gpShowPlayerPicksOverlay,

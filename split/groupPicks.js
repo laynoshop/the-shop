@@ -122,6 +122,15 @@
     return (Render().gpBuildLeagueAnnouncementsHTML || (() => ""))(announcementsList, expandedMap);
   }
 
+  // Commissioner/Treasurer ribbon — TEMPORARY admin-only gate for the
+  // initial rollout (per explicit request: "for now I only want it to
+  // show on the admin login so I can see it/test it first before
+  // rolling out to all players"). Remove the isAdmin check once tested.
+  function gpBuildRoleRibbonHTMLForLeague(league, isAdmin) {
+    if (!isAdmin) return "";
+    return (Render().gpBuildLeagueRoleRibbonHTML || (() => ""))(league);
+  }
+
   // ───────────────────────────────────────────
   // Pending picks (in-memory, per session)
   // ───────────────────────────────────────────
@@ -504,7 +513,8 @@
       try { leagueMembers = await (Data().gpGetLeagueMembers || (async () => []))(db, pickLeagueId); } catch {}
       const bodyHTML = (Render().gpBuildH2HPreSeasonHTML || (() => ""))(leagueMembers);
       const announcementHTML = gpBuildAnnouncementsHTMLForLeague(league);
-      el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${bodyHTML}</div>`;
+      const roleRibbonHTML = gpBuildRoleRibbonHTMLForLeague(league, isAdmin);
+      el.innerHTML = `${headerHTML}<div class="gpContainer">${roleRibbonHTML}${announcementHTML}${bodyHTML}</div>`;
       postRender();
       return;
     }
@@ -538,6 +548,7 @@
     // those two tabs' branches, silently vanishing on Standings/Schedule/
     // Playoffs.
     const announcementHTML = gpBuildAnnouncementsHTMLForLeague(league);
+    const roleRibbonHTML = gpBuildRoleRibbonHTMLForLeague(league, isAdmin);
     let notifOptInHTML = "";
 
     if (tab === "matchup" || tab === "picks") {
@@ -672,7 +683,7 @@
       }
     }
 
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${tabBarHTML}${pagerHTML}${bodyHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${roleRibbonHTML}${announcementHTML}${notifOptInHTML}${tabBarHTML}${pagerHTML}${bodyHTML}</div>`;
     postRender();
   }
 
@@ -1441,6 +1452,7 @@
     window.__gpCurrentWeekLabel         = weekLabel;
 
     const announcementHTML = gpBuildAnnouncementsHTMLForLeague(league);
+    const roleRibbonHTML = gpBuildRoleRibbonHTMLForLeague(league, isAdmin);
     const notifOptInHTML = (Render().gpBuildNotifOptInHTML || (() => ""))();
 
     // ── lock reminder (mine only) — missing picks + tiebreaker ──
@@ -1470,7 +1482,7 @@
       weekIndex: weeks.findIndex(w => String(w?.id) === selectedId)
     });
 
-    el.innerHTML = `${headerHTML}<div class="gpContainer">${announcementHTML}${notifOptInHTML}${toggleHTML}${pagerHTML}${cardsHTML}</div>`;
+    el.innerHTML = `${headerHTML}<div class="gpContainer">${roleRibbonHTML}${announcementHTML}${notifOptInHTML}${toggleHTML}${pagerHTML}${cardsHTML}</div>`;
     postRender();
   }
 
@@ -2067,10 +2079,24 @@
       const archivedEl   = document.getElementById("gpLeagueArchived");
       const formatEl     = document.getElementById("gpLeagueFormat");
       const playoffTeamsEl = document.getElementById("gpLeagueH2HPlayoffTeams");
+      const commissionerEl = document.getElementById("gpLeagueCommissioner");
+      const treasurerEl    = document.getElementById("gpLeagueTreasurer");
       const name       = String(nameEl?.value || "").trim();
       const year       = Number(yearEl?.value || "");
       const totalWeeks = String(totalWeeksEl?.value || "").trim();
       const format     = String(formatEl?.value || "points").trim();
+      // Role selects only render in edit mode (gpBuildLeagueSettingsHTML) —
+      // resolve the chosen name from the members list already stashed for
+      // this settings screen, so no extra fetch is needed to save it.
+      const settingsMembersList = gpMem().gpLeagueSettingsMembersCache || [];
+      const resolveRoleName = (playerId) => {
+        const m = settingsMembersList.find(x => String(x.playerId) === String(playerId));
+        return m ? String(m.name || "") : "";
+      };
+      const commissionerPlayerId = commissionerEl ? String(commissionerEl.value || "").trim() : undefined;
+      const treasurerPlayerId    = treasurerEl ? String(treasurerEl.value || "").trim() : undefined;
+      const commissionerName = commissionerEl ? resolveRoleName(commissionerPlayerId) : undefined;
+      const treasurerName    = treasurerEl ? resolveRoleName(treasurerPlayerId) : undefined;
       // The playoff-teams <select> lives in the (hidden, not removed)
       // H2H-only block, so it's still present in the DOM for a points
       // league too — only actually read/saved when the format being
@@ -2100,7 +2126,8 @@
           await (Admin().gpUpdateLeagueSettings || (async () => {}))(db2, uid, leagueId, {
             name, seasonYear: year, totalWeeks,
             archived: archivedEl ? !!archivedEl.checked : undefined,
-            format, announcements, h2hPlayoffTeams
+            format, announcements, h2hPlayoffTeams,
+            commissionerPlayerId, commissionerName, treasurerPlayerId, treasurerName
           });
           gpBustLeagueSettingsFetchCache();
         } else {
