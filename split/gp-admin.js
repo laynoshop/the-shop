@@ -197,7 +197,7 @@
       .slice(0, MAX_ANNOUNCEMENTS);
   }
 
-  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, announcements, h2hPlayoffTeams }) {
+  async function gpCreateLeague(db, uid, { name, seasonYear, totalWeeks, format, announcements, h2hPlayoffTeams, commissionerPlayerId, commissionerName, treasurerPlayerId, treasurerName }) {
     const ref = db.collection("leagues").doc();
     const isH2H = format === "h2h";
     await ref.set({
@@ -221,13 +221,23 @@
       // bracket (Playoffs tab). Harmless/unused on a points league.
       h2hPlayoffTeams: normalizeH2HPlayoffTeams(h2hPlayoffTeams),
       announcements: normalizeAnnouncements(announcements),
+      // Commissioner/Treasurer — a joined member's playerId plus a
+      // denormalized name captured at save time (same id+name shape as
+      // leagues/{id}/members), so the role ribbon (gp-render.js) can
+      // read straight off the already-fetched league doc instead of a
+      // separate members fetch on every page view. Re-saving League
+      // Settings refreshes the name if it's ever "Fix Name"'d later.
+      commissionerPlayerId: String(commissionerPlayerId || "").trim(),
+      commissionerName:     String(commissionerName || "").trim().slice(0, 20),
+      treasurerPlayerId:    String(treasurerPlayerId || "").trim(),
+      treasurerName:        String(treasurerName || "").trim().slice(0, 20),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(), createdBy: uid,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(), updatedBy: uid
     });
     return ref.id;
   }
 
-  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, announcements, h2hPlayoffTeams }) {
+  async function gpUpdateLeagueSettings(db, uid, leagueId, { name, seasonYear, totalWeeks, archived, format, announcements, h2hPlayoffTeams, commissionerPlayerId, commissionerName, treasurerPlayerId, treasurerName }) {
     const patch = {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: uid
@@ -237,6 +247,10 @@
     if (totalWeeks !== undefined) patch.totalWeeks = normalizeTotalWeeks(totalWeeks);
     if (archived !== undefined)   patch.archived = !!archived;
     if (h2hPlayoffTeams !== undefined) patch.h2hPlayoffTeams = normalizeH2HPlayoffTeams(h2hPlayoffTeams);
+    if (commissionerPlayerId !== undefined) patch.commissionerPlayerId = String(commissionerPlayerId || "").trim();
+    if (commissionerName !== undefined)     patch.commissionerName     = String(commissionerName || "").trim().slice(0, 20);
+    if (treasurerPlayerId !== undefined)    patch.treasurerPlayerId    = String(treasurerPlayerId || "").trim();
+    if (treasurerName !== undefined)        patch.treasurerName        = String(treasurerName || "").trim().slice(0, 20);
     if (announcements !== undefined) {
       let prevAnnouncements = [];
       try {
